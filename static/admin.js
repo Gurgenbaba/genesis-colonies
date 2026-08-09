@@ -4613,7 +4613,13 @@
           : "—";
         const sqlOpens = `${esc(s.sql_count || 0)}/${esc(s.db_connection_open_count || 0)}`;
         const dbMs = esc(s.db_query_ms || 0);
-        return `<tr><td>${esc(when)}</td><td>${esc(s.slow_class || "")}</td><td>${esc(s.route)}</td><td>${esc(s.total_ms)}</td><td class="admin-small-hint">${costs || "—"}</td><td title="db_ms=${dbMs}">${sqlOpens}</td></tr>`;
+        const panels = String(s.panels_built || "").trim();
+        const page = String(s.panel_page || "").trim();
+        const panelHint = panels
+          ? `panels=${esc(panels)}${page ? ` @${esc(page)}` : ""}`
+          : (page ? `page=${esc(page)}` : "");
+        const costsCell = [costs, panelHint].filter(Boolean).join(" · ") || "—";
+        return `<tr><td>${esc(when)}</td><td>${esc(s.slow_class || "")}</td><td>${esc(s.route)}</td><td>${esc(s.total_ms)}</td><td class="admin-small-hint">${costsCell}</td><td title="db_ms=${dbMs}">${sqlOpens}</td></tr>`;
       })
       .join("");
     const histMax = Math.max(1, ...history.map((h) => Number(h.p95_ms) || 0));

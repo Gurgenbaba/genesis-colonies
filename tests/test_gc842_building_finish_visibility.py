@@ -86,5 +86,7 @@ def test_gc842_finish_delta_smaller_than_full_panel(game_client):
     _set_buildings(pid, {"metal_mine": 2, "crystal_mine": 1, "solar_plant": 1})
 
     delta = client.get("/api/game-state?panel_delta_buildings=metal_mine").get_json()
-    full = client.get("/api/game-state?include_panel=1").get_json()
+    full = client.get(
+        "/api/game-state?include_panel=1&panel_page=buildings"
+    ).get_json()
     assert len(json.dumps(delta, separators=(",", ":"))) < len(json.dumps(full, separators=(",", ":")))

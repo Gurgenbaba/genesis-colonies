@@ -132,7 +132,7 @@ def test_api_game_state_energy_after_energy_tech_finish(game_client):
     assert data["ok"] is True
     assert float(data["energy"]["mine_energy_factor"]) == pytest.approx(0.99, rel=0.01)
     assert int(data["energy"]["used"]) < used_before
-    assert data["overview"]["energy_hint"] in ("ok", "low", "zero")
+    assert data["overview"]["energy_hint"] in ("ok", "low", "zero", "critical")
     assert int(data["buildings"]["metal_mine"]) >= 6
 
 
@@ -374,14 +374,19 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     compact = _json.dumps(body, separators=(",", ":"), default=str)
     assert len(compact.encode("utf-8")) < 15000, len(compact)
 
-def test_api_game_state_include_panel_has_full_research_catalog(game_client):
-    """Unscoped include_panel keeps research.techs (legacy/mutation compat)."""
+def test_api_game_state_include_panel_unscoped_skips_heavy_catalogs(game_client):
+    """GC-PERF-PANEL-SCOPE-002: unscoped include_panel must not build heavy catalogs."""
     client, _pid = game_client
     body = client.get("/api/game-state?include_panel=1").get_json()
     assert body.get("ok") is True
     research = body.get("research") or {}
-    assert isinstance(research.get("techs"), list)
-    assert len(research["techs"]) > 0
+    assert "techs" not in research
+    assert "buildings_panel" not in body
+    assert not (body.get("overview") or {}).get("rows")
+    assert "defense" not in body
+    assert "shipyard" not in body
+    assert "auction_house" not in body
+    assert "exchange" not in body
 
 
 def test_api_game_state_panel_page_buildings_skips_research_catalog(game_client):
@@ -455,14 +460,12 @@ def test_idle_poll_marks_refreshed_so_hud_skip_finish_sticks(game_client):
 
 
 def test_api_game_state_include_panel_has_heavy_hud_slices(game_client):
-    """GC-740B: panel polls include fleet HUD, global queue HUD, and overview rows."""
+    """GC-740B + SCOPE-002: fleet/global queue HUD on panel; overview rows only when scoped."""
     client, _pid = game_client
     r = client.get("/api/game-state?include_panel=1")
     assert r.status_code == 200
     body = r.get_json()
     assert body.get("ok") is True
-    assert isinstance(body.get("overview", {}).get("rows"), list)
-    assert len(body["overview"]["rows"]) > 0
     assert "active_fleets" in body
     assert isinstance(body["active_fleets"], dict)
     assert "items" in body["active_fleets"]
@@ -470,11 +473,16 @@ def test_api_game_state_include_panel_has_heavy_hud_slices(game_client):
     assert "fleet_alerts" in body
     assert "global_queue_hud" in body
     assert isinstance(body["global_queue_hud"], dict)
+    # SCOPE-002: unscoped include_panel must not build overview catalog rows.
+    assert not (body.get("overview") or {}).get("rows")
+    ov = client.get("/api/game-state?include_panel=1&panel_page=overview").get_json()
+    assert isinstance((ov.get("overview") or {}).get("rows"), list)
+    assert len(ov["overview"]["rows"]) > 0
 
 
 def test_api_game_state_include_panel_has_buildings_panel(game_client):
     client, _pid = game_client
-    r = client.get("/api/game-state?include_panel=1")
+    r = client.get("/api/game-state?include_panel=1&panel_page=buildings")
     assert r.status_code == 200
     body = r.get_json()
     assert body.get("ok") is True
@@ -537,7 +545,7 @@ def test_api_game_state_include_panel_uses_full_live_refresh(game_client, monkey
 def test_api_game_state_buildings_panel_requirements_fields(game_client):
     """GC-546B: include_panel rows expose requirements for live client patch."""
     client, _pid = game_client
-    r = client.get("/api/game-state?include_panel=1")
+    r = client.get("/api/game-state?include_panel=1&panel_page=buildings")
     assert r.status_code == 200
     panel = r.get_json().get("buildings_panel") or {}
     assert isinstance(panel, dict) and panel
@@ -782,7 +790,7 @@ def test_api_include_panel_finishes_due_ship_delivery(game_client):
     conn.commit()
     conn.close()
 
-    body = client.get("/api/game-state?include_panel=1").get_json()
+    body = client.get("/api/game-state?include_panel=1&panel_page=shipyard").get_json()
     assert body.get("ok") is True
     sy = body.get("shipyard") or {}
     ships_block = sy.get("ships") or {}
@@ -803,7 +811,7 @@ def test_api_include_panel_finishes_due_research_level(game_client):
     conn.commit()
     conn.close()
 
-    body = client.get("/api/game-state?include_panel=1").get_json()
+    body = client.get("/api/game-state?include_panel=1&panel_page=research").get_json()
     assert body.get("ok") is True
     techs = (body.get("research") or {}).get("techs") or []
     energy = next((t for t in techs if t.get("key") == "energy_tech"), None)
@@ -874,7 +882,7 @@ def test_api_include_panel_finishes_due_troop_delivery(game_client):
     before = int(get_planet_troops(planet_id, conn=conn).get("militia") or 0)
     conn.close()
 
-    body = client.get("/api/game-state?include_panel=1").get_json()
+    body = client.get("/api/game-state?include_panel=1&panel_page=defense").get_json()
     assert body.get("ok") is True
     troops = (body.get("defense") or {}).get("troops") or {}
     assert isinstance(troops, dict)

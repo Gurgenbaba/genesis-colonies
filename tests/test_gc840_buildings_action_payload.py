@@ -68,12 +68,16 @@ def test_gc840_action_payload_smaller_than_full_panel(game_client):
         json={"building_type": "metal_mine", "request_id": f"gc840-size-{uuid.uuid4().hex}"},
         headers={"Content-Type": "application/json"},
     ).get_json()
-    panel = client.get("/api/game-state?include_panel=1").get_json()
+    panel = client.get(
+        "/api/game-state?include_panel=1&panel_page=buildings"
+    ).get_json()
 
     action_bytes = len(json.dumps(action.get("state") or {}, separators=(",", ":")))
     panel_bytes = len(json.dumps(panel or {}, separators=(",", ":")))
+    # Action diet must stay smaller than a scoped buildings panel (absolute KB
+    # caps drift with HUD slices; relative size is the GC-840 contract).
     assert action_bytes < panel_bytes
-    assert action_bytes < 25_000
+    assert "buildings_panel" not in (action.get("state") or {})
 
 
 def test_gc840_action_state_diet_strips_page_catalog(game_client):

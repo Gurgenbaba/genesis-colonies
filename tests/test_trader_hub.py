@@ -70,7 +70,7 @@ def _login_client(trader_hub_db, monkeypatch):
 
 def test_game_state_includes_trader_panels(trader_hub_db, monkeypatch):
     client, _uid = _login_client(trader_hub_db, monkeypatch)
-    res = client.get("/api/game-state?include_panel=1")
+    res = client.get("/api/game-state?include_panel=1&panel_page=trader_hub")
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True
@@ -104,7 +104,7 @@ def test_game_state_exchange_limit_scales_without_hardcap(trader_hub_db, monkeyp
     conn.commit()
     conn.close()
 
-    res = client.get("/api/game-state?include_panel=1")
+    res = client.get("/api/game-state?include_panel=1&panel_page=trader_hub")
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True

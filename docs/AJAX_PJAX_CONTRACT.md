@@ -38,7 +38,7 @@ Light-PJAX und SSR-Skip (Owner: `static/main.js`, Details in [STATE_AJAX.md](STA
 | Shell-HUD nach Login | `#gc-hud-boot-state` → `bootstrapHudFromDom()` vor Fleet-Drawer (GC-INSTANT-UX-001A) |
 | Production `/h` Rates SSR | `HEADER_PROD_PER_HOUR` / `prod_per_hour` in `#resource-bar` — Climb ohne Diet-Poll (**GC-INSTANT-HUD-RATES-001**) |
 | Busy-Flags aus SSR | `bootstrapBusyFlagsFromDom()` nach Queue-Bootstrap; First Diet-Poll = volle Cadence (**GC-INSTANT-POLL-BOOT-001**) |
-| Timer-Zero Finish | Optimistic Level aus `data-target-level`, dann Canonical `include_panel=1` + `panel_page` (**GC-INSTANT-QUEUE-FINISH-001**, **GC-PERF-PANEL-SCOPE-001**) |
+| Timer-Zero Finish | Optimistic Level aus `data-target-level`, dann Canonical `include_panel=1` + `panel_page` (**GC-INSTANT-QUEUE-FINISH-001**, **GC-PERF-PANEL-SCOPE-001/002**) — unscoped `include_panel` baut keine Heavy-Catalogs mehr |
 | Tab / bfcache wake | `wakeClientAfterHidden` — abort in-flight game-state, release shell blockers, clear stuck PJAX; exclusive `tab_visible` refresh (**GC-WAKE-001**) |
 | Identity First Paint | `#gc-identity-critical` im `<head>` (**GC-INSTANT-IDENTITY-FOUC-001**) |
 | Fleet-Seite mit `#fleet-page-state` `ready: true` | `initFleet` skippt sofortiges `refreshFleetState` (GC-INSTANT-UX-001C) |

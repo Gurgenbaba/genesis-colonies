@@ -300,7 +300,7 @@ def test_api_collector_redeem_returns_state(collector_redeem_db, monkeypatch):
 
 def test_game_state_includes_collector_exchange(collector_redeem_db, monkeypatch):
     client, _uid = _login_client(collector_redeem_db, monkeypatch)
-    res = client.get("/api/game-state?include_panel=1")
+    res = client.get("/api/game-state?include_panel=1&panel_page=trader_hub")
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True

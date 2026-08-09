@@ -123,7 +123,9 @@ def test_gc841_debug_payload_still_smaller_than_full_panel(game_client, monkeypa
         json={"building_type": "metal_mine", "request_id": f"gc841-size-{uuid.uuid4().hex}"},
         headers={"Content-Type": "application/json"},
     ).get_json()
-    panel = client.get("/api/game-state?include_panel=1").get_json()
+    panel = client.get(
+        "/api/game-state?include_panel=1&panel_page=buildings"
+    ).get_json()
 
     action_bytes = len(json.dumps(action, separators=(",", ":")))
     panel_bytes = len(json.dumps(panel, separators=(",", ":")))

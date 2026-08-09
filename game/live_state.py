@@ -77,6 +77,8 @@ _REQUEST_PERF_META_KEYS = frozenset(
         "route",
         "pjax",
         "include_panel",
+        "panel_page",
+        "panels_built",
         "panel_delta",
         "fleet_tick_ran",
         "fleet_tick_source",
@@ -2189,6 +2191,8 @@ def _emit_request_perf_log(
         "route",
         "pjax",
         "include_panel",
+        "panel_page",
+        "panels_built",
         "panel_delta",
         "fleet_tick_ran",
         "fleet_tick_source",
@@ -2246,6 +2250,8 @@ def _record_perf_intel_from_state(
             slow_queries=list(state.slow_queries),
             payload_bytes=int(response_bytes or 0),
             error=bool(had_exception) or int(status) >= 500,
+            panels_built=str(state.meta.get("panels_built") or ""),
+            panel_page=str(state.meta.get("panel_page") or ""),
         )
         get_store().end_request()
         state.intel_recorded = True

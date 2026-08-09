@@ -92,6 +92,16 @@ Spike evidence: `hud.research` ~500–700ms on research `include_panel` (catalog
 - Same pass-through in `summarize_max_queueable_research_jobs`, queue reschedule, technical data table, auto_empire.
 - Semantics unchanged (still `EffectResolver.get_research_time_seconds`); Panel-Scope-002 / TK remain separate.
 
+### GC-PERF-PANEL-SCOPE-002 — No unscoped heavy catalogs
+
+Prod evidence: `api_auction_house_bid` ~1.8–2.1s with `panel.buildings_rows≈850` + `overview_rows` because `include_panel=True` without `panel_page` built **all** heavy catalogs.
+
+- Unscoped `include_panel=1` → HUD / lightweight only (no buildings/overview/research/defense/shipyard/exchange/auction catalogs).
+- `panel_page` matrix: buildings | research/techtree | defense | shipyard | trader_hub | auction_house | overview.
+- Legacy actions map via `_FINISH_SOURCE_PANEL_PAGE` (e.g. auction bid → `auction_house`).
+- Perf meta: `panels_built`, `panel_page`, `panel_total_ms` (Admin spikes show `panels=… @page`).
+- Out of scope: `finish_fleet` / writer-lock (separate ticket).
+
 ### GC-PERF-HUD-READS-001 — HUD read children + shared research levels
 
 Spike evidence: `live.hud_reads` ~80–110ms on slow polls (envelope).

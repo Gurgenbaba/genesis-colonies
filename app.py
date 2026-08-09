@@ -1208,12 +1208,80 @@ def _load_player_view_with_resources(
 
 _BUILDINGS_PANEL_TABS = frozenset({"resources", "research", "military", "infrastructure"})
 
+# GC-PERF-PANEL-SCOPE-002: action finish_source → page when client omitted panel_page.
+# Unmapped / empty → no heavy catalogs (HUD + lightweight slices only).
+_FINISH_SOURCE_PANEL_PAGE: Dict[str, str] = {
+    "api_auction_house_bid": "auction_house",
+    "api_auction_house_bid_fallback": "auction_house",
+    "api_exchange": "trader_hub",
+    "api_scrapyard": "trader_hub",
+    "api_collector_exchange": "trader_hub",
+    "api_fuel_exchange": "trader_hub",
+    "api_defense_overview": "defense",
+    "api_defense": "defense",
+    "api_troops_train": "defense",
+    "api_troops_cancel": "defense",
+    "api_shipyard_build": "shipyard",
+    "api_shipyard_queue_cancel": "shipyard",
+    "api_buildings_upgrade": "buildings",
+    "api_buildings_cancel": "buildings",
+    "api_research_start": "research",
+    "api_research_cancel": "research",
+    "research": "research",
+    "techtree": "techtree",
+    "buildings": "buildings",
+    "shipyard": "shipyard",
+    "defense": "defense",
+    "overview": "overview",
+    "auction_house": "auction_house",
+    "trader_hub": "trader_hub",
+}
+
+
+def _normalize_panel_page(panel_page: str) -> str:
+    """Canonical panel_page token (underscore). ``other`` / empty → no heavy scope."""
+    page = str(panel_page or "").strip().lower().replace("-", "_")
+    if page in ("", "other"):
+        return ""
+    return page
+
+
+def _resolve_effective_panel_page(panel_page: str, finish_source: str = "") -> str:
+    """Explicit panel_page wins; else finish_source hint; else unscoped (no heavy)."""
+    page = _normalize_panel_page(panel_page)
+    if page:
+        return page
+    src = str(finish_source or "").strip().lower()
+    return _normalize_panel_page(_FINISH_SOURCE_PANEL_PAGE.get(src, ""))
+
+
+def _heavy_panels_for_page(panel_page: str) -> frozenset:
+    """Which heavy catalogs to build for a resolved panel_page (SCOPE-002)."""
+    page = _normalize_panel_page(panel_page)
+    if not page:
+        return frozenset()
+    if page == "buildings":
+        return frozenset({"buildings"})
+    if page in ("research", "techtree"):
+        return frozenset({"research"})
+    if page == "defense":
+        return frozenset({"defense"})
+    if page == "shipyard":
+        return frozenset({"shipyard"})
+    if page == "trader_hub":
+        return frozenset({"exchange", "scrapyard", "collector_exchange"})
+    if page == "auction_house":
+        return frozenset({"auction_house"})
+    if page == "overview":
+        return frozenset({"overview"})
+    return frozenset()
+
 
 def _resolve_game_state_panel_scope() -> Tuple[str, Optional[str]]:
-    """Client panel_page / panel_tab for GC-PERF-PANEL-SCOPE-001 (include_panel diet)."""
-    page = str(
+    """Client panel_page / panel_tab for GC-PERF-PANEL-SCOPE (include_panel diet)."""
+    page = _normalize_panel_page(
         request.args.get("panel_page") or request.headers.get("X-GC-Page") or ""
-    ).strip().lower()
+    )
     tab = str(request.args.get("panel_tab") or "").strip().lower()
     if tab not in _BUILDINGS_PANEL_TABS:
         tab = ""
@@ -1225,16 +1293,14 @@ def _want_research_techs_for_panel(
     finish_source: str,
     panel_page: str = "",
 ) -> bool:
-    """Full research catalog only on research/techtree pages (or unscoped legacy panel)."""
+    """Full research catalog only on research/techtree (SSR source or scoped panel)."""
     src = str(finish_source or "")
     if src in ("research", "techtree"):
         return True
     if not include_panel:
         return False
-    page = str(panel_page or "").strip().lower()
-    if not page:
-        return True
-    return page in ("research", "techtree")
+    page = _resolve_effective_panel_page(panel_page, finish_source)
+    return "research" in _heavy_panels_for_page(page)
 
 
 def _load_page_live_context(
@@ -1257,7 +1323,7 @@ def _load_page_live_context(
     user_id = int(user_id)
     src = str(finish_source or "page_load")
     own_conn = conn is None
-    resolved_panel_page = str(panel_page or "").strip().lower()
+    resolved_panel_page = _normalize_panel_page(panel_page)
     try:
         from flask import has_request_context, request as flask_request
         from game.live_state import set_request_perf_meta
@@ -1268,11 +1334,11 @@ def _load_page_live_context(
             if str(flask_request.headers.get("X-PJAX") or "").strip().lower() in ("1", "true", "yes"):
                 set_request_perf_meta("pjax", 1)
             if not resolved_panel_page:
-                resolved_panel_page = str(
+                resolved_panel_page = _normalize_panel_page(
                     flask_request.args.get("panel_page")
                     or flask_request.headers.get("X-GC-Page")
                     or ""
-                ).strip().lower()
+                )
     except Exception:
         pass
     if own_conn:
@@ -4719,7 +4785,11 @@ def api_auction_house_bid():
     from game.planet_evolution.repository import get_context_planet
 
     if not auction_schema_ready(db()):
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_auction_house_bid")
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_auction_house_bid",
+            panel_page="auction_house",
+        )
         return jsonify({"ok": False, "reason": "auction_unavailable", "state": state}), 503
 
     conn = db()
@@ -4735,7 +4805,11 @@ def api_auction_house_bid():
             conn=conn,
         )
     except Exception:
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_auction_house_bid")
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_auction_house_bid",
+            panel_page="auction_house",
+        )
         return jsonify({"ok": False, "reason": "auction_action_failed", "state": state}), 500
     finally:
         conn.close()
@@ -4743,7 +4817,11 @@ def api_auction_house_bid():
     state: Dict[str, Any] = {"ok": True, "server_time": time.time()}
     auction_house: Dict[str, Any] = {}
     try:
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_auction_house_bid")
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_auction_house_bid",
+            panel_page="auction_house",
+        )
         auction_house = dict(state.get("auction_house") or {})
     except Exception:
         logger.exception("auction-house bid: game-state build failed user_id=%s", user_id)
@@ -10521,47 +10599,53 @@ def _payload_from_live_context(
     except Exception:
         payload["commander"] = {"ready": False}
 
+    # GC-PERF-PANEL-SCOPE-002: heavy catalogs only for resolved panel_page (never unscoped all).
+    from game.live_state import record_request_perf_phase, set_request_perf_meta
+
+    page = _normalize_panel_page(panel_page)
+    heavy = _heavy_panels_for_page(page) if include_panel else frozenset()
+    panels_built: List[str] = []
+    panel_block_t0 = time.perf_counter()
+
     with perf_span("payload.panel"):
-        # Panel-only: diet/action_slim strip overview.status/rows anyway — never build then discard.
-        # GC-PERF-PANEL-SCOPE-001: when panel_page is set, build only the page-relevant slices.
-        if include_panel:
+        if include_panel and "overview" in heavy:
             from game.buildings import get_overview_building_rows
-            from game.buildings import get_buildings_panel_rows
             from game.overview_page import build_overview_status
 
-            page = str(panel_page or "").strip().lower()
-            want_overview = (not page) or page == "overview"
-            want_buildings = (not page) or page == "buildings"
+            with perf_span("panel.overview_rows"):
+                payload["overview"]["rows"] = get_overview_building_rows(
+                    planet, buildings, build_queue=build_queue
+                )
+            with perf_span("panel.overview_status"):
+                payload["overview"]["status"] = build_overview_status(
+                    user_id=user_id,
+                    player_view=player_view,
+                    ratio=float(ratio),
+                    energy_total=int(energy_total),
+                    energy_used=int(energy_used),
+                    storage_caps=storage_caps,
+                    prod_per_hour=prod_per_hour,
+                    build_queue=build_queue,
+                    research=research,
+                    planet=planet,
+                    include_log=False,
+                    conn=conn,
+                )
+            panels_built.append("overview")
 
-            if want_overview:
-                with perf_span("panel.overview_rows"):
-                    payload["overview"]["rows"] = get_overview_building_rows(
-                        planet, buildings, build_queue=build_queue
-                    )
-                with perf_span("panel.overview_status"):
-                    payload["overview"]["status"] = build_overview_status(
-                        user_id=user_id,
-                        player_view=player_view,
-                        ratio=float(ratio),
-                        energy_total=int(energy_total),
-                        energy_used=int(energy_used),
-                        storage_caps=storage_caps,
-                        prod_per_hour=prod_per_hour,
-                        build_queue=build_queue,
-                        research=research,
-                        planet=planet,
-                        include_log=False,
-                        conn=conn,
-                    )
-            if want_buildings:
-                with perf_span("panel.buildings_rows"):
-                    payload["buildings_panel"] = get_buildings_panel_rows(
-                        planet,
-                        buildings,
-                        build_queue=build_queue,
-                        active_tab=panel_tab if page == "buildings" else None,
-                        conn=conn,
-                    )
+        if include_panel and "buildings" in heavy:
+            from game.buildings import get_buildings_panel_rows
+
+            with perf_span("panel.buildings_rows"):
+                payload["buildings_panel"] = get_buildings_panel_rows(
+                    planet,
+                    buildings,
+                    build_queue=build_queue,
+                    active_tab=panel_tab if page == "buildings" else None,
+                    conn=conn,
+                )
+            panels_built.append("buildings")
+
         if panel_delta_keys:
             from game.buildings import get_buildings_panel_delta
 
@@ -10573,6 +10657,8 @@ def _payload_from_live_context(
                     building_keys=panel_delta_keys,
                     conn=conn,
                 )
+            if "buildings_delta" not in panels_built:
+                panels_built.append("buildings_delta")
 
     active_planet_id = int(planet.get("id") or 0)
     payload["active_planet_id"] = active_planet_id
@@ -10989,7 +11075,8 @@ def _payload_from_live_context(
         except Exception:
             payload["has_seed_ark"] = False
 
-    if include_panel:
+    # Heavy trader / combat catalogs — only when SCOPE-002 page asks for them.
+    if include_panel and "exchange" in heavy:
         try:
             from game.exchange import exchange_schema_ready, get_exchange_status
 
@@ -11002,25 +11089,34 @@ def _payload_from_live_context(
                     fuel_cells=float(player_view.get("fuel_cells") or 0),
                     conn=conn,
                 )
+                if "exchange" not in panels_built:
+                    panels_built.append("exchange")
         except Exception:
             pass
 
+    if include_panel and "scrapyard" in heavy:
         try:
             from game.scrapyard import scrapyard_status
 
             pid_tr = int(planet["id"])
             payload["scrapyard"] = scrapyard_status(user_id, pid_tr, conn=conn)
+            if "scrapyard" not in panels_built:
+                panels_built.append("scrapyard")
         except Exception:
             pass
 
+    if include_panel and "collector_exchange" in heavy:
         try:
             from game.collector_exchange import build_collector_exchange_payload, collector_schema_ready
 
             if collector_schema_ready(conn):
                 payload["collector_exchange"] = build_collector_exchange_payload(user_id, conn=conn)
+                if "collector_exchange" not in panels_built:
+                    panels_built.append("collector_exchange")
         except Exception:
             pass
 
+    if include_panel and "auction_house" in heavy:
         try:
             from game.auction_house import auction_schema_ready, build_auction_house_state
 
@@ -11033,18 +11129,24 @@ def _payload_from_live_context(
                     fuel_cells=float(player_view.get("fuel_cells") or 0),
                     conn=conn,
                 )
+                if "auction_house" not in panels_built:
+                    panels_built.append("auction_house")
         except Exception:
             pass
 
+    if include_panel and "defense" in heavy:
         try:
             from game.live_state import defense_panel_for_game_state
 
             defense_panel = defense_panel_for_game_state(user_id, conn=conn)
             if defense_panel is not None:
                 payload["defense"] = defense_panel
+                if "defense" not in panels_built:
+                    panels_built.append("defense")
         except Exception:
             pass
 
+    if include_panel and "shipyard" in heavy:
         try:
             from game.live_state import shipyard_panel_for_game_state
 
@@ -11052,8 +11154,24 @@ def _payload_from_live_context(
             if shipyard_panel is not None:
                 payload["shipyard"] = shipyard_panel
                 payload["shipyard_queue"] = shipyard_panel.get("queue")
+                if "shipyard" not in panels_built:
+                    panels_built.append("shipyard")
         except Exception:
             pass
+
+    if include_panel and "research" in heavy and (research.get("techs") is not None):
+        if "research" not in panels_built:
+            panels_built.append("research")
+
+    try:
+        set_request_perf_meta("panels_built", ",".join(panels_built) if panels_built else "")
+        set_request_perf_meta("panel_page", page or "")
+        record_request_perf_phase(
+            "panel_total_ms",
+            (time.perf_counter() - panel_block_t0) * 1000.0,
+        )
+    except Exception:
+        pass
 
     if not lightweight:
         try:
@@ -11128,11 +11246,10 @@ def _build_game_state_payload(
 
     from game.live_state import record_request_perf_phase, set_request_perf_meta
 
-    page = str(panel_page or "").strip().lower()
+    page = _resolve_effective_panel_page(panel_page, finish_source)
     set_request_perf_meta("finish_source", str(finish_source or "game_state"))
     set_request_perf_meta("include_panel", 1 if include_panel else 0)
-    if page:
-        set_request_perf_meta("panel_page", page)
+    set_request_perf_meta("panel_page", page or "")
     if panel_delta_keys:
         set_request_perf_meta("panel_delta", 1)
 
@@ -11352,7 +11469,11 @@ def _defense_json_response(
     """Canonical defense envelope: { ok, state, queue, defenses }."""
     from game.defense_api import defense_err, defense_ok, empty_defense_slices
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source=finish_source,
+        panel_page="defense",
+    )
     if queue is None or defenses is None:
         empty_q, empty_d = empty_defense_slices()
         queue = empty_q if queue is None else queue

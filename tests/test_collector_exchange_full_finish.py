@@ -76,7 +76,7 @@ def test_game_state_includes_collector_and_active_boosters(collector_full_db, mo
     conn.commit()
     conn.close()
 
-    res = client.get("/api/game-state?include_panel=1")
+    res = client.get("/api/game-state?include_panel=1&panel_page=trader_hub")
     assert res.status_code == 200
     data = res.get_json()
     assert data.get("collector_exchange", {}).get("ready") is True

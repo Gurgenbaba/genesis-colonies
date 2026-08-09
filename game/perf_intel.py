@@ -365,6 +365,8 @@ class RequestSample:
     slow_queries: List[Dict[str, Any]] = field(default_factory=list)
     payload_bytes: int = 0
     slow_class: str = ""
+    panels_built: str = ""
+    panel_page: str = ""
 
 
 @dataclass
@@ -469,6 +471,8 @@ class PerfIntelStore:
             "slow_queries": list(sample.slow_queries or [])[:5],
             "concurrent": int(self._active),
             "payload_bytes": int(sample.payload_bytes or 0),
+            "panels_built": str(sample.panels_built or ""),
+            "panel_page": str(sample.panel_page or ""),
         }
 
     def recent_spikes(self, limit: int = 20) -> List[Dict[str, Any]]:
@@ -936,6 +940,8 @@ def record_request_sample(
     slow_queries: Optional[List[Dict[str, Any]]] = None,
     payload_bytes: int = 0,
     error: bool = False,
+    panels_built: str = "",
+    panel_page: str = "",
 ) -> None:
     if not is_perf_intel_enabled():
         return
@@ -958,6 +964,8 @@ def record_request_sample(
             slow_queries=list(slow_queries or [])[:20],
             payload_bytes=int(payload_bytes or 0),
             slow_class=slow_class,
+            panels_built=str(panels_built or ""),
+            panel_page=str(panel_page or ""),
         )
         _STORE.record(sample)
         if slow_class:
