@@ -15572,8 +15572,12 @@
   function shouldSyncRoleSidebarFromHudData(data, reason) {
     const planetId = Number(data?.active_planet_id || data?.active_planet?.planet_id || 0);
     if (!planetId) return false;
+    // /admin keeps the game shell sidebar mounted — restoring accordion against
+    // admin URLs breaks GC-849 Infrastruktur (nested expand / pointer-events).
+    if (isAdminRoutePath(window.location.pathname)) return false;
     const r = String(reason || "");
     if (r === "admin_balance_save" || r === "admin_balance_preset") return false;
+    if (r.startsWith("admin_")) return false;
     return true;
   }
 
@@ -33363,6 +33367,14 @@
 
   GC.restoreLeftmenuState = function restoreLeftmenuState(url) {
     const targetUrl = url || window.location.href;
+    // Never re-apply accordion against /admin — no infrastructure route hints;
+    // sync leaves Infra/nested groups non-interactive (GC-INFRA / GC-849).
+    try {
+      const path = new URL(targetUrl, window.location.origin).pathname;
+      if (isAdminRoutePath(path)) return;
+    } catch (_) {
+      /* fall through */
+    }
     const routeCtx = resolveLeftmenuRouteContext(targetUrl);
 
     restoreSidebarMenuState(document.getElementById("gc-sidebar-nav"), targetUrl, routeCtx);

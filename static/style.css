@@ -1032,11 +1032,13 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   pointer-events: auto;
 }
 
-/* GC-849 ? infrastructure: one section transition; nested buildings toggles instantly (no max-height chain). */
+/* GC-849 — infrastructure: one section transition; nested buildings toggles instantly (no max-height chain). */
 .gc-nav-section[data-nav-section="infrastructure"] > .gc-nav-section-body{
   max-height: none;
   display: grid;
   grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
   transition: grid-template-rows 0.2s ease, opacity 0.16s ease;
 }
 

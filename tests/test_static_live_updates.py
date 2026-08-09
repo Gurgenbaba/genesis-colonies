@@ -541,6 +541,7 @@ def test_admin_pjax_exit_hard_load_entry():
     assert 'wrap.querySelector(".gc-hud-select-menu")' not in sync_fn
     leave_fn = admin_src.split("function adminLeaveShellCleanup")[1].split("function playerNameLink")[0]
     assert "releaseShellNavigationBlockers" in leave_fn
+    assert "stopPerfAutoRefresh" in leave_fn
     assert "adminLeaveShellCleanup" in admin_src.split("GC.teardownAdminPanel")[1][:400]
     assert "adminLeaveShellCleanup" in admin_src.split("adminPanelCleanup")[1][:200]
 

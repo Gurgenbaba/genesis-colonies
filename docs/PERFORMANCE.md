@@ -75,6 +75,12 @@ Spike evidence: `live.hud_reads` ~80–110ms on slow polls (envelope).
 - Drop duplicate `get_research_modifiers` on the user_id EffectResolver production path.
 - Live rates/queues unchanged — same server payloads, fewer duplicate reads.
 
+**Reading spikes:** `db_begin_immediate` as top diagnosis is often **lock wait** (one writer), not BEGIN cost itself — e.g. `api_chat_messages` waiting while `admin_panel` holds a write TX. Prefer spike rows over the aggregate %. `hud.research` ≫100ms on `research_view` is the full tech catalog (include_techs), not diet.
+
+### GC-INFRA-ADMIN-001 — Admin must not rebind leftnav accordion
+
+Admin keeps the game shell sidebar. HUD sync used to call `restoreLeftmenuState(/admin)` and break Infrastruktur expand/nested clicks (GC-849). Skip sidebar restore + role sync while on `/admin`; stop perf auto-refresh on leave.
+
 ### GC-PERF-FLEET-HUD-001 — Drawer without mission resolve
 
 Spike evidence: `fleets.active` 70–120ms on slow `/api/game-state` while drawer only needs labels/timers.

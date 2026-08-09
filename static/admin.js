@@ -93,6 +93,7 @@
   }
 
   function adminLeaveShellCleanup() {
+    stopPerfAutoRefresh();
     _activeTab = "health";
     _adminPanelBootstrapped = false;
     if (typeof GC.releaseShellNavigationBlockers === "function") {

@@ -22,6 +22,24 @@ def test_gc849_infrastructure_accordion_css_uses_grid_not_nested_max_height():
     assert "grid-template-rows" in block
     assert "gc-nav-buildings-group" in block
     assert "transition: none" in block
+    # Collapsed infra must not inherit ambiguous hit-testing from grid 0fr alone.
+    collapsed = block.split(".is-expanded > .gc-nav-section-body")[0]
+    assert "opacity: 0" in collapsed
+    assert "pointer-events: none" in collapsed
+
+
+def test_gc849_restore_leftmenu_skips_admin_path():
+    src = _read("static/main.js")
+    restore = src.split("GC.restoreLeftmenuState = function restoreLeftmenuState")[1].split(
+        "function applyMobileBottomNav"
+    )[0]
+    assert "isAdminRoutePath(path)" in restore
+    assert "if (isAdminRoutePath(path)) return;" in restore
+    should_sync = src.split("function shouldSyncRoleSidebarFromHudData")[1].split(
+        "function applyHudOnlyGameState"
+    )[0]
+    assert "isAdminRoutePath(window.location.pathname)" in should_sync
+    assert 'r.startsWith("admin_")' in should_sync
 
 
 def test_gc849_infrastructure_section_toggle_does_not_restore_leftmenu():
