@@ -39,6 +39,17 @@ _PHASE_ALIASES = {
     "live_context": "live_context_ms",
     "database": "db_query_ms",
     "template": "template_ms",
+    # GC-PERF-AUTO-007A payload / page children
+    "payload.nav_badges": "payload_nav_badges_ms",
+    "payload.fleets_hud": "payload_fleets_hud_ms",
+    "payload.score": "payload_score_ms",
+    "payload.active_planet": "payload_active_planet_ms",
+    "payload.panel": "payload_panel_ms",
+    "payload.notifications": "payload_notifications_ms",
+    "payload.liveops": "payload_liveops_ms",
+    "page_context.overview": "page_context_overview_ms",
+    "page_context.shipyard": "page_context_shipyard_ms",
+    "page_context.fleet": "page_context_fleet_ms",
 }
 
 _COMPONENT_DISPLAY = {
@@ -47,8 +58,18 @@ _COMPONENT_DISPLAY = {
     "fleet_tick_ms": "fleet_tick",
     "finish_fleet_ms": "finish_fleet",
     "payload_ms": "state_build",
+    "payload_nav_badges_ms": "payload.nav_badges",
+    "payload_fleets_hud_ms": "payload.fleets_hud",
+    "payload_score_ms": "payload.score",
+    "payload_active_planet_ms": "payload.active_planet",
+    "payload_panel_ms": "payload.panel",
+    "payload_notifications_ms": "payload.notifications",
+    "payload_liveops_ms": "payload.liveops",
     "live_context_ms": "live_context",
     "page_context_ms": "page_context",
+    "page_context_overview_ms": "page_context.overview",
+    "page_context_shipyard_ms": "page_context.shipyard",
+    "page_context_fleet_ms": "page_context.fleet",
     "live_state_ms": "live_state",
     "db_query_ms": "database",
     "template_ms": "template",
@@ -61,9 +82,14 @@ _PARENT_PHASE_KEYS = frozenset(
         "handler_ms",
         "before_request_ms",
         "after_request_ms",
+        # GC-PERF-AUTO-007A/B: envelope around payload children (same wall as children sum)
+        "payload_ms",
     }
 )
-_PARENT_COMPONENT_NAMES = frozenset({"handler", "before_request", "after_request"})
+_PARENT_COMPONENT_NAMES = frozenset(
+    {"handler", "before_request", "after_request", "state_build"}
+)
+_SPIKE_RING_MAX = 48
 
 _SKIP_PATH_PREFIXES = ("/healthz", "/health", "/static/")
 _PRESSURE_MIN_SAMPLES = 8
@@ -301,9 +327,11 @@ class PerfIntelStore:
         *,
         ring_max: int = _RING_MAX,
         history_minutes: int = _HISTORY_MINUTES,
+        spike_max: int = _SPIKE_RING_MAX,
     ) -> None:
         self._lock = threading.RLock()
         self._ring: Deque[RequestSample] = deque(maxlen=max(32, int(ring_max)))
+        self._spikes: Deque[Dict[str, Any]] = deque(maxlen=max(8, int(spike_max)))
         self._history_minutes = max(5, int(history_minutes))
         self._buckets: Dict[int, MinuteBucket] = {}
         self._active = 0
@@ -314,6 +342,7 @@ class PerfIntelStore:
     def reset(self) -> None:
         with self._lock:
             self._ring.clear()
+            self._spikes.clear()
             self._buckets.clear()
             self._active = 0
             self._pressure_state = "normal"
@@ -341,6 +370,8 @@ class PerfIntelStore:
     def record(self, sample: RequestSample) -> None:
         with self._lock:
             self._ring.append(sample)
+            if sample.slow_class:
+                self._spikes.appendleft(self._spike_from_sample_unlocked(sample))
             minute = int(sample.ts) // 60
             bucket = self._buckets.get(minute)
             if bucket is None:
@@ -354,6 +385,36 @@ class PerfIntelStore:
             bucket.latencies.append(float(sample.total_ms))
             self._prune_buckets_unlocked(now_minute=minute)
             self._update_pressure_unlocked()
+
+    def _spike_from_sample_unlocked(self, sample: RequestSample) -> Dict[str, Any]:
+        phases_sorted = sorted(
+            (
+                (_COMPONENT_DISPLAY.get(k, k.replace("_ms", "")), round(float(v), 1))
+                for k, v in sample.phases.items()
+                if k not in _PARENT_PHASE_KEYS and float(v) > 0
+            ),
+            key=lambda kv: -kv[1],
+        )[:8]
+        return {
+            "ts": round(float(sample.ts), 3),
+            "route": sample.route or sample.path,
+            "path": sample.path,
+            "method": sample.method,
+            "status": sample.status,
+            "total_ms": round(float(sample.total_ms), 1),
+            "slow_class": sample.slow_class,
+            "top_costs": [{"name": n, "ms": ms} for n, ms in phases_sorted],
+            "sql_count": int(sample.sql_count),
+            "db_query_ms": round(float(sample.db_query_ms), 1),
+            "slow_queries": list(sample.slow_queries or [])[:5],
+            "concurrent": int(self._active),
+            "payload_bytes": int(sample.payload_bytes or 0),
+        }
+
+    def recent_spikes(self, limit: int = 20) -> List[Dict[str, Any]]:
+        lim = max(1, min(64, int(limit)))
+        with self._lock:
+            return list(self._spikes)[:lim]
 
     def _prune_buckets_unlocked(self, *, now_minute: Optional[int] = None) -> None:
         if now_minute is None:
@@ -650,6 +711,16 @@ class PerfIntelStore:
                     f"SSR/live context cost on '{(hot_route or {}).get('route')}' — "
                     "measure which panel/query inside the page load; cold first hit is common."
                 )
+            elif cause.startswith("payload."):
+                recommendation = (
+                    f"Game-state payload section '{cause}' dominates slow requests — "
+                    "profile that helper before trimming HUD fields."
+                )
+            elif cause.startswith("page_context."):
+                recommendation = (
+                    f"SSR page builder '{cause}' is hot — "
+                    "reuse live_context stash where possible (see OVERVIEW-TTFB pattern)."
+                )
             else:
                 recommendation = f"Profile component '{cause}' on the hot route before changing gameplay."
         elif hot_route and float(hot_route.get("p95_ms") or 0) >= get_slow_request_ms():
@@ -698,6 +769,7 @@ class PerfIntelStore:
         components = self.component_stats(300.0)
         slow_queries = self.slow_query_stats(300.0)
         diagnosis = self.build_diagnosis(300.0)
+        spikes = self.recent_spikes(20)
 
         return {
             "ok": True,
@@ -709,6 +781,7 @@ class PerfIntelStore:
             "routes": routes[:25],
             "components": components[:25],
             "slow_queries": slow_queries,
+            "spikes": spikes,
             "diagnosis": diagnosis,
             "history_60m": self.history_60m(),
             "ring_size": self.ring_len,
@@ -848,6 +921,7 @@ def build_admin_performance_payload() -> Dict[str, Any]:
             "routes": [],
             "components": [],
             "slow_queries": [],
+            "spikes": [],
             "diagnosis": {"cause": "disabled", "recommendation": "Set GC_PERF_INTEL=1"},
             "history_60m": [],
         }

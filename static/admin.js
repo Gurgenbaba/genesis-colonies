@@ -4571,6 +4571,7 @@
     const routes = data.routes || [];
     const components = data.components || [];
     const slowQueries = data.slow_queries || [];
+    const spikes = data.spikes || [];
     const diagnosis = data.diagnosis || {};
     const history = data.history_60m || [];
     const statusLevel =
@@ -4596,6 +4597,19 @@
         (q) =>
           `<tr><td><code>${esc(q.signature)}</code></td><td>${esc(q.count)}</td><td>${esc(q.p95_ms)}</td><td>${esc(q.max_ms)}</td></tr>`
       )
+      .join("");
+    const spikeRows = spikes
+      .slice(0, 16)
+      .map((s) => {
+        const costs = (s.top_costs || [])
+          .slice(0, 4)
+          .map((c) => `${esc(c.name)}=${esc(c.ms)}`)
+          .join(" · ");
+        const when = s.ts
+          ? new Date(Number(s.ts) * 1000).toLocaleTimeString()
+          : "—";
+        return `<tr><td>${esc(when)}</td><td>${esc(s.slow_class || "")}</td><td>${esc(s.route)}</td><td>${esc(s.total_ms)}</td><td class="admin-small-hint">${costs || "—"}</td><td>${esc(s.sql_count || 0)}/${esc(s.db_query_ms || 0)}</td></tr>`;
+      })
       .join("");
     const histMax = Math.max(1, ...history.map((h) => Number(h.p95_ms) || 0));
     const histBars = history
@@ -4647,6 +4661,19 @@
           <h3 class="admin-subtitle">${esc(t("admin_perf_diagnosis", "Diagnose"))}</h3>
           <p><strong>${esc(t("admin_perf_cause", "Wahrscheinlichste Ursache"))}:</strong> ${esc(diagnosis.cause || "—")}</p>
           <p class="admin-small-hint">${esc(diagnosis.recommendation || "")}</p>
+        </section>
+
+        <section class="admin-section admin-card">
+          <h3 class="admin-subtitle">${esc(t("admin_perf_spikes", "LETZTE SPIKES"))}</h3>
+          <p class="admin-small-hint">${esc(t("admin_perf_spikes_hint", "Slow requests (≥500ms): Route + Top-Kosten. Kein Dauertracing."))}</p>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr>
+            <th>${esc(t("admin_perf_col_time", "Zeit"))}</th>
+            <th>${esc(t("admin_perf_col_class", "Klasse"))}</th>
+            <th>${esc(t("admin_perf_col_route", "Route"))}</th>
+            <th>${esc(t("admin_perf_col_total", "Total"))}</th>
+            <th>${esc(t("admin_perf_col_top_costs", "Top Costs"))}</th>
+            <th>SQL / db_ms</th>
+          </tr></thead><tbody>${spikeRows || `<tr><td colspan="6">${esc(t("admin_perf_empty", "Noch keine Samples."))}</td></tr>`}</tbody></table></div>
         </section>
 
         <section class="admin-section admin-card">

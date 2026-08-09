@@ -34,7 +34,36 @@ Defer only non-gameplay work when pressure/critical:
 
 Single source: `perf_intel.get_pressure_state()`.
 
-### GC-PERF-AUTO-007 — Evidence-driven optimizations (Phase E)
+### GC-PERF-AUTO-007A — Payload / page child spans + spike snapshots (shipped)
+
+Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
+
+| Span | Section |
+|------|---------|
+| `payload.nav_badges` | Nav badge HUD |
+| `payload.fleets_hud` | Active fleets / alerts |
+| `payload.score` | Score + rank |
+| `payload.active_planet` | Visuals + identity |
+| `payload.panel` | Buildings/overview panel |
+| `payload.notifications` | Unread / toast |
+| `payload.liveops` | Server events + live_events |
+| `page_context.overview` / `.shipyard` / `.fleet` | SSR page builders |
+
+`payload_ms` is a **parent envelope** (like `handler_ms`) — hotspots/diagnosis prefer children.
+
+**Spike ring:** last ~48 slow requests (`≥ GC_PERF_SLOW_MS`) as `spikes[]` on admin API + **LETZTE SPIKES** UI (route + top costs + SQL). No always-on full tracing.
+
+### GC-PERF-AUTO-007B — Evidence-driven cut (partial)
+
+- Removed double-count: `_load_page_live_context` no longer records `page_context_ms` for live-refresh wall time (was twin of `live_context_ms`).
+- True `page_context.*` only on Overview/Shipyard/Fleet builders.
+- Further payload trims only after spike samples show a stable child hotspot (N≥20).
+
+### GC-PERF-FEEL-001 — Shell background weight
+
+- `static/img/background.webp` recompressed (~272KB → ~84KB @ 1400w); CSS still WebP primary via `image-set`.
+
+### GC-PERF-AUTO-007 — Evidence-driven optimizations (continued)
 
 Only after live/staging samples prove a hotspot (diet finish, nav badges, N+1 SQL, …).
 
@@ -130,6 +159,7 @@ Legacy detailed line `[GC REQUEST PERF]` remains env-gated (`GC_REQUEST_PERF_DEB
 - Tab: System → **performance**
 - API: `GET /api/admin/performance` (`@require_admin_api`)
 - Poll interval ~12s (dashboard must stay light)
+- Sections: status · diagnose · **spikes** · hot routes · hot components · slow queries · history
 
 ## Poll jitter (GC-PERF-AUTO-005)
 

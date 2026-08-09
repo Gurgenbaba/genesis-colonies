@@ -1225,10 +1225,9 @@ def _load_page_live_context(
     user_id = int(user_id)
     src = str(finish_source or "page_load")
     own_conn = conn is None
-    ctx_t0 = time.perf_counter()
     try:
         from flask import has_request_context, request as flask_request
-        from game.live_state import record_request_perf_phase, set_request_perf_meta
+        from game.live_state import set_request_perf_meta
 
         if has_request_context():
             set_request_perf_meta("finish_source", src)
@@ -1380,16 +1379,6 @@ def _load_page_live_context(
             conn.close()
 
     try:
-        from game.live_state import record_request_perf_phase
-
-        record_request_perf_phase(
-            "page_context_ms",
-            (time.perf_counter() - ctx_t0) * 1000.0,
-        )
-    except Exception:
-        pass
-
-    try:
         from flask import g as _flask_g, has_request_context
 
         if has_request_context() and prod_per_hour is not None:
@@ -1397,6 +1386,9 @@ def _load_page_live_context(
     except Exception:
         pass
 
+    # GC-PERF-AUTO-007B: do not record page_context_ms here — this function is live
+    # refresh (finish+resources), not SSR page builders. True page_context.* spans
+    # are recorded in overview/shipyard/fleet views.
     return {
         "player_view": player_view,
         "buildings": buildings,
@@ -1804,7 +1796,10 @@ def overview():
         if ctx is None:
             finish_ssr_perf(response_bytes=0)
             return redirect(url_for("login"))
+        if ssr is not None:
+            ssr.add_live_context_ms((time.perf_counter() - ctx_t0) * 1000.0)
 
+        from game.live_state import perf_span
         from game.overview_page import build_overview_page_context
 
         planet = ctx.get("planet")
@@ -1812,18 +1807,16 @@ def overview():
             from game.live_state import get_request_context_planet
 
             planet = get_request_context_planet(int(session["user_id"]), conn=conn)
-        overview_status = build_overview_page_context(
-            int(session["user_id"]), ctx, planet=planet, conn=conn
-        )
-        # Persist companion away→ready transitions from overview build.
-        from game.db import commit as _commit
+        with perf_span("page_context.overview"):
+            overview_status = build_overview_page_context(
+                int(session["user_id"]), ctx, planet=planet, conn=conn
+            )
+            # Persist companion away→ready transitions from overview build.
+            from game.db import commit as _commit
 
-        _commit(conn)
-        if ssr is not None:
-            ssr.add_live_context_ms((time.perf_counter() - ctx_t0) * 1000.0)
+            _commit(conn)
     finally:
         conn.close()
-
     tpl_t0 = time.perf_counter()
     resp = render_template(
         "overview.html",
@@ -2514,18 +2507,20 @@ def shipyard_view():
 
     conn = db()
     try:
+        from game.live_state import perf_span
+
         planet = get_context_planet(int(session.get("user_id") or 0), conn=conn)
-        shipyard_ctx = (
-            build_shipyard_page_context(int(session.get("user_id") or 0), planet, conn=conn)
-            if fleet_schema_ready(conn)
-            else {"ready": False, "orbital_shipyard_level": 0}
-        )
+        with perf_span("page_context.shipyard"):
+            shipyard_ctx = (
+                build_shipyard_page_context(int(session.get("user_id") or 0), planet, conn=conn)
+                if fleet_schema_ready(conn)
+                else {"ready": False, "orbital_shipyard_level": 0}
+            )
     finally:
         conn.close()
 
     if ssr is not None:
         ssr.add_live_context_ms((time.perf_counter() - data_t0) * 1000.0)
-
     tpl_t0 = time.perf_counter()
     resp = render_template(
         "shipyard.html",
@@ -2681,19 +2676,22 @@ def fleet_view():
         fleet_ctx: Dict[str, Any] = {"ready": False}
         logistics_ctx: Dict[str, Any] = {"ready": False}
         if fleet_schema_ready(conn):
+            from game.live_state import perf_span
+
             planet_dict = dict(planet)
-            fleet_ctx = build_fleet_page_context(
-                player_id=int(player_view["id"]),
-                planet_id=int(planet["id"]),
-                planet=planet_dict,
-                conn=conn,
-            )
-            logistics_ctx = build_logistics_page_context(
-                player_id=int(player_view["id"]),
-                planet_id=int(planet["id"]),
-                planet=planet_dict,
-                conn=conn,
-            )
+            with perf_span("page_context.fleet"):
+                fleet_ctx = build_fleet_page_context(
+                    player_id=int(player_view["id"]),
+                    planet_id=int(planet["id"]),
+                    planet=planet_dict,
+                    conn=conn,
+                )
+                logistics_ctx = build_logistics_page_context(
+                    player_id=int(player_view["id"]),
+                    planet_id=int(planet["id"]),
+                    planet=planet_dict,
+                    conn=conn,
+                )
     finally:
         conn.close()
 
@@ -10357,6 +10355,7 @@ def _payload_from_live_context(
 ) -> Dict[str, Any]:
     """Build JSON payload from an already-refreshed live context."""
     from game.logic import get_research_modifiers
+    from game.live_state import perf_span
 
     player_view = ctx["player_view"]
     buildings = ctx["buildings"]
@@ -10455,231 +10454,237 @@ def _payload_from_live_context(
     except Exception:
         payload["commander"] = {"ready": False}
 
-    if include_panel:
-        from game.buildings import get_overview_building_rows
+    with perf_span("payload.panel"):
+        if include_panel:
+            from game.buildings import get_overview_building_rows
 
-        payload["overview"]["rows"] = get_overview_building_rows(
-            planet, buildings, build_queue=build_queue
-        )
+            payload["overview"]["rows"] = get_overview_building_rows(
+                planet, buildings, build_queue=build_queue
+            )
 
-    from game.overview_page import build_overview_status
+        from game.overview_page import build_overview_status
 
-    if not lightweight:
-        payload["overview"]["status"] = build_overview_status(
-            user_id=user_id,
-            player_view=player_view,
-            ratio=float(ratio),
-            energy_total=int(energy_total),
-            energy_used=int(energy_used),
-            storage_caps=storage_caps,
-            prod_per_hour=prod_per_hour,
-            build_queue=build_queue,
-            research=research,
-            planet=planet,
-            include_log=False,
-            conn=conn,
-        )
+        if not lightweight:
+            payload["overview"]["status"] = build_overview_status(
+                user_id=user_id,
+                player_view=player_view,
+                ratio=float(ratio),
+                energy_total=int(energy_total),
+                energy_used=int(energy_used),
+                storage_caps=storage_caps,
+                prod_per_hour=prod_per_hour,
+                build_queue=build_queue,
+                research=research,
+                planet=planet,
+                include_log=False,
+                conn=conn,
+            )
 
     active_planet_id = int(planet.get("id") or 0)
     payload["active_planet_id"] = active_planet_id
     payload["active_planet_name"] = str(planet.get("name") or "")
-    try:
-        from game.galaxy import get_planet_coordinates
-        from game.planet_evolution.dna import effective_planet_class
-        from game.planet_evolution.ux_copy import planet_class_label_key
+    with perf_span("payload.active_planet"):
+        try:
+            from game.galaxy import get_planet_coordinates
+            from game.planet_evolution.dna import effective_planet_class
+            from game.planet_evolution.ux_copy import planet_class_label_key
 
-        from game.planet_visuals import (
-            get_planet_identity_for_position,
-            herocard_webp_srcset_for_position,
-            landscape_static_relpath,
-            OVERVIEW_HEROCARD_SIZES,
-            raster_webp_relpath,
-        )
-
-        coords = get_planet_coordinates(planet)
-        position = int(coords.get("position") or 0)
-        landscape_rel = landscape_static_relpath(position)
-        herocard_rel = landscape_rel
-        planet_class = effective_planet_class(planet)
-        theme = get_planet_identity_for_position(position)
-        from game.planet_visuals import climate_economy_display_for_position, temperature_range_for_position
-
-        temp = temperature_range_for_position(position)
-        climate = climate_economy_display_for_position(position)
-        from game.planet_evolution.empire_identity import empire_identity_for_planet
-        from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
-
-        identity = empire_identity_for_planet(planet, conn=conn)
-        payload["active_planet"] = {
-            "planet_id": int(active_planet_id),
-            "name": str(planet.get("name") or ""),
-            "coordinates_formatted": coords.get("formatted") or "",
-            "planet_class": planet_class,
-            "planet_class_label_key": planet_class_label_key(planet_class),
-            "is_homeworld": bool(planet.get("is_homeworld")),
-            "position": position,
-            "landscape_url": versioned_static_url("static", filename=landscape_rel),
-            "landscape_webp_url": versioned_static_url(
-                "static", filename=raster_webp_relpath(landscape_rel)
-            ),
-            "herocard_url": versioned_static_url("static", filename=herocard_rel),
-            "herocard_webp_url": versioned_static_url(
-                "static", filename=raster_webp_relpath(herocard_rel)
-            ),
-            "herocard_webp_srcset": herocard_webp_srcset_for_position(
-                position, versioned_static_url
-            ),
-            "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
-            "accent_color": theme["accent_color"],
-            "secondary_color": theme["secondary_color"],
-            "glow_color": theme["accent_color"],
-            "planet_effect": theme["effect"],
-            "theme_key": theme["theme_key"],
-            "theme_group": theme["theme_group"],
-            "slot_label_key": theme["label_key"],
-            "temperature_display": temp["display"],
-            "climate": climate,
-            **identity,
-            "sidebar_nav": resolve_sidebar_nav(
-                empire_role_key=identity["empire_role_key"],
-                is_homeworld=bool(planet.get("is_homeworld")),
-            ),
-        }
-    except Exception:
-        from game.planet_visuals import (
-            DEFAULT_HEROCARD,
-            climate_economy_display_for_position,
-            get_planet_identity_for_position,
-            herocard_webp_srcset_for_position,
-            OVERVIEW_HEROCARD_SIZES,
-            raster_webp_relpath,
-            temperature_range_for_position,
-        )
-
-        fallback_rel = f"img/herocards/{DEFAULT_HEROCARD}"
-        fallback_herocard_rel = fallback_rel
-        fallback_theme = get_planet_identity_for_position(0)
-        fallback_temp = temperature_range_for_position(0)
-        fallback_climate = climate_economy_display_for_position(0)
-        from game.planet_evolution.empire_identity import empire_identity_for_planet
-        from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
-
-        identity = empire_identity_for_planet(planet, conn=conn)
-        payload["active_planet"] = {
-            "planet_id": int(active_planet_id),
-            "name": str(planet.get("name") or ""),
-            "coordinates_formatted": "",
-            "planet_class": str(planet.get("planet_class") or "terrestrial"),
-            "planet_class_label_key": "planet_class_terrestrial",
-            "is_homeworld": bool(planet.get("is_homeworld")),
-            "position": None,
-            "landscape_url": versioned_static_url("static", filename=fallback_rel),
-            "landscape_webp_url": versioned_static_url(
-                "static", filename=raster_webp_relpath(fallback_rel)
-            ),
-            "herocard_url": versioned_static_url("static", filename=fallback_herocard_rel),
-            "herocard_webp_url": versioned_static_url(
-                "static", filename=raster_webp_relpath(fallback_herocard_rel)
-            ),
-            "herocard_webp_srcset": herocard_webp_srcset_for_position(
-                0, versioned_static_url
-            ),
-            "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
-            "accent_color": fallback_theme["accent_color"],
-            "secondary_color": fallback_theme["secondary_color"],
-            "glow_color": fallback_theme["accent_color"],
-            "planet_effect": fallback_theme["effect"],
-            "theme_key": fallback_theme["theme_key"],
-            "theme_group": fallback_theme["theme_group"],
-            "slot_label_key": fallback_theme["label_key"],
-            "temperature_display": fallback_temp["display"],
-            "climate": fallback_climate,
-            **identity,
-            "sidebar_nav": resolve_sidebar_nav(
-                empire_role_key=identity["empire_role_key"],
-                is_homeworld=bool(planet.get("is_homeworld")),
-            ),
-        }
-
-    if panel_delta_keys:
-        from game.buildings import get_buildings_panel_delta
-
-        payload["buildings_panel_delta"] = get_buildings_panel_delta(
-            planet,
-            buildings,
-            build_queue=build_queue,
-            building_keys=panel_delta_keys,
-        )
-    elif include_panel:
-        from game.buildings import get_buildings_panel_rows
-
-        payload["buildings_panel"] = get_buildings_panel_rows(
-            planet,
-            buildings,
-            build_queue=build_queue,
-        )
-
-    score = get_player_score_cached(user_id, read_only=True) or {
-        "total": 0,
-        "buildings": 0,
-        "research": 0,
-    }
-    rank, total_players = get_player_rank(user_id)
-
-    payload["score"] = {
-        "total": int(score.get("total", 0) or 0),
-        "buildings": int(score.get("buildings", 0) or 0),
-        "research": int(score.get("research", 0) or 0),
-        "rank": int(rank) if rank else None,
-        "total_players": int(total_players) if total_players else None,
-    }
-
-    try:
-        payload["unread_messages_count"] = messages_logic.unread_count(
-            user_id,
-            conn=conn,
-            prepare=not lightweight,
-        )
-        latest_message_id = messages_logic.latest_inbox_message_id(
-            user_id,
-            conn=conn,
-            prepare=not lightweight,
-        )
-        payload["latest_message_id"] = int(latest_message_id) if latest_message_id else None
-        toast_items = []
-        if int(payload["unread_messages_count"] or 0) > 0:
-            toast_items = messages_logic.notification_toast_items(
-                user_id,
-                limit=16,
-                conn=conn,
-                prepare=False,
+            from game.planet_visuals import (
+                get_planet_identity_for_position,
+                herocard_webp_srcset_for_position,
+                landscape_static_relpath,
+                OVERVIEW_HEROCARD_SIZES,
+                raster_webp_relpath,
             )
-        payload["notifications"] = {
-            "unread_count": max(0, int(payload["unread_messages_count"] or 0)),
-            "newest_id": payload["latest_message_id"],
-            "new_items": toast_items,
+
+            coords = get_planet_coordinates(planet)
+            position = int(coords.get("position") or 0)
+            landscape_rel = landscape_static_relpath(position)
+            herocard_rel = landscape_rel
+            planet_class = effective_planet_class(planet)
+            theme = get_planet_identity_for_position(position)
+            from game.planet_visuals import climate_economy_display_for_position, temperature_range_for_position
+
+            temp = temperature_range_for_position(position)
+            climate = climate_economy_display_for_position(position)
+            from game.planet_evolution.empire_identity import empire_identity_for_planet
+            from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
+
+            identity = empire_identity_for_planet(planet, conn=conn)
+            payload["active_planet"] = {
+                "planet_id": int(active_planet_id),
+                "name": str(planet.get("name") or ""),
+                "coordinates_formatted": coords.get("formatted") or "",
+                "planet_class": planet_class,
+                "planet_class_label_key": planet_class_label_key(planet_class),
+                "is_homeworld": bool(planet.get("is_homeworld")),
+                "position": position,
+                "landscape_url": versioned_static_url("static", filename=landscape_rel),
+                "landscape_webp_url": versioned_static_url(
+                    "static", filename=raster_webp_relpath(landscape_rel)
+                ),
+                "herocard_url": versioned_static_url("static", filename=herocard_rel),
+                "herocard_webp_url": versioned_static_url(
+                    "static", filename=raster_webp_relpath(herocard_rel)
+                ),
+                "herocard_webp_srcset": herocard_webp_srcset_for_position(
+                    position, versioned_static_url
+                ),
+                "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
+                "accent_color": theme["accent_color"],
+                "secondary_color": theme["secondary_color"],
+                "glow_color": theme["accent_color"],
+                "planet_effect": theme["effect"],
+                "theme_key": theme["theme_key"],
+                "theme_group": theme["theme_group"],
+                "slot_label_key": theme["label_key"],
+                "temperature_display": temp["display"],
+                "climate": climate,
+                **identity,
+                "sidebar_nav": resolve_sidebar_nav(
+                    empire_role_key=identity["empire_role_key"],
+                    is_homeworld=bool(planet.get("is_homeworld")),
+                ),
+            }
+        except Exception:
+            from game.planet_visuals import (
+                DEFAULT_HEROCARD,
+                climate_economy_display_for_position,
+                get_planet_identity_for_position,
+                herocard_webp_srcset_for_position,
+                OVERVIEW_HEROCARD_SIZES,
+                raster_webp_relpath,
+                temperature_range_for_position,
+            )
+
+            fallback_rel = f"img/herocards/{DEFAULT_HEROCARD}"
+            fallback_herocard_rel = fallback_rel
+            fallback_theme = get_planet_identity_for_position(0)
+            fallback_temp = temperature_range_for_position(0)
+            fallback_climate = climate_economy_display_for_position(0)
+            from game.planet_evolution.empire_identity import empire_identity_for_planet
+            from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
+
+            identity = empire_identity_for_planet(planet, conn=conn)
+            payload["active_planet"] = {
+                "planet_id": int(active_planet_id),
+                "name": str(planet.get("name") or ""),
+                "coordinates_formatted": "",
+                "planet_class": str(planet.get("planet_class") or "terrestrial"),
+                "planet_class_label_key": "planet_class_terrestrial",
+                "is_homeworld": bool(planet.get("is_homeworld")),
+                "position": None,
+                "landscape_url": versioned_static_url("static", filename=fallback_rel),
+                "landscape_webp_url": versioned_static_url(
+                    "static", filename=raster_webp_relpath(fallback_rel)
+                ),
+                "herocard_url": versioned_static_url("static", filename=fallback_herocard_rel),
+                "herocard_webp_url": versioned_static_url(
+                    "static", filename=raster_webp_relpath(fallback_herocard_rel)
+                ),
+                "herocard_webp_srcset": herocard_webp_srcset_for_position(
+                    0, versioned_static_url
+                ),
+                "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
+                "accent_color": fallback_theme["accent_color"],
+                "secondary_color": fallback_theme["secondary_color"],
+                "glow_color": fallback_theme["accent_color"],
+                "planet_effect": fallback_theme["effect"],
+                "theme_key": fallback_theme["theme_key"],
+                "theme_group": fallback_theme["theme_group"],
+                "slot_label_key": fallback_theme["label_key"],
+                "temperature_display": fallback_temp["display"],
+                "climate": fallback_climate,
+                **identity,
+                "sidebar_nav": resolve_sidebar_nav(
+                    empire_role_key=identity["empire_role_key"],
+                    is_homeworld=bool(planet.get("is_homeworld")),
+                ),
+            }
+
+    with perf_span("payload.panel"):
+        if panel_delta_keys:
+            from game.buildings import get_buildings_panel_delta
+
+            payload["buildings_panel_delta"] = get_buildings_panel_delta(
+                planet,
+                buildings,
+                build_queue=build_queue,
+                building_keys=panel_delta_keys,
+            )
+        elif include_panel:
+            from game.buildings import get_buildings_panel_rows
+
+            payload["buildings_panel"] = get_buildings_panel_rows(
+                planet,
+                buildings,
+                build_queue=build_queue,
+            )
+
+    with perf_span("payload.score"):
+        score = get_player_score_cached(user_id, read_only=True) or {
+            "total": 0,
+            "buildings": 0,
+            "research": 0,
         }
-    except Exception:
-        payload["unread_messages_count"] = 0
-        payload["latest_message_id"] = None
-        payload["notifications"] = {
-            "unread_count": 0,
-            "newest_id": None,
-            "new_items": [],
+        rank, total_players = get_player_rank(user_id)
+
+        payload["score"] = {
+            "total": int(score.get("total", 0) or 0),
+            "buildings": int(score.get("buildings", 0) or 0),
+            "research": int(score.get("research", 0) or 0),
+            "rank": int(rank) if rank else None,
+            "total_players": int(total_players) if total_players else None,
         }
 
-    try:
-        from game.live_state import nav_badges_for_game_state
+    with perf_span("payload.notifications"):
+        try:
+            payload["unread_messages_count"] = messages_logic.unread_count(
+                user_id,
+                conn=conn,
+                prepare=not lightweight,
+            )
+            latest_message_id = messages_logic.latest_inbox_message_id(
+                user_id,
+                conn=conn,
+                prepare=not lightweight,
+            )
+            payload["latest_message_id"] = int(latest_message_id) if latest_message_id else None
+            toast_items = []
+            if int(payload["unread_messages_count"] or 0) > 0:
+                toast_items = messages_logic.notification_toast_items(
+                    user_id,
+                    limit=16,
+                    conn=conn,
+                    prepare=False,
+                )
+            payload["notifications"] = {
+                "unread_count": max(0, int(payload["unread_messages_count"] or 0)),
+                "newest_id": payload["latest_message_id"],
+                "new_items": toast_items,
+            }
+        except Exception:
+            payload["unread_messages_count"] = 0
+            payload["latest_message_id"] = None
+            payload["notifications"] = {
+                "unread_count": 0,
+                "newest_id": None,
+                "new_items": [],
+            }
 
-        payload["nav_badges"] = nav_badges_for_game_state(user_id, conn=conn)
-    except Exception:
-        payload["nav_badges"] = {
-            "vote_center": {"active": False, "count": 0, "label": ""},
-            "government": {"active": False, "count": 0, "label": ""},
-            "referrals": {"active": False, "count": 0, "label": ""},
-            "imperial_directives": {"active": False, "count": 0, "label": ""},
-            "auction_house": {"active": False, "count": 0, "label": ""},
-        }
+    with perf_span("payload.nav_badges"):
+        try:
+            from game.live_state import nav_badges_for_game_state
+
+            payload["nav_badges"] = nav_badges_for_game_state(user_id, conn=conn)
+        except Exception:
+            payload["nav_badges"] = {
+                "vote_center": {"active": False, "count": 0, "label": ""},
+                "government": {"active": False, "count": 0, "label": ""},
+                "referrals": {"active": False, "count": 0, "label": ""},
+                "imperial_directives": {"active": False, "count": 0, "label": ""},
+                "auction_house": {"active": False, "count": 0, "label": ""},
+            }
 
     try:
         from game.live_state import imperial_directives_for_game_state
@@ -10720,59 +10725,70 @@ def _payload_from_live_context(
             "phase_id": "",
         }
 
-    try:
-        from game.server_events import serialize_active_events
+    with perf_span("payload.liveops"):
+        try:
+            from game.server_events import serialize_active_events
 
-        payload["server_events"] = serialize_active_events(conn=conn)
-    except Exception:
-        payload["server_events"] = {
-            "events": [],
-            "production_mult": 1.0,
-            "expedition_hold_mult": 1.0,
-            "shop_discount_bps": 0,
-            "build_time_speed": 1.0,
-            "research_time_speed": 1.0,
-            "asteroid_spawn_mult": 1.0,
-            "world_boss_spawn_mult": 1.0,
-            "inactive_farm_mult": 1.0,
-        }
-
-    try:
-        from game.overview_page import build_overview_live_events
-        from game.i18n import current_locale
-
-        payload["live_events"] = build_overview_live_events(
-            conn=conn,
-            user_id=user_id,
-            locale=current_locale(),
-        )
-    except Exception:
-        payload["live_events"] = []
-
-    try:
-        from game.live_state import fleet_hud_for_game_state
-
-        fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
-        if fleet_hud is not None:
-            from game.fleet import FLEET_DRAWER_VISIBLE_LIMIT
-
-            payload["active_fleets"] = fleet_hud.get("active_fleets") or {
-                "count": 0,
-                "active_fleet_count": 0,
-                "fleets_confirmed_empty": True,
-                "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
-                "next_remaining_seconds": 0,
-                "items": [],
+            payload["server_events"] = serialize_active_events(conn=conn)
+        except Exception:
+            payload["server_events"] = {
+                "events": [],
+                "production_mult": 1.0,
+                "expedition_hold_mult": 1.0,
+                "shop_discount_bps": 0,
+                "build_time_speed": 1.0,
+                "research_time_speed": 1.0,
+                "asteroid_spawn_mult": 1.0,
+                "world_boss_spawn_mult": 1.0,
+                "inactive_farm_mult": 1.0,
             }
-            payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
-            payload["fleet_alerts"] = fleet_hud.get("fleet_alerts") or {
-                "incoming_attack_count": 0,
-                "next_attack_arrival": None,
-                "has_incoming_attack": False,
-                "alert_key": "",
-                "incoming_attacks": [],
-            }
-        else:
+
+        try:
+            from game.overview_page import build_overview_live_events
+            from game.i18n import current_locale
+
+            payload["live_events"] = build_overview_live_events(
+                conn=conn,
+                user_id=user_id,
+                locale=current_locale(),
+            )
+        except Exception:
+            payload["live_events"] = []
+
+    with perf_span("payload.fleets_hud"):
+        try:
+            from game.live_state import fleet_hud_for_game_state
+
+            fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
+            if fleet_hud is not None:
+                from game.fleet import FLEET_DRAWER_VISIBLE_LIMIT
+
+                payload["active_fleets"] = fleet_hud.get("active_fleets") or {
+                    "count": 0,
+                    "active_fleet_count": 0,
+                    "fleets_confirmed_empty": True,
+                    "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
+                    "next_remaining_seconds": 0,
+                    "items": [],
+                }
+                payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
+                payload["fleet_alerts"] = fleet_hud.get("fleet_alerts") or {
+                    "incoming_attack_count": 0,
+                    "next_attack_arrival": None,
+                    "has_incoming_attack": False,
+                    "alert_key": "",
+                    "incoming_attacks": [],
+                }
+            else:
+                payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+                payload["fleet_alerts"] = {
+                    "incoming_attack_count": 0,
+                    "next_attack_arrival": None,
+                    "has_incoming_attack": False,
+                    "alert_key": "",
+                    "incoming_attacks": [],
+                }
+        except Exception:
             payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
             payload["fleet_alerts"] = {
                 "incoming_attack_count": 0,
@@ -10781,15 +10797,6 @@ def _payload_from_live_context(
                 "alert_key": "",
                 "incoming_attacks": [],
             }
-    except Exception:
-        payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
-        payload["fleet_alerts"] = {
-            "incoming_attack_count": 0,
-            "next_attack_arrival": None,
-            "has_incoming_attack": False,
-            "alert_key": "",
-            "incoming_attacks": [],
-        }
 
     try:
         from game.live_state import account_safety_hud_for_game_state

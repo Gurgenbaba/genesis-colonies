@@ -59,7 +59,9 @@ Siehe `game.config.get_perf_budgets()` / [ARCHITECTURE.md](ARCHITECTURE.md). Bas
 |--------|--------|--------|
 | **GC-PERF-AUTO-001…005** | Audit, instrumentation, rolling metrics, admin dashboard, poll jitter | ✅ Wave 1 — [PERFORMANCE.md](PERFORMANCE.md) |
 | GC-PERF-AUTO-006 | Load Guard (defer non-gameplay only) | 📋 after evidence |
-| GC-PERF-AUTO-007 | Evidence-driven optimizations | 📋 after evidence |
+| **GC-PERF-AUTO-007A** | Payload/page child spans + spike snapshots | ✅ — [PERFORMANCE.md](PERFORMANCE.md) |
+| GC-PERF-AUTO-007B | Evidence-driven cuts (page_context double-count fixed) | 🔄 partial — more after live spikes |
+| GC-PERF-FEEL-001 | Shell background WebP weight | ✅ |
 
 ## Ticket-Serie B — Postgres Cutover (offen)
 

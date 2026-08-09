@@ -205,9 +205,91 @@ def test_hotspot_and_diagnosis():
     comps = store.component_stats(300.0)
     assert comps and comps[0]["component"] == "queue_finish"
     assert all(c["component"] != "handler" for c in comps)
+    assert all(c["component"] != "state_build" for c in comps)
     diag = store.build_diagnosis(300.0)
     assert diag["cause"] == "queue_finish"
     assert "queue" in diag["recommendation"].lower() or "finish" in diag["recommendation"].lower()
+
+
+def test_payload_child_hotspot_not_state_build_envelope():
+    """GC-PERF-AUTO-007A: payload children beat envelope state_build in hotspots."""
+    from game.perf_intel import PerfIntelStore, RequestSample
+
+    store = PerfIntelStore()
+    now = time.time()
+    for _ in range(12):
+        store.record(
+            RequestSample(
+                ts=now,
+                method="GET",
+                route="api_game_state",
+                path="/api/game-state",
+                status=200,
+                total_ms=900.0,
+                error=False,
+                phases={
+                    "payload_ms": 700.0,
+                    "payload_fleets_hud_ms": 420.0,
+                    "payload_nav_badges_ms": 80.0,
+                    "finish_ms": 40.0,
+                },
+                slow_class="slow",
+            )
+        )
+    comps = store.component_stats(300.0)
+    names = [c["component"] for c in comps]
+    assert "payload.fleets_hud" in names
+    assert names[0] == "payload.fleets_hud"
+    assert "state_build" not in names
+    diag = store.build_diagnosis(300.0)
+    assert diag["cause"] == "payload.fleets_hud"
+
+
+def test_spike_ring_captures_slow_only():
+    """GC-PERF-AUTO-007A: slow requests land in spikes[]; fast ones do not."""
+    from game.perf_intel import PerfIntelStore, RequestSample
+
+    store = PerfIntelStore(spike_max=16)
+    now = time.time()
+    store.record(
+        RequestSample(
+            ts=now,
+            method="GET",
+            route="api_game_state",
+            path="/api/game-state",
+            status=200,
+            total_ms=80.0,
+            error=False,
+            phases={"payload_score_ms": 10.0},
+            slow_class="",
+        )
+    )
+    store.record(
+        RequestSample(
+            ts=now + 1,
+            method="GET",
+            route="overview",
+            path="/overview",
+            status=200,
+            total_ms=1800.0,
+            error=False,
+            phases={
+                "page_context_overview_ms": 900.0,
+                "live_context_ms": 400.0,
+            },
+            slow_class="very_slow",
+            sql_count=12,
+            db_query_ms=55.0,
+        )
+    )
+    spikes = store.recent_spikes(10)
+    assert len(spikes) == 1
+    assert spikes[0]["route"] == "overview"
+    assert spikes[0]["slow_class"] == "very_slow"
+    assert spikes[0]["top_costs"][0]["name"] == "page_context.overview"
+    snap = store.snapshot()
+    assert "spikes" in snap
+    assert len(snap["spikes"]) == 1
 
 
 def test_pressure_ignores_sparse_traffic():
@@ -328,8 +410,29 @@ def test_admin_performance_ok_for_admin(app_client):
     assert "requests" in data
     assert "routes" in data
     assert "components" in data
+    assert "spikes" in data
+    assert isinstance(data.get("spikes"), list)
     assert "diagnosis" in data
     assert "history_60m" in data
+
+
+def test_payload_child_span_aliases():
+    from game.perf_intel import resolve_phase_name
+    from game.live_state import _REQUEST_PERF_PHASE_KEYS
+
+    assert resolve_phase_name("payload.fleets_hud") == "payload_fleets_hud_ms"
+    assert resolve_phase_name("page_context.overview") == "page_context_overview_ms"
+    assert "payload_fleets_hud_ms" in _REQUEST_PERF_PHASE_KEYS
+    assert "page_context_overview_ms" in _REQUEST_PERF_PHASE_KEYS
+
+
+def test_admin_spikes_ui_contract():
+    admin = _read("static/admin.js")
+    assert "data.spikes" in admin
+    assert "admin_perf_spikes" in admin
+    assert "LETZTE SPIKES" in admin or 't("admin_perf_spikes"' in admin
+    assert 'perf_span("payload.fleets_hud")' in _read("app.py")
+    assert 'perf_span("page_context.overview")' in _read("app.py")
 
 
 def test_poll_jitter_contract_in_main_js():
@@ -345,6 +448,8 @@ def test_admin_tab_and_docs_exist():
     assert "GC-PERF-AUTO" in _read("docs/PERFORMANCE.md")
     assert "/api/game-state" in _read("docs/PERFORMANCE.md")
     assert "GC-PERF-AUTO-006" in _read("docs/PERFORMANCE.md")
+    assert "GC-PERF-AUTO-007A" in _read("docs/PERFORMANCE.md")
+    assert "spikes" in _read("docs/PERFORMANCE.md")
 
 
 def test_perf_intel_owner_in_core_architecture():

@@ -27,6 +27,7 @@ IMG = ROOT / "static" / "img"
 
 # Budgets (bytes)
 MAX_ROOT_VARIANT = 500_000
+BACKGROUND_WEBP_MAX = 120_000
 HEROCARD_SM_MAX = 80_000
 HEROCARD_MD_MAX = 150_000
 HEROCARD_LG_MAX = 280_000
@@ -147,7 +148,12 @@ def _compress_root_pair(name: str, *, max_w: int, dry_run: bool) -> list[Result]
         im = _resize(im.convert("RGB"), max_w)
         w, h = im.size
         after_png = _save_png_budget(im, png_path, max_bytes=MAX_ROOT_VARIANT, dry_run=dry_run)
-        after_webp = _save_webp_budget(im, webp_path, max_bytes=MAX_ROOT_VARIANT, dry_run=dry_run)
+        after_webp = _save_webp_budget(
+            im,
+            webp_path,
+            max_bytes=BACKGROUND_WEBP_MAX if name == "background" else MAX_ROOT_VARIANT,
+            dry_run=dry_run,
+        )
     out.append(
         Result(
             f"static/img/{name}.png",

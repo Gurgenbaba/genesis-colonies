@@ -8750,5 +8750,11 @@
   "admin_perf_empty": "Pas encore d’échantillons.",
   "admin_perf_col_route": "Route",
   "admin_perf_col_component": "Composant",
-  "admin_perf_col_signature": "Signature"
+  "admin_perf_col_signature": "Signature",
+  "admin_perf_spikes": "DERNIERS SPIKES",
+  "admin_perf_spikes_hint": "Requêtes lentes (≥500ms) : route + coûts top. Pas de tracing permanent.",
+  "admin_perf_col_time": "Heure",
+  "admin_perf_col_class": "Classe",
+  "admin_perf_col_total": "Total",
+  "admin_perf_col_top_costs": "Top coûts"
 }

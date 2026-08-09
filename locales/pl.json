@@ -8750,5 +8750,11 @@
   "admin_perf_empty": "Brak próbek.",
   "admin_perf_col_route": "Trasa",
   "admin_perf_col_component": "Komponent",
-  "admin_perf_col_signature": "Sygnatura"
+  "admin_perf_col_signature": "Sygnatura",
+  "admin_perf_spikes": "OSTATNIE SPIKI",
+  "admin_perf_spikes_hint": "Wolne requesty (≥500ms): trasa + top koszty. Bez ciągłego tracingu.",
+  "admin_perf_col_time": "Czas",
+  "admin_perf_col_class": "Klasa",
+  "admin_perf_col_total": "Total",
+  "admin_perf_col_top_costs": "Top koszty"
 }

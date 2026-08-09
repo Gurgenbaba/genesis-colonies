@@ -59,13 +59,18 @@ def test_page_live_context_sets_finish_source_meta():
     assert 'set_request_perf_meta("finish_source", src)' in block
     assert 'set_request_perf_meta("route"' in block
     assert 'set_request_perf_meta("pjax", 1)' in block
-    assert 'record_request_perf_phase(\n            "page_context_ms"' in block or 'record_request_perf_phase("page_context_ms"' in block
+    # GC-PERF-AUTO-007B: page_context.* lives on SSR views, not inside live refresh.
+    assert 'record_request_perf_phase("page_context_ms"' not in block
+    assert 'page_context.overview' in src
+    assert 'page_context.shipyard' in src
+    assert 'page_context.fleet' in src
 
 
 def test_db_connection_perf_phase():
     src = _read("game/db.py")
     assert "db_connection_ms" in src
-    assert "is_request_perf_sampled()" in src
+    # Owner gate renamed: sampled-only → any active request perf (intel always-on).
+    assert "is_request_perf_active()" in src
 
 
 def test_buildings_pjax_request_perf_slow_log(game_client, monkeypatch, caplog):

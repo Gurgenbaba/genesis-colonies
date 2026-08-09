@@ -8750,5 +8750,11 @@
   "admin_perf_empty": "Noch keine Samples.",
   "admin_perf_col_route": "Route",
   "admin_perf_col_component": "Komponente",
-  "admin_perf_col_signature": "Signatur"
+  "admin_perf_col_signature": "Signatur",
+  "admin_perf_spikes": "LETZTE SPIKES",
+  "admin_perf_spikes_hint": "Slow requests (≥500ms): Route + Top-Kosten. Kein Dauertracing.",
+  "admin_perf_col_time": "Zeit",
+  "admin_perf_col_class": "Klasse",
+  "admin_perf_col_total": "Total",
+  "admin_perf_col_top_costs": "Top Costs"
 }
