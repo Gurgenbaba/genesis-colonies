@@ -32,6 +32,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | — | Command Initiation (do-first once-through) | [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | EPIC-27 | Commander Classes & Skill Trees | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
 | EPIC-28 | Space Lottery (Chrono Chamber) | [SPACE_LOTTERY.md](SPACE_LOTTERY.md) |
+| EPIC-29 | Mine Evolution / Industrial Ascension | [MINE_EVOLUTION.md](MINE_EVOLUTION.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -57,6 +58,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) | Sammler-Markt, Collectibles, Prestige |
 | [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) | Ankerkurven, Universe-Defaults (Code-generiert) |
+| [MINE_EVOLUTION.md](MINE_EVOLUTION.md) | Mine Evolution / Industrial Ascension (EPIC-29) |
 | [GC-850_RUNTIME_DOC_AUDIT.md](GC-850_RUNTIME_DOC_AUDIT.md) | Runtime ↔ Doc Audit (GC-850) |
 | GC-851 doc sync guards | `tests/test_gc851_docs_version_sync.py` — VERSION, migrations, pytest count |
 | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) | Kanonische Produktionsformeln (GC-820) |

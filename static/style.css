@@ -9669,6 +9669,21 @@ body.gc-body-ingame.gc-has-planet-landscape .buildings-shell.gc-panel::before{
 }
 
 /* GC-557G ? hero right stack: floating level + timer badges (buildings/research) */
+.gc-bld-hero-left-stack{
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: auto;
+  min-width: 0;
+  max-width: calc(50% - 8px);
+  pointer-events: none;
+}
+
 .gc-bld-hero-right-stack{
   position: absolute;
   top: 5px;
@@ -10980,6 +10995,155 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 .gc-prog-affordable .gc-bld-prod-delta-cost .gc-bld-prod-delta-val{
   animation: none;
+}
+
+/* EPIC-29 Mine Evolution — scoped to building cards only */
+.gc-bld-evo-badge{
+  border: 1px solid rgba(255, 196, 72, 0.55);
+  background: rgba(40, 28, 8, 0.85);
+  color: rgba(255, 214, 120, 0.95);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-evo-block{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 2px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 180, 64, 0.28);
+  background: linear-gradient(180deg, rgba(36, 24, 8, 0.55), rgba(12, 14, 18, 0.4));
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-evo-progress{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.68rem;
+  color: rgba(220, 230, 240, 0.88);
+}
+.gc-bld-evo-progress-vals{
+  color: rgba(255, 214, 120, 0.95);
+}
+.gc-bld-evo-bar{
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  border-radius: 0;
+}
+.gc-bld-evo-bar-fill{
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 160, 40, 0.85), rgba(255, 220, 100, 0.95));
+}
+.gc-bld-evo-bonus{
+  font-size: 0.64rem;
+  color: rgba(160, 230, 170, 0.9);
+}
+.gc-bld-evo-btn{
+  margin-top: 2px;
+  width: 100%;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-radius: var(--gc-radius-sm, 2px);
+  border: 1px solid rgba(255, 180, 64, 0.55);
+  background: rgba(70, 42, 10, 0.75);
+  color: rgba(255, 230, 170, 0.95);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.gc-bld-evo-btn:hover:not([disabled]):not(.is-disabled){
+  border-color: rgba(255, 210, 100, 0.8);
+  background: rgba(95, 55, 12, 0.9);
+}
+.gc-bld-evo-btn[disabled],
+.gc-bld-evo-btn.is-disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.gc-building-card--evolved{
+  box-shadow: inset 0 0 0 1px rgba(255, 180, 64, 0.18);
+}
+
+.gc-bld-evo-confirm-modal .gc-bld-evo-confirm-dialog{
+  max-width: 420px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-evo-confirm-body{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-bld-evo-confirm-lead{
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(230, 236, 245, 0.95);
+}
+.gc-bld-evo-confirm-rank-chip{
+  display: inline-flex;
+  align-self: flex-start;
+  margin: 0;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(210, 230, 255, 0.95);
+  border: 1px solid rgba(120, 160, 220, 0.45);
+  background: rgba(24, 36, 56, 0.85);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-evo-confirm-section{
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 140, 170, 0.28);
+  background: rgba(12, 18, 28, 0.55);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-evo-confirm-section-title{
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(170, 190, 220, 0.85);
+}
+.gc-bld-evo-confirm-benefit{
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: rgba(180, 240, 190, 0.95);
+}
+.gc-bld-evo-confirm-tribute-list{
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(220, 230, 245, 0.95);
+  font-variant-numeric: tabular-nums;
+}
+.gc-bld-evo-confirm-tribute-list li + li{
+  margin-top: 4px;
+}
+.gc-bld-evo-confirm-note{
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(200, 210, 225, 0.88);
+}
+.gc-bld-evo-confirm-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.gc-bld-evo-confirm-actions .gc-btn{
+  border-radius: var(--gc-radius-sm, 2px);
 }
 
 .gc-bld-card-meta{

@@ -113,7 +113,7 @@ Galaxy climate still adjusts **solar output** via `EffectResolver` (`solar_outpu
 
 | Modifier | Future use |
 |----------|------------|
-| `building_modifier` | Per-building production bonuses |
+| `building_modifier` | **Live (EPIC-29):** Mine Evolution rank → `1 + bonus(rank)` via `production_context_from_resolver` ([MINE_EVOLUTION.md](MINE_EVOLUTION.md)) |
 | `planet_modifier` | Planet classes |
 | `empire_modifier` | Imperium doctrines |
 | `alliance_modifier` | Alliance bonuses |

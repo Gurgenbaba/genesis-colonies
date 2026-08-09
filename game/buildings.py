@@ -1073,8 +1073,9 @@ def _panel_upgrade_effect_fields(
         )
 
     if building_type == "geothermal_nexus":
-        cur_prod = r_now.get_max_building_level("metal_mine")
-        nxt_prod = r_next.get_max_building_level("metal_mine")
+        # EPIC-29: mines uncapped — nexus still raises solar + storage caps.
+        cur_prod = r_now.get_max_building_level("solar_plant")
+        nxt_prod = r_next.get_max_building_level("solar_plant")
         cur_store = r_now.get_max_building_level("metal_storage")
         nxt_store = r_next.get_max_building_level("metal_storage")
         out = _panel_effect_snapshot(
@@ -1096,8 +1097,9 @@ def _panel_upgrade_effect_fields(
         return out
 
     if building_type == "planet_core_nexus":
-        cur_max = r_now.get_max_building_level("metal_mine")
-        nxt_max = r_next.get_max_building_level("metal_mine")
+        # EPIC-29: core raises solar (and formerly mine) cap — mines are uncapped.
+        cur_max = r_now.get_max_building_level("solar_plant")
+        nxt_max = r_next.get_max_building_level("solar_plant")
         return _panel_effect_snapshot(
             effect_kind="max_level",
             effect_current=cur_max,
@@ -1340,7 +1342,8 @@ def _technical_effects_at_level(
         return out
 
     if building_type == "geothermal_nexus":
-        prod_max = int(r.get_max_building_level("metal_mine"))
+        # EPIC-29: show solar cap (mines uncapped).
+        prod_max = int(r.get_max_building_level("solar_plant"))
         store_max = int(r.get_max_building_level("metal_storage"))
         out.update(
             effect_kind="max_level",
@@ -1358,7 +1361,7 @@ def _technical_effects_at_level(
         return out
 
     if building_type == "planet_core_nexus":
-        val = int(r.get_max_building_level("metal_mine"))
+        val = int(r.get_max_building_level("solar_plant"))
         out.update(
             effect_kind="max_level",
             effect_value=val,
@@ -1659,6 +1662,12 @@ def _make_panel_row(
             panel_ctx=panel_ctx,
         )
 
+    from .mine_evolution import UNCAPPED_BUILDING_LEVEL, is_evolvable_mine, panel_evolution_fields
+
+    uncapped = is_evolvable_mine(building_type)
+    # Uncapped mines never show "MAX" from the soft sentinel alone.
+    at_hard_max = (not uncapped) and bool(at_queue_max)
+
     row: Dict[str, Any] = {
         "key": building_type,
         "tab": get_building_tab(building_type),
@@ -1666,8 +1675,9 @@ def _make_panel_row(
         "level": level,
         "target_level": target_level,
         "max_level": max_level,
+        "uncapped": bool(uncapped),
         "queue_count": queued_same,
-        "at_queue_max": bool(at_queue_max),
+        "at_queue_max": bool(at_hard_max),
         "cost_metal": cost_metal,
         "cost_crystal": cost_crystal,
         "time_seconds": int(time_seconds),
@@ -1680,6 +1690,26 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
+    planet_id = planet.get("id")
+    try:
+        pid = int(planet_id) if planet_id is not None else None
+    except (TypeError, ValueError):
+        pid = None
+    evo_ranks = None
+    if panel_ctx is not None and pid is not None and uncapped:
+        evo_ranks = getattr(panel_ctx, "_mine_evo_ranks", None)
+        if evo_ranks is None:
+            from .mine_evolution import get_evolution_ranks_for_planet
+
+            evo_ranks = get_evolution_ranks_for_planet(pid)
+            try:
+                panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]
+            except Exception:
+                pass
+    row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
+    if uncapped:
+        # Keep enqueue math working with sentinel; UI uses uncapped / at_queue_max=False.
+        row["max_level"] = int(UNCAPPED_BUILDING_LEVEL)
     stage = None
     if stage_layout and building_type in stage_layout:
         stage = stage_layout.get(building_type)

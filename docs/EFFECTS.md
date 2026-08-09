@@ -9,7 +9,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to these modules; the 
 |------|--------|--------|
 | Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives + diplomacy (GC-720E, GC-721H) |
 | Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds` → `power_build_seconds` (GC-850A); `get_research_time_seconds` |
-| Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
+| Building caps (core nexus, geothermal) | **Fixed** | EPIC-29: production mines uncapped ([MINE_EVOLUTION.md](MINE_EVOLUTION.md)); nexus still raises solar/storage caps; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor`, `cargo_multiplier` — consumed in `fleet.py` / `fleet_calc.py` (incl. Commander Class) |
 | Radar (`radar_array` → `scan_range`) | **Active** | Deep-Space Threat Net — passive fleet contacts via `build_radar_contacts` / `fleet_alerts` |

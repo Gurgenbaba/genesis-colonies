@@ -97,12 +97,21 @@ def clamp_resource(value: Any, default: float = 0.0) -> float:
     return max(0.0, min(n, float(MAX_RESOURCE)))
 
 
-def clamp_building_level(value: Any, default: int = 0) -> int:
+def clamp_building_level(value: Any, default: int = 0, building_type: str | None = None) -> int:
     try:
         n = int(value)
     except (TypeError, ValueError):
         n = int(default)
-    return max(0, min(n, MAX_BUILDING_LEVEL))
+    cap = MAX_BUILDING_LEVEL
+    # EPIC-29: production mines use the uncapped sentinel for admin edits.
+    if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):
+        try:
+            from game.mine_evolution import UNCAPPED_BUILDING_LEVEL
+
+            cap = int(UNCAPPED_BUILDING_LEVEL)
+        except Exception:
+            cap = MAX_BUILDING_LEVEL
+    return max(0, min(n, cap))
 
 
 def validate_confirm(action_key: str, confirm_text: Any) -> bool:
@@ -799,7 +808,7 @@ def set_planet_building(admin_id: int, planet_id: int, body: Dict[str, Any]) -> 
     building_type = str(body.get("building_type") or "").strip()
     if building_type not in BUILDING_KEYS:
         return _err("invalid_building", "Unknown building type.")
-    level = clamp_building_level(body.get("level", 0))
+    level = clamp_building_level(body.get("level", 0), building_type=building_type)
     return set_planet_buildings_bulk(
         admin_id,
         planet_id,
@@ -817,7 +826,7 @@ def set_planet_buildings_bulk(admin_id: int, planet_id: int, body: Dict[str, Any
         btype = str(key or "").strip()
         if btype not in BUILDING_KEYS:
             return _err("invalid_building", f"Unknown building type: {btype}")
-        updates[btype] = clamp_building_level(value)
+        updates[btype] = clamp_building_level(value, building_type=btype)
 
     conn = db()
     try:

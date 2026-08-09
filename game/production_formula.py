@@ -332,6 +332,27 @@ def production_context_from_resolver(
     except Exception:
         event_mod = 1.0
 
+    # EPIC-29: Mine Evolution → building_modifier (planet-scoped rank).
+    building_mod = 1.0
+    pid = resolver.planet_id
+    if pid is not None:
+        from .mine_evolution import RESOURCE_TO_MINE, building_modifier_for
+
+        mine_key = RESOURCE_TO_MINE.get(key)
+        if mine_key:
+            cache = getattr(resolver, "_mine_evo_mod_cache", None)
+            if cache is None:
+                cache = {}
+                try:
+                    resolver._mine_evo_mod_cache = cache  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            if mine_key in cache:
+                building_mod = float(cache[mine_key])
+            else:
+                building_mod = float(building_modifier_for(int(pid), mine_key))
+                cache[mine_key] = building_mod
+
     return ProductionContext(
         resource_type=key,
         level=int(level),
@@ -342,6 +363,7 @@ def production_context_from_resolver(
         research=dict(resolver.research or {}),
         player=resolver.player_id,
         planet=resolver.planet_id,
+        building_modifier=float(building_mod),
         directive_modifier=float(overlay),
         event_modifier=max(0.0, event_mod),
     )

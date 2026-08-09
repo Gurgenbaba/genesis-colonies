@@ -1359,17 +1359,18 @@ class EffectResolver:
         }
 
     def get_max_building_level(self, building_type: str) -> int:
+        # EPIC-29: production mines are uncapped (soft sentinel); solar keeps nexus formula.
+        if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):
+            from ..mine_evolution import UNCAPPED_BUILDING_LEVEL
+
+            return int(UNCAPPED_BUILDING_LEVEL)
+
         base_max = self.MAX_BUILDING_LEVEL
         b = self.buildings
         core = _bld(b, "planet_core_nexus")
         geo = _bld(b, "geothermal_nexus")
 
-        if building_type in (
-            "metal_mine",
-            "crystal_mine",
-            "solar_plant",
-            "fuel_cell_plant",
-        ):
+        if building_type == "solar_plant":
             return base_max + core + geo * 2
         if building_type in ("metal_storage", "crystal_storage", "fuel_storage"):
             return base_max + geo * 2

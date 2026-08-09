@@ -199,6 +199,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).
 | **LiveOps Retention (EPIC-22)** | ✅ | Login calendar + Battle Pass — [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | **Payment / Shop (EPIC-23)** | ✅ | Stripe + PayPal convenience shop — [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | **Commander Classes (EPIC-27)** | 🔄 | 5 Klassen, linearer Skill-Trunk, TK-Swap — [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
+| **Mine Evolution (EPIC-29)** | 🔄 | Phase 1 Kern-Loop GC-2900…2905 — [MINE_EVOLUTION.md](MINE_EVOLUTION.md); Phase 2+ Bäume/Industrial Core 📋 |
 | CI Pipeline | 💡 |
 | Automated Backups | 📋 Operator-intern |
 

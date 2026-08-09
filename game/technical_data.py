@@ -147,7 +147,21 @@ def _building_output_at(
     level: int,
     ratio: float,
     research_levels: Mapping[str, int],
+    *,
+    planet_id: Optional[int] = None,
 ) -> int:
+    if building_type in BUILDING_PRODUCTION_MAP:
+        ctx = _production_context_for_building(
+            buildings,
+            building_type,
+            level,
+            ratio,
+            research_levels,
+            planet_id=planet_id,
+        )
+        resource = BUILDING_PRODUCTION_MAP[building_type]
+        return int(calculate_resource_output(resource, ctx))
+
     from .logic import get_building_production_per_hour
 
     bumped = dict(buildings)
@@ -162,12 +176,22 @@ def _production_delta_at(
     level: int,
     ratio: float,
     research_levels: Mapping[str, int],
+    *,
+    planet_id: Optional[int] = None,
 ) -> int:
     lvl = max(0, int(level))
     if lvl < 1:
         return 0
-    cur = _building_output_at(buildings, building_type, lvl, ratio, research_levels)
-    prev = _building_output_at(buildings, building_type, lvl - 1, ratio, research_levels) if lvl > 1 else 0
+    cur = _building_output_at(
+        buildings, building_type, lvl, ratio, research_levels, planet_id=planet_id
+    )
+    prev = (
+        _building_output_at(
+            buildings, building_type, lvl - 1, ratio, research_levels, planet_id=planet_id
+        )
+        if lvl > 1
+        else 0
+    )
     return max(0, cur - prev)
 
 
@@ -296,12 +320,18 @@ def _production_context_for_building(
     level: int,
     ratio: float,
     research_levels: Mapping[str, int],
+    *,
+    planet_id: Optional[int] = None,
 ) -> ProductionContext:
     from .effects import EffectResolver
 
     bumped = dict(buildings)
     bumped[building_type] = max(0, int(level))
-    resolver = EffectResolver(bumped, dict(research_levels or {}))
+    resolver = EffectResolver(
+        bumped,
+        dict(research_levels or {}),
+        planet_id=int(planet_id) if planet_id is not None else None,
+    )
     resource = BUILDING_PRODUCTION_MAP[building_type]
     return production_context_from_resolver(
         resolver, resource, level=int(level), energy_ratio=float(ratio)
@@ -318,15 +348,22 @@ def build_production_display(
     metal_cost: int = 0,
     crystal_cost: int = 0,
     fuel_cells_cost: int = 0,
+    planet_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     resource = BUILDING_PRODUCTION_MAP[building_type]
     lvl = max(0, int(level))
     prev_lvl = max(0, lvl - 1)
-    current = _building_output_at(buildings, building_type, prev_lvl, ratio, research_levels) if lvl > 0 else 0
-    next_val = _building_output_at(buildings, building_type, lvl, ratio, research_levels) if lvl > 0 else 0
+    current = _building_output_at(
+        buildings, building_type, prev_lvl, ratio, research_levels, planet_id=planet_id
+    ) if lvl > 0 else 0
+    next_val = _building_output_at(
+        buildings, building_type, lvl, ratio, research_levels, planet_id=planet_id
+    ) if lvl > 0 else 0
     delta = max(0, next_val - current)
 
-    ctx = _production_context_for_building(buildings, building_type, lvl, ratio, research_levels)
+    ctx = _production_context_for_building(
+        buildings, building_type, lvl, ratio, research_levels, planet_id=planet_id
+    )
     roi = _upgrade_roi_hours(
         building_type,
         lvl,
@@ -814,6 +851,12 @@ def enrich_building_technical_row(
     btype = str(building_type)
     metal_cost = int(row.get("cost_metal") or 0)
     crystal_cost = int(row.get("cost_crystal") or 0)
+    planet_id = None
+    if panel_ctx is not None:
+        try:
+            planet_id = getattr(panel_ctx.resolver, "planet_id", None)
+        except Exception:
+            planet_id = None
 
     if btype in MINE_BUILDINGS:
         display = build_production_display(
@@ -824,6 +867,7 @@ def enrich_building_technical_row(
             research_levels=research_levels,
             metal_cost=metal_cost,
             crystal_cost=crystal_cost,
+            planet_id=planet_id,
         )
         row["production_delta_per_hour"] = display["delta_per_hour"]
         row["upgrade_roi_hours"] = display.get("upgrade_roi_hours")
@@ -848,6 +892,7 @@ def enrich_building_technical_row(
             research_levels=research_levels,
             metal_cost=metal_cost,
             crystal_cost=crystal_cost,
+            planet_id=planet_id,
         )
         row["display"] = display
         return
@@ -1221,7 +1266,8 @@ def resolve_building_impact(
     if btype in ("geothermal_nexus", "planet_core_nexus"):
         base = getattr(panel_ctx, "resolver", None) if panel_ctx is not None else None
 
-        def _max_mine(bld: Mapping[str, int]) -> int:
+        def _max_solar(bld: Mapping[str, int]) -> int:
+            # EPIC-29: nexus impact shows solar cap; mines are uncapped.
             if base is not None:
                 er = EffectResolver(
                     dict(bld),
@@ -1235,17 +1281,17 @@ def resolve_building_impact(
                 )
             else:
                 er = EffectResolver(dict(bld), dict(research_levels or {}))
-            return int(er.get_max_building_level("metal_mine"))
+            return int(er.get_max_building_level("solar_plant"))
 
         bld_cur = dict(buildings or {})
         bld_nxt = dict(bld_cur)
         bld_nxt[btype] = cur + 1
         return impact_from_rate(
             blurb_key=blurb,
-            current_rate=_max_mine(bld_cur),
-            next_rate=_max_mine(bld_nxt),
+            current_rate=_max_solar(bld_cur),
+            next_rate=_max_solar(bld_nxt),
             unit="",
-            affects=[{"label_key": "building_metal_mine"}, {"label_key": f"building_{btype}"}],
+            affects=[{"label_key": "building_solar_plant"}, {"label_key": f"building_{btype}"}],
             kind="capacity",
         )
 

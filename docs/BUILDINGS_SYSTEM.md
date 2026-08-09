@@ -18,13 +18,16 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 | **military** | `orbital_shipyard`, `defense_factory`, `barracks`, `radar_array` |
 | **infrastructure** | `command_center`, `shield_generator`, `terraformer`, `nanofactory`, `geothermal_nexus`, `planet_core_nexus` |
 
-`MAX_BUILDING_LEVEL = 50` (Basis). **L51+** nur über Nexus (GC-821 Endgame-Gate):
+`MAX_BUILDING_LEVEL = 50` (Basis). Caps (EPIC-29 / GC-2900+):
 
 | Gebäude | Cap-Formel |
 |---------|------------|
-| `metal_mine`, `crystal_mine`, `solar_plant`, `fuel_cell_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` |
+| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **Uncapped** — Progression über Kosten/Zeit + [Mine Evolution](MINE_EVOLUTION.md); Soft-Sentinel `UNCAPPED_BUILDING_LEVEL` |
+| `solar_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` |
 | `metal_storage`, `crystal_storage`, `fuel_storage` | `50 + 2×geothermal_nexus` (ohne Core) |
 | alle übrigen | `50` |
+
+Nexus hebt **kein** Mine-Hardcap mehr (Minen uncapped — Ascension-Milestones L200+ müssen erreichbar bleiben); Solar-/Storage-Caps bleiben. Mine Ascension (Tribute, kein Level-Reset): [MINE_EVOLUTION.md](MINE_EVOLUTION.md).
 
 `terraformer`: +5 % Lagerkapazität/Stufe — **kein** Gebäude-Level-Cap. Owner: `EffectResolver.get_max_building_level()`.
 

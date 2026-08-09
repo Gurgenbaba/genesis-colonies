@@ -3544,6 +3544,11 @@
       not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
       max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
+      level_too_low: t("buildings_mine_evo_err_level", "Mine noch nicht bereit für Ascension."),
+      insufficient_resources: t("buildings_mine_evo_err_resources", "Nicht genug Ressourcen für den Ascension-Tribute."),
+      queue_pending: t("buildings_mine_evo_err_queue", "Bauaufträge dieser Mine zuerst abschließen oder abbrechen."),
+      invalid_building: t("buildings_mine_evo_err_invalid", "Dieses Gebäude kann nicht evolvieren."),
+      schema_missing: t("buildings_mine_evo_err_schema", "Mine Evolution noch nicht verfügbar."),
       missing_job_id: t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
       insufficient_timekeeper: t("timekeeper_error_insufficient", "Nicht genug Imperiumszeit."),
       timekeeper_unavailable: t("timekeeper_error_unavailable", "Timekeeper nicht verfügbar."),
@@ -4017,13 +4022,123 @@
 
   function applyBuildingRowState(row, b) {
     if (!row || !b) return;
-    const isMax = (b.level >= b.max_level) || b.at_queue_max;
+    const isMax = !b.uncapped && ((b.level >= b.max_level) || b.at_queue_max);
     let prog = "gc-prog-affordable";
     if (isMax) prog = "gc-prog-max";
     else if (!b.requirements_met) prog = "gc-prog-locked";
     else if (!b.can_afford) prog = "gc-prog-unaffordable";
     _syncExclusiveProgClass(row, prog);
     _syncQueueOwnerClasses(row, "gc-building-card", b.queue_job);
+  }
+
+  function patchBuildingEvolution(row, b) {
+    if (!row || !b || !b.mine_evolution) return;
+    const level = Math.max(0, Math.floor(Number(b.level) || 0));
+    const required = Math.max(0, Math.floor(Number(b.evolution_required_level) || 0));
+    const rank = Math.max(0, Math.floor(Number(b.evolution_rank) || 0));
+    const canEvolve = !!b.evolution_can_evolve;
+    const progressPct = Math.max(
+      0,
+      Math.min(100, Math.floor(Number(b.evolution_progress_pct != null ? b.evolution_progress_pct : required > 0 ? (level / required) * 100 : 0)))
+    );
+    const tributeMetal = Math.max(0, Math.floor(Number(b.evolution_tribute_metal) || 0));
+    const tributeCrystal = Math.max(0, Math.floor(Number(b.evolution_tribute_crystal) || 0));
+    const roman = String(b.evolution_roman || "");
+    const bonusPct = b.evolution_bonus_pct != null ? b.evolution_bonus_pct : "";
+
+    let block = row.querySelector("[data-mine-evolution]");
+    const meta = row.querySelector(".gc-bld-card-meta");
+    if (!block) {
+      block = document.createElement("div");
+      block.className = "gc-bld-evo-block";
+      block.setAttribute("data-mine-evolution", String(b.key || ""));
+      block.innerHTML =
+        `<div class="gc-bld-evo-progress" role="status">` +
+        `<span class="gc-bld-evo-progress-label">${escapeHtml(t("buildings_mine_evo_progress", "Nächste Evolution"))}</span>` +
+        `<span class="gc-mono gc-bld-evo-progress-vals"></span></div>` +
+        `<div class="gc-bld-evo-bar" aria-hidden="true"><span class="gc-bld-evo-bar-fill" style="width:0%"></span></div>`;
+      if (meta) meta.insertAdjacentElement("beforebegin", block);
+      else row.appendChild(block);
+    }
+
+    const vals = block.querySelector(".gc-bld-evo-progress-vals");
+    if (vals) _setIfChanged(vals, `${fmtNumber(level)} / ${fmtNumber(required)}`);
+    const fill = block.querySelector(".gc-bld-evo-bar-fill");
+    if (fill) {
+      const nextWidth = `${progressPct}%`;
+      if (fill.style.width !== nextWidth) fill.style.width = nextWidth;
+    }
+
+    let bonusEl = block.querySelector(".gc-bld-evo-bonus");
+    if (rank > 0) {
+      const bonusText = `+${bonusPct}% ${t("buildings_mine_evo_bonus", "Produktion")}`;
+      if (!bonusEl) {
+        bonusEl = document.createElement("div");
+        bonusEl.className = "gc-bld-evo-bonus gc-mono";
+        const bar = block.querySelector(".gc-bld-evo-bar");
+        if (bar) bar.insertAdjacentElement("afterend", bonusEl);
+        else block.appendChild(bonusEl);
+      }
+      _setIfChanged(bonusEl, bonusText);
+    } else if (bonusEl) {
+      bonusEl.remove();
+    }
+
+    let btn = block.querySelector("[data-mine-evolve]");
+    if (canEvolve) {
+      const name = t("building_" + b.key, b.key);
+      const nextBonus = b.evolution_next_bonus_pct != null ? b.evolution_next_bonus_pct : "";
+      const gainBonus = b.evolution_bonus_gain_pct != null ? b.evolution_bonus_gain_pct : "";
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "gc-btn gc-bld-evo-btn";
+        btn.textContent = t("buildings_mine_evo_action", "Ascension einleiten");
+        block.appendChild(btn);
+      }
+      btn.setAttribute("data-mine-evolve", String(b.key || ""));
+      btn.setAttribute("data-evo-from", String(rank));
+      btn.setAttribute("data-evo-to", String(rank + 1));
+      btn.setAttribute("data-evo-to-roman", String(b.evolution_next_roman || ""));
+      btn.setAttribute("data-evo-bonus-next", String(nextBonus));
+      btn.setAttribute("data-evo-bonus-gain", String(gainBonus));
+      btn.setAttribute("data-evo-tribute-metal", String(tributeMetal));
+      btn.setAttribute("data-evo-tribute-crystal", String(tributeCrystal));
+      btn.setAttribute("data-evo-name", name);
+      btn.disabled = false;
+      btn.removeAttribute("aria-disabled");
+      btn.classList.remove("is-disabled");
+    } else if (btn) {
+      btn.remove();
+    }
+
+    row.classList.toggle("gc-building-card--evolved", rank > 0);
+    const hero = row.querySelector(".gc-bld-card-hero");
+    let leftStack = row.querySelector(".gc-bld-hero-left-stack");
+    let badge = row.querySelector(".gc-bld-evo-badge");
+    if (rank > 0 && hero) {
+      const badgeText = `${t("buildings_mine_evo_short", "EVO")} ${roman}`;
+      if (!leftStack) {
+        leftStack = document.createElement("div");
+        leftStack.className = "gc-bld-hero-left-stack";
+        const rightStack = hero.querySelector(".gc-bld-hero-right-stack");
+        if (rightStack) rightStack.insertAdjacentElement("beforebegin", leftStack);
+        else hero.appendChild(leftStack);
+      }
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "gc-hero-stat-badge gc-bld-evo-badge";
+        badge.title = t("buildings_mine_evo_badge", "Evolution");
+        badge.setAttribute("aria-label", t("buildings_mine_evo_badge", "Evolution"));
+        leftStack.appendChild(badge);
+      } else if (badge.parentElement !== leftStack) {
+        leftStack.appendChild(badge);
+      }
+      _setIfChanged(badge, badgeText);
+    } else if (rank <= 0) {
+      if (badge) badge.remove();
+      if (leftStack && !leftStack.childElementCount) leftStack.remove();
+    }
   }
 
   function applyResearchRowState(row, tech) {
@@ -4259,7 +4374,7 @@
   }
 
   function getBuildingActionState(b, bqQueueFull) {
-    const isMax = (b.level >= b.max_level) || b.at_queue_max;
+    const isMax = !b.uncapped && ((b.level >= b.max_level) || b.at_queue_max);
     if (isMax) return "max";
     if (!b.requirements_met) return "warn";
     if (bqQueueFull) return "locked";
@@ -4388,32 +4503,36 @@
         const levelEl = document.getElementById(`level-${key}`);
         if (levelEl) _setIfChanged(levelEl, fmtNumber(b.level));
 
-        const row = document.querySelector(`[data-building-row="${key}"]`);
-        if (!row) return;
+        // Stage source + retro cards / popup clones can share the same key.
+        const rowsForKey = document.querySelectorAll(`[data-building-row="${key}"]`);
+        if (!rowsForKey.length) return;
 
-        const heroLevel = row.querySelector(".gc-bld-hero-level, .gc-bld-card-level");
-        if (heroLevel && heroLevel !== levelEl) {
-          _setIfChanged(heroLevel, fmtNumber(b.level));
-        }
+        rowsForKey.forEach((row) => {
+          const heroLevel = row.querySelector(".gc-bld-hero-level, .gc-bld-card-level");
+          if (heroLevel && heroLevel !== levelEl) {
+            _setIfChanged(heroLevel, fmtNumber(b.level));
+          }
 
-        applyBuildingRowState(row, b);
-        patchBuildingRequirements(row, b);
-        patchBuildingProduction(row, b);
-        patchBuildingCosts(row, b);
+          applyBuildingRowState(row, b);
+          patchBuildingRequirements(row, b);
+          patchBuildingProduction(row, b);
+          patchBuildingCosts(row, b);
+          patchBuildingEvolution(row, b);
 
-        // GC-PERF-CARD-TIMERS-001: catalog duration for next enqueueable level
-        // (server already includes queued_same). Must update even while in-queue.
-        setHeroTimeChipIdle(row, b.time_seconds, t("buildings_col_time", "Bauzeit"));
+          // GC-PERF-CARD-TIMERS-001: catalog duration for next enqueueable level
+          // (server already includes queued_same). Must update even while in-queue.
+          setHeroTimeChipIdle(row, b.time_seconds, t("buildings_col_time", "Bauzeit"));
 
-        const actionCell = row.querySelector(".bcell-action");
-        if (actionCell) {
-          syncBuildingHeadAction(actionCell, b, summary, bqQueueFull);
-        }
+          const actionCell = row.querySelector(".bcell-action");
+          if (actionCell) {
+            syncBuildingHeadAction(actionCell, b, summary, bqQueueFull);
+          }
 
-        if (syncCardQueuesFromBuildState) {
-          /* queue blocks synced via card_jobs_by_owner */
-        } else if (b.queue_job) GC.renderCardQueueBlock(row, b.queue_job);
-        else GC.clearCardQueueBlock(row);
+          if (syncCardQueuesFromBuildState) {
+            /* queue blocks synced via card_jobs_by_owner */
+          } else if (b.queue_job) GC.renderCardQueueBlock(row, b.queue_job);
+          else GC.clearCardQueueBlock(row);
+        });
       });
     });
     syncBuildingStageProps(rowsByTab, summary, bqQueueFull);
@@ -6002,7 +6121,7 @@
         let state = "ready";
         // Dim only when the building does not exist yet (Lv.0), not for unmet reqs on built props.
         if (levelNum <= 0) state = "locked";
-        else if ((b.level >= b.max_level) || b.at_queue_max) state = "max";
+        else if (!b.uncapped && ((b.level >= b.max_level) || b.at_queue_max)) state = "max";
         else if ((Number(b.queue_count) || 0) > 0 || b.queue_job) state = "queue";
         else if (!b.can_afford) state = "warn";
         prop.dataset.propState = state;
@@ -6364,6 +6483,7 @@
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
         closeBuildingCardPopup();
+        closeMineEvolutionConfirm();
         setBuildingStageArrangeMode(false);
         GC._bldStageDragging = false;
         document.querySelectorAll(".bld-stage-prop.is-focused, .bld-stage-prop.is-initiation-target").forEach((el) => {
@@ -43658,11 +43778,199 @@
   }
   GC.setActionBusy = setProgressionActionBusy;
 
+  let _mineEvoPending = null;
+
+  function closeMineEvolutionConfirm() {
+    const modal = document.getElementById("gc-mine-evo-confirm-modal");
+    if (modal) {
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+    }
+    _mineEvoPending = null;
+    const submitBtn = document.getElementById("gc-mine-evo-confirm-submit");
+    if (submitBtn) {
+      submitBtn.dataset.busy = "0";
+      submitBtn.classList.remove("is-busy");
+      submitBtn.disabled = false;
+    }
+  }
+
+  function openMineEvolutionConfirm(triggerEl) {
+    const modal = document.getElementById("gc-mine-evo-confirm-modal");
+    if (!modal || !triggerEl) return;
+    const buildingType = triggerEl.getAttribute("data-mine-evolve") || "";
+    if (!buildingType) return;
+    const fromRank = Math.max(0, Math.floor(Number(triggerEl.getAttribute("data-evo-from")) || 0));
+    const toRank = Math.max(1, Math.floor(Number(triggerEl.getAttribute("data-evo-to")) || fromRank + 1));
+    const toRoman =
+      triggerEl.getAttribute("data-evo-to-roman") ||
+      (typeof GC.romanNumeral === "function" ? GC.romanNumeral(toRank) : String(toRank));
+    const bonusGain = triggerEl.getAttribute("data-evo-bonus-gain") || "0";
+    const tributeMetal = triggerEl.getAttribute("data-evo-tribute-metal") || "0";
+    const tributeCrystal = triggerEl.getAttribute("data-evo-tribute-crystal") || "0";
+    const name =
+      triggerEl.getAttribute("data-evo-name") ||
+      t("building_" + buildingType, buildingType);
+    const resourceKey =
+      buildingType === "crystal_mine"
+        ? "crystal"
+        : buildingType === "fuel_cell_plant"
+          ? "fuel_cells"
+          : "metal";
+    const resourceName = t(resourceKey, resourceKey === "metal" ? "Ferronit" : resourceKey);
+
+    _mineEvoPending = { buildingType, triggerEl };
+
+    const lead = document.getElementById("gc-mine-evo-confirm-lead");
+    const rankChip = document.getElementById("gc-mine-evo-confirm-rank-chip");
+    const benefitEl = document.getElementById("gc-mine-evo-confirm-benefit");
+    const tributeMetalEl = document.getElementById("gc-mine-evo-confirm-tribute-metal");
+    const tributeCrystalEl = document.getElementById("gc-mine-evo-confirm-tribute-crystal");
+    const levelKeptEl = document.getElementById("gc-mine-evo-confirm-level-kept");
+    const rankEl = document.getElementById("gc-mine-evo-confirm-rank");
+    if (lead) {
+      const leadKey =
+        fromRank <= 0
+          ? "buildings_mine_evo_modal_lead_first"
+          : "buildings_mine_evo_modal_lead_next";
+      const leadFallback =
+        fromRank <= 0
+          ? "Du leitest die erste Ascension deiner {name} ein."
+          : "Du leitest die nächste Ascension deiner {name} ein.";
+      lead.textContent = tf(leadKey, { name }, leadFallback);
+    }
+    if (rankChip) {
+      rankChip.textContent = tf(
+        "buildings_mine_evo_modal_rank_chip",
+        { roman: toRoman },
+        "Evolution {roman}"
+      );
+    }
+    if (benefitEl) {
+      benefitEl.textContent = tf(
+        "buildings_mine_evo_modal_benefit",
+        { gain: bonusGain, resource: resourceName },
+        "+{gain}% {resource}-Produktion dieser Mine"
+      );
+    }
+    if (tributeMetalEl) {
+      tributeMetalEl.textContent = tf(
+        "buildings_mine_evo_modal_tribute_line",
+        {
+          amount: fmtNumber(Number(tributeMetal) || 0),
+          resource: t("metal", "Ferronit"),
+        },
+        "{amount} {resource}"
+      );
+    }
+    if (tributeCrystalEl) {
+      tributeCrystalEl.textContent = tf(
+        "buildings_mine_evo_modal_tribute_line",
+        {
+          amount: fmtNumber(Number(tributeCrystal) || 0),
+          resource: t("crystal", "Crytite"),
+        },
+        "{amount} {resource}"
+      );
+    }
+    if (levelKeptEl) {
+      levelKeptEl.textContent = t(
+        "buildings_mine_evo_modal_level_kept",
+        "Deine Mine bleibt auf ihrer aktuellen Stufe."
+      );
+    }
+    if (rankEl) {
+      rankEl.textContent = tf(
+        "buildings_mine_evo_modal_rank",
+        { roman: toRoman },
+        "Nach der Ascension wird Evolution {roman} dauerhaft freigeschaltet. Die Evolution kann nicht rückgängig gemacht werden."
+      );
+    }
+
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    document.getElementById("gc-mine-evo-confirm-submit")?.focus();
+  }
+
+  async function submitMineEvolutionConfirm(submitBtn) {
+    if (!_mineEvoPending || !submitBtn) return;
+    if (submitBtn.dataset.busy === "1") return;
+    const { buildingType, triggerEl } = _mineEvoPending;
+    if (!buildingType) return;
+
+    submitBtn.dataset.busy = "1";
+    submitBtn.classList.add("is-busy");
+    submitBtn.disabled = true;
+    if (triggerEl) {
+      triggerEl.dataset.busy = "1";
+      triggerEl.classList.add("is-busy");
+    }
+    try {
+      const json = await GC.fetchGameAction("/api/buildings/mine-evolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          building_type: buildingType,
+          request_id: newRequestId(),
+        }),
+      });
+      closeMineEvolutionConfirm();
+      applyActionState(json, json.ok ? "mine_evolve_success" : "mine_evolve_error");
+      if (json.ok) {
+        showNotify(t("buildings_mine_evo_success", "Ascension abgeschlossen."), "success");
+        if (typeof GC.reloadCurrentPage === "function") {
+          GC.reloadCurrentPage({ reason: "mine_evolve" });
+        }
+      } else {
+        showNotify(mapActionError(json.reason, json.payload), "error");
+      }
+    } catch (err) {
+      console.error("Mine evolve AJAX failed:", err);
+      showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+      closeMineEvolutionConfirm();
+    } finally {
+      if (triggerEl) {
+        triggerEl.dataset.busy = "0";
+        triggerEl.classList.remove("is-busy");
+      }
+    }
+  }
+
   function initGameActions() {
     if (GC._gameActionsBound) return;
     GC._gameActionsBound = true;
 
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const modal = document.getElementById("gc-mine-evo-confirm-modal");
+      if (modal && !modal.hidden) {
+        e.preventDefault();
+        closeMineEvolutionConfirm();
+      }
+    });
+
     document.addEventListener("click", async (e) => {
+      const mineEvolveEl = e.target.closest("button[data-mine-evolve]:not([disabled])");
+      if (mineEvolveEl) {
+        e.preventDefault();
+        if (mineEvolveEl.dataset.busy === "1") return;
+        openMineEvolutionConfirm(mineEvolveEl);
+        return;
+      }
+
+      if (e.target.closest("[data-mine-evo-confirm-cancel]")) {
+        e.preventDefault();
+        closeMineEvolutionConfirm();
+        return;
+      }
+
+      const mineEvoSubmit = e.target.closest("#gc-mine-evo-confirm-submit");
+      if (mineEvoSubmit) {
+        e.preventDefault();
+        await submitMineEvolutionConfirm(mineEvoSubmit);
+        return;
+      }
+
       const upgradeMaxEl = e.target.closest("button.btn-upgrade-max:not([disabled])");
       if (upgradeMaxEl) {
         e.preventDefault();

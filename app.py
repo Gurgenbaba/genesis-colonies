@@ -1225,6 +1225,7 @@ _FINISH_SOURCE_PANEL_PAGE: Dict[str, str] = {
     "api_shipyard_queue_cancel": "shipyard",
     "api_buildings_upgrade": "buildings",
     "api_buildings_cancel": "buildings",
+    "api_buildings_mine_evolve": "buildings",
     "api_research_start": "research",
     "api_research_cancel": "research",
     "research": "research",
@@ -11329,6 +11330,7 @@ def _uses_action_state_diet(finish_source: str) -> bool:
     return str(finish_source or "") in (
         "api_buildings_upgrade",
         "api_buildings_cancel",
+        "api_buildings_mine_evolve",
         "game_state_buildings_finish",
         "api_planets_active",
         "api_fleet_send",
@@ -13976,6 +13978,50 @@ def api_buildings_upgrade():
     if request_id and isinstance(response_obj, dict):
         save_idempotent_action(user_id, request_id, response_obj)
 
+    return resp
+
+
+@app.route("/api/buildings/mine-evolve", methods=["POST"])
+@require_login
+def api_buildings_mine_evolve():
+    """EPIC-29 / GC-2901: Industrial Ascension for production mines."""
+    from game.mine_evolution import evolve_mine
+    from game.planet_evolution.repository import get_context_planet
+
+    data = request.get_json(silent=True) or {}
+    building_type = (data.get("building_type") or request.form.get("building_type") or "").strip()
+    if not building_type:
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_building_type", "state": state}), 400
+
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    user_id = int(user_id)
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    planet = get_context_planet(user_id)
+    if not planet:
+        return jsonify({"ok": False, "reason": "no_planet"}), 400
+
+    ok, reason, extra = evolve_mine(user_id, planet, building_type)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_buildings_mine_evolve",
+        include_panel=False,
+        panel_delta_keys=[building_type] if building_type else None,
+    )
+    response_obj = resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
     return resp
 
 

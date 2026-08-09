@@ -34,6 +34,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-26 | Living Inactives + AI Expeditions | 🔄 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · GC-2600…2620 |
 | EPIC-27 | Commander Classes & Skill Trees | 🔄 | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) · GC-CLASS-000…007 |
 | EPIC-28 | Space Lottery (Chrono Chamber) | 🔄 | [SPACE_LOTTERY.md](SPACE_LOTTERY.md) · GC-2800…2806 |
+| EPIC-29 | Mine Evolution / Industrial Ascension | 🔄 | [MINE_EVOLUTION.md](MINE_EVOLUTION.md) · GC-2900…2905 (Phase 1 Kern-Loop + Ascension feel-fix) |
 
 ---
 
@@ -183,3 +184,17 @@ Details: [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md)
 | GC-P26–P31 | Player-loop brain, cheat teardown, 6 factions, human colony wipe |
 
 Details: [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md)
+
+**EPIC-29 Mine Evolution** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-2900 | Master-Doc + CORE §17 / BUILDINGS / PRODUCTION / ROADMAP |
+| GC-2901 | Schema + `game/mine_evolution/` + Evolve-API + Mine-Uncapped |
+| GC-2902 | `building_modifier` Wire in `production_context_from_resolver` |
+| GC-2903 | Buildings UI + Confirm + Locales |
+| GC-2904 | Integrationstests (Isolation, Threshold, Bonus, Queue, Uncapped) |
+| GC-2905 | Kein Level-Reset; Tribute@Milestone; Bonus-Kurve; Catch-up; atomic/idempotent |
+
+Details: [MINE_EVOLUTION.md](MINE_EVOLUTION.md)  
+Phase 2+ (Bäume, Industrial Core): nur dokumentiert, eigene Tickets.

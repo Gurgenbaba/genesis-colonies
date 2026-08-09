@@ -16,7 +16,8 @@
 {% endmacro %}
 
 {% macro render_building_head_action(b, tab_name, bq_summary, bq_queue_full, btn_id=none, action_extra_class='') %}
-  {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
+  {% set _uncapped_action = b.uncapped if b.uncapped is defined else false %}
+  {% set is_max = (not _uncapped_action) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
   {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
   {% set _action_queue = bq_summary.count if bq_summary.count is defined else 0 %}
   {% set _action_label = T("research_btn_queue", "Anreihen") if _action_queue else T("buildings_btn_upgrade", "Ausbau starten") %}
@@ -101,7 +102,8 @@
 
       {% for b in rows %}
         {% set building_type = b.key %}
-        {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
+        {% set _uncapped = b.uncapped if b.uncapped is defined else false %}
+        {% set is_max = (not _uncapped) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
         {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
         {% set row_class = '' %}
         {% if is_max %}
@@ -113,11 +115,16 @@
         {% else %}
           {% set row_class = 'gc-prog-affordable' %}
         {% endif %}
+        {% set _evo = b.mine_evolution if b.mine_evolution is defined else false %}
+        {% set _evo_rank = b.evolution_rank|int if b.evolution_rank is defined else 0 %}
+        {% set _evo_req = b.evolution_required_level|int if b.evolution_required_level is defined else 0 %}
+        {% set _evo_ready = b.evolution_can_evolve if b.evolution_can_evolve is defined else false %}
 
-        <article class="gc-building-card gc-prog-card {{ row_class }}{% if b.queue_job is defined and b.queue_job %} gc-building-card--in-queue{% if b.queue_job.status == 'active' %} gc-building-card--queue-active{% else %} gc-building-card--queue-pending{% endif %}{% endif %}"
+        <article class="gc-building-card gc-prog-card {{ row_class }}{% if b.queue_job is defined and b.queue_job %} gc-building-card--in-queue{% if b.queue_job.status == 'active' %} gc-building-card--queue-active{% else %} gc-building-card--queue-pending{% endif %}{% endif %}{% if _evo and _evo_rank > 0 %} gc-building-card--evolved{% endif %}"
                  data-building-card
                  data-building-type="{{ building_type }}"
                  data-building-row="{{ building_type }}"
+                 {% if _uncapped %}data-uncapped="1"{% endif %}
                  role="listitem">
 
           <div class="gc-bld-card-hero">
@@ -125,6 +132,13 @@
             {% set _bld_webp = _bld_png|webp_static %}
             {% set _card_load = 'high' if (_lcp_hero and loop.index0 == 0) else 'lazy' %}
             {{ render_hero_img_stack(_bld_webp, _bld_png, none, _card_load, _lcp_hero and loop.index0 == 0) }}
+            {% if _evo and _evo_rank > 0 %}
+            <div class="gc-bld-hero-left-stack">
+              <span class="gc-hero-stat-badge gc-bld-evo-badge"
+                    title="{{ T('buildings_mine_evo_badge') }}"
+                    aria-label="{{ T('buildings_mine_evo_badge') }}">{{ T('buildings_mine_evo_short') }} {{ b.evolution_roman }}</span>
+            </div>
+            {% endif %}
             <div class="gc-bld-hero-right-stack">
               <span id="level-{{ building_type }}"
                     class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level"
@@ -151,6 +165,36 @@
           </div>
 
           {{ render_building_effect_bundle(b) }}
+
+          {% if _evo %}
+          <div class="gc-bld-evo-block" data-mine-evolution="{{ building_type }}">
+            <div class="gc-bld-evo-progress" role="status">
+              <span class="gc-bld-evo-progress-label">{{ T('buildings_mine_evo_progress') }}</span>
+              <span class="gc-mono gc-bld-evo-progress-vals">{{ b.level|fmt_int }} / {{ _evo_req|fmt_int }}</span>
+            </div>
+            <div class="gc-bld-evo-bar" aria-hidden="true">
+              <span class="gc-bld-evo-bar-fill" style="width: {{ b.evolution_progress_pct|default(0) }}%;"></span>
+            </div>
+            {% if _evo_rank > 0 %}
+            <div class="gc-bld-evo-bonus gc-mono">+{{ b.evolution_bonus_pct }}% {{ T('buildings_mine_evo_bonus') }}</div>
+            {% endif %}
+            {% if _evo_ready %}
+            <button type="button"
+                    class="gc-btn gc-bld-evo-btn"
+                    data-mine-evolve="{{ building_type }}"
+                    data-evo-from="{{ _evo_rank }}"
+                    data-evo-to="{{ _evo_rank + 1 }}"
+                    data-evo-to-roman="{{ b.evolution_next_roman|default('') }}"
+                    data-evo-bonus-next="{{ b.evolution_next_bonus_pct|default(0) }}"
+                    data-evo-bonus-gain="{{ b.evolution_bonus_gain_pct|default(0) }}"
+                    data-evo-tribute-metal="{{ b.evolution_tribute_metal|default(0) }}"
+                    data-evo-tribute-crystal="{{ b.evolution_tribute_crystal|default(0) }}"
+                    data-evo-name="{{ T('building_' ~ building_type) }}">
+              {{ T('buildings_mine_evo_action') }}
+            </button>
+            {% endif %}
+          </div>
+          {% endif %}
 
           <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
             <div class="gc-bld-card-costs">
@@ -237,7 +281,9 @@
         {% set _stage_icon = b.stage_icon if b.stage_icon is defined and b.stage_icon else b.icon %}
         {% set _icon_png = url_for('static', filename=_stage_icon, v=GC_ASSET_VERSION) %}
         {% set _icon_webp = _icon_png|webp_static %}
-        {% set _prop_state = 'locked' if (b.level|int) <= 0 else ('max' if (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) else ('queue' if (b.queue_count|int) > 0 or (b.queue_job is defined and b.queue_job) else ('warn' if not b.can_afford else 'ready'))) %}
+        {% set _prop_uncapped = b.uncapped if b.uncapped is defined else false %}
+        {% set _prop_at_max = (not _prop_uncapped) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
+        {% set _prop_state = 'locked' if (b.level|int) <= 0 else ('max' if _prop_at_max else ('queue' if (b.queue_count|int) > 0 or (b.queue_job is defined and b.queue_job) else ('warn' if not b.can_afford else 'ready'))) %}
         {% set _qj = b.queue_job if b.queue_job is defined and b.queue_job else none %}
         {% set _prog = (_qj.progress_pct|int) if _qj and _qj.progress_pct is defined else 0 %}
         {% set _prop_visible = b.tab == active_tab %}
@@ -352,6 +398,56 @@
   </div>
 </dialog>
 {% endif %}
+
+<div id="gc-mine-evo-confirm-modal"
+     class="gc-player-card-modal gc-bld-evo-confirm-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-mine-evo-confirm-cancel tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-mine-evo-confirm-title">
+    <header class="gc-player-card-head">
+      <h2 id="gc-mine-evo-confirm-title" class="gc-player-card-head-title">
+        {{ T('buildings_mine_evo_modal_title', 'Mine Ascension') }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-mine-evo-confirm-cancel
+              aria-label="{{ T('close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body gc-bld-evo-confirm-body">
+      <p class="gc-bld-evo-confirm-lead" id="gc-mine-evo-confirm-lead"></p>
+      <div class="gc-bld-evo-confirm-rank-chip" id="gc-mine-evo-confirm-rank-chip" aria-hidden="false"></div>
+      <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-mine-evo-confirm-benefit-label">
+        <h3 class="gc-bld-evo-confirm-section-title" id="gc-mine-evo-confirm-benefit-label">
+          {{ T('buildings_mine_evo_modal_benefit_label', 'Permanenter Vorteil') }}
+        </h3>
+        <p class="gc-bld-evo-confirm-benefit" id="gc-mine-evo-confirm-benefit"></p>
+      </section>
+      <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-mine-evo-confirm-tribute-label">
+        <h3 class="gc-bld-evo-confirm-section-title" id="gc-mine-evo-confirm-tribute-label">
+          {{ T('buildings_mine_evo_modal_tribute_label', 'Tribute') }}
+        </h3>
+        <ul class="gc-bld-evo-confirm-tribute-list" id="gc-mine-evo-confirm-tribute-list">
+          <li id="gc-mine-evo-confirm-tribute-metal"></li>
+          <li id="gc-mine-evo-confirm-tribute-crystal"></li>
+        </ul>
+      </section>
+      <p class="gc-bld-evo-confirm-note" id="gc-mine-evo-confirm-level-kept"></p>
+      <p class="gc-bld-evo-confirm-note" id="gc-mine-evo-confirm-rank"></p>
+      <div class="gc-bld-evo-confirm-actions">
+        <button type="button" class="gc-btn gc-btn-primary" id="gc-mine-evo-confirm-submit">
+          {{ T('buildings_mine_evo_modal_confirm', 'Ascension bestätigen') }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-secondary" data-mine-evo-confirm-cancel>
+          {{ T('buildings_mine_evo_modal_cancel', 'Abbrechen') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
 
