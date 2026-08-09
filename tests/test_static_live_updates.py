@@ -2324,8 +2324,19 @@ def test_main_js_auth_session_recovery_on_failure():
     assert "scheduleAuthSessionRecovery(reasonStr)" in auth
     assert "noteConfirmedAuthFailure" in auth
     vis = src.split("function initVisibilityPolling()")[1].split("function initMobileNav", 1)[0]
-    assert "_authRecoveryStarted" in vis
-    assert 'GC.refreshGameState("tab_visible")' in vis
+    assert 'wakeClientAfterHidden("tab_visible")' in vis
+    assert 'wakeClientAfterHidden("pageshow_bfcache")' in vis
+    wake = src.split("function wakeClientAfterHidden(reason)")[1].split("function initVisibilityPolling()", 1)[0]
+    assert "_authRecoveryStarted" in wake
+    assert "abortInFlightGameStateFetches()" in wake
+    assert "_authLoopAborted = false" not in wake
+    assert "releaseStuckPjaxAfterWake" in src
+    refresh = src.split("async function refreshGameState(reason)")[1].split(
+        "GC.refreshGameState = refreshGameState", 1
+    )[0]
+    assert "exclusiveWake" in refresh
+    assert 'reasonStr === "tab_visible"' in refresh
+    assert "abortInFlightGameStateFetches()" in refresh.split("if (exclusiveWake)")[1][:400]
 
 
 def test_main_js_gc547_gpu_idle_visual_loop_guards():
@@ -3223,7 +3234,12 @@ def test_main_js_force_canonical_refresh_on_timer_zero():
     """Timer zero must fetch include_panel=1 and apply with forcePanel."""
     src = _read("static/main.js")
     assert "async function forceCanonicalGameStateRefresh(reason, opts)" in src
-    assert '"/api/game-state?include_panel=1"' in src.split("async function forceCanonicalGameStateRefresh")[1].split("GC.forceCanonicalGameStateRefresh")[0]
+    canonical = src.split("async function forceCanonicalGameStateRefresh(reason, opts)")[1].split(
+        "GC.forceCanonicalGameStateRefresh = forceCanonicalGameStateRefresh"
+    )[0]
+    assert "include_panel=1" in canonical
+    assert "panel_page=" in canonical
+    assert "panel_tab=" in canonical
     timer_zero = src.split("function requestQueueTimerZeroRefresh(meta)")[1].split("function markCardQueueZeroRefresh")[0]
     assert "forceCanonicalGameStateRefresh" in timer_zero
     assert "QUEUE_TIMER_ZERO_DEBOUNCE_MS = 150" in src

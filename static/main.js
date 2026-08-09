@@ -15371,7 +15371,18 @@
     const myToken = _queuePanelRefreshToken;
     const flight = (async () => {
       try {
-        const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
+        // GC-PERF-PANEL-SCOPE-001: scope heavy panel slices to the active page/tab.
+        const page =
+          typeof GC.detectPage === "function" ? String(GC.detectPage() || "").trim() : "";
+        let panelUrl = "/api/game-state?include_panel=1";
+        if (page) {
+          panelUrl += `&panel_page=${encodeURIComponent(page)}`;
+          if (page === "buildings" && typeof _getActiveBuildingTab === "function") {
+            const tab = String(_getActiveBuildingTab() || "").trim();
+            if (tab) panelUrl += `&panel_tab=${encodeURIComponent(tab)}`;
+          }
+        }
+        const data = await GC.fetchJSON(panelUrl, { cache: "no-store" });
         if (myToken !== _queuePanelRefreshToken) {
           console.debug("[GC] canonical state refresh superseded", { reason: reasonStr });
           return null;
@@ -15502,12 +15513,21 @@
     const isFinishReason = reasonStr.endsWith("_finished");
     const isChainReason = isFinishReason || reasonStr === "timer_done";
     const hudOnly = isHudOnlyGameStateReason(reasonStr);
+    // GC-WAKE-001: tab focus / bfcache wake must not coalesce onto a hung diet poll.
+    const exclusiveWake =
+      reasonStr === "tab_visible"
+      || reasonStr === "pageshow_bfcache"
+      || reasonStr.startsWith("wake_");
 
     if (GC.refreshInFlight) {
-      if (isChainReason || reasonStr === "fleet_countdown_expired") {
-        if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr;
+      if (exclusiveWake) {
+        abortInFlightGameStateFetches();
+      } else {
+        if (isChainReason || reasonStr === "fleet_countdown_expired") {
+          if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr;
+        }
+        return GC.refreshInFlight;
       }
-      return GC.refreshInFlight;
     }
 
     const p = GC.polling;
@@ -43047,6 +43067,7 @@
       fetchTimeout: null,
       fetchTimeoutId: null,
       promise: null,
+      startedAt: Date.now(),
     };
     _activePjaxNavigation = nav;
     GC._pjaxAbort = controller;
@@ -44103,6 +44124,55 @@
   // =========================
   // Visibility listener
   // =========================
+  let _tabHiddenAtMs = 0;
+
+  function _hiddenDurationMs() {
+    if (!_tabHiddenAtMs) return 0;
+    return Math.max(0, Date.now() - _tabHiddenAtMs);
+  }
+
+  function releaseStuckPjaxAfterWake(hiddenMs) {
+    const nav = _activePjaxNavigation;
+    const age = nav && nav.startedAt ? Math.max(0, Date.now() - nav.startedAt) : 0;
+    const stuck =
+      Boolean(nav)
+      && (Number(hiddenMs || 0) >= 5000 || age >= PJAX_FETCH_TIMEOUT_MS);
+    const orphanFlight = !nav && Boolean(GC.pjaxInFlight);
+    if (!stuck && !orphanFlight) return;
+    if (nav) {
+      try {
+        clearPjaxNavigation(nav);
+      } catch (_) {}
+    }
+    GC.pjaxInFlight = null;
+    _pjaxPendingNav = null;
+    _pjaxCoalesceTail = null;
+    console.debug("[GC] wake cleared stuck PJAX", { hiddenMs, age, orphanFlight });
+  }
+
+  /** GC-WAKE-001: exclusive client wake after tab hide / bfcache restore. */
+  function wakeClientAfterHidden(reason) {
+    const reasonStr = String(reason || "tab_visible");
+    const hiddenMs = _hiddenDurationMs();
+    _tabHiddenAtMs = 0;
+    abortInFlightGameStateFetches();
+    if (GC.polling) GC.polling.backoff = 0;
+    // Long hide + ?since= can return {unchanged:true} and skip HUD apply — force full diet.
+    if (hiddenMs >= 30000) {
+      _lastPollVersion = 0;
+    }
+    if (typeof GC.releaseShellNavigationBlockers === "function") {
+      GC.releaseShellNavigationBlockers(reasonStr);
+    }
+    releaseStuckPjaxAfterWake(hiddenMs);
+    resumeVisualLoops();
+    if (!shouldPollGameState() || _authRecoveryStarted || isAdminShellPage()) return;
+    // Do not clear _authLoopAborted here — only a successful game-state clears auth failure.
+    GC.refreshGameState(reasonStr);
+    GC.startPolling(hasBusyLiveActivity());
+    if (!isAdminShellPage() && typeof GC.initChat === "function") GC.initChat();
+  }
+
   function initVisibilityPolling() {
     if (GC._visibilityBound) return;
     GC._visibilityBound = true;
@@ -44110,20 +44180,20 @@
     document.addEventListener("visibilitychange", () => {
       syncPerfBodyClasses();
       if (document.hidden) {
+        _tabHiddenAtMs = Date.now();
         pauseVisualLoops();
         if (shouldPollGameState() && !_authLoopAborted) {
           GC.startPolling(hasBusyLiveActivity());
         }
         return;
       }
-      if (!shouldPollGameState() || _authRecoveryStarted || isAdminShellPage()) return;
-      if (_authLoopAborted) _authLoopAborted = false;
-      if (typeof GC.releaseShellNavigationBlockers === "function") {
-        GC.releaseShellNavigationBlockers("tab_visible");
-      }
-      resumeVisualLoops();
-      GC.refreshGameState("tab_visible");
-      if (!isAdminShellPage() && typeof GC.initChat === "function") GC.initChat();
+      wakeClientAfterHidden("tab_visible");
+    });
+
+    window.addEventListener("pageshow", (event) => {
+      if (!event || !event.persisted) return;
+      syncPerfBodyClasses();
+      wakeClientAfterHidden("pageshow_bfcache");
     });
   }
 

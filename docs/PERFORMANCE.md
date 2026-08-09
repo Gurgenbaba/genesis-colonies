@@ -61,10 +61,18 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 - `live_context_ms` + `payload_fleets_hud_ms` are **parent envelopes** (like `payload_ms`) — diagnosis prefers children.
 - Child spans: `live.hud_reads`, `fleets.dirty_tick` / `.alerts` / `.radar` / `.active` / `.slots`.
 - `payload.panel` children: `panel.overview_rows` / `.overview_status` / `.buildings_rows` / `.buildings_delta`.
-- **Live cut (evidence):** diet / probe / non-research pages use `get_research_status(include_techs=False)` — queue HUD only; full catalog stays on `/research`, techtree, `include_panel`.
+- **Live cut (evidence):** diet / probe / non-research pages use `get_research_status(include_techs=False)` — queue HUD only; full catalog stays on `/research`, techtree, scoped research `include_panel`.
 - Idle poll + persist-only paths call `mark_request_live_refreshed()` so HUD `skip_finish=True` actually skips finish.
 - Meta/reward actions (login rewards, battle pass, vote, politics, referrals) use `_hud_only_game_state` — no full `payload.panel`.
 - Further cuts only after spike samples show the next child hotspot (N≥20).
+
+### GC-PERF-PANEL-SCOPE-001 + GC-WAKE-001 — Idle wake hang
+
+Spike evidence: `api_game_state` p95 ~2s with `panel.buildings_rows` + `hud.research` on every `include_panel=1` (also concurrent TK apply).
+
+- Client wake (`wakeClientAfterHidden`): abort hung diet polls on `tab_visible` / bfcache `pageshow`; clear stuck PJAX; reset `?since=` after long hide; no optimistic `_authLoopAborted` clear.
+- Canonical panel fetch sends `panel_page` (+ `panel_tab` on buildings).
+- Server builds `buildings_panel` / overview panel slices only for the scoped page; research catalog only for `research`/`techtree` (or unscoped legacy `include_panel`).
 
 ### GC-PERF-HUD-READS-001 — HUD read children + shared research levels
 

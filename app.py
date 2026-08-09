@@ -1206,10 +1206,42 @@ def _load_player_view_with_resources(
     )
 
 
+_BUILDINGS_PANEL_TABS = frozenset({"resources", "research", "military", "infrastructure"})
+
+
+def _resolve_game_state_panel_scope() -> Tuple[str, Optional[str]]:
+    """Client panel_page / panel_tab for GC-PERF-PANEL-SCOPE-001 (include_panel diet)."""
+    page = str(
+        request.args.get("panel_page") or request.headers.get("X-GC-Page") or ""
+    ).strip().lower()
+    tab = str(request.args.get("panel_tab") or "").strip().lower()
+    if tab not in _BUILDINGS_PANEL_TABS:
+        tab = ""
+    return page, (tab or None)
+
+
+def _want_research_techs_for_panel(
+    include_panel: bool,
+    finish_source: str,
+    panel_page: str = "",
+) -> bool:
+    """Full research catalog only on research/techtree pages (or unscoped legacy panel)."""
+    src = str(finish_source or "")
+    if src in ("research", "techtree"):
+        return True
+    if not include_panel:
+        return False
+    page = str(panel_page or "").strip().lower()
+    if not page:
+        return True
+    return page in ("research", "techtree")
+
+
 def _load_page_live_context(
     *,
     finish_source: str = "page_load",
     include_panel: bool = False,
+    panel_page: str = "",
     conn=None,
     close_conn: bool = True,
 ) -> Optional[Dict[str, Any]]:
@@ -1225,6 +1257,7 @@ def _load_page_live_context(
     user_id = int(user_id)
     src = str(finish_source or "page_load")
     own_conn = conn is None
+    resolved_panel_page = str(panel_page or "").strip().lower()
     try:
         from flask import has_request_context, request as flask_request
         from game.live_state import set_request_perf_meta
@@ -1234,6 +1267,12 @@ def _load_page_live_context(
             set_request_perf_meta("route", str(flask_request.path or ""))
             if str(flask_request.headers.get("X-PJAX") or "").strip().lower() in ("1", "true", "yes"):
                 set_request_perf_meta("pjax", 1)
+            if not resolved_panel_page:
+                resolved_panel_page = str(
+                    flask_request.args.get("panel_page")
+                    or flask_request.headers.get("X-GC-Page")
+                    or ""
+                ).strip().lower()
     except Exception:
         pass
     if own_conn:
@@ -1292,8 +1331,10 @@ def _load_page_live_context(
             from game.buildings import get_build_queue_status_for_planet
 
             planet = get_request_context_planet(user_id, conn=conn)
-            # Full research catalog only for research SSR / include_panel game-state.
-            include_research_techs = bool(include_panel) or src in ("research", "techtree")
+            # Full research catalog only for research SSR / scoped research panel.
+            include_research_techs = _want_research_techs_for_panel(
+                include_panel, src, resolved_panel_page
+            )
 
             from game.models import get_research_levels
 
@@ -1366,7 +1407,9 @@ def _load_page_live_context(
                 conn=conn,
                 skip_finish=True,
             )
-            include_research_techs = bool(include_panel) or src in ("research", "techtree")
+            include_research_techs = _want_research_techs_for_panel(
+                include_panel, src, resolved_panel_page
+            )
             from game.models import get_research_levels
             from game.live_state import perf_span as _live_perf_span
 
@@ -10372,6 +10415,8 @@ def _payload_from_live_context(
     lightweight: bool = False,
     panel_delta_keys: Optional[List[str]] = None,
     action_slim: bool = False,
+    panel_page: str = "",
+    panel_tab: Optional[str] = None,
     conn=None,
 ) -> Dict[str, Any]:
     """Build JSON payload from an already-refreshed live context."""
@@ -10477,36 +10522,44 @@ def _payload_from_live_context(
 
     with perf_span("payload.panel"):
         # Panel-only: diet/action_slim strip overview.status/rows anyway — never build then discard.
+        # GC-PERF-PANEL-SCOPE-001: when panel_page is set, build only the page-relevant slices.
         if include_panel:
             from game.buildings import get_overview_building_rows
             from game.buildings import get_buildings_panel_rows
             from game.overview_page import build_overview_status
 
-            with perf_span("panel.overview_rows"):
-                payload["overview"]["rows"] = get_overview_building_rows(
-                    planet, buildings, build_queue=build_queue
-                )
-            with perf_span("panel.overview_status"):
-                payload["overview"]["status"] = build_overview_status(
-                    user_id=user_id,
-                    player_view=player_view,
-                    ratio=float(ratio),
-                    energy_total=int(energy_total),
-                    energy_used=int(energy_used),
-                    storage_caps=storage_caps,
-                    prod_per_hour=prod_per_hour,
-                    build_queue=build_queue,
-                    research=research,
-                    planet=planet,
-                    include_log=False,
-                    conn=conn,
-                )
-            with perf_span("panel.buildings_rows"):
-                payload["buildings_panel"] = get_buildings_panel_rows(
-                    planet,
-                    buildings,
-                    build_queue=build_queue,
-                )
+            page = str(panel_page or "").strip().lower()
+            want_overview = (not page) or page == "overview"
+            want_buildings = (not page) or page == "buildings"
+
+            if want_overview:
+                with perf_span("panel.overview_rows"):
+                    payload["overview"]["rows"] = get_overview_building_rows(
+                        planet, buildings, build_queue=build_queue
+                    )
+                with perf_span("panel.overview_status"):
+                    payload["overview"]["status"] = build_overview_status(
+                        user_id=user_id,
+                        player_view=player_view,
+                        ratio=float(ratio),
+                        energy_total=int(energy_total),
+                        energy_used=int(energy_used),
+                        storage_caps=storage_caps,
+                        prod_per_hour=prod_per_hour,
+                        build_queue=build_queue,
+                        research=research,
+                        planet=planet,
+                        include_log=False,
+                        conn=conn,
+                    )
+            if want_buildings:
+                with perf_span("panel.buildings_rows"):
+                    payload["buildings_panel"] = get_buildings_panel_rows(
+                        planet,
+                        buildings,
+                        build_queue=build_queue,
+                        active_tab=panel_tab if page == "buildings" else None,
+                    )
         if panel_delta_keys:
             from game.buildings import get_buildings_panel_delta
 
@@ -11054,6 +11107,8 @@ def _build_game_state_payload(
     force_include_panel: bool = False,
     panel_delta_keys: Optional[List[str]] = None,
     action_slim: bool = False,
+    panel_page: str = "",
+    panel_tab: Optional[str] = None,
 ) -> Tuple[dict, int]:
     """
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
@@ -11070,8 +11125,11 @@ def _build_game_state_payload(
 
     from game.live_state import record_request_perf_phase, set_request_perf_meta
 
+    page = str(panel_page or "").strip().lower()
     set_request_perf_meta("finish_source", str(finish_source or "game_state"))
     set_request_perf_meta("include_panel", 1 if include_panel else 0)
+    if page:
+        set_request_perf_meta("panel_page", page)
     if panel_delta_keys:
         set_request_perf_meta("panel_delta", 1)
 
@@ -11081,6 +11139,7 @@ def _build_game_state_payload(
         ctx = _load_page_live_context(
             finish_source=str(finish_source or "game_state"),
             include_panel=include_panel,
+            panel_page=page,
             conn=conn,
             close_conn=False,
         )
@@ -11096,6 +11155,8 @@ def _build_game_state_payload(
             lightweight=lightweight,
             panel_delta_keys=panel_delta_keys,
             action_slim=action_slim,
+            panel_page=page,
+            panel_tab=panel_tab,
             conn=conn,
         )
         from game.live_state import current_action_perf
@@ -11331,6 +11392,7 @@ def api_notifications_summary():
 def api_game_state():
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
     delta_keys = _parse_panel_delta_buildings_param()
+    panel_page, panel_tab = _resolve_game_state_panel_scope()
     since_raw = request.args.get("since", "").strip()
     delta_raw = os.environ.get("GC_STATE_DELTA", "1").strip().lower()
     delta_enabled = delta_raw not in ("0", "false", "no", "off")
@@ -11361,6 +11423,8 @@ def api_game_state():
             include_panel=True,
             finish_source=finish_source,
             force_include_panel=True,
+            panel_page=panel_page,
+            panel_tab=panel_tab,
         )
     else:
         payload, _player_id = _build_game_state_payload(

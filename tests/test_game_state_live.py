@@ -375,13 +375,41 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert len(compact.encode("utf-8")) < 15000, len(compact)
 
 def test_api_game_state_include_panel_has_full_research_catalog(game_client):
-    """Panel polls still include research.techs for live research/buildings pages."""
+    """Unscoped include_panel keeps research.techs (legacy/mutation compat)."""
     client, _pid = game_client
     body = client.get("/api/game-state?include_panel=1").get_json()
     assert body.get("ok") is True
     research = body.get("research") or {}
     assert isinstance(research.get("techs"), list)
     assert len(research["techs"]) > 0
+
+
+def test_api_game_state_panel_page_buildings_skips_research_catalog(game_client):
+    """GC-PERF-PANEL-SCOPE-001: buildings-scoped panel must not ship full tech catalog."""
+    client, _pid = game_client
+    body = client.get(
+        "/api/game-state?include_panel=1&panel_page=buildings&panel_tab=resources"
+    ).get_json()
+    assert body.get("ok") is True
+    research = body.get("research") or {}
+    assert "techs" not in research
+    panel = body.get("buildings_panel") or {}
+    assert isinstance(panel, dict)
+    assert "resources" in panel
+    assert "military" not in panel
+    assert not (body.get("overview") or {}).get("rows")
+
+
+def test_api_game_state_panel_page_research_has_catalog_not_buildings_panel(game_client):
+    """Research-scoped panel keeps techs and skips buildings_panel / overview rows."""
+    client, _pid = game_client
+    body = client.get("/api/game-state?include_panel=1&panel_page=research").get_json()
+    assert body.get("ok") is True
+    research = body.get("research") or {}
+    assert isinstance(research.get("techs"), list)
+    assert len(research["techs"]) > 0
+    assert "buildings_panel" not in body
+    assert not (body.get("overview") or {}).get("rows")
 
 
 def test_research_status_include_techs_false_skips_catalog(game_client):
