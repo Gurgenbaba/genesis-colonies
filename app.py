@@ -1295,24 +1295,34 @@ def _load_page_live_context(
             # Full research catalog only for research SSR / include_panel game-state.
             include_research_techs = bool(include_panel) or src in ("research", "techtree")
 
+            from game.models import get_research_levels
+
             with _live_perf_span("live.hud_reads"):
-                build_queue = get_build_queue_status_for_planet(
-                    int(planet["id"]),
-                    conn=conn,
-                    skip_finish=True,
-                )
-                research = get_research_status(
-                    user_id=user_id,
-                    buildings=buildings,
-                    skip_finish=True,
-                    include_techs=include_research_techs,
-                    conn=conn,
-                )
-                prod_per_hour = get_building_production_per_hour(
-                    buildings=buildings,
-                    ratio=ratio,
-                    user_id=user_id,
-                )
+                with _live_perf_span("hud.build_queue"):
+                    build_queue = get_build_queue_status_for_planet(
+                        int(planet["id"]),
+                        conn=conn,
+                        skip_finish=True,
+                    )
+                # One levels read shared by research HUD + production (GC-PERF-HUD-READS-001).
+                research_levels = get_research_levels(user_id, conn=conn)
+                with _live_perf_span("hud.research"):
+                    research = get_research_status(
+                        user_id=user_id,
+                        buildings=buildings,
+                        skip_finish=True,
+                        include_techs=include_research_techs,
+                        conn=conn,
+                        levels=research_levels,
+                    )
+                with _live_perf_span("hud.prod"):
+                    prod_per_hour = get_building_production_per_hour(
+                        buildings=buildings,
+                        ratio=ratio,
+                        user_id=user_id,
+                        research=research_levels,
+                        conn=conn,
+                    )
             try:
                 from flask import g as _flask_g, has_request_context
 
@@ -1357,18 +1367,34 @@ def _load_page_live_context(
                 skip_finish=True,
             )
             include_research_techs = bool(include_panel) or src in ("research", "techtree")
-            research = get_research_status(
-                user_id=user_id,
-                buildings=buildings,
-                skip_finish=True,
-                include_techs=include_research_techs,
-                conn=conn,
-            )
-            prod_per_hour = get_building_production_per_hour(
-                buildings=buildings,
-                ratio=ratio,
-                user_id=user_id,
-            )
+            from game.models import get_research_levels
+            from game.live_state import perf_span as _live_perf_span
+
+            with _live_perf_span("live.hud_reads"):
+                with _live_perf_span("hud.build_queue"):
+                    build_queue = get_build_queue_status_for_planet(
+                        int(planet["id"]),
+                        conn=conn,
+                        skip_finish=True,
+                    )
+                research_levels = get_research_levels(user_id, conn=conn)
+                with _live_perf_span("hud.research"):
+                    research = get_research_status(
+                        user_id=user_id,
+                        buildings=buildings,
+                        skip_finish=True,
+                        include_techs=include_research_techs,
+                        conn=conn,
+                        levels=research_levels,
+                    )
+                with _live_perf_span("hud.prod"):
+                    prod_per_hour = get_building_production_per_hour(
+                        buildings=buildings,
+                        ratio=ratio,
+                        user_id=user_id,
+                        research=research_levels,
+                        conn=conn,
+                    )
             try:
                 from flask import g as _flask_g, has_request_context
 

@@ -66,6 +66,15 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 - Meta/reward actions (login rewards, battle pass, vote, politics, referrals) use `_hud_only_game_state` — no full `payload.panel`.
 - Further cuts only after spike samples show the next child hotspot (N≥20).
 
+### GC-PERF-HUD-READS-001 — HUD read children + shared research levels
+
+Spike evidence: `live.hud_reads` ~80–110ms on slow polls (envelope).
+
+- Child spans: `hud.build_queue` / `hud.research` / `hud.prod` — `live.hud_reads` is parent (diagnosis prefers children).
+- One `get_research_levels` shared into `get_research_status(levels=…)` + `get_building_production_per_hour(research=…, conn=…)`.
+- Drop duplicate `get_research_modifiers` on the user_id EffectResolver production path.
+- Live rates/queues unchanged — same server payloads, fewer duplicate reads.
+
 ### GC-PERF-FLEET-HUD-001 — Drawer without mission resolve
 
 Spike evidence: `fleets.active` 70–120ms on slow `/api/game-state` while drawer only needs labels/timers.

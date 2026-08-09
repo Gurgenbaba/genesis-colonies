@@ -1254,6 +1254,7 @@ def get_research_status(
     skip_finish: bool = False,
     include_techs: bool = True,
     conn=None,
+    levels: Optional[Dict[str, int]] = None,
 ) -> dict:
     uid = int(user_id)
 
@@ -1286,7 +1287,8 @@ def get_research_status(
     buildings = resolve_buildings_for_research(buildings, uid, conn=conn)
     lab_level = int(buildings.get("research_lab", 0) or 0)
 
-    levels = get_research_levels(uid, conn=conn)
+    if levels is None:
+        levels = get_research_levels(uid, conn=conn)
     queue = get_research_queue_rows(uid, conn=conn)
     now = time.time()
     from .queue_poll import due_cutoff_ts

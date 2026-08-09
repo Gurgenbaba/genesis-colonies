@@ -57,6 +57,9 @@ _PHASE_ALIASES = {
     "fleets.active": "fleets_active_ms",
     "fleets.slots": "fleets_slots_ms",
     "live.hud_reads": "live_hud_reads_ms",
+    "hud.build_queue": "hud_build_queue_ms",
+    "hud.research": "hud_research_ms",
+    "hud.prod": "hud_prod_ms",
     "panel.overview_rows": "panel_overview_rows_ms",
     "panel.overview_status": "panel_overview_status_ms",
     "panel.buildings_rows": "panel_buildings_rows_ms",
@@ -86,6 +89,9 @@ _COMPONENT_DISPLAY = {
     "fleets_active_ms": "fleets.active",
     "fleets_slots_ms": "fleets.slots",
     "live_hud_reads_ms": "live.hud_reads",
+    "hud_build_queue_ms": "hud.build_queue",
+    "hud_research_ms": "hud.research",
+    "hud_prod_ms": "hud.prod",
     "live_context_ms": "live_context",
     "page_context_ms": "page_context",
     "page_context_overview_ms": "page_context.overview",
@@ -107,6 +113,8 @@ _PARENT_PHASE_KEYS = frozenset(
         "payload_ms",
         # Diet live refresh wall (finish + resource + hud_reads) — prefer children
         "live_context_ms",
+        # HUD queue/research/prod wall — prefer hud.* children
+        "live_hud_reads_ms",
         # Fleet HUD rebuild wall — prefer fleets.* children
         "payload_fleets_hud_ms",
         # Full panel wall — prefer panel.* children
@@ -120,6 +128,7 @@ _PARENT_COMPONENT_NAMES = frozenset(
         "after_request",
         "state_build",
         "live_context",
+        "live.hud_reads",
         "payload.fleets_hud",
         "payload.panel",
     }
@@ -779,8 +788,13 @@ class PerfIntelStore:
                 )
             elif cause == "live.hud_reads":
                 recommendation = (
-                    "Post-finish queue/research/prod reads are hot — "
-                    "profile get_build_queue_status / research_status on diet."
+                    "Post-finish HUD read envelope is hot — "
+                    "check hud.build_queue / hud.research / hud.prod children."
+                )
+            elif cause.startswith("hud."):
+                recommendation = (
+                    f"HUD section '{cause}' dominates live.hud_reads — "
+                    "profile that helper on diet before trimming live fields."
                 )
             elif cause.startswith("payload."):
                 recommendation = (

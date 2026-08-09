@@ -508,11 +508,15 @@ def test_payload_child_span_aliases():
     assert resolve_phase_name("page_context.overview") == "page_context_overview_ms"
     assert resolve_phase_name("fleets.radar") == "fleets_radar_ms"
     assert resolve_phase_name("live.hud_reads") == "live_hud_reads_ms"
+    assert resolve_phase_name("hud.build_queue") == "hud_build_queue_ms"
+    assert resolve_phase_name("hud.research") == "hud_research_ms"
+    assert resolve_phase_name("hud.prod") == "hud_prod_ms"
     assert resolve_phase_name("panel.buildings_rows") == "panel_buildings_rows_ms"
     assert "payload_fleets_hud_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "page_context_overview_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "fleets_radar_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "live_hud_reads_ms" in _REQUEST_PERF_PHASE_KEYS
+    assert "hud_prod_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "panel_buildings_rows_ms" in _REQUEST_PERF_PHASE_KEYS
 
 
@@ -525,7 +529,13 @@ def test_admin_spikes_ui_contract():
     assert 'perf_span("page_context.overview")' in _read("app.py")
     assert 'perf_span("fleets.radar")' in _read("game/live_state.py")
     assert 'perf_span("live.hud_reads")' in _read("app.py") or '_live_perf_span("live.hud_reads")' in _read("app.py")
+    assert 'perf_span("hud.prod")' in _read("app.py") or '_live_perf_span("hud.prod")' in _read("app.py")
     assert 'perf_span("panel.buildings_rows")' in _read("app.py")
+    app = _read("app.py")
+    # Shared research levels into research HUD + production (no double levels fetch in block).
+    assert "research_levels = get_research_levels" in app
+    assert "levels=research_levels" in app
+    assert "research=research_levels" in app
 
 
 def test_meta_reward_actions_use_hud_only_state():

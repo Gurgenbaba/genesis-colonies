@@ -467,7 +467,7 @@ def get_building_production_per_hour(
 
     ✅ user_id strikt int
     ✅ research optional (sonst DB)
-    ✅ mods aus research.get_research_modifiers (single source of truth)
+    ✅ Mit user_id: EffectResolver (GC-820) — kein separater modifiers-DB-Pass
     """
     user_id_int: Optional[int] = int(user_id) if user_id is not None else None
 
@@ -477,13 +477,12 @@ def get_building_production_per_hour(
         else:
             research = {}
 
-    mods = _get_research_modifiers(user_id_int, conn=conn) if user_id_int is not None else None
-
+    # With user_id, EffectResolver owns modifiers — skip duplicate get_research_modifiers.
     return _core_get_bpph(
         buildings=buildings,
         ratio=ratio,
         research=research,
-        mods=mods,
+        mods=None,
         user_id=user_id_int,
         conn=conn,
     )
@@ -661,12 +660,14 @@ def get_research_status(
     skip_finish: bool = False,
     include_techs: bool = True,
     conn=None,
+    levels: Optional[Dict[str, int]] = None,
 ) -> dict:
     """
     Wrapper um game.research.get_research_status.
 
     skip_finish=True: Caller hat bereits refresh_player_live_state ausgeführt.
     include_techs=False: queue HUD only (diet / probe / non-research pages).
+    levels: optional preloaded research levels (shared with production HUD).
     """
     from .live_state import coerce_skip_finish
 
@@ -676,6 +677,7 @@ def get_research_status(
         skip_finish=coerce_skip_finish(bool(skip_finish)),
         include_techs=bool(include_techs),
         conn=conn,
+        levels=levels,
     )
 
 
