@@ -1769,7 +1769,10 @@ def get_buildings_panel_rows(
     build_queue: Optional[Dict[str, Any]] = None,
     *,
     active_tab: Optional[str] = None,
+    conn=None,
+    research_levels: Optional[Dict[str, int]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
+    """Build buildings panel catalog. Reuse request ``conn`` (GC-PERF-PANEL-CONN-001)."""
     from .live_state import current_ssr_perf
 
     ssr = current_ssr_perf()
@@ -1780,9 +1783,21 @@ def get_buildings_panel_rows(
     if user_id is None:
         raise RuntimeError("get_buildings_panel_rows: planet hat kein 'player_id'-Feld")
 
-    research_levels = get_research_levels(user_id=int(user_id))
-    ratio = _panel_energy_ratio(buildings, research_levels)
-    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio)
+    if research_levels is None:
+        research_levels = get_research_levels(user_id=int(user_id), conn=conn)
+    else:
+        research_levels = dict(research_levels)
+    # GC-PERF-PANEL-CONN-001: derive ratio from the same conn-backed resolver
+    # (avoid `_panel_energy_ratio` → conn-less EffectResolver → orphan db()).
+    panel_ctx = BuildingsPanelContext.for_planet(
+        planet, buildings, research_levels, 1.0, conn=conn
+    )
+    energy_total, energy_used = panel_ctx.resolver.compute_energy()
+    ratio = float(EffectResolver.energy_ratio(energy_total, energy_used))
+    panel_ctx.ratio = ratio
+    panel_ctx.production_per_hour = panel_ctx.resolver.get_building_production_per_hour(
+        ratio
+    )
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
@@ -1801,7 +1816,7 @@ def get_buildings_panel_rows(
     except (TypeError, ValueError):
         bq_limit = 0
     if bq_limit <= 0:
-        bq_limit = _resolve_build_queue_limit()
+        bq_limit = _resolve_build_queue_limit(conn=conn)
     queue_free_slots = max(0, bq_limit - bq_count)
 
     tab_filter = str(active_tab or "").strip() or None
@@ -1821,7 +1836,7 @@ def get_buildings_panel_rows(
         planet_id = int(planet.get("id") or 0)
     except (TypeError, ValueError):
         planet_id = 0
-    stage_layout = resolve_stage_layout(planet_id) if planet_id > 0 else None
+    stage_layout = resolve_stage_layout(planet_id, conn=conn) if planet_id > 0 else None
 
     for key in building_keys:
         if ssr is not None and cards_t0 is None:
@@ -1854,6 +1869,9 @@ def get_buildings_panel_delta(
     buildings: Dict[str, int],
     build_queue: Optional[Dict[str, Any]] = None,
     building_keys: Sequence[str] = (),
+    *,
+    conn=None,
+    research_levels: Optional[Dict[str, int]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """GC-840: partial panel rows for mutation action responses (affected cards only)."""
     keys = [str(k).strip() for k in building_keys if str(k).strip() in BUILDING_ORDER]
@@ -1864,9 +1882,19 @@ def get_buildings_panel_delta(
     if user_id is None:
         raise RuntimeError("get_buildings_panel_delta: planet hat kein 'player_id'-Feld")
 
-    research_levels = get_research_levels(user_id=int(user_id))
-    ratio = _panel_energy_ratio(buildings, research_levels)
-    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio)
+    if research_levels is None:
+        research_levels = get_research_levels(user_id=int(user_id), conn=conn)
+    else:
+        research_levels = dict(research_levels)
+    panel_ctx = BuildingsPanelContext.for_planet(
+        planet, buildings, research_levels, 1.0, conn=conn
+    )
+    energy_total, energy_used = panel_ctx.resolver.compute_energy()
+    ratio = float(EffectResolver.energy_ratio(energy_total, energy_used))
+    panel_ctx.ratio = ratio
+    panel_ctx.production_per_hour = panel_ctx.resolver.get_building_production_per_hour(
+        ratio
+    )
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
@@ -1885,14 +1913,14 @@ def get_buildings_panel_delta(
     except (TypeError, ValueError):
         bq_limit = 0
     if bq_limit <= 0:
-        bq_limit = _resolve_build_queue_limit()
+        bq_limit = _resolve_build_queue_limit(conn=conn)
     queue_free_slots = max(0, bq_limit - bq_count)
 
     try:
         planet_id = int(planet.get("id") or 0)
     except (TypeError, ValueError):
         planet_id = 0
-    stage_layout = resolve_stage_layout(planet_id) if planet_id > 0 else None
+    stage_layout = resolve_stage_layout(planet_id, conn=conn) if planet_id > 0 else None
 
     rows_by_tab: Dict[str, List[Dict[str, Any]]] = {}
     for key in keys:
@@ -2071,9 +2099,13 @@ def summarize_max_queueable_build_jobs(
     }
 
 
-def _resolve_build_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int:
+def _resolve_build_queue_limit(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    conn=None,
+) -> int:
     if settings is None:
-        settings = get_game_settings()
+        settings = get_game_settings(conn=conn)
     raw_limit = settings.get("queue_limit", 3)
     try:
         queue_limit = int(raw_limit)

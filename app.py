@@ -2026,6 +2026,7 @@ def buildings_view():
             ctx["buildings"],
             build_queue=ctx["build_queue"],
             active_tab=active_tab,
+            conn=conn,
         )
         from game.options import get_buildings_ui_settings
 
@@ -10559,6 +10560,7 @@ def _payload_from_live_context(
                         buildings,
                         build_queue=build_queue,
                         active_tab=panel_tab if page == "buildings" else None,
+                        conn=conn,
                     )
         if panel_delta_keys:
             from game.buildings import get_buildings_panel_delta
@@ -10569,6 +10571,7 @@ def _payload_from_live_context(
                     buildings,
                     build_queue=build_queue,
                     building_keys=panel_delta_keys,
+                    conn=conn,
                 )
 
     active_planet_id = int(planet.get("id") or 0)

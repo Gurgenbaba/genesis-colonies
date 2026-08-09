@@ -8756,5 +8756,6 @@
   "admin_perf_col_time": "Zeit",
   "admin_perf_col_class": "Klasse",
   "admin_perf_col_total": "Total",
-  "admin_perf_col_top_costs": "Top Costs"
+  "admin_perf_col_top_costs": "Top Costs",
+  "admin_perf_col_sql_opens": "SQL / Opens"
 }

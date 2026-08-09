@@ -91,6 +91,7 @@ _REQUEST_PERF_META_KEYS = frozenset(
         "sample",
         "sql_count",
         "sql_write_count",
+        "db_connection_open_count",
         "had_exception",
         "diet_payload_bytes",
         "budget_miss",
@@ -1697,6 +1698,7 @@ class RequestPerfState:
         "meta",
         "sql_count",
         "sql_write_count",
+        "db_connection_open_count",
         "db_query_ms",
         "slow_queries",
         "logged",
@@ -1714,6 +1716,7 @@ class RequestPerfState:
         self.meta: Dict[str, Any] = {}
         self.sql_count = 0
         self.sql_write_count = 0
+        self.db_connection_open_count = 0
         self.db_query_ms = 0.0
         self.slow_queries: List[Dict[str, Any]] = []
         self.logged = False
@@ -1932,6 +1935,17 @@ def set_request_perf_meta(name: str, value: Any) -> None:
         logger.debug("set_request_perf_meta failed name=%s", name, exc_info=True)
 
 
+def record_request_perf_db_connection_open() -> None:
+    """GC-PERF-PANEL-CONN-001: count real db() opens for the active request."""
+    try:
+        state = _request_perf_state()
+        if state is None:
+            return
+        state.db_connection_open_count += 1
+    except Exception:
+        pass
+
+
 def record_request_perf_sql_statement(sql: str) -> None:
     """Count SQL statements via sqlite trace callback (legacy count path)."""
     try:
@@ -2130,6 +2144,7 @@ def _emit_request_perf_log(
         state.meta["had_exception"] = 1
     state.meta["sql_count"] = int(state.sql_count)
     state.meta["sql_write_count"] = int(state.sql_write_count)
+    state.meta["db_connection_open_count"] = int(state.db_connection_open_count)
 
     # GC-PERF-AUTO: always-on aggregator (independent of debug log gate).
     _record_perf_intel_from_state(
@@ -2182,6 +2197,7 @@ def _emit_request_perf_log(
         "content_type",
         "sql_count",
         "sql_write_count",
+        "db_connection_open_count",
         "diet_payload_bytes",
         "budget_miss",
         "state_version",
@@ -2225,6 +2241,7 @@ def _record_perf_intel_from_state(
             total_ms=float(total_ms),
             phases=dict(state.phases),
             sql_count=int(state.sql_count),
+            db_connection_open_count=int(state.db_connection_open_count),
             db_query_ms=float(state.db_query_ms or state.phases.get("db_query_ms") or 0.0),
             slow_queries=list(state.slow_queries),
             payload_bytes=int(response_bytes or 0),

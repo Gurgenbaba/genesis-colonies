@@ -294,7 +294,8 @@ class EffectResolver:
     def _settings_dict(self) -> Dict[str, Any]:
         if self._settings is not None:
             return self._settings
-        self._settings = get_game_settings()
+        # GC-PERF-PANEL-CONN-001: reuse request conn when present (no orphan db()).
+        self._settings = get_game_settings(conn=self._conn)
         return self._settings
 
     @staticmethod

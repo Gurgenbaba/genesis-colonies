@@ -612,7 +612,14 @@ def try_enqueue_research(
         return {"ok": False, "error": "resources"}
 
     duration = int(
-        get_research_time(tech_key, target, user_id=player_id, buildings=buildings)
+        get_research_time(
+            tech_key,
+            target,
+            user_id=player_id,
+            buildings=buildings,
+            levels=levels,
+            conn=conn,
+        )
     )
     if duration_cap is not None:
         duration = max(5, min(duration, int(duration_cap)))

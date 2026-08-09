@@ -4611,7 +4611,9 @@
         const when = s.ts
           ? new Date(Number(s.ts) * 1000).toLocaleTimeString()
           : "—";
-        return `<tr><td>${esc(when)}</td><td>${esc(s.slow_class || "")}</td><td>${esc(s.route)}</td><td>${esc(s.total_ms)}</td><td class="admin-small-hint">${costs || "—"}</td><td>${esc(s.sql_count || 0)}/${esc(s.db_query_ms || 0)}</td></tr>`;
+        const sqlOpens = `${esc(s.sql_count || 0)}/${esc(s.db_connection_open_count || 0)}`;
+        const dbMs = esc(s.db_query_ms || 0);
+        return `<tr><td>${esc(when)}</td><td>${esc(s.slow_class || "")}</td><td>${esc(s.route)}</td><td>${esc(s.total_ms)}</td><td class="admin-small-hint">${costs || "—"}</td><td title="db_ms=${dbMs}">${sqlOpens}</td></tr>`;
       })
       .join("");
     const histMax = Math.max(1, ...history.map((h) => Number(h.p95_ms) || 0));
@@ -4675,7 +4677,7 @@
             <th>${esc(t("admin_perf_col_route", "Route"))}</th>
             <th>${esc(t("admin_perf_col_total", "Total"))}</th>
             <th>${esc(t("admin_perf_col_top_costs", "Top Costs"))}</th>
-            <th>SQL / db_ms</th>
+            <th>${esc(t("admin_perf_col_sql_opens", "SQL / opens"))}</th>
           </tr></thead><tbody>${spikeRows || `<tr><td colspan="6">${esc(t("admin_perf_empty", "Noch keine Samples."))}</td></tr>`}</tbody></table></div>
         </section>
 

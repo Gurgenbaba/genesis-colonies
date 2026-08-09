@@ -1,6 +1,6 @@
 # Genesis Colonies — Architecture
 
-Technische Architektur-Dokumentation (Stand: **v0.5.9.143**, Reality-Sync **2026-08-09**). Ergänzt die [README](../README.md) mit Abläufen, Modulgrenzen und Datenflüssen.
+Technische Architektur-Dokumentation (Stand: **v0.5.9.145**, Reality-Sync **2026-08-09**). Ergänzt die [README](../README.md) mit Abläufen, Modulgrenzen und Datenflüssen.
 
 **System-Docs (Single Source of Truth pro Domäne):**
 
@@ -433,7 +433,7 @@ Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · E
 
 ## Test-Suite
 
-**4574 pytest-Tests** (Stand v0.5.9.143 — `python -m pytest --collect-only -q`), u. a.:
+**4584 pytest-Tests** (Stand v0.5.9.145 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

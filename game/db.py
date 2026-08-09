@@ -142,18 +142,19 @@ def db() -> DbConn:
         except Exception as exc:
             raise NotImplementedError(f"{_POSTGRES_NOT_CONFIGURED} ({exc})") from exc
         try:
-            from game.live_state import is_request_perf_active, record_request_perf_phase
+            from game.live_state import (
+                attach_request_perf_sql_trace,
+                is_request_perf_active,
+                record_request_perf_db_connection_open,
+                record_request_perf_phase,
+            )
 
+            record_request_perf_db_connection_open()
             if is_request_perf_active():
                 record_request_perf_phase(
                     "db_connection_ms",
                     (time.perf_counter() - conn_t0) * 1000.0,
                 )
-        except Exception:
-            pass
-        try:
-            from game.live_state import attach_request_perf_sql_trace
-
             attach_request_perf_sql_trace(conn)
         except Exception:
             pass
@@ -166,13 +167,20 @@ def db() -> DbConn:
     conn_t0 = time.perf_counter()
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
-        from game.live_state import is_request_perf_active, record_request_perf_phase
+        from game.live_state import (
+            attach_request_perf_sql_trace,
+            is_request_perf_active,
+            record_request_perf_db_connection_open,
+            record_request_perf_phase,
+        )
 
+        record_request_perf_db_connection_open()
         if is_request_perf_active():
             record_request_perf_phase(
                 "db_connection_ms",
                 (time.perf_counter() - conn_t0) * 1000.0,
             )
+        attach_request_perf_sql_trace(conn)
     except Exception:
         pass
     conn.row_factory = sqlite3.Row
@@ -182,12 +190,6 @@ def db() -> DbConn:
     # immediate SQLITE_BUSY on HTTP touch / game-state paths.
     conn.execute("PRAGMA busy_timeout=20000")
     conn.execute("PRAGMA synchronous=NORMAL")
-    try:
-        from game.live_state import attach_request_perf_sql_trace
-
-        attach_request_perf_sql_trace(conn)
-    except Exception:
-        pass
     return conn
 
 

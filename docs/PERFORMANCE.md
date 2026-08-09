@@ -74,6 +74,24 @@ Spike evidence: `api_game_state` p95 ~2s with `panel.buildings_rows` + `hud.rese
 - Canonical panel fetch sends `panel_page` (+ `panel_tab` on buildings).
 - Server builds `buildings_panel` / overview panel slices only for the scoped page; research catalog only for `research`/`techtree` (or unscoped legacy `include_panel`).
 
+### GC-PERF-PANEL-CONN-001 — Buildings panel request conn
+
+Spike evidence: `panel.buildings_rows` ~0.8–1.1s and `sql_count` ~3800 on `include_panel=1&panel_page=buildings` (orphan `db()` opens + PRAGMA×4 per open).
+
+- `get_buildings_panel_rows` / `get_buildings_panel_delta` take request `conn` (+ optional shared `research_levels`).
+- Pass-through: `get_research_levels`, `BuildingsPanelContext.for_planet`, `resolve_stage_layout`, `get_game_settings` / queue limit.
+- Perf meta: `db_connection_open_count` (Admin spikes show `SQL / opens`).
+- No global EffectResolver cache in this ticket — measure first; Research-Time / Panel-Scope-002 follow separately.
+
+### GC-PERF-RESEARCH-TIME-001 — Shared resolver for research catalog times
+
+Spike evidence: `hud.research` ~500–700ms on research `include_panel` (catalog called `get_research_time` per tech → orphan `get_research_levels` / EffectResolver rebuild each time).
+
+- `get_research_time(..., levels=, conn=, resolver=)` — prefer shared resolver; no levels refetch when `resolver=` set.
+- `get_research_status` builds **one** EffectResolver for queue start fallback + tech catalog + MAX-queue preview.
+- Same pass-through in `summarize_max_queueable_research_jobs`, queue reschedule, technical data table, auto_empire.
+- Semantics unchanged (still `EffectResolver.get_research_time_seconds`); Panel-Scope-002 / TK remain separate.
+
 ### GC-PERF-HUD-READS-001 — HUD read children + shared research levels
 
 Spike evidence: `live.hud_reads` ~80–110ms on slow polls (envelope).

@@ -528,21 +528,39 @@ def get_research_time(
     level: int,
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
+    *,
+    levels: Optional[Dict[str, int]] = None,
+    conn=None,
+    resolver=None,
 ) -> int:
+    """Research duration in seconds. Prefer shared ``levels`` / ``conn`` / ``resolver`` (GC-PERF-RESEARCH-TIME-001)."""
     if tech_key not in RESEARCH_TECHS:
         return 0
+
+    if resolver is not None:
+        return int(resolver.get_research_time_seconds(tech_key, max(1, int(level))))
 
     if buildings is None:
         from .planet_evolution.repository import get_context_planet
 
-        planet = get_context_planet(int(user_id))
-        buildings = get_planet_buildings(int(planet["id"]))
+        planet = get_context_planet(int(user_id), conn=conn)
+        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
 
-    from .effects import EffectResolver
+    if levels is None:
+        levels = get_research_levels(int(user_id), conn=conn)
 
-    research_levels = get_research_levels(int(user_id))
-    resolver = EffectResolver(buildings, research_levels, player_id=int(user_id))
-    return resolver.get_research_time_seconds(tech_key, max(1, int(level)))
+    from .effects import EffectResolver, get_effect_resolver
+
+    if conn is not None:
+        er = get_effect_resolver(
+            int(user_id),
+            buildings=buildings,
+            research=levels,
+            conn=conn,
+        )
+    else:
+        er = EffectResolver(buildings, levels, player_id=int(user_id), conn=conn)
+    return int(er.get_research_time_seconds(tech_key, max(1, int(level))))
 
 
 def recalculate_research_queue_finish_times(
@@ -569,6 +587,14 @@ def recalculate_research_queue_finish_times(
         conn=conn,
     )
     levels = get_research_levels(uid, conn=conn)
+    from .effects import get_effect_resolver
+
+    time_resolver = get_effect_resolver(
+        uid,
+        buildings=buildings,
+        research=levels,
+        conn=conn,
+    )
     cur = conn.cursor()
     schedule_at = ts
     queued_counts: Dict[str, int] = {}
@@ -581,7 +607,17 @@ def recalculate_research_queue_finish_times(
         current = int(levels.get(tech, 0) or 0)
         queued_same = int(queued_counts.get(tech, 0))
         target = current + queued_same + 1
-        duration = float(get_research_time(tech, target, user_id=uid, buildings=buildings))
+        duration = float(
+            get_research_time(
+                tech,
+                target,
+                user_id=uid,
+                buildings=buildings,
+                levels=levels,
+                conn=conn,
+                resolver=time_resolver,
+            )
+        )
 
         if idx == 0:
             start_existing = float(row["start_at"] or 0)
@@ -882,6 +918,9 @@ def summarize_max_queueable_research_jobs(
     queue_free_slots: int,
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
+    levels: Optional[Dict[str, int]] = None,
+    conn=None,
+    resolver=None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX research queue UX: levels, total cost, cumulative time."""
     jobs = preview_max_queueable_research_jobs(
@@ -903,7 +942,17 @@ def summarize_max_queueable_research_jobs(
         cost_m, cost_c = get_research_cost(tech_key, target)
         total_m += float(cost_m)
         total_c += float(cost_c)
-        total_sec += int(get_research_time(tech_key, target, int(user_id), buildings=buildings))
+        total_sec += int(
+            get_research_time(
+                tech_key,
+                target,
+                int(user_id),
+                buildings=buildings,
+                levels=levels,
+                conn=conn,
+                resolver=resolver,
+            )
+        )
     return {
         "jobs": int(jobs),
         "from_level": from_level,
@@ -1032,7 +1081,14 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
                 )
                 break
 
-            duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
+            duration = get_research_time(
+                tech_key,
+                target,
+                user_id=uid,
+                buildings=buildings,
+                levels=levels,
+                conn=conn,
+            )
             last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
             start_at = max(now, last_finish)
             finish_at = start_at + float(duration)
@@ -1321,6 +1377,21 @@ def get_research_status(
     queue_list: List[Dict[str, Any]] = []
     pending: Dict[str, int] = {}
 
+    # GC-PERF-RESEARCH-TIME-001: one resolver for queue fallback + full tech catalog.
+    from .effects import EffectResolver, get_effect_resolver
+
+    if conn is not None:
+        time_resolver = get_effect_resolver(
+            uid,
+            buildings=buildings,
+            research=levels,
+            conn=conn,
+        )
+    else:
+        time_resolver = EffectResolver(
+            buildings, levels, player_id=uid, conn=conn
+        )
+
     for i, job in enumerate(queue):
         tech = str(job["tech_key"])
         cfg = RESEARCH_TECHS.get(tech, {})
@@ -1336,7 +1407,17 @@ def get_research_status(
         elif i > 0:
             start_at = float(queue[i - 1]["finish_at"])
         else:
-            start_at = finish_at - float(get_research_time(tech, targ, user_id=int(user_id), buildings=buildings))
+            start_at = finish_at - float(
+                get_research_time(
+                    tech,
+                    targ,
+                    user_id=uid,
+                    buildings=buildings,
+                    levels=levels,
+                    conn=conn,
+                    resolver=time_resolver,
+                )
+            )
 
         total = max(1, int(finish_at - start_at))
         remain = max(0, int(finish_at - now))
@@ -1389,7 +1470,15 @@ def get_research_status(
             targ = curr + q_count + 1
 
             cost_m, cost_c = get_research_cost(tech, targ)
-            t_sec = get_research_time(tech, targ, user_id=int(user_id), buildings=buildings)
+            t_sec = get_research_time(
+                tech,
+                targ,
+                user_id=uid,
+                buildings=buildings,
+                levels=levels,
+                conn=conn,
+                resolver=time_resolver,
+            )
 
             req = cfg.get("requirements") or {}
             req_met = _check_requirements(req, buildings, levels)
@@ -1403,8 +1492,11 @@ def get_research_status(
                     metal=planet_metal,
                     crystal=planet_crystal,
                     queue_free_slots=queue_free_slots,
-                    user_id=int(user_id),
+                    user_id=uid,
                     buildings=buildings,
+                    levels=levels,
+                    conn=conn,
+                    resolver=time_resolver,
                 )
 
             is_active = bool(active and str(active.get("tech_key")) == tech)
@@ -1492,11 +1584,24 @@ def _research_technical_level_row(
     user_id: int,
     buildings: Dict[str, int],
     is_current: bool,
+    levels: Optional[Dict[str, int]] = None,
+    conn=None,
+    resolver=None,
 ) -> Dict[str, Any]:
     lvl = max(0, int(level))
     cost_level = max(1, lvl) if lvl > 0 else 1
     cost_m, cost_c = get_research_cost(tech_key, cost_level)
-    time_s = int(get_research_time(tech_key, cost_level, int(user_id), buildings=buildings))
+    time_s = int(
+        get_research_time(
+            tech_key,
+            cost_level,
+            int(user_id),
+            buildings=buildings,
+            levels=levels,
+            conn=conn,
+            resolver=resolver,
+        )
+    )
     if lvl > 0:
         effect = get_research_effect_preview(tech_key, lvl - 1, lvl)
     else:
@@ -1561,6 +1666,17 @@ def build_research_technical_data(
         technical_row_role,
     )
 
+    from .effects import EffectResolver, get_effect_resolver
+
+    time_resolver = get_effect_resolver(
+        uid,
+        buildings=buildings,
+        research=levels,
+        conn=conn,
+    ) if conn is not None else EffectResolver(
+        buildings, levels, player_id=uid, conn=conn
+    )
+
     preview = technical_preview_levels(current)
     level_rows: List[Dict[str, Any]] = []
     for lvl in preview:
@@ -1570,6 +1686,9 @@ def build_research_technical_data(
             user_id=uid,
             buildings=buildings,
             is_current=(lvl == current),
+            levels=levels,
+            conn=conn,
+            resolver=time_resolver,
         )
         row["row_role"] = technical_row_role(lvl, current)
         level_rows.append(row)

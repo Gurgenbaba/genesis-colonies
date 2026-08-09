@@ -360,6 +360,7 @@ class RequestSample:
     error: bool
     phases: Dict[str, float] = field(default_factory=dict)
     sql_count: int = 0
+    db_connection_open_count: int = 0
     db_query_ms: float = 0.0
     slow_queries: List[Dict[str, Any]] = field(default_factory=list)
     payload_bytes: int = 0
@@ -463,6 +464,7 @@ class PerfIntelStore:
             "slow_class": sample.slow_class,
             "top_costs": [{"name": n, "ms": ms} for n, ms in phases_sorted],
             "sql_count": int(sample.sql_count),
+            "db_connection_open_count": int(sample.db_connection_open_count),
             "db_query_ms": round(float(sample.db_query_ms), 1),
             "slow_queries": list(sample.slow_queries or [])[:5],
             "concurrent": int(self._active),
@@ -929,6 +931,7 @@ def record_request_sample(
     total_ms: float = 0.0,
     phases: Optional[Dict[str, float]] = None,
     sql_count: int = 0,
+    db_connection_open_count: int = 0,
     db_query_ms: float = 0.0,
     slow_queries: Optional[List[Dict[str, Any]]] = None,
     payload_bytes: int = 0,
@@ -950,6 +953,7 @@ def record_request_sample(
             error=bool(error) or int(status or 0) >= 500,
             phases=dict(phases or {}),
             sql_count=int(sql_count or 0),
+            db_connection_open_count=int(db_connection_open_count or 0),
             db_query_ms=max(0.0, float(db_query_ms or 0.0)),
             slow_queries=list(slow_queries or [])[:20],
             payload_bytes=int(payload_bytes or 0),
@@ -979,7 +983,7 @@ def _emit_slow_request_log(sample: RequestSample) -> None:
         rss = proc.get("rss_mb")
         logger.info(
             "[GC PERF] %s REQUEST route=%s path=%s total=%.1fms status=%s "
-            "TOP_COSTS %s CPU=%s RSS=%sMB concurrent=%s sql=%s db_ms=%.1f",
+            "TOP_COSTS %s CPU=%s RSS=%sMB concurrent=%s sql=%s conn_opens=%s db_ms=%.1f",
             label,
             sample.route or sample.path,
             sample.path,
@@ -990,6 +994,7 @@ def _emit_slow_request_log(sample: RequestSample) -> None:
             rss if rss is not None else "n/a",
             _STORE.active_requests,
             sample.sql_count,
+            sample.db_connection_open_count,
             sample.db_query_ms,
         )
     except Exception:

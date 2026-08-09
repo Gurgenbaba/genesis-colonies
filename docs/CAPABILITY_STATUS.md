@@ -1,6 +1,6 @@
 # Genesis Colonies — Was es kann, was es noch verträgt
 
-**Stand:** Alpha `0.5.9.143` · Stack Flask + **SQLite (WAL)** + Vanilla JS/PJAX · **4574** pytest-Tests  
+**Stand:** Alpha `0.5.9.145` · Stack Flask + **SQLite (WAL)** + Vanilla JS/PJAX · **4584** pytest-Tests  
 **Strategie:** Completion-First — fertigmachen vor Greenfield.  
 **Produktentscheidung DB:** SQLite bleibt der produktive Pfad (1 Writer, 1 Gunicorn-Worker, Volume, Backups). Postgres-Cutover ist **nicht** geplant — siehe [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
 
