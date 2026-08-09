@@ -3749,6 +3749,87 @@ def test_build_active_fleets_payload_confirmed_empty_flags(fleet_db):
     assert empty['visible_limit'] == 1
     conn.close()
 
+
+def test_build_active_fleets_payload_skips_mission_resolve(fleet_db, monkeypatch):
+    """GC-PERF-FLEET-HUD-001: drawer path must not N× resolve_fleet_target."""
+    from game import fleet as fleet_mod
+    from game.fleet import build_active_fleets_payload, send_fleet
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    cur.execute("UPDATE planets SET name = ? WHERE id = ?;", ("HUD Target Colony", int(colony2)))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+    ok, reason, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok, reason
+
+    calls = {"n": 0}
+
+    def _boom(*_a, **_k):
+        calls["n"] += 1
+        raise AssertionError("resolve_fleet_target must not run for HUD drawer payload")
+
+    monkeypatch.setattr(fleet_mod, "resolve_fleet_target", _boom)
+    payload = build_active_fleets_payload(uid, conn=conn)
+    assert calls["n"] == 0
+    assert payload["count"] == 1
+    assert payload["items"][0]["target_name"] == "HUD Target Colony"
+    conn.close()
+
+
+def test_list_active_movements_full_enrich_still_resolves(fleet_db, monkeypatch):
+    """Fleet page / Overview keep full world_target enrich (default)."""
+    from game import fleet as fleet_mod
+    from game.fleet import list_active_movements, send_fleet
+
+    calls = {"n": 0}
+    real = fleet_mod.resolve_fleet_target
+
+    def _wrap(*a, **k):
+        calls["n"] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(fleet_mod, "resolve_fleet_target", _wrap)
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+    ok, reason, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok, reason
+    movements = list_active_movements(uid, conn=conn)
+    assert calls["n"] >= 1
+    assert movements and movements[0].get("world_target")
+    conn.close()
+
 def test_recall_fleet_movement_before_overdue_arrival_tick(fleet_db):
     """Cancel must win over a not-yet-ticked overdue arrival (transport/spy/attack)."""
     from game.fleet import recall_fleet_movement

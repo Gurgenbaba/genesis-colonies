@@ -66,6 +66,15 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 - Meta/reward actions (login rewards, battle pass, vote, politics, referrals) use `_hud_only_game_state` — no full `payload.panel`.
 - Further cuts only after spike samples show the next child hotspot (N≥20).
 
+### GC-PERF-FLEET-HUD-001 — Drawer without mission resolve
+
+Spike evidence: `fleets.active` 70–120ms on slow `/api/game-state` while drawer only needs labels/timers.
+
+- `build_active_fleets_payload` → `list_active_movements(..., enrich_world_target=False)`.
+- Light path: JOIN target planet name + `resources.world_key` presentation — **no** per-row `resolve_fleet_target` (debris/pirate/boss scans).
+- Full enrich remains default for Fleet page / Overview / Command Map (`list_active_movements` default).
+- Live UI unchanged: count, timers, expand list, recall/cancel flags still from movement rows.
+
 ### GC-PERF-FEEL-001 — Shell background weight
 
 - `static/img/background.webp` recompressed (~272KB → ~84KB @ 1400w); CSS still WebP primary via `image-set`.

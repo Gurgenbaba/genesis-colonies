@@ -2159,7 +2159,60 @@ def _enrich_movement_world_target(
     return mv
 
 
-def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
+def _enrich_movement_hud_target(mv: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Drawer/HUD target label without resolve_fleet_target (GC-PERF-FLEET-HUD-001).
+
+    Mission-resolution (debris/pirates/boss/allowed missions) is for send/preview —
+    not for every /api/game-state active list row.
+    """
+    resources = mv.get("resources") or {}
+    wk = str(resources.get("world_key") or "").strip() or None
+    if not wk:
+        wk = str(mv.get("target_planet_world_key") or "").strip() or None
+    wt: Dict[str, Any] = {
+        "legacy_coords": {
+            "galaxy": int(mv.get("target_galaxy") or 0),
+            "system": int(mv.get("target_system") or 0),
+            "position": int(mv.get("target_position") or 0),
+        },
+    }
+    if mv.get("target_planet_id"):
+        wt["target_planet_id"] = int(mv["target_planet_id"])
+    if wk:
+        wt["target_world_key"] = wk
+        wt["world_key"] = wk
+        try:
+            from .planet_evolution.strategic_worlds import build_strategic_world_presentation_from_key
+
+            pres = build_strategic_world_presentation_from_key(wk)
+            if pres.get("name_key"):
+                wt["target_name_key"] = str(pres["name_key"])
+            if pres.get("world_type"):
+                wt["target_type"] = "world_colony"
+        except Exception:
+            pass
+    planet_name = str(mv.get("target_planet_name") or "").strip()
+    if planet_name:
+        wt["target_name"] = planet_name
+    mv["world_target"] = wt
+    return mv
+
+
+def list_active_movements(
+    player_id: int,
+    *,
+    conn=None,
+    enrich_world_target: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Active fleet movements for this player.
+
+    enrich_world_target=True (default): full GC-590B world_target via resolve_fleet_target
+    (Fleet page, Overview, Command Map).
+
+    enrich_world_target=False: HUD drawer path — display name only (no per-row mission resolve).
+    """
     own = conn is None
     if own:
         conn = db()
@@ -2170,9 +2223,11 @@ def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
         cur = conn.cursor()
         cur.execute(
             f"""
-            SELECT fm.*, op.name AS origin_name, op.galaxy AS og, op.system AS os, op.position AS opos
+            SELECT fm.*, op.name AS origin_name, op.galaxy AS og, op.system AS os, op.position AS opos,
+                   tp.name AS target_planet_name, tp.world_key AS target_planet_world_key
             FROM fleet_movements fm
             JOIN planets op ON op.id = fm.origin_planet_id
+            LEFT JOIN planets tp ON tp.id = fm.target_planet_id
             WHERE fm.player_id = ? AND fm.status IN ({placeholders})
             ORDER BY fm.arrival_at ASC;
             """,
@@ -2188,8 +2243,13 @@ def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
                 )
             except GalaxyCoordinateError:
                 mv["origin_coords"] = ""
+            mv["target_planet_name"] = str(row["target_planet_name"] or "")
+            mv["target_planet_world_key"] = str(row["target_planet_world_key"] or "")
             mv = enrich_movement_timing(mv, now=_now())
-            out.append(_enrich_movement_world_target(mv, int(player_id), conn=conn))
+            if enrich_world_target:
+                out.append(_enrich_movement_world_target(mv, int(player_id), conn=conn))
+            else:
+                out.append(_enrich_movement_hud_target(mv))
         return out
     finally:
         if own and conn is not None:
@@ -2450,7 +2510,11 @@ def build_active_fleets_payload(
     visible_limit: int = FLEET_DRAWER_VISIBLE_LIMIT,
 ) -> Dict[str, Any]:
     """Player-wide active fleet block for global drawer (GC-654)."""
-    movements = list_active_movements(int(player_id), conn=conn)
+    # HUD: skip resolve_fleet_target N× (spikes: fleets.active 70–120ms).
+    # Fleet page / Overview keep full enrich via list_active_movements default.
+    movements = list_active_movements(
+        int(player_id), conn=conn, enrich_world_target=False
+    )
     items = [format_movement_drawer_item(mv) for mv in movements]
     next_remaining = 0
     if items:
