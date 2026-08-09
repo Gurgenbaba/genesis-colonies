@@ -20,7 +20,7 @@ Der Versionswechsel zu `v1.0.0-beta.1` ist erst erlaubt, wenn alle Gates abgesch
 
 - [x] **Alliance MVP abgeschlossen** — Hub, Mitglieder, Bewerbungen, Spenden, Projekte, Tech, Diplomatie-MVP, Logo-Upload, PJAX und Boni spielbar (GC-AL-MVP-01…09). Combat-/Diplomatie-Deep-Hooks bewusst post-Beta.
 - [ ] **GC-BETA-001 — Architecture & CI Green** — Architektur- und PJAX-Regressionstests grün; keine neuen Reload-/Href-Verstöße; GC-000 eingehalten.
-- [ ] **GC-BETA-002 — Documentation Reality Sync** — Master-Docs spiegeln den tatsächlichen Stand wider; keine bekannten Reality-Gaps.
+- [x] **GC-BETA-002 — Documentation Reality Sync** — Master-Docs spiegeln den tatsächlichen Stand wider; keine bekannten Reality-Gaps (Sync 2026-08-09, GC-851 Guards).
 - [ ] **GC-BETA-003 — Alpha Exit Validation** — manueller Smoke-Test bestätigt, dass die Kernsysteme zusammen funktionieren.
 
 Erst danach:

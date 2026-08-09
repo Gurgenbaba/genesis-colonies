@@ -1,6 +1,6 @@
 # Genesis Colonies — Was es kann, was es noch verträgt
 
-**Stand:** Alpha `0.5.9.48` · Stack Flask + **SQLite (WAL)** + Vanilla JS/PJAX · ~4000+ pytest-Tests  
+**Stand:** Alpha `0.5.9.143` · Stack Flask + **SQLite (WAL)** + Vanilla JS/PJAX · **4574** pytest-Tests  
 **Strategie:** Completion-First — fertigmachen vor Greenfield.  
 **Produktentscheidung DB:** SQLite bleibt der produktive Pfad (1 Writer, 1 Gunicorn-Worker, Volume, Backups). Postgres-Cutover ist **nicht** geplant — siehe [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
 
@@ -101,7 +101,7 @@ Priorisiert nach Spielerwert und Beta-Reife. Kein zweites Combat-/Queue-/Fleet-S
 11. Radar/Scan-Layer (Gebäude impliziert Feature)
 12. Season / Universe-Reset-Ops
 13. Optional: Recycler UX (GC-800C), Logistics `auto_cargo`, Balancing-Tooling
-14. Contract-Schuld: Shipyard `{ok,state}` (GC-512D), Legacy-Admin-Forms, `fleet_presets` CHECK, Resource INTEGER (GC-622B)
+14. Contract-Schuld: Legacy-Admin-Forms, `fleet_presets` CHECK, Resource INTEGER (GC-622B) — Shipyard `{ok,state}` ✅
 
 **Bewusst nicht priorisieren:** WebSocket (Polling funktioniert), CDN/Asset-Pipeline, parallele Engines, Postgres-Cutover.
 

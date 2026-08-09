@@ -6,7 +6,7 @@ Browser-basiertes Sci-Fi-Strategiespiel (OGame-inspiriert) — entwickelt als pr
 
 | | |
 |---|---|
-| **Version** | `0.5.9.113` (siehe [`VERSION`](VERSION)) · Spieler-Meilenstein **v0.9 Alpha** |
+| **Version** | `0.5.9.143` (siehe [`VERSION`](VERSION)) · Spieler-Meilenstein **v0.9 Alpha** |
 | **Stack** | Python 3.10+ · Flask 3 · SQLite (WAL) · Vanilla JS |
 | **Status** | Alpha (`v0.9`) — Economy, Combat, Defense, Fleet, Alliance MVP, Imperium spielbar · Beta/`v1.0` erst nach [BETA_GATE.md](docs/BETA_GATE.md) |
 | **Health** | `GET /health` |
@@ -38,7 +38,7 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Audit Logging | `admin_audit_log` für privilegierte Aktionen |
 | Frontend-Architektur | SPA/PJAX, Singleton-Polling, Lifecycle-Cleanup |
 | Queue-Hardening | Atomare Transaktionen, Idempotenz, Parallel-Tests |
-| Test-Suite | **4554** pytest-Tests (`python -m pytest --collect-only -q`) |
+| Test-Suite | **4574** pytest-Tests (`python -m pytest --collect-only -q`) |
 
 ### Spielbar (Mechanik)
 
@@ -67,12 +67,6 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Allianz | `/alliance` | ✅ MVP (Hub, Spenden, Projekte, Tech, Boni) |
 | Options | `/options` | ✅ |
 | Admin | `/admin` | ✅ Control Center |
-
-### Tech debt / Placeholder
-
-| Modul | Route | Status |
-|-------|-------|--------|
-| Shipyard API envelope | `/api/shipyard*` | ⚠️ `{ok,data}` statt `{ok,state}` (GC-512D) |
 
 Vollständiger Modul-Status: [docs/PROJECT_INVENTORY.md](docs/PROJECT_INVENTORY.md) · Capability-Überblick: [docs/CAPABILITY_STATUS.md](docs/CAPABILITY_STATUS.md) · Balance-Anker: [docs/BALANCE_ANCHORS.md](docs/BALANCE_ANCHORS.md)
 
@@ -296,7 +290,7 @@ Genesis Colonies/
 │   ├── chat.py, messages.py, alliance.py, …
 │   └── admin*.py           # Admin Control Center
 │
-├── migrations/             # SQL-Migrationen (006–116)
+├── migrations/             # SQL-Migrationen (006–147)
 ├── templates/              # Jinja2 (base.html = SPA-Shell)
 ├── static/
 │   ├── main.js             # PJAX, Polling, Fleet, Planet Scope

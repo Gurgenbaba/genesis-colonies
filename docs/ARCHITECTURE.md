@@ -1,6 +1,6 @@
 # Genesis Colonies — Architecture
 
-Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-06-24**). Ergänzt die [README](../README.md) mit Abläufen, Modulgrenzen und Datenflüssen.
+Technische Architektur-Dokumentation (Stand: **v0.5.9.143**, Reality-Sync **2026-08-09**). Ergänzt die [README](../README.md) mit Abläufen, Modulgrenzen und Datenflüssen.
 
 **System-Docs (Single Source of Truth pro Domäne):**
 
@@ -83,7 +83,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-0
                              │
 ┌────────────────────────────▼─────────────────────────────────────┐
 │ SQLite (WAL) — game/game.db                                       │
-│  migration_history + migrations/*.sql (006–145)                   │
+│  migration_history + migrations/*.sql (006–147)                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -266,7 +266,7 @@ Vollständige Tabelle: **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** — hier
 | Buildings | `/buildings`, `/api/buildings/*` | `buildings.py` | ✅ |
 | Research | `/research`, `/api/research/*` | `research.py` | ✅ |
 | Trader Hub | `/trader-hub`, `/api/exchange`, … | `exchange.py`, `scrapyard.py` | ✅ |
-| Shipyard | `/shipyard`, `/api/shipyard/*` | `shipyard.py` | ✅ ⚠️ GC-512D envelope |
+| Shipyard | `/shipyard`, `/api/shipyard/*` | `shipyard.py` | ✅ `{ok,state}` (+ optional `data`) |
 | Defense | `/defense`, `/api/defense/*` | `defense.py` | ✅ |
 | Fleet / Combat | `/fleet`, `/api/fleet/*` | `fleet.py`, `combat.py` | ✅ |
 | Galaxy | `/galaxy` | `galaxy.py` | ✅ |
@@ -324,7 +324,7 @@ Balance-Editor: `game/admin_balance.py` → `/api/admin/balance`.
 | `migrate.py` | Runner, `migration_history` |
 | `game/migrations_util.py` | Pending-Check für Bootstrap + Health |
 
-**Aktuelle Migrationen:** `006`–`144` — siehe `migrations/` und `migration_history`.
+**Aktuelle Migrationen:** `006`–`147` — siehe `migrations/` und `migration_history`.
 
 Neue Schema-Änderungen **immer** als `migrations/NNN_name.sql` + Test in `test_persistence.py`.
 
@@ -433,7 +433,7 @@ Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · E
 
 ## Test-Suite
 
-**4554 pytest-Tests** (Stand v0.5.9.113 — `python -m pytest --collect-only -q`), u. a.:
+**4574 pytest-Tests** (Stand v0.5.9.143 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

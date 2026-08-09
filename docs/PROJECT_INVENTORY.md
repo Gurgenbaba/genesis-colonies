@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** v0.5.9.113 (2026-08-01) — Alliance MVP complete (GC-AL-MVP-09); Spieler-Meilenstein **v0.9 Alpha**; siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.  
+**Stand:** v0.5.9.143 (2026-08-09) — Alliance MVP complete (GC-AL-MVP-09); Spieler-Meilenstein **v0.9 Alpha**; siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.  
 **Capability-Überblick / nächste Prioritäten:** [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) (SQLite bleibt Produktions-DB; Postgres-Cutover nicht geplant).
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
@@ -13,7 +13,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Buildings** | `buildings.py`, `queue_engine` | `/buildings`, PJAX | `POST /api/buildings/*` + `state` | `test_race_conditions`, `test_queue_static_contract` | ✅ | — |
 | **Research** | `research.py` | `/research`, PJAX | `POST /api/research/*` + `state` | `test_race_conditions`, `test_research_requirements` | ✅ | — |
 | **Trader Hub** | `exchange.py`, `scrapyard.py`, `fuel_exchange.py` | `/trader-hub` | `POST /api/exchange`, `/api/trader/scrapyard` | `test_trader_hub`, `test_exchange`, `test_scrapyard` | ✅ | — |
-| **Shipyard** | `shipyard.py`, `shipyard_queue.py` | `/shipyard` (`orbital_shipyard`) | `/api/shipyard*` (`{ok,data}`) | `test_shipyard.py`, `test_shipyard_queue`, `test_fleet` | ✅ | ⚠️ Envelope → `{ok,state}` (GC-512D) |
+| **Shipyard** | `shipyard.py`, `shipyard_queue.py` | `/shipyard` (`orbital_shipyard`) | `/api/shipyard*` (`{ok,state}` + optional `data`) | `test_shipyard.py`, `test_shipyard_queue`, `test_fleet` | ✅ | — |
 | **Defense** | `defense.py`, `defense_api.py`, `defense_defs.py` | `/defense` | `/api/defense*`, `{ok,state,queue,defenses}` | `test_defense_phase1`, `test_defense_detail_modal` | ✅ | GC-600 done; Seiten-Poll dokumentiert |
 | **Fleet** | `fleet.py`, `fleet_calc.py`, `fleet_api.py` | `/fleet` | `/api/fleet/*` | `test_fleet.py` (groß) | ✅ | — |
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
@@ -35,6 +35,9 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Galactic Politics** | `galactic_directives/`, `galactic_diplomacy/` | `/galactic-politics` | `/api/galactic-politics/*` | `test_galactic_*.py` | ✅ | — |
 | **Referrals** | `referrals.py` | `/referrals` | `/api/referrals/*` | `test_referrals.py` | ✅ | — |
 | **Meta content** | news, chronicles, hall-of-fame, records | `/news`, … | read APIs | various | ✅ | — |
+| **Timekeeper** | `timekeeper.py` | HUD + queue apply | `/api/timekeeper/*` + `state` | `test_timekeeper.py` | ✅ | — |
+| **Space Lottery** | `space_lottery.py` | Chrono Chamber UI | `/api/space-lottery/*` + `state` | `test_space_lottery.py` | ✅ | TK stakes only |
+| **World Boss** | `world_boss.py`, `world_boss_companions.py` | LiveOps / reports | `/api/world-boss/*` | `test_world_boss.py`, `test_world_boss_companions.py` | ✅ | — |
 
 ---
 
@@ -49,7 +52,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | Planet Scope | ✅ `get_context_planet()` / `resolve_owned_planet_id` |
 | Owner-Module | ✅ siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §17 |
 
-Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_ARCHITECTURE_VALIDATION.md) Follow-ups GC-512A–D.
+Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_ARCHITECTURE_VALIDATION.md) Follow-ups GC-512A–C (D Shipyard-Envelope ✅ shipped).
 
 ---
 
@@ -73,8 +76,9 @@ Aus [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) — Completion-First, ohne Post
 | `BUILDINGS_SYSTEM.md` / `RESEARCH_SYSTEM.md` | Cancel refunds, Kosten/Zeit | ✅ Reality-Sync 2026-06-24 |
 | `ECONOMY_SYSTEM.md` | Storage 150k, fuel_storage, loot floors | ✅ Reality-Sync 2026-06-24 |
 | `EffectResolver` build time | `power_build_seconds` (GC-850A) | ✅ Reality-Sync 2026-06-24 |
-| Shipyard envelope | `{ok,data}` statt `{ok,state}` | ⚠️ GC-512D backlog |
+| Shipyard envelope | `{ok,state}` (+ optional `data`) | ✅ shipped (`api_shipyard_*` setzt `state`) |
 | Alliance backend + UI + PJAX | MVP complete (GC-AL-MVP-01…09) | ✅ Rollen, Rekrutierung, Spenden, Projekte, Boni, Tests, Docs |
+| Master-Docs Meta (VERSION / pytest / migrations) | GC-BETA-002 / GC-851 | ✅ Reality-Sync 2026-08-09 |
 
 Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) (closed).
 

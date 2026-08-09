@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.9 Alpha** / Build `0.5.9.113` (Reality-Sync 2026-08-01).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.9 Alpha** / Build `0.5.9.143` (Reality-Sync 2026-08-09).
 
 Status-Legende:
 
@@ -24,12 +24,12 @@ Status-Legende:
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`145`) | ✅ |
+| SQL-Migrationen (`006`–`147`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**4554** Tests) | ✅ |
+| pytest-Suite (**4574** Tests) | ✅ |
 
 ---
 
@@ -269,7 +269,7 @@ Genesis Colonies bleibt `v0.9.x` Alpha, bis alle Alpha-Exit-Gates aus [BETA_GATE
 |------|------|
 | Alliance MVP | ✅ Abgeschlossen (GC-AL-MVP-01…09) — Hub, Bewerbungen, Spenden, Projekte, Tech, Boni, PJAX; Deep-Hooks später |
 | GC-BETA-001 — Architecture & CI Green | Architektur- und PJAX-Regressionstests grün; keine neuen Reload-/Href-Verstöße |
-| GC-BETA-002 — Documentation Reality Sync | Master-Docs spiegeln den Code-Stand wider |
+| GC-BETA-002 — Documentation Reality Sync | ✅ Master-Docs spiegeln den Code-Stand wider (2026-08-09) |
 | GC-BETA-003 — Alpha Exit Validation | Manueller Smoke-Test aller Kernsysteme ohne P0/P1-Fund |
 
 Versionsbedeutung:
@@ -297,7 +297,6 @@ Wartungs-Schulden sind kein Beta-Blocker, solange GC-000 eingehalten wird, CI gr
 | Recycler UX polish (GC-800C) | Optional UX | GC-800A/B ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md) |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |
 | SQLite Single-Writer | Scale | Ops: 1 Worker/Replica — Cutover **nicht** geplant ([CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)) |
-| README vs VERSION drift | Docs | README auf 1.5.3 |
 | `fleet_presets` CHECK ohne colonize | Schema | Migration fix |
 | Ressourcen als REAL statt INTEGER | Präzision ab ~9×10¹⁵ | [GC-622B](GC-622B_RESOURCE_INTEGER_MIGRATION.md) (Backlog) |
 
@@ -326,7 +325,7 @@ Kanonisch: **[CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)**. Kurz:
 | P0 | Combat polish (GC-700E) → dann P2 | ✅ GC-700E; GC-AL-DIP-01 ✅ |
 | P1 | Beta Gate, First-30, Collector, Megabunker, i18n | 💡 zurückgestellt |
 | P2 | Alliance Kriegs-Meta · Imperium Presence (566B/568) · Marketplace | 📋 aktiv |
-| P3 | Radar, Seasons, Contract-Schuld (GC-512D, …) | 💡 |
+| P3 | Radar, Seasons, Contract-Schuld (GC-512C, Legacy-Admin, …) | 💡 |
 
 **Nicht priorisieren:** Postgres-Cutover, WebSocket, parallele Engines.
 
