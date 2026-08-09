@@ -271,7 +271,7 @@ def test_diet_early_exit_blocked_when_queue_due(game_client, monkeypatch):
     assert data.get("diet_early_exit") != 1
 
 def test_diet_probe_skip_uses_process_local_fingerprint(game_client, monkeypatch):
-    """GC-PERF-STATE-005: matching since skips heavy probe_poll_version."""
+    """GC-PERF-STATE-005: matching since skips heavy probe_poll_version (within TTL)."""
     from game import live_state as ls
 
     monkeypatch.delenv("GC_STATE_DELTA", raising=False)
@@ -300,6 +300,41 @@ def test_diet_probe_skip_uses_process_local_fingerprint(game_client, monkeypatch
     assert data.get("diet_early_exit") == 1
     assert data.get("diet_probe_skip") == 1
     assert probe_calls["n"] == 0
+
+
+def test_diet_probe_skip_expires_so_nav_badges_reprobe(game_client, monkeypatch):
+    """TTL forces probe_poll_version so Inventar/LiveOps/Vote badges stay live."""
+    from game import live_state as ls
+
+    monkeypatch.delenv("GC_STATE_DELTA", raising=False)
+    monkeypatch.setattr(
+        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: False
+    )
+    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
+    ls.clear_diet_poll_fingerprint()
+
+    probe_calls = {"n": 0}
+
+    def counting_probe(*_a, **_k):
+        probe_calls["n"] += 1
+        return 888002
+
+    monkeypatch.setattr(ls, "probe_poll_version", counting_probe)
+    monkeypatch.setattr("game.messages.unread_count", lambda *_a, **_k: 0)
+
+    client, pid = game_client
+    ls.remember_diet_poll_fingerprint(int(pid), version=888002, unread=0)
+    # Age the fingerprint past TTL
+    cached = ls._DIET_POLL_FP_CACHE[int(pid)]
+    ls._DIET_POLL_FP_CACHE[int(pid)] = (cached[0], cached[1], cached[2] - 10.0)
+
+    resp = client.get("/api/game-state?since=888002")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("unchanged") is True
+    assert data.get("diet_early_exit") == 1
+    assert data.get("diet_probe_skip") != 1
+    assert probe_calls["n"] == 1
 
 
 def test_poll_thrash_pattern_removed_from_refresh():

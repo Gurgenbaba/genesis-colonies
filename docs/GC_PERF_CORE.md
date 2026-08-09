@@ -92,7 +92,7 @@ Schema-Port
 | **GC-PERF-EFFECT-CACHE-001** | EffectResolver request-scoped Cache | ✅ |
 | **GC-PERF-LIVE-001** | Client diet `?since=` + Busy-Poll Fleet/Defense | ✅ |
 | **GC-PERF-STATE-004** | Early exit vor diet payload build | ✅ |
-| **GC-PERF-STATE-005** | Process-local probe skip when since+unread match | ✅ |
+| **GC-PERF-STATE-005** | Process-local probe skip when since+unread match (TTL 3s; mutations clear FP) | ✅ |
 | **GC-PERF-RADAR-001** | Threat Net: fingerprint on probe/notification; batched bubbles; scoped SQL; diet alert slice; client signature/ticker split | ✅ |
 | **GC-PERF-POLL-THRASH-001** | No stop/start on unchanged hidden polls | ✅ |
 | **GC-PERF-CHAT-IDLE-001** | Chat message poll slows when panel closed | ✅ |

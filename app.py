@@ -11079,6 +11079,14 @@ def _build_game_state_payload(
         if perf is not None:
             perf.add_payload_ms(payload_ms)
         record_request_perf_phase("payload_ms", payload_ms)
+        # Mutations / panel builds change nav badges — don't let idle probe_skip hide them.
+        if not lightweight:
+            try:
+                from game.live_state import clear_diet_poll_fingerprint
+
+                clear_diet_poll_fingerprint(user_id)
+            except Exception:
+                pass
         return payload, user_id
     finally:
         conn.close()

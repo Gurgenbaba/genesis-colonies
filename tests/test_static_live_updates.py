@@ -634,6 +634,11 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert 'refreshGameState("planet_switch")' not in switch_section
     assert "bootstrapResourceLiveFromDom()" in switch_section
     action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "state.nav_badges" in action_body
+    assert "_lastPollVersion = 0" in action_body
+    assert "GC.lastState.nav_badges" in src or "GC.lastState && typeof GC.lastState" in src
+    assert "_cbSyncAttentionBadges" in src
+    assert "GC.lastState && GC.lastState.nav_badges" in src.split("function _cbSyncAttentionBadges")[1].split("function renderCaseBattlesUI")[0]
     assert 'reason === "planet_switch"' in action_body
     apply_body = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "applyHudOnlyGameState" in apply_body

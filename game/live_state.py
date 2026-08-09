@@ -1450,8 +1450,10 @@ def try_diet_poll_early_unchanged(
     GC-PERF-STATE-004 / STATE-005: tiny ``{unchanged:true}`` before full diet build.
 
     Due queue/fleet work always forces a full build so finish stays on the poll owner path.
-    STATE-005: if process-local fingerprint still matches ``since`` and unread is unchanged,
-    skip the heavy ``probe_poll_version`` (EffectResolver + nav badges).
+    STATE-005: if process-local fingerprint still matches ``since`` and unread is unchanged
+    **and** the fingerprint is fresher than ``_DIET_PROBE_SKIP_TTL_SEC``, skip the heavy
+    ``probe_poll_version`` (EffectResolver + nav badges). TTL keeps Inventar / LiveOps /
+    Vote / Directives / World Boss badges from going stale while idle.
     """
     from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
@@ -1473,23 +1475,26 @@ def try_diet_poll_early_unchanged(
 
         cached = _DIET_POLL_FP_CACHE.get(uid)
         if cached is not None and int(cached[0]) == int(since):
-            try:
-                unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
-            except Exception:
-                unread = -1
-            if unread == int(cached[1]):
-                set_request_perf_meta("diet_early_exit", 1)
-                set_request_perf_meta("diet_probe_skip", 1)
-                envelope: Dict[str, Any] = {
-                    "ok": True,
-                    "unchanged": True,
-                    "since": int(since),
-                    "version": int(since),
-                    "poll_version": int(since),
-                    "diet_early_exit": 1,
-                    "diet_probe_skip": 1,
-                }
-                return attach_canonical_server_time(envelope)
+            cached_ts = float(cached[2]) if len(cached) > 2 else 0.0
+            fresh = (now - cached_ts) <= float(_DIET_PROBE_SKIP_TTL_SEC)
+            if fresh:
+                try:
+                    unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
+                except Exception:
+                    unread = -1
+                if unread == int(cached[1]):
+                    set_request_perf_meta("diet_early_exit", 1)
+                    set_request_perf_meta("diet_probe_skip", 1)
+                    envelope: Dict[str, Any] = {
+                        "ok": True,
+                        "unchanged": True,
+                        "since": int(since),
+                        "version": int(since),
+                        "poll_version": int(since),
+                        "diet_early_exit": 1,
+                        "diet_probe_skip": 1,
+                    }
+                    return attach_canonical_server_time(envelope)
 
         ver = probe_poll_version(uid, conn)
         if ver is None or int(ver) != int(since):
@@ -1521,11 +1526,17 @@ def try_diet_poll_early_unchanged(
 
 
 # GC-PERF-STATE-005: process-local diet fingerprint (safe for single-worker SQLite default).
+# Tuple: (poll_version, unread, remembered_at). TTL forces periodic nav-badge probe.
 _DIET_POLL_FP_CACHE: Dict[int, tuple] = {}
+_DIET_PROBE_SKIP_TTL_SEC = 3.0
 
 
 def remember_diet_poll_fingerprint(player_id: int, *, version: int, unread: int) -> None:
-    _DIET_POLL_FP_CACHE[int(player_id)] = (int(version), max(0, int(unread or 0)))
+    _DIET_POLL_FP_CACHE[int(player_id)] = (
+        int(version),
+        max(0, int(unread or 0)),
+        float(time.time()),
+    )
 
 
 def clear_diet_poll_fingerprint(player_id: Optional[int] = None) -> None:
@@ -1533,6 +1544,10 @@ def clear_diet_poll_fingerprint(player_id: Optional[int] = None) -> None:
         _DIET_POLL_FP_CACHE.clear()
         return
     _DIET_POLL_FP_CACHE.pop(int(player_id), None)
+
+
+def diet_probe_skip_ttl_sec() -> float:
+    return float(_DIET_PROBE_SKIP_TTL_SEC)
 
 
 def build_delta_game_state(

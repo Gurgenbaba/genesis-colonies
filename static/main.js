@@ -1786,6 +1786,11 @@
       skipScopedPanels: isPlanetSwitch,
     });
 
+    // Badge/HUD mutations must not leave diet ?since= stuck on a pre-action fingerprint.
+    if (state && state.nav_badges && typeof state.nav_badges === "object") {
+      _lastPollVersion = 0;
+    }
+
     logActionStatePatch("patched", reasonStr, { poll_fallback_only: false });
 
     if (_actionPerfSession && isMutationStatePatchReason(reasonStr)) {
@@ -18712,12 +18717,16 @@
       ? { active: true, count, label: String(count > 99 ? "99+" : count) }
       : { active: false, count: 0, label: "" };
     if (typeof GC.updateNavBadges === "function") {
-      // Merge into last known badges if available; otherwise patch inventory key only.
-      const base = (GC._lastHudState && GC._lastHudState.nav_badges)
-        || (window.GC && GC.lastGameState && GC.lastGameState.nav_badges)
-        || {};
+      // Merge into canonical lastState badges (not stale _lastHudState / lastGameState).
+      const base =
+        (GC.lastState && GC.lastState.nav_badges) ||
+        (GC._lastHudState && GC._lastHudState.nav_badges) ||
+        {};
       const next = Object.assign({}, base, { inventory: entry });
       GC.updateNavBadges(next);
+      if (GC.lastState && typeof GC.lastState === "object") {
+        GC.lastState.nav_badges = next;
+      }
     } else {
       document.querySelectorAll('[data-nav-badge="inventory"]').forEach((el) => {
         if (count <= 0) {
