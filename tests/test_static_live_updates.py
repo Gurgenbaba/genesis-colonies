@@ -495,6 +495,7 @@ def test_admin_balance_save_skips_blocking_game_state():
     assert "function reparentHudSelectMenu" in main_src
     assert 'body > .gc-hud-select-menu' in main_src
     assert "shouldSyncRoleSidebarFromHudData" in main_src
+    assert "shouldPollGameState" in main_src
     assert "function isAdminRoutePath(pathname)" in main_src
     should_run = main_src.split("function shouldRunGameLoop()")[1].split("function isAdminShellPage")[0]
     assert "isAdminRoutePath(window.location.pathname)" in should_run
