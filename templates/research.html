@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_compact_effect_row with context %}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
@@ -50,44 +49,11 @@
   {% endif %}
 {% endmacro %}
 
+{# GC-PERF-CARD-TIMERS-001: catalog duration only — live ETA/% live on #research-mini-queue. #}
 {% macro render_hero_time_chip(qj, idle_seconds, timer_kind, idle_title) %}
   <span class="gc-bld-hero-time-chip gc-card-timer bcell-duration gc-mono" data-hero-time-chip title="{{ idle_title }}">
-    {% if qj and qj.status == 'active' %}
-      {{ render_card_queue_timer(qj, timer_kind, 'game-state') }}
-    {% else %}
-      <span class="gc-hero-time-text">{{ render_prog_duration(idle_seconds) }}</span>
-    {% endif %}
+    <span class="gc-hero-time-text">{{ render_prog_duration(idle_seconds) }}</span>
   </span>
-{% endmacro %}
-
-{% macro render_hero_queue(qj, timer_kind, cancel_domain) %}
-  <div class="gc-bld-hero-queue gc-card-queue-block gc-card-queue-block--hero gc-card-queue-block--{{ qj.status }} gc-bld-hero-queue--{{ qj.status }}"
-       data-hero-queue="1"
-       data-gc-card-queue="1"
-       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
-       data-timer-domain="{{ cancel_domain }}"
-       data-job-id="{{ qj.job_id|int }}"
-       data-queue-position="{{ qj.queue_position|int }}"{{ render_card_queue_data_attrs(qj) }}>
-    {% if qj.status == 'active' %}
-    <div class="gc-bld-hero-queue-center"
-         role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
-      <span class="gc-bld-hero-queue-pct gc-mono">{{ qj.progress_pct|default(0)|int }}%</span>
-    </div>
-    {% else %}
-    <div class="gc-bld-hero-queue-badge gc-mono">
-      <span class="gc-bld-hero-queue-badge-line">{{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}</span>
-      <span class="gc-bld-hero-queue-badge-sub">
-        <span class="gc-bld-hero-queue-starts-label">{{ T('queue_starts_in', 'Startet in') }}</span>
-        {{ render_card_queue_timer(qj, timer_kind, 'game-state') }}
-      </span>
-    </div>
-    {% endif %}
-    <button type="button"
-            class="gc-bld-hero-queue-cancel"
-            {% if cancel_domain == 'research' %}data-research-cancel-id{% else %}data-build-cancel-id{% endif %}="{{ qj.job_id|int }}"
-            title="{{ T('action_cancel', 'Abbrechen') }}"
-            aria-label="{{ T('action_cancel', 'Abbrechen') }}"><span aria-hidden="true">×</span></button>
-  </div>
 {% endmacro %}
 
 {% macro render_research_head_action(tech, rq_summary, queue_full) %}
@@ -187,18 +153,15 @@
            role="listitem">
 
     <div class="gc-bld-card-hero">
-      {{ render_hero_img_stack(_research_webp, _research_png, tech.queue_job if tech.queue_job is defined else none, hero_load, lcp_primary) }}
-      {% if tech.queue_job is defined and tech.queue_job %}
-      {{ render_hero_queue(tech.queue_job, 'research', 'research') }}
-      {% endif %}
+      {{ render_hero_img_stack(_research_webp, _research_png, none, hero_load, lcp_primary) }}
       <div class="gc-bld-hero-right-stack">
         <span class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level tech-level-current"
               title="{{ T('buildings_col_level') }}"
               aria-label="{{ T('buildings_col_level') }}">{{ curr_lvl|fmt_int }}</span>
         <div class="gc-bld-hero-action-row">
-          {# TK ⚡ only on #research-mini-queue (one boost per job) #}
+          {# TK ⚡ + live ETA only on #research-mini-queue #}
           <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
-            {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
+            {{ render_hero_time_chip(none, tech.time_seconds, 'research', T('research_col_time')) }}
           </span>
         </div>
       </div>

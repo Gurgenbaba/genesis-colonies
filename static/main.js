@@ -4401,10 +4401,9 @@
         patchBuildingProduction(row, b);
         patchBuildingCosts(row, b);
 
-        const durCell = row.querySelector(".bcell-duration");
-        if (durCell && !row.classList.contains("gc-building-card--in-queue")) {
-          setHeroTimeChipIdle(row, b.time_seconds, t("buildings_col_time", "Bauzeit"));
-        }
+        // GC-PERF-CARD-TIMERS-001: catalog duration for next enqueueable level
+        // (server already includes queued_same). Must update even while in-queue.
+        setHeroTimeChipIdle(row, b.time_seconds, t("buildings_col_time", "Bauzeit"));
 
         const actionCell = row.querySelector(".bcell-action");
         if (actionCell) {
@@ -4460,9 +4459,8 @@
         if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
       }
 
-      if (!row.classList.contains("gc-research-card--in-queue")) {
-        setHeroTimeChipIdle(row, tech.time_seconds, t("research_col_time", "Forschungszeit"));
-      }
+      // Next research duration after queued_same — update even while in-queue.
+      setHeroTimeChipIdle(row, tech.time_seconds, t("research_col_time", "Forschungszeit"));
 
       const actionCell = row.querySelector(".tech-status-cell, .gc-bld-card-action[data-tech-key]");
       if (actionCell) {
@@ -8651,8 +8649,21 @@
     cardEl.classList.toggle(`${cardPrefix}--queue-pending`, !isActive);
   }
 
-  function findHeroQueue(cardEl) {
-    return cardEl?.querySelector("[data-hero-queue]");
+  function applyCardInQueueClasses(cardEl, queueJob, opts) {
+    if (!cardEl || !queueJob) return;
+    const domain = _cardQueueDomain(queueJob, opts);
+    const cardPrefix = _cardQueueClassPrefix(domain);
+    const isActive = String(queueJob.status || "") === "active";
+    cardEl.classList.add(`${cardPrefix}--in-queue`);
+    cardEl.classList.toggle(`${cardPrefix}--queue-active`, isActive);
+    cardEl.classList.toggle(`${cardPrefix}--queue-pending`, !isActive);
+  }
+
+  function clearHeroQueueVisuals(cardEl) {
+    if (!cardEl) return;
+    cardEl.querySelectorAll("[data-hero-queue], .gc-bld-hero-queue").forEach((el) => el.remove());
+    stripHeroTimeChipQueueTimer(cardEl);
+    resetHeroImageProgress(cardEl);
   }
 
   function findHeroImgStack(cardEl) {
@@ -8694,10 +8705,6 @@
     if (color) color.style.clipPath = `inset(${100 - progress}% 0 0 0)`;
   }
 
-  function applyHeroQueuedMark(cardEl) {
-    resetHeroImageProgress(cardEl);
-  }
-
   function resetHeroImageProgress(cardEl) {
     const stack = findHeroImgStack(cardEl);
     if (!stack) return;
@@ -8721,9 +8728,7 @@
   }
 
   function setHeroTimeChipIdle(cardEl, seconds, title) {
-    if (!cardEl || cardEl.classList.contains("gc-building-card--in-queue") || cardEl.classList.contains("gc-research-card--in-queue")) {
-      return;
-    }
+    if (!cardEl) return;
     stripHeroTimeChipQueueTimer(cardEl);
     const chip = cardEl.querySelector("[data-hero-time-chip]");
     if (!chip) return;
@@ -8737,242 +8742,15 @@
     _setIfChanged(textEl, label);
   }
 
-  function ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero) {
-    const chip = cardEl?.querySelector("[data-hero-time-chip]");
-    if (!chip || !queueJob) return null;
-    if (String(queueJob.status || "") !== "active") return null;
-    let timerEl = chip.querySelector(".gc-card-queue-timer");
-    const timerTarget = cardQueueTimerTarget(queueJob, true);
-    if (!timerEl) {
-      timerEl = document.createElement("div");
-      timerEl.className = "gc-card-queue-timer gc-mono";
-      chip.innerHTML = "";
-      chip.appendChild(timerEl);
-    }
-    if (timerTarget > 0) {
-      const remaining = queueJobRemainingSeconds(
-        timerTarget,
-        getTimerServerNow(),
-        resolveQueueJobRemaining(queueJob)
-      );
-      applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
-      timerEl.textContent = formatEta(queueTimerDisplaySeconds(remaining));
-    }
-    return timerEl;
-  }
-
-  function ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero) {
-    if (!block || !queueJob) return null;
-    const position = Math.max(1, Math.floor(Number(queueJob.queue_position || block.dataset.queuePosition || 1)));
-    let badge = block.querySelector(".gc-bld-hero-queue-badge");
-    if (!badge) {
-      badge = document.createElement("div");
-      badge.className = "gc-bld-hero-queue-badge gc-mono";
-      block.innerHTML = "";
-      block.appendChild(badge);
-    }
-    let lineEl = badge.querySelector(".gc-bld-hero-queue-badge-line");
-    let subEl = badge.querySelector(".gc-bld-hero-queue-badge-sub");
-    if (!lineEl || !subEl) {
-      badge.innerHTML =
-        '<span class="gc-bld-hero-queue-badge-line"></span>' +
-        '<span class="gc-bld-hero-queue-badge-sub">' +
-        `<span class="gc-bld-hero-queue-starts-label">${t("queue_starts_in", "Startet in")}</span> ` +
-        "</span>";
-      lineEl = badge.querySelector(".gc-bld-hero-queue-badge-line");
-      subEl = badge.querySelector(".gc-bld-hero-queue-badge-sub");
-    }
-    const queuedLabel = tf("queue_card_status_queued", { n: position }, `QUEUE #${position}`);
-    _setIfChanged(lineEl, queuedLabel);
-    let timerEl = subEl?.querySelector(".gc-card-queue-timer");
-    if (!timerEl && subEl) {
-      timerEl = document.createElement("div");
-      timerEl.className = "gc-card-queue-timer gc-mono";
-      subEl.appendChild(timerEl);
-    }
-    const timerTarget = cardQueueTimerTarget(queueJob, false);
-    if (timerEl && timerTarget > 0) {
-      const remaining = queueJobRemainingSeconds(
-        timerTarget,
-        getTimerServerNow(),
-        resolveQueueJobRemaining(queueJob)
-      );
-      applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
-      timerEl.textContent = formatEta(queueTimerDisplaySeconds(remaining));
-    }
-    return timerEl;
-  }
-
-  function applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero) {
-    if (!cardEl || !block || !queueJob) return;
-    const isActive = String(queueJob.status || "") === "active";
-    const progress = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
-    const pctEl = block.querySelector(".gc-bld-hero-queue-pct");
-    const centerEl = block.querySelector(".gc-bld-hero-queue-center");
-    block.classList.toggle("gc-bld-hero-queue--active", isActive);
-    block.classList.toggle("gc-bld-hero-queue--queued", !isActive);
-    if (isActive) {
-      applyHeroImageProgress(cardEl, progress);
-      if (pctEl) _setIfChanged(pctEl, `${progress}%`);
-      if (centerEl) {
-        centerEl.setAttribute("role", "progressbar");
-        centerEl.setAttribute("aria-valuemin", "0");
-        centerEl.setAttribute("aria-valuemax", "100");
-        centerEl.setAttribute("aria-valuenow", String(progress));
-      }
-      const timerEl = cardEl.querySelector("[data-hero-time-chip] .gc-card-queue-timer");
-      if (timerEl && Number.isFinite(remaining)) {
-        const eta = formatEta(queueTimerDisplaySeconds(remaining));
-        _setIfChanged(timerEl, eta);
-        block.title = eta;
-      }
-    } else {
-      applyHeroQueuedMark(cardEl);
-      if (timerKind) ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero || "game-state");
-      centerEl?.removeAttribute("role");
-      centerEl?.removeAttribute("aria-valuemin");
-      centerEl?.removeAttribute("aria-valuemax");
-      centerEl?.removeAttribute("aria-valuenow");
-      const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
-      const queuedLabel = tf("queue_card_status_queued", { n: position }, `QUEUE #${position}`);
-      block.title = queuedLabel;
-    }
-  }
-
-  function patchHeroQueueInPlace(block, queueJob, opts) {
-    const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
-    const { timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
-    const isActive = String(queueJob.status || "") === "active";
-    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
-    const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || block.dataset.totalSeconds || 1)));
-    const now = getTimerServerNow();
-    const timerTarget = cardQueueTimerTarget(queueJob, isActive);
-    const remaining = timerTarget > 0
-      ? queueJobRemainingSeconds(timerTarget, now, resolveQueueJobRemaining(queueJob))
-      : Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
-    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(queueJob.progress_pct || 0))));
-    const pct = isActive
-      ? (totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct)
-      : 0;
-
-    if (isActive) {
-      ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero);
-    } else {
-      ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero);
-    }
-
-    _patchCardQueueTimingDatasets(block, queueJob);
-    if (isActive && finishAt > 0) assignMonotonicServerRemaining(block, remaining, finishAt);
-    applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
-    _syncTimekeeperApplyBtn(block, _cardQueueDomain(queueJob, opts), queueJob);
-    return block;
-  }
-
+  /** GC-PERF-CARD-TIMERS-001: no per-card live ETA/% — mini-queue owns timers + cancel. */
   function renderHeroQueueOverlay(cardEl, queueJob, opts) {
-    const hero = cardEl.querySelector(".gc-bld-card-hero");
-    if (!hero || !queueJob) return null;
-
+    if (!cardEl || !queueJob) return null;
     const options = opts && typeof opts === "object" ? opts : {};
     const domain = _cardQueueDomain(queueJob, options);
     if (domain !== "building" && domain !== "research") return null;
-
-    const sig = cardQueueJobSignature(queueJob);
-    const jobId = Math.floor(Number(queueJob.job_id || 0));
-    let block = findHeroQueue(cardEl);
-    if (!block) {
-      block = document.createElement("div");
-      block.className = "gc-bld-hero-queue gc-card-queue-block gc-card-queue-block--hero";
-      block.dataset.heroQueue = "1";
-      const levelBadge = hero.querySelector(".gc-bld-card-level");
-      if (levelBadge) hero.insertBefore(block, levelBadge);
-      else hero.appendChild(block);
-    }
-
-    cardEl.querySelectorAll("[data-hero-queue]").forEach((existing) => {
-      if (existing !== block) existing.remove();
-    });
-
-    if (block && canPatchCardQueueInPlace(block, queueJob)) {
-      block.dataset.queueSig = sig;
-      patchHeroQueueInPlace(block, queueJob, options);
-      syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
-      return block;
-    }
-
-    const { timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, options);
-    const status = String(queueJob.status || "");
-    const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
-    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
-    const startAt = Math.floor(Number(queueJob.start_at || 0));
-    const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || 1)));
-    const isActive = status === "active";
-    const remaining = Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
-    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(queueJob.progress_pct || 0))));
-
-    block.className = `gc-bld-hero-queue gc-card-queue-block gc-card-queue-block--hero gc-card-queue-block--${isActive ? "active" : "queued"} gc-bld-hero-queue--${isActive ? "active" : "queued"}`;
-    block.dataset.heroQueue = "1";
-    block.dataset.gcCardQueue = "1";
-    block.dataset.queueSig = sig;
-    block.dataset.queueActive = isActive ? "1" : "0";
-    block.dataset.timerDomain = domain;
-    block.dataset.queuePosition = String(position);
-    if (jobId > 0) block.dataset.jobId = String(jobId);
-    if (startAt > 0) block.dataset.startAt = String(startAt);
-    if (finishAt > 0) block.dataset.finishAt = String(finishAt);
-    const heroTargetLevel = Math.floor(Number(queueJob.target_level || 0));
-    if (heroTargetLevel > 0) block.dataset.targetLevel = String(heroTargetLevel);
-    const heroCurrentLevel = Math.floor(Number(queueJob.current_level ?? (heroTargetLevel > 0 ? heroTargetLevel - 1 : 0)));
-    if (heroTargetLevel > 0) block.dataset.currentLevel = String(Math.max(0, heroCurrentLevel));
-    block.dataset.totalSeconds = String(totalSeconds);
-    if (isActive && Number.isFinite(remaining)) assignMonotonicServerRemaining(block, remaining, finishAt);
-
-    if (isActive) {
-      block.innerHTML =
-        '<div class="gc-bld-hero-queue-center"><span class="gc-bld-hero-queue-pct gc-mono"></span></div>';
-    } else {
-      block.innerHTML =
-        '<div class="gc-bld-hero-queue-badge gc-mono">' +
-        '<span class="gc-bld-hero-queue-badge-line"></span>' +
-        '<span class="gc-bld-hero-queue-badge-sub">' +
-        `<span class="gc-bld-hero-queue-starts-label">${t("queue_starts_in", "Startet in")}</span> ` +
-        "</span></div>";
-    }
-
-    if (isActive) {
-      ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero);
-    } else {
-      ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero);
-    }
-
-    let cancelBtn = block.querySelector(".gc-bld-hero-queue-cancel");
-    if (jobId > 0) {
-      if (!cancelBtn) {
-        cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "gc-bld-hero-queue-cancel";
-        cancelBtn.innerHTML = '<span class="gc-bld-head-action-icon">×</span>';
-        block.appendChild(cancelBtn);
-      }
-      if (domain === "research") {
-        cancelBtn.dataset.researchCancelId = String(jobId);
-        delete cancelBtn.dataset.buildCancelId;
-      } else {
-        cancelBtn.dataset.buildCancelId = String(jobId);
-        delete cancelBtn.dataset.researchCancelId;
-      }
-      cancelBtn.title = t("action_cancel", "Abbrechen");
-      cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
-    } else if (cancelBtn) {
-      cancelBtn.remove();
-    }
-
-    const pct = isActive
-      ? (totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct)
-      : 0;
-    applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
-    _syncTimekeeperApplyBtn(block, domain, queueJob);
-    syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
-    return block;
+    clearHeroQueueVisuals(cardEl);
+    applyCardInQueueClasses(cardEl, queueJob, options);
+    return null;
   }
 
   function _cardQueueTimerMeta(queueJob, opts) {
@@ -9007,7 +8785,10 @@
 
   function patchCardQueueBlockInPlace(block, cardEl, queueJob, opts) {
     if (block?.dataset?.heroQueue === "1" || block?.classList?.contains("gc-bld-hero-queue")) {
-      return patchHeroQueueInPlace(block, queueJob, opts);
+      // GC-PERF-CARD-TIMERS-001: strip legacy hero overlays; classes via applyCardInQueueClasses.
+      clearHeroQueueVisuals(cardEl || block.closest("[data-building-row], [data-research-card], [data-building-card]"));
+      if (cardEl && queueJob) applyCardInQueueClasses(cardEl, queueJob, opts);
+      return null;
     }
     const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
     const status = String(queueJob.status || "");
@@ -9109,7 +8890,12 @@
           { once: true }
         );
       }
-      syncCardQueueOwnerClassesFromBlocks(card, _cardQueueDomain(headJob));
+      const domain = _cardQueueDomain(headJob);
+      if (domain === "building" || domain === "research") {
+        applyCardInQueueClasses(card, headJob);
+      } else {
+        syncCardQueueOwnerClassesFromBlocks(card, domain);
+      }
     });
     if (GC.lastState && GC.lastState.ok !== false) {
       _refreshDomTimekeeperApplyBtns(getTimerServerNow());
@@ -9121,11 +8907,11 @@
 
     const options = opts && typeof opts === "object" ? opts : {};
     const domain = _cardQueueDomain(queueJob, options);
-    if (domain === "building" || domain === "research") {
-      return renderHeroQueueOverlay(cardEl, queueJob, options);
-    }
-    // GC-UNIT-QUEUE-DEDUP-001: shipyard/defense only in central mini-queue strip.
-    if (domain === "shipyard" || domain === "defense") {
+    // GC-PERF-CARD-TIMERS-001 / GC-UNIT-QUEUE-DEDUP-001: live ETA on mini-queue only.
+    if (domain === "building" || domain === "research" || domain === "shipyard" || domain === "defense") {
+      if (domain === "building" || domain === "research") {
+        return renderHeroQueueOverlay(cardEl, queueJob, options);
+      }
       return null;
     }
 

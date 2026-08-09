@@ -21,36 +21,17 @@
 {% endmacro %}
 
 {% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy', lcp_primary=false) %}
-  {% set _active = qj is defined and qj and qj.status == 'active' %}
+  {# GC-PERF-CARD-TIMERS-001: no dual-layer progress wash on cards (ETA/% live on mini-queue). #}
   {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
   {% set _primary_role = 'primary' if hero_load in ('high', 'eager') else 'defer' %}
-  <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
-       {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
-    {% if _active %}
-      <img src="{{ src }}"
-           alt=""
-           class="gc-bld-card-hero-img gc-bld-card-hero-img--muted"
-           width="320"
-           height="180"
-           {% if lcp_primary %}data-gc-lcp-hero="1" data-gc-lcp-webp-href="{{ src }}"{% endif %}
-           {{ render_hero_img_attrs(hero_load, _primary_role) }}
-           onerror="{{ _onerr }}">
-      <img src="{{ src }}"
-           alt=""
-           class="gc-bld-card-hero-img gc-bld-card-hero-img--color"
-           width="320"
-           height="180"
-           {{ render_hero_img_attrs(hero_load, 'secondary' if hero_load in ('high', 'eager') else 'defer') }}
-           onerror="{{ _onerr }}">
-    {% else %}
-      <img src="{{ src }}"
-           alt=""
-           class="gc-bld-card-hero-img"
-           width="320"
-           height="180"
-           {% if lcp_primary %}data-gc-lcp-hero="1" data-gc-lcp-webp-href="{{ src }}"{% endif %}
-           {{ render_hero_img_attrs(hero_load, _primary_role) }}
-           onerror="{{ _onerr }}">
-    {% endif %}
+  <div class="gc-bld-hero-img-stack">
+    <img src="{{ src }}"
+         alt=""
+         class="gc-bld-card-hero-img"
+         width="320"
+         height="180"
+         {% if lcp_primary %}data-gc-lcp-hero="1" data-gc-lcp-webp-href="{{ src }}"{% endif %}
+         {{ render_hero_img_attrs(hero_load, _primary_role) }}
+         onerror="{{ _onerr }}">
   </div>
 {% endmacro %}

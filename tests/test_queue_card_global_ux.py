@@ -16,7 +16,7 @@ QUEUE_PAGES = {
         "compact_id": "build-mini-queue",
         "compact_label": "build-mini-queue",
         "card_attr": "data-building-card",
-        "card_queue": "render_hero_queue",
+        "skip_card_queue": True,
         "mini_queue": True,
     },
     "research": {
@@ -24,7 +24,7 @@ QUEUE_PAGES = {
         "compact_id": "research-mini-queue",
         "compact_label": "research-mini-queue",
         "card_attr": "data-research-card",
-        "card_queue": "render_hero_queue",
+        "skip_card_queue": True,
         "mini_queue": True,
     },
     "shipyard": {
@@ -184,12 +184,25 @@ def test_main_js_uses_render_card_queue_block_for_all_domains():
         "patchDefenseCardQueues",
     ):
         assert fn in js, f"missing card queue patcher: {fn}"
-    # GC-UNIT-QUEUE-DEDUP-001: unit queues never render into ship/defense cards.
+    # GC-UNIT-QUEUE-DEDUP-001 / GC-PERF-CARD-TIMERS-001: unit + building/research
+    # queues never render live ETA into item cards (mini-queue only).
     render_guard = js.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split(
         "const sig = cardQueueJobSignature"
     )[0]
+    assert 'domain === "building" || domain === "research"' in render_guard
     assert 'domain === "shipyard" || domain === "defense"' in render_guard
     assert "return null" in render_guard
+    assert "GC-PERF-CARD-TIMERS-001" in js
+    assert "function renderHeroQueueOverlay" in js
+    assert "clearHeroQueueVisuals" in js
+    assert "applyCardInQueueClasses" in js
+    hero = js.split("function renderHeroQueueOverlay(cardEl, queueJob, opts)")[1].split(
+        "function _cardQueueTimerMeta"
+    )[0]
+    assert "clearHeroQueueVisuals" in hero
+    assert "applyCardInQueueClasses" in hero
+    assert "return null" in hero
+    assert "gc-bld-hero-queue-pct" not in hero
     patch_sy = js.split("function patchShipyardCardQueues(page")[1].split("function shipyardIconUrl")[0]
     assert "clearAllProductionCardQueues(page)" in patch_sy
     assert "patchCardQueuesFromOwnerMap" not in patch_sy
@@ -203,6 +216,37 @@ def test_main_js_uses_render_card_queue_block_for_all_domains():
     assert "gc-card-queue-block--queued" in render_block or 'isActive ? "active" : "queued"' in render_block
     assert "gc-card-queue-bar-fill" in render_block
     assert "applyQueueJobTimerAttrs" in render_block
+
+
+def test_buildings_research_cards_have_no_live_queue_timers():
+    """GC-PERF-CARD-TIMERS-001: per-card % / ETA removed; mini-queue remains the live surface."""
+    for rel in ("templates/buildings.html", "templates/research.html"):
+        html = _read(rel)
+        assert "render_hero_queue" not in html
+        assert "gc-bld-hero-queue" not in html
+        assert "data-hero-queue" not in html
+        assert "gc-bld-hero-queue-pct" not in html
+        assert "render_page_mini_queue_strip" in html
+        assert "data-hero-time-chip" in html
+        # Catalog duration only — no live countdown attrs on the time chip path.
+        chip = html.split("data-hero-time-chip")[1].split("{% endmacro %}")[0]
+        assert "data-countdown-at" not in chip
+        assert "gc-hero-time-text" in chip
+    img = _read("templates/partials/card_hero_img_macros.html")
+    assert "gc-bld-hero-img-stack--progress" not in img
+    assert "gc-bld-card-hero-img--muted" not in img
+    # Panel patch must refresh catalog duration even while the card is in-queue.
+    js = _read("static/main.js")
+    building_patch = js.split("function patchBuildingPanel(rowsByTab, buildQueueRaw)")[1].split(
+        "function patchResearchEffects"
+    )[0]
+    assert "setHeroTimeChipIdle(row, b.time_seconds" in building_patch
+    assert 'gc-building-card--in-queue")) {\n          setHeroTimeChipIdle' not in building_patch
+    research_patch = js.split("function patchResearchPanel(techs, researchRaw)")[1].split(
+        "function patchQueuePanelsImmediate"
+    )[0]
+    assert "setHeroTimeChipIdle(row, tech.time_seconds" in research_patch
+    assert 'gc-research-card--in-queue")) {\n        setHeroTimeChipIdle' not in research_patch
 
 
 def test_main_js_no_legacy_queue_panel_roots():

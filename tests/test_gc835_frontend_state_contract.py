@@ -52,6 +52,14 @@ def test_cancel_clears_hero_time_chip_timer():
         "function patchResearchEffects"
     )[0]
     assert "setHeroTimeChipIdle(row, b.time_seconds" in building_patch
+    assert 'contains("gc-building-card--in-queue")' not in building_patch
+    research_patch = src.split("function patchResearchPanel(techs, researchRaw)")[1].split(
+        "let _finishRefreshTimer"
+    )[0]
+    # Stop before unrelated helpers if split lands wrong — keep local to duration update.
+    dur_section = research_patch.split("setHeroTimeChipIdle(row, tech.time_seconds")[0][-120:]
+    assert "setHeroTimeChipIdle(row, tech.time_seconds" in research_patch
+    assert 'contains("gc-research-card--in-queue")' not in dur_section
 
 
 def test_missing_card_jobs_by_owner_treated_as_empty_map():

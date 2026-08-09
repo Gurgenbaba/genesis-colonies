@@ -2513,7 +2513,7 @@ def test_main_js_gc550b_compact_head_actions():
 
 
 def test_main_js_gc550c_buildings_hero_queue_and_subnav():
-    """GC-550C: hero progress overlay, same-building re-queue, subnav collapse."""
+    """GC-550C / GC-PERF-CARD-TIMERS-001: catalog time chip + mini-queue; no per-card live ETA."""
     src = _read("static/main.js")
     buildings_html = _read("templates/buildings.html")
     research_html = _read("templates/research.html")
@@ -2537,13 +2537,21 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     assert "gc-bld-card-hero-img--muted" in css
     assert "gc-bld-hero-time-chip" in css
     assert "renderHeroQueueOverlay" in src
-    assert "applyHeroImageProgress" in src
-    assert "ensureHeroQueuedBadgeTimer" in src
-    assert "queue_starts_in" in buildings_html
-    assert "queue_starts_in" in research_html
+    assert "clearHeroQueueVisuals" in src
+    assert "ensureHeroQueuedBadgeTimer" not in src
+    hero_overlay = src.split("function renderHeroQueueOverlay(cardEl, queueJob, opts)")[1].split(
+        "function _cardQueueTimerMeta"
+    )[0]
+    assert "clearHeroQueueVisuals(cardEl)" in hero_overlay
+    assert "applyCardInQueueClasses(cardEl, queueJob, options)" in hero_overlay
     assert "gc-bld-card-hero-overlay" not in buildings_html
     assert "gc-bld-card-hero-overlay" not in research_html
+    assert "render_hero_queue" not in buildings_html
+    assert "render_hero_queue" not in research_html
+    assert "queue_starts_in" not in buildings_html
+    assert "queue_starts_in" not in research_html
     assert "grayscale(1)" not in css.split(".gc-bld-hero-img-stack .gc-bld-card-hero-img--muted")[1].split("}")[0]
+
     assert "saturate(" in css
     assert "gc-nav-sub--collapsed" in src
     assert "BUILDINGS_NAV_PAGES" in src
@@ -2588,8 +2596,13 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-bld-card-hero" in buildings_html
     assert "building-tabs--prominent" not in buildings_html
     assert "data-buildings-tab-panels" in buildings_html
-    assert "gc-bld-hero-queue" in buildings_html
+    assert "render_hero_queue" not in buildings_html
+    assert "gc-bld-hero-queue" not in buildings_html
+    assert "build-mini-queue" in buildings_html
     assert "gc-bld-card-hero" in research_html
+    assert "render_hero_queue" not in research_html
+    assert "gc-bld-hero-queue" not in research_html
+    assert "research-mini-queue" in research_html
     assert "gc-bld-card-hero" in shipyard_html
     assert "gc-bld-card-icon--title" not in shipyard_html
     # Shipyard cards use their own gc-ship-card-action wrap (with dedicated
@@ -2889,15 +2902,17 @@ def test_main_js_mini_queue_research_label_resolution():
 
 
 def test_main_js_timekeeper_apply_btn_survives_live_queue_patch():
-    """Live queue re-renders must keep ⚡ Zeit einsetzen on active jobs."""
+    """Live mini-queue re-renders keep ⚡; building/research cards do not host a second one."""
     src = _read("static/main.js")
     assert "function _syncTimekeeperApplyBtn(parent, domain, queueJob)" in src
     mini = src.split("GC.renderMiniQueueStrip = function renderMiniQueueStrip")[1].split("function _renderProductionMiniQueue")[0]
     assert "_syncTimekeeperApplyBtn(card, domain, job)" in mini
     hero = src.split("function renderHeroQueueOverlay(cardEl, queueJob, opts)")[1].split("function _cardQueueTimerMeta")[0]
-    assert "_syncTimekeeperApplyBtn(block, domain, queueJob)" in hero
+    assert "_syncTimekeeperApplyBtn" not in hero
     card_block = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
     assert "_syncTimekeeperApplyBtn(block, domain, queueJob)" in card_block
+    assert 'domain === "building" || domain === "research"' in card_block
+    assert "return renderHeroQueueOverlay(cardEl, queueJob, options)" in card_block
 
 
 def test_main_js_timekeeper_queue_btn_is_compact_icon():

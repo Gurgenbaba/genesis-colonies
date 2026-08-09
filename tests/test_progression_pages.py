@@ -113,7 +113,8 @@ def test_templates_import_progression_macros_with_context():
     # unmet" invariant now lives in render_req_hover_attrs(tech.requirements_items).
     assert "render_req_hover_attrs" in research
     assert "not tech.requirements_met" in research
-    assert "render_hero_queue" in research
+    assert "render_hero_queue" not in research
+    assert "research-mini-queue" in research
     assert "gc-bld-head-action-btn--busy" not in research
     assert "render_prog_identity" not in research
     assert "render_prog_effect" not in buildings
