@@ -24182,7 +24182,8 @@ a.gc-ranking-alliance:hover{
   margin: 0;
   background: rgba(2, 6, 14, 0.58);
   cursor: pointer;
-  pointer-events: auto;
+  /* Only while open — child pointer-events:auto re-enables under parent:none. */
+  pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -24203,7 +24204,7 @@ a.gc-ranking-alliance:hover{
     0 18px 40px rgba(0, 0, 0, 0.55);
   transform: translateX(110%);
   transition: transform 0.24s ease;
-  pointer-events: auto;
+  pointer-events: none;
   overflow: hidden;
 }
 
@@ -24213,10 +24214,12 @@ a.gc-ranking-alliance:hover{
 
 .gc-planet-registry-sheet.is-open .gc-planet-registry-sheet-backdrop{
   opacity: 1;
+  pointer-events: auto;
 }
 
 .gc-planet-registry-sheet.is-open .gc-planet-registry-sheet-panel{
   transform: translateX(0);
+  pointer-events: auto;
 }
 
 .gc-planet-registry-sheet-close{

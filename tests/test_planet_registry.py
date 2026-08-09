@@ -572,6 +572,9 @@ def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
     assert ap.get("herocard_url")
     assert ap["landscape_url"] == ap["herocard_url"]
     assert ap.get("landscape_webp_url") == ap.get("herocard_webp_url")
+    # Cache-bust query must match SSR so polls do not force a second download.
+    assert "v=" in str(ap["landscape_url"])
+    assert "v=" in str(ap["herocard_url"])
 
 
 def test_gc641_economy_nav_visible_on_colony(switcher_db, monkeypatch):
@@ -652,6 +655,8 @@ def test_planet_switch_hotfix_client_contract():
     assert "GC._planetSwitchInFlight" in registry
     assert "GC._planetSwitchCooldownUntil" in registry
     assert "PLANET_SWITCH_COOLDOWN_MS" in registry
+    assert "planet_switch_watchdog" in registry
+    assert "setSafeTimeout" not in registry.split("const busyGuard")[1].split("try {")[0]
     assert 'refreshGameState("planet_switch")' not in registry
     # GC-FLEET-PLANET-SWITCH-001: soft fleet refresh with explicit planet + force
     assert 'pageName === "fleet"' in registry
@@ -673,6 +678,10 @@ def test_planet_switch_hotfix_client_contract():
     assert "GC.refreshInFlight = null" in apply
     assert "hudOnly: isPlanetSwitch" in apply
     assert "staleMutationPlanet" in apply
+    assert 'releaseShellNavigationBlockers(reasonStr || "action_state")' in apply
+    assert "action_no_state" in apply
+    assert "heroImageMatchesCurrent" in src
+    assert "staticAssetPathKey" in src
     upd = src.split(
         "GC.updatePlanetRegistryFromState = function updatePlanetRegistryFromState(data)"
     )[1].split("function rebuildLanguageSelectMenu")[0]

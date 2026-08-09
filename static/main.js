@@ -1155,6 +1155,41 @@
     return raw.replace(/\.(png|jpe?g)(\?.*)?$/i, ".webp$2");
   }
 
+  function staticAssetPathKey(url) {
+    const path = String(url || "").split("?")[0];
+    const i = path.lastIndexOf("/");
+    return i >= 0 ? path.slice(i + 1) : path;
+  }
+
+  function staticAssetStemKey(url) {
+    return staticAssetPathKey(url)
+      .replace(/-(sm|md|lg)\.webp$/i, "")
+      .replace(/\.(webp|png|jpe?g)$/i, "");
+  }
+
+  function cssUrlPathKey(cssVal) {
+    const raw = String(cssVal || "").trim();
+    const m = raw.match(/url\(\s*["']?([^"')]+)/i);
+    return staticAssetPathKey(m ? m[1] : raw);
+  }
+
+  function heroImageMatchesCurrent(img, herocardUrl, herocardWebp, herocardSrcset) {
+    const cur = staticAssetPathKey(img?.currentSrc || img?.src || "");
+    if (!cur) return false;
+    const curStem = staticAssetStemKey(cur);
+    const candidates = [herocardUrl, herocardWebp];
+    if (herocardSrcset) {
+      herocardSrcset.split(",").forEach((part) => {
+        candidates.push(part.trim().split(/\s+/)[0]);
+      });
+    }
+    return candidates.some((u) => {
+      const key = staticAssetPathKey(u);
+      if (!key) return false;
+      return cur === key || curStem === staticAssetStemKey(key);
+    });
+  }
+
   function applyPlanetLandscapeFromState(data) {
     const ap = data?.active_planet;
     // Partial HUD payloads (e.g. admin balance save) omit landscape — never strip the shell.
@@ -1178,10 +1213,11 @@
     const nextWebp = webp ? `url("${webp}")` : "";
     const curLandscape = String(document.body.style.getPropertyValue("--planet-landscape") || "").trim();
     const curWebp = String(document.body.style.getPropertyValue("--planet-landscape-webp") || "").trim();
+    // Compare path only — SSR uses ?v= while older polls omitted it and forced a full re-download.
     const alreadyPainted =
       document.body.classList.contains("gc-has-planet-landscape")
-      && curLandscape === nextLandscape
-      && curWebp === nextWebp;
+      && cssUrlPathKey(curLandscape) === staticAssetPathKey(url)
+      && (!webp || cssUrlPathKey(curWebp) === staticAssetPathKey(webp));
     if (!alreadyPainted) {
       document.body.classList.add("gc-has-planet-landscape");
       document.body.style.setProperty("--planet-landscape", nextLandscape);
@@ -1273,9 +1309,10 @@
       const img = bgWrap.querySelector("img");
       const source = picture?.querySelector("source");
       const heroPosition = String(hero.dataset.planetPosition || "").trim();
-      const samePlanet = planetPosition && heroPosition === planetPosition;
-      const currentSrc = img?.currentSrc || img?.src || "";
-      const sameImage = samePlanet && currentSrc && (currentSrc === herocardUrl || currentSrc.endsWith(herocardUrl));
+      const samePlanet = !planetPosition || !heroPosition || heroPosition === planetPosition;
+      const sameImage = samePlanet && heroImageMatchesCurrent(
+        img, herocardUrl, herocardWebp, herocardSrcset
+      );
       if (img && !sameImage) {
         img.style.opacity = "0";
         const onLoad = () => {
@@ -1295,20 +1332,8 @@
         } else if (herocardWebp) {
           img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
         }
-      } else if (img) {
-        if (source && herocardSrcset) {
-          source.srcset = herocardSrcset;
-          if (herocardSizes) source.sizes = herocardSizes;
-        }
-        img.src = herocardUrl;
-        if (herocardSrcset) {
-          const picked = resolveLcpPreloadFromSrcset(herocardSrcset, herocardSizes);
-          if (picked.href) img.setAttribute("data-gc-lcp-webp-href", picked.href);
-          else if (herocardWebp) img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
-        } else if (herocardWebp) {
-          img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
-        }
       }
+      // sameImage: keep currentSrc / browser cache — do not rewrite src (avoids fade + re-fetch).
     }
 
     const slotBadge = document.getElementById("overview-planet-slot-badge");
@@ -1639,7 +1664,15 @@
   function applyActionState(json, reason) {
     if (!json) return false;
     const state = json.state || (json.data && json.data.state);
-    if (!state) return false;
+    if (!state) {
+      // Failed / empty payloads must still unlock shell nav (planet switch, overlays).
+      try {
+        if (typeof releaseShellNavigationBlockers === "function") {
+          releaseShellNavigationBlockers(String(reason || "action_no_state"));
+        }
+      } catch (_) {}
+      return false;
+    }
 
     const reasonStr = String(reason || "");
     if (_actionPerfSession && isMutationStatePatchReason(reasonStr) && !_actionPerfSession.applyStartAt) {
@@ -1727,6 +1760,14 @@
       if (_actionPerfSession && isMutationStatePatchReason(reasonStr)) {
         finishActionPerfAfterApply(reasonStr);
       }
+      // Errors / late patches must not leave popovers or registry locks stuck.
+      if (reasonStr.endsWith("_error") || reasonStr.endsWith("_failed")) {
+        try {
+          if (typeof releaseShellNavigationBlockers === "function") {
+            releaseShellNavigationBlockers(reasonStr);
+          }
+        } catch (_) {}
+      }
       return hasBusyLiveActivity();
     }
     if (!isPlanetSwitch) {
@@ -1761,19 +1802,14 @@
       ) {
         syncMountedQueuePagesFromState(state, reasonStr);
       }
-      if (
-        reasonStr === "timekeeper_apply"
-        || reasonStr === "shipyard_build"
-        || reasonStr === "shipyard_cancel"
-        || reasonStr === "defense_build"
-        || reasonStr === "defense_cancel"
-      ) {
-        try {
-          if (typeof releaseShellNavigationBlockers === "function") {
-            releaseShellNavigationBlockers(reasonStr);
-          }
-        } catch (_) {}
-      }
+      // Always unlock shell blockers after mutation settle (incl. *_error).
+      // Previously only shipyard/defense/TK cleared overlays — failed builds left
+      // planet registry / sheet backdrop / HUD selects blocking clicks until reload.
+      try {
+        if (typeof releaseShellNavigationBlockers === "function") {
+          releaseShellNavigationBlockers(reasonStr || "action_state");
+        }
+      } catch (_) {}
       _schedulePlanetEvolutionRefreshAfterAction(reasonStr);
       syncFleetUiAfterMutation(reasonStr);
       if (shouldPollGameState()) {
@@ -1821,6 +1857,9 @@
     refreshGameState: null,
     currentPage: null,
     pjaxInFlight: null,
+    assetVersion: String(
+      (typeof window !== "undefined" && window.GC_CLIENT_CONFIG?.asset_version) || ""
+    ),
     _shellReady: false,
     _visibilityBound: false,
     _gameActionsBound: false,
@@ -32459,6 +32498,18 @@
         btn.disabled = false;
       });
     });
+    // Stuck mid-close sheet: not [hidden], not .is-open — backdrop still captured clicks
+    // (child pointer-events:auto under parent pointer-events:none).
+    const planetSheet = document.getElementById("gc-planet-registry-sheet");
+    if (planetSheet && !planetSheet.hidden && !planetSheet.classList.contains("is-open")) {
+      planetSheet.hidden = true;
+      planetSheet.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("gc-planet-sheet-open");
+      if (typeof syncPlanetRegistrySheetToggle === "function") {
+        syncPlanetRegistrySheetToggle(false);
+      }
+    }
+    GC._planetSwitchInFlight = false;
     if (reason) console.debug("[GC] releaseShellNavigationBlockers", reason);
   }
 
@@ -33697,10 +33748,6 @@
       const unlockShellEarly = (reason) => {
         if (shellUnlocked) return;
         shellUnlocked = true;
-        if (typeof GC.setSafeTimeout === "function") {
-          const idx = GC.pageLifecycle.timeouts.indexOf(busyGuard);
-          if (idx >= 0) GC.pageLifecycle.timeouts.splice(idx, 1);
-        }
         clearTimeout(busyGuard);
         releaseBusy();
         GC._planetSwitchCooldownUntil = Date.now() + PLANET_SWITCH_COOLDOWN_MS;
@@ -33709,9 +33756,11 @@
           GC.releaseShellNavigationBlockers(reason || "planet_switch");
         }
       };
-      const busyGuard = typeof GC.setSafeTimeout === "function"
-        ? GC.setSafeTimeout(() => unlockShellEarly("planet_switch_watchdog"), 12000)
-        : setTimeout(() => unlockShellEarly("planet_switch_watchdog"), 12000);
+      // Raw timer: setSafeTimeout is wiped by cleanupPage and never unlocked the rail.
+      const busyGuard = setTimeout(
+        () => unlockShellEarly("planet_switch_watchdog"),
+        12000
+      );
 
       try {
         const res = await GC.fetchGameAction("/api/planets/active", {

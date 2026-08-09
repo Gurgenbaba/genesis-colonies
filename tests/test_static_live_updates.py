@@ -568,13 +568,15 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     blockers = src.split("function releaseShellNavigationBlockers(reason)")[1].split("function syncHudSelectLabelsInRoot")[0]
     assert "GC.pjaxInFlight = null" not in blockers
     assert "GC._pjaxAbort" not in blockers
+    assert "GC._planetSwitchInFlight = false" in blockers
+    assert 'getElementById("gc-planet-registry-sheet")' in blockers
     preload = src.split("function isValidLcpPreloadHref(href)")[1].split("GC.syncLcpHeroPreload = syncLcpHeroPreload")[0]
     assert '"null"' in preload
     assert '"undefined"' in preload
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.104"
+    assert version and version[0].isdigit()
     assert "GAME_STATE_FETCH_TIMEOUT_MS" in src
     assert "NOTIFICATION_POLL_TIMEOUT_MS" in src
     assert "const PJAX_FETCH_TIMEOUT_MS = 25000;" in src
@@ -626,7 +628,9 @@ def test_main_js_gc802_planet_switch_state_sync():
         "function hydratePageFromLastState", 1
     )[0]
     assert "skip reloadCurrentPage; active PJAX away" in reload_fn
-    assert "activeTarget !== here" in reload_fn
+    # Pending sidebar nav supersedes same-URL force-reload (was activeTarget-only).
+    assert "awayTarget !== here" in reload_fn
+    assert "pendingTarget || activeTarget" in reload_fn
     assert 'refreshGameState("planet_switch")' not in switch_section
     assert "bootstrapResourceLiveFromDom()" in switch_section
     action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]

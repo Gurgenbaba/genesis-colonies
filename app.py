@@ -122,6 +122,13 @@ def get_asset_version() -> str:
         return "dev"
 
 
+def versioned_static_url(endpoint: str, **values):
+    """``url_for`` for static assets with cache-busting ``v=`` (immutable Cache-Control)."""
+    if endpoint == "static" and "v" not in values:
+        values["v"] = get_asset_version()
+    return url_for(endpoint, **values)
+
+
 GC_ASSET_VERSION = get_asset_version()
 
 # GC-861B — moderate cache for unversioned raster static assets (7 days)
@@ -611,7 +618,7 @@ def inject_globals():
 
             header_planets = apply_herocard_urls_to_switcher_planets(
                 list_player_planets_for_switcher(int(user_id)),
-                url_for,
+                versioned_static_url,
             )
             for row in header_planets:
                 if row.get("is_active"):
@@ -649,8 +656,8 @@ def inject_globals():
             landscape_rel = (
                 landscape_static_relpath(pos_i) if pos_i else f"img/herocards/{DEFAULT_HEROCARD}"
             )
-            current_planet_landscape_url = url_for("static", filename=landscape_rel)
-            current_planet_landscape_webp_url = url_for(
+            current_planet_landscape_url = versioned_static_url("static", filename=landscape_rel)
+            current_planet_landscape_webp_url = versioned_static_url(
                 "static", filename=raster_webp_relpath(landscape_rel)
             )
     except Exception:
@@ -762,7 +769,10 @@ def inject_globals():
     except Exception:
         pass
 
-    client_runtime_config = get_client_runtime_config()
+    client_runtime_config = {
+        **get_client_runtime_config(),
+        "asset_version": get_asset_version(),
+    }
     try:
         if auth_user and auth_user.get("id"):
             from game.options import get_buildings_ui_settings
@@ -10508,11 +10518,17 @@ def _payload_from_live_context(
             "planet_class_label_key": planet_class_label_key(planet_class),
             "is_homeworld": bool(planet.get("is_homeworld")),
             "position": position,
-            "landscape_url": url_for("static", filename=landscape_rel),
-            "landscape_webp_url": url_for("static", filename=raster_webp_relpath(landscape_rel)),
-            "herocard_url": url_for("static", filename=herocard_rel),
-            "herocard_webp_url": url_for("static", filename=raster_webp_relpath(herocard_rel)),
-            "herocard_webp_srcset": herocard_webp_srcset_for_position(position, url_for),
+            "landscape_url": versioned_static_url("static", filename=landscape_rel),
+            "landscape_webp_url": versioned_static_url(
+                "static", filename=raster_webp_relpath(landscape_rel)
+            ),
+            "herocard_url": versioned_static_url("static", filename=herocard_rel),
+            "herocard_webp_url": versioned_static_url(
+                "static", filename=raster_webp_relpath(herocard_rel)
+            ),
+            "herocard_webp_srcset": herocard_webp_srcset_for_position(
+                position, versioned_static_url
+            ),
             "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
             "accent_color": theme["accent_color"],
             "secondary_color": theme["secondary_color"],
@@ -10557,11 +10573,17 @@ def _payload_from_live_context(
             "planet_class_label_key": "planet_class_terrestrial",
             "is_homeworld": bool(planet.get("is_homeworld")),
             "position": None,
-            "landscape_url": url_for("static", filename=fallback_rel),
-            "landscape_webp_url": url_for("static", filename=raster_webp_relpath(fallback_rel)),
-            "herocard_url": url_for("static", filename=fallback_herocard_rel),
-            "herocard_webp_url": url_for("static", filename=raster_webp_relpath(fallback_herocard_rel)),
-            "herocard_webp_srcset": herocard_webp_srcset_for_position(0, url_for),
+            "landscape_url": versioned_static_url("static", filename=fallback_rel),
+            "landscape_webp_url": versioned_static_url(
+                "static", filename=raster_webp_relpath(fallback_rel)
+            ),
+            "herocard_url": versioned_static_url("static", filename=fallback_herocard_rel),
+            "herocard_webp_url": versioned_static_url(
+                "static", filename=raster_webp_relpath(fallback_herocard_rel)
+            ),
+            "herocard_webp_srcset": herocard_webp_srcset_for_position(
+                0, versioned_static_url
+            ),
             "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
             "accent_color": fallback_theme["accent_color"],
             "secondary_color": fallback_theme["secondary_color"],
@@ -10847,7 +10869,7 @@ def _payload_from_live_context(
 
         payload["planets"] = apply_herocard_urls_to_switcher_planets(
             list_player_planets_for_switcher(user_id, conn=conn),
-            url_for,
+            versioned_static_url,
         )
     except Exception:
         payload["planets"] = []
@@ -13871,7 +13893,7 @@ def api_planets_list():
         "ok": True,
         "planets": apply_herocard_urls_to_switcher_planets(
             list_player_planets_for_switcher(user_id),
-            url_for,
+            versioned_static_url,
         ),
     })
 
@@ -13912,7 +13934,7 @@ def api_planets_set_active():
 
         planets = apply_herocard_urls_to_switcher_planets(
             list_player_planets_for_switcher(user_id),
-            url_for,
+            versioned_static_url,
         )
     return jsonify({"ok": ok, "reason": reason, "state": state, "planets": planets})
 
