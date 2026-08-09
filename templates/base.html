@@ -252,11 +252,12 @@
                 {{ render_resource_icon('metal', hud=true, lazy=false, priority='high', alt=T('resource_metal')) }}
                 <span class="hud-res-amount">
                   <span class="res-value metal">{{ metal_have|fmt_int }}</span>
-                  {{ render_hud_capacity_bar('metal', metal_have, metal_cap_val) }}
-                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
+                  {# GC-HUD-STORAGE-001: visible current / capacity (server storage_caps). #}
+                  <span class="hud-res-cap-line" title="{{ T('hud_storage_capacity', 'Lagerkapazität') }}">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap metal">{{ metal_cap_val|fmt_int }}</span>
                   </span>
+                  {{ render_hud_capacity_bar('metal', metal_have, metal_cap_val) }}
                 </span>
               </div>
               {{ render_hud_storage_warn('metal', metal_have, metal_cap_val) }}
@@ -274,11 +275,11 @@
                 {{ render_resource_icon('crystal', hud=true, lazy=false, priority='high', alt=T('resource_crystal')) }}
                 <span class="hud-res-amount">
                   <span class="res-value crystal">{{ crystal_have|fmt_int }}</span>
-                  {{ render_hud_capacity_bar('crystal', crystal_have, crystal_cap_val) }}
-                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
+                  <span class="hud-res-cap-line" title="{{ T('hud_storage_capacity', 'Lagerkapazität') }}">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap crystal">{{ crystal_cap_val|fmt_int }}</span>
                   </span>
+                  {{ render_hud_capacity_bar('crystal', crystal_have, crystal_cap_val) }}
                 </span>
               </div>
               {{ render_hud_storage_warn('crystal', crystal_have, crystal_cap_val) }}
@@ -296,11 +297,11 @@
                 {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
                 <span class="hud-res-amount">
                   <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
-                  {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap_val) }}
-                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
+                  <span class="hud-res-cap-line" title="{{ T('hud_storage_capacity', 'Lagerkapazität') }}">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap fuel_cells">{{ fc_cap_val|fmt_int }}</span>
                   </span>
+                  {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap_val) }}
                 </span>
               </div>
               {{ render_hud_storage_warn('fuel_cells', fc_have, fc_cap_val) }}

@@ -217,6 +217,9 @@ Multi-Kolonie ohne Scope würde verwirren: Welche Mine produziert gerade? Wo bau
 **Warum ändern sich meine Ressourcen nach dem Wechsel?**
 Jede Welt hat eigene Lager und Produktion. Der Switcher wechselt den Kontext, nicht dein gesamtes Imperium.
 
+**Zeigt die Resource Bar die Lagerkapazität?**
+Ja (GC-HUD-STORAGE-001): Ferronit/Crytite/Brennzellen als `current / capacity` aus serverseitigem `storage` im Live-State (`EffectResolver`). Planet-Limit bleibt im Registry-Header, nicht in der Resource Bar.
+
 **Kann ich eine Nicht-Homeworld löschen?**
 Ja — aktive Nicht-Homeworld kann gelöscht werden; active springt auf die Genesis Ark.
 

@@ -24651,7 +24651,7 @@ body.gc-planet-sheet-open{
   width: 100%;
 }
 
-/* GC-GUI-DECLUTTER-003: numeric /cap lives for live patch targets; capacity bar is the visible cue. */
+/* GC-HUD-STORAGE-001: numeric /cap visible under current amount (server storage). */
 .gc-header-cmd .hud-res-cap-line--sr{
   position: absolute;
   width: 1px;
@@ -45866,10 +45866,14 @@ a.alliance-hub-browse-card:hover,
     font-size: 0.7rem;
   }
 
+  /* GC-HUD-STORAGE-001: keep numeric /cap on narrow viewports; bar/footer can hide. */
   .gc-header-cmd .hud-res-capacity,
-  .gc-header-cmd .hud-res-cap-line,
   .gc-header-cmd .hud-res-footer{
     display: none !important;
+  }
+
+  .gc-header-cmd .hud-res-cap-line{
+    display: inline-flex !important;
   }
 
   .gc-header-cmd .hud-res-body .res-cap,

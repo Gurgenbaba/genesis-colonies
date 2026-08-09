@@ -53,12 +53,12 @@
   {% endif %}
 {% endmacro %}
 
-{# GC-INSTANT-HUD-STORAGE-WARN-001 — SSR storage warn/full (same 0.92 threshold as patchHudStorageWarnings). #}
+{# GC-INSTANT-HUD-STORAGE-WARN-001 / GC-HUD-STORAGE-001 — warn ≥90%, full ≥100% (same as JS). #}
 {% macro hud_storage_warn_level(current, max_cap) -%}
 {%- set cur = (current or 0)|int -%}
 {%- set cap = (max_cap or 0)|int -%}
 {%- if cap > 0 and cur >= cap -%}full
-{%- elif cap > 0 and cur >= ((cap * 92) / 100)|int -%}warn
+{%- elif cap > 0 and cur >= ((cap * 90) / 100)|int -%}warn
 {%- else -%}
 {%- endif -%}
 {%- endmacro %}

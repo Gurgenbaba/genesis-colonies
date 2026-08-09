@@ -170,16 +170,17 @@ def test_base_template_shows_fuel_cells_panel():
     assert 'fc_cap <= 0' not in html
     assert 'repeat(4, minmax(0, 1fr))' in css
     metal_block = html.split('hud-res-metal')[1].split('hud-res-crystal')[0]
-    fuel_block = html.split('hud-res-fuel-cells')[1].split('hud-res-energy')[0]
+    fuel_block = html.split('hud-res-fuel-cells')[1].split('hud-res-timekeeper')[0]
     assert 'hud-res-cap-line' in metal_block
     assert 'hud-res-cap-line' in fuel_block
     assert '{% if fc_cap' not in fuel_block
-    # GC-GUI-DECLUTTER-003: no duplicate badge/name; /cap sr-only; live values remain.
+    # GC-GUI-DECLUTTER-003: no duplicate badge/name; GC-HUD-STORAGE-001: /cap visible.
     assert 'hud-res-badge' not in metal_block
     assert 'hud-res-name' not in metal_block
-    assert 'hud-res-cap-line--sr' in metal_block
-    assert 'hud-res-cap-line--sr' in fuel_block
-    assert 'hud-res-cap-line--sr' in css
+    assert 'hud-res-cap-line--sr' not in metal_block
+    assert 'hud-res-cap-line--sr' not in fuel_block
+    assert 'res-cap metal' in metal_block
+    assert 'res-cap fuel_cells' in fuel_block
 
 def test_main_js_patches_fuel_cells():
     root = Path(__file__).resolve().parent.parent

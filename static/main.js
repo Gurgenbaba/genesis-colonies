@@ -4833,7 +4833,8 @@
   }
 
   function patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
-    const STORAGE_WARN_RATIO = 0.92;
+    // GC-HUD-STORAGE-001: subtle warn from ~90% fill; full at ≥ capacity (overflow allowed).
+    const STORAGE_WARN_RATIO = 0.9;
     const pairs = [
       ["metal", metal, storageMetal],
       ["crystal", crystal, storageCrystal],
@@ -14355,8 +14356,12 @@
     const p = data.player || {};
     const energy = data.energy || {};
     const resources = data.resources || {};
-    const storage = data.storage || {};
     const prod = data.production_per_hour || {};
+    // GC-HUD-STORAGE-001: reuse canonical server caps (top-level storage, else resources.storage).
+    const storage =
+      (data.storage && typeof data.storage === "object" ? data.storage : null)
+      || (resources.storage && typeof resources.storage === "object" ? resources.storage : null)
+      || {};
 
     // Partial HUD merges (SSR fleet/unread boot) must not wipe SSR resource amounts to 0.
     const hasResourceSnapshot = Boolean(

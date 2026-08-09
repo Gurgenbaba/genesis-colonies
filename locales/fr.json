@@ -8757,5 +8757,6 @@
   "admin_perf_col_class": "Classe",
   "admin_perf_col_total": "Total",
   "admin_perf_col_top_costs": "Top coûts",
-  "admin_perf_col_sql_opens": "SQL / opens"
+  "admin_perf_col_sql_opens": "SQL / opens",
+  "hud_storage_capacity": "Capacité de stockage"
 }
