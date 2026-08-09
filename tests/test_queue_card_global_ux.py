@@ -164,12 +164,29 @@ def test_all_queue_pages_use_card_queue_blocks():
 
 
 def test_main_js_global_queue_hud_actions():
+    """GC-GUI-DECLUTTER-004: no header queue HUD DOM — sync + ticker only."""
     js = _read("static/main.js")
+    base = _read("templates/base.html")
+    assert "data-global-queue-hud" not in base
     assert "initGlobalQueueHud" in js
     assert "renderGlobalQueueHud" in js
-    assert "_handleGlobalQueueHudCancel" in js
-    assert "data-global-queue-hud-chip" in js
+    assert "_syncGlobalQueueHudLiveState" in js
+    assert "_createGlobalQueueHudRow" not in js
+    assert "_handleGlobalQueueHudCancel" not in js
     assert "global_queue_hud" in js
+    assert "GC-GUI-DECLUTTER-004" in js
+
+
+def test_ingame_sticky_header_occludes_scrolling_main():
+    """GC-GUI-DECLUTTER-005: sticky header/res-bar must be opaque above main content."""
+    css = _read("static/style.css")
+    assert "GC-GUI-DECLUTTER-005" in css
+    block = css.split("GC-GUI-DECLUTTER-005")[1].split("body.gc-body-ingame .gc-layout")[0]
+    assert "background-color: rgb(4, 10, 20)" in block
+    assert "z-index: var(--gc-z-sticky, 200)" in block
+    assert "backdrop-filter: none" in block
+    layout = css.split("body.gc-body-ingame .gc-layout{")[1].split("}")[0]
+    assert "z-index: 0" in layout
 
 
 def test_main_js_uses_render_card_queue_block_for_all_domains():
@@ -191,8 +208,18 @@ def test_main_js_uses_render_card_queue_block_for_all_domains():
     )[0]
     assert 'domain === "building" || domain === "research"' in render_guard
     assert 'domain === "shipyard" || domain === "defense"' in render_guard
+    assert 'domain === "planet_research" || domain === "ascension"' in render_guard
+    assert "_isPeQueueListHost" in render_guard
     assert "return null" in render_guard
     assert "GC-PERF-CARD-TIMERS-001" in js
+    assert "GC-GUI-DECLUTTER-001" in js
+    assert "_syncPeItemCardInQueueClasses" in js
+    pe_patch = js.split("function patchPePlanetTechCardQueues(rdx)")[1].split(
+        "function applyPeResearchCardQueueJobs"
+    )[0]
+    assert "_syncPeItemCardInQueueClasses" in pe_patch
+    assert "[data-planet-tech-card]" in pe_patch
+    assert "[data-ascension-card]" in pe_patch
     assert "function renderHeroQueueOverlay" in js
     assert "clearHeroQueueVisuals" in js
     assert "applyCardInQueueClasses" in js
@@ -219,7 +246,7 @@ def test_main_js_uses_render_card_queue_block_for_all_domains():
 
 
 def test_buildings_research_cards_have_no_live_queue_timers():
-    """GC-PERF-CARD-TIMERS-001: per-card % / ETA removed; mini-queue remains the live surface."""
+    """GC-PERF-CARD-TIMERS-001 / GC-GUI-DECLUTTER-002: per-card % / ETA removed; mini-queue remains the live surface."""
     for rel in ("templates/buildings.html", "templates/research.html"):
         html = _read(rel)
         assert "render_hero_queue" not in html
@@ -232,6 +259,10 @@ def test_buildings_research_cards_have_no_live_queue_timers():
         chip = html.split("data-hero-time-chip")[1].split("{% endmacro %}")[0]
         assert "data-countdown-at" not in chip
         assert "gc-hero-time-text" in chip
+    research = _read("templates/research.html")
+    assert "render_research_card_footer" not in research
+    assert "data-research-time-footer" not in research
+    assert "gc-card-footer-row--time" not in research
     img = _read("templates/partials/card_hero_img_macros.html")
     assert "gc-bld-hero-img-stack--progress" not in img
     assert "gc-bld-card-hero-img--muted" not in img

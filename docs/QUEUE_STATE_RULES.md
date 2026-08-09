@@ -149,15 +149,16 @@ Queue-Mutationen liefern immer frischen **`state`** (game-state payload) — sie
 
 Frontend zeigt Queue-Fortschritt aus `state.build_queue`, `state.research`, etc. — keine eigene Queue-Berechnung.
 
-### Presentation (GC-536A ✅ / GC-UNIT-QUEUE-DEDUP-001)
+### Presentation (GC-536A ✅ / GC-UNIT-QUEUE-DEDUP-001 / GC-PERF-CARD-TIMERS-001 / GC-GUI-DECLUTTER-001)
 
 Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Presentation-Adapter: `game/queue_card.py` (**keine zweite Queue**).
 
-- Gebäude / Forschung / PE: Jobs in Item-Cards (+ Mini-Strip)
+- **Gebäude / Forschung:** Live-ETA/%/⚡/Cancel nur in der Mini-Strip (`#build-mini-queue` / `#research-mini-queue`); Item-Cards = Katalog-Dauer-Chip + `--in-queue`-Klassen (kein per-card Live-Timer)
+- **PE (Planet-Tech / Ascension):** Live-Blöcke nur in `#pe-planet-tech-queue-list` / `#pe-ascension-queue-list`; Tech-/Ascension-Cards ohne `data-gc-card-queue`
 - **Unit-Queues (Shipyard / Defense):** ausschließlich zentrale Mini-Bauschleife; `renderCardQueueBlock` liefert für `shipyard`/`defense` `null`; TK/Cancel nur im Strip
 - **TK-Boost Dedup:** eine ⚡ pro aktivem Job — Mini-Strip (Build/Research/Shipyard/Defense) bzw. PE-Queue-List; Hero-/Tech-Cards hosten keinen Apply-Button
 - **Live-Sync:** `syncMountedQueuePagesFromState` nach Actions und Diet-Polls; Finish → optimistic Level-Patch → `queue_timer_zero` / `*_finished` + include_panel (Authority)
-- Serializer (`map_*_queue_to_card_jobs`, `mini_queue_jobs`) bleiben für Strip/HUD — nicht für Unit-Card-DOM
+- Serializer (`map_*_queue_to_card_jobs`, `mini_queue_jobs`) bleiben für Strip/HUD/PE-Listen — nicht für Item-Card-DOM (außer PE-Zone-Listen)
 
 ---
 

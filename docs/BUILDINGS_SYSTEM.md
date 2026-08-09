@@ -114,10 +114,10 @@ Antwort: `{ ok, reason, job?, state }` — immer frischer game-state.
 ## UI
 
 - Template: `templates/buildings.html` — 4 Tabs
-- **Queue-UX (GC-536B / GC-644C):** Kompakt-Header `#build-queue-compact` + Card-Queues pro Gebäude
+- **Queue-UX (GC-PERF-CARD-TIMERS-001 / Mini-Strip):** Live-ETA/%/⚡/Cancel nur in `#build-mini-queue`; Gebäude-Cards zeigen Katalog-Dauer-Chip + `--in-queue`-Klassen
 - **Kein globaler Queue-HUD** unter der Ressourcenleiste
 - Buttons: `.btn-upgrade` → intercepted → POST API
-- Card-Queue: `GC.renderCardQueueBlock` / `.gc-card-queue-block` (Timer + Progress aus Poll)
+- Stage-Bau-FX: diskreter „Bau läuft“-State am Prop (kein Live-%-Ring auf der Card)
 
 Panel-Daten: `get_buildings_panel_rows()` für SSR + Poll `buildings_panel` (inkl. optional `queue_job` pro Row).
 
@@ -254,7 +254,7 @@ Die Buildings-Seite zeigt oben eine **Kolonie-Stage** (Diorama-Foundation).
 - Anordnen-Modus: Pointer-Drag mit Grab-Offset; Poll überschreibt Positionen im Arrange-Modus **nicht**
 - Prop-Klick (außer Anordnen / außer Action-Buttons): Detail-Popup clont die versteckte Card (Name → Technical Data); **ohne** +1/MAX im Popup (Actions nur auf der Stage)
 - Stage-Actions: gleiche `btn-upgrade` / `btn-upgrade-max` Owner wie Karten (`render_building_head_action` / `syncBuildingHeadAction`)
-- Bau-FX: Progress-Ring + Scan/Pulse am Prop (`bld-stage-prop--queue`); Live-Tick über Mini-Queue (`data-owner-key` → `setBuildingStagePropBuildFx`) und Card-Queue-Ticker
+- Bau-FX: diskreter Queue-State am Prop (`bld-stage-prop--queue`); Live-% nur in Mini-Queue (`updateBuildingStageBuildFxFromMiniQueue`)
 - Retro-Karten: eigene SSR-Oberfläche (`data-bld-cards-mode="retro"`), immer expanded
 - Props: rund (`border-radius: 50%` Clip) mit Level-Badge; Art `static/img/buildings/stage/{key}.webp`
 - Stage-Actions / Prop-Chrome: Identity-Tint via `--gc-id-rgb` (PlayerCard Theme), kein festes Cyan

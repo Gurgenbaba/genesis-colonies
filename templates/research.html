@@ -27,15 +27,7 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_research_card_footer(tech) %}
-  {% set time_s = (tech.time_seconds if tech.time_seconds is defined else 0)|int %}
-  {% if time_s > 0 and not (tech.queue_job is defined and tech.queue_job) %}
-  <div class="gc-card-footer-row gc-card-footer-row--time" data-research-time-footer>
-    <span class="gc-card-footer-glyph" aria-hidden="true">⏱</span>
-    <span class="gc-card-footer-val gc-mono">{{ render_prog_duration(time_s) }}</span>
-  </div>
-  {% endif %}
-{% endmacro %}
+{# GC-GUI-DECLUTTER-002: catalog duration only on hero time chip (no footer duplicate). #}
 
 {% macro render_research_blockers(tech, queue_full) %}
   {% set res_items = tech.resource_items if tech.resource_items is defined else [] %}
@@ -185,8 +177,6 @@
         {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
       </div>
     </div>
-
-    {{ render_research_card_footer(tech) }}
 
     {{ render_research_blockers(tech, queue_full) }}
   </article>

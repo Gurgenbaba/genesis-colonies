@@ -148,6 +148,13 @@ def test_planet_evolution_template_card_queue_markers():
     assert "pe-research-queue-cards" not in html
     assert "pe_research_job(" not in html
     assert "pe_visible_tech_cards" in html
+    # GC-GUI-DECLUTTER-001: pe_card_queue_block only in zone lists, not inside tech-card macro.
+    tech_card = html.split("{% macro pe_research_tech_card")[1].split("{% endmacro %}")[0]
+    assert "pe_card_queue_block" not in tech_card
+    assert "data-gc-card-queue" not in tech_card
+    assert "gc-planet-tech-card--in-queue" in tech_card
+    list_section = html.split('id="pe-planet-tech-queue-list"')[1].split("pe-tech-grid")[0]
+    assert "pe_card_queue_block" in list_section
 
 
 def test_queued_planet_tech_wait_uses_finish_at():

@@ -58,16 +58,16 @@ Manuelle QA über alle Queue-Seiten. Kein großes Queue-Panel mehr.
 
 | # | Seite | Schritt | Erwartung |
 |---|-------|---------|-----------|
-| Q1 | `/buildings` | Bau starten | Mini-Strip oben + Card zeigt AKTIV + Timer + Progress + ⚡ | - klappt
-| Q2 | `/research` | 2. Tech anreihen | Wartender Job: QUEUE in Tech-Card; Mini-Strip aktualisiert | - klappt
+| Q1 | `/buildings` | Bau starten | Mini-Strip: AKTIV + Timer + Progress + ⚡; Card nur Katalog-Dauer + in-queue | - klappt
+| Q2 | `/research` | 2. Tech anreihen | Mini-Strip aktualisiert; Tech-Card ohne Live-Timer/Footer-Dauer-Duplikat | - klappt
 | Q3 | `/shipyard` | Schiff bauen | **Nur** zentrale Mini-Bauschleife oben (Menge, Timer, Progress, ⚡, Abbrechen); Schiff-Card ohne Queue-UI | - klappt
 | Q3b | `/defense` | Verteidigung bauen | **Nur** zentrale Mini-Bauschleife oben; Defense-Card ohne Queue-UI | - klappt
 | Q3c | `/shipyard` oder `/defense` | Timekeeper ⚡ | ⚡ nur in der oberen Bauschleife (aktiver Job); nach Apply sofort ohne Reload | - klappt
-| Q4 | `/planet_evolution` | Planet-Tech starten | Card-Queue mit DNA-Akzent; kein separater Job-Listenblock | - klappt
-| Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Ascension-Card mit Orbit-Pulse; Kompaktstatus `🌌 N Ascension-Aufträge` | - klappt
+| Q4 | `/planet_evolution` | Planet-Tech starten | Live nur in `#pe-planet-tech-queue-list`; Tech-Card ohne `data-gc-card-queue` | - klappt
+| Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Live in `#pe-ascension-queue-list`; Ascension-Card ohne Queue-Block; Kompaktstatus | - klappt
 | Q6 | PJAX | Buildings → Research → Shipyard | Keine doppelte Unit-Queue in Cards nach Navigation | - klappt
 | Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Mini-Strip / Cards umbrechen sauber | - klappt
-| Q8 | Cancel | Job in Mini-Strip / Card abbrechen | Nächster Job wird aktiv ohne Reload; Unit-Cards bleiben queue-frei | - klappt
+| Q8 | Cancel | Job in Mini-Strip / PE-Liste abbrechen | Nächster Job wird aktiv ohne Reload; Item-Cards bleiben queue-frei | - klappt
 
 Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) F1–F5
 

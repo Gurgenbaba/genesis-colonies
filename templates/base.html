@@ -246,15 +246,14 @@
             {% set _rate_metal = (_hud_prod.metal_mine if _hud_prod.metal_mine is defined else (_hud_prod.metal if _hud_prod.metal is defined else 0))|int %}
             {% set _rate_crystal = (_hud_prod.crystal_mine if _hud_prod.crystal_mine is defined else (_hud_prod.crystal if _hud_prod.crystal is defined else 0))|int %}
             {% set _rate_fuel = (_hud_prod.fuel_cell_plant if _hud_prod.fuel_cell_plant is defined else (_hud_prod.fuel_cells if _hud_prod.fuel_cells is defined else 0))|int %}
+            {# GC-GUI-DECLUTTER-003: icon + value + capacity bar; short label via panel title/aria (no badge+name dup). #}
             <div class="hud-res-panel hud-res-metal{% if _metal_warn == 'full' %} hud-res-panel--storage-full{% elif _metal_warn == 'warn' %} hud-res-panel--storage-warn{% endif %}" data-hud-res="metal" title="{{ T('resource_metal') }}" aria-label="{{ T('resource_metal') }}">
               <div class="hud-res-body res-block res-block-metal">
-                <span class="hud-res-badge" aria-hidden="true">{{ T('resource_metal_short', 'FN') }}</span>
                 {{ render_resource_icon('metal', hud=true, lazy=false, priority='high', alt=T('resource_metal')) }}
                 <span class="hud-res-amount">
-                  <span class="hud-res-name">{{ T('resource_metal_short', 'FN') }}</span>
                   <span class="res-value metal">{{ metal_have|fmt_int }}</span>
                   {{ render_hud_capacity_bar('metal', metal_have, metal_cap_val) }}
-                  <span class="hud-res-cap-line">
+                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap metal">{{ metal_cap_val|fmt_int }}</span>
                   </span>
@@ -272,13 +271,11 @@
             {% set _crystal_warn = hud_storage_warn_level(crystal_have, crystal_cap_val)|trim %}
             <div class="hud-res-panel hud-res-crystal{% if _crystal_warn == 'full' %} hud-res-panel--storage-full{% elif _crystal_warn == 'warn' %} hud-res-panel--storage-warn{% endif %}" data-hud-res="crystal" title="{{ T('resource_crystal') }}" aria-label="{{ T('resource_crystal') }}">
               <div class="hud-res-body res-block res-block-crystal">
-                <span class="hud-res-badge" aria-hidden="true">{{ T('resource_crystal_short', 'CT') }}</span>
                 {{ render_resource_icon('crystal', hud=true, lazy=false, priority='high', alt=T('resource_crystal')) }}
                 <span class="hud-res-amount">
-                  <span class="hud-res-name">{{ T('resource_crystal_short', 'CT') }}</span>
                   <span class="res-value crystal">{{ crystal_have|fmt_int }}</span>
                   {{ render_hud_capacity_bar('crystal', crystal_have, crystal_cap_val) }}
-                  <span class="hud-res-cap-line">
+                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap crystal">{{ crystal_cap_val|fmt_int }}</span>
                   </span>
@@ -296,13 +293,11 @@
             {% set _fc_warn = hud_storage_warn_level(fc_have, fc_cap_val)|trim %}
             <div class="hud-res-panel hud-res-fuel-cells{% if _fc_warn == 'full' %} hud-res-panel--storage-full{% elif _fc_warn == 'warn' %} hud-res-panel--storage-warn{% endif %}" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
               <div class="hud-res-body res-block res-block-fuel-cells">
-                <span class="hud-res-badge" aria-hidden="true">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
                 {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
                 <span class="hud-res-amount">
-                  <span class="hud-res-name">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
                   <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
                   {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap_val) }}
-                  <span class="hud-res-cap-line">
+                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap fuel_cells">{{ fc_cap_val|fmt_int }}</span>
                   </span>
@@ -319,13 +314,11 @@
             {% set tk_bal = (tk.balance_sec|int) if tk.balance_sec is defined else 0 %}
             <div class="hud-res-panel hud-res-timekeeper" data-hud-res="timekeeper" title="{{ T('timekeeper_name', 'Timekeeper') }}" aria-label="{{ T('timekeeper_name', 'Timekeeper') }}">
               <div class="hud-res-body res-block res-block-timekeeper">
-                <span class="hud-res-badge" aria-hidden="true">{{ T('timekeeper_short', 'TK') }}</span>
                 {{ render_resource_icon('timekeeper', hud=true, lazy=false, priority='high', alt=T('timekeeper_name', 'Timekeeper')) }}
                 <span class="hud-res-amount">
-                  <span class="hud-res-name">{{ T('timekeeper_short', 'TK') }}</span>
                   <span class="res-value timekeeper gc-mono" data-timekeeper-balance>{{ tk.label }}</span>
                   {{ render_hud_capacity_bar('timekeeper', tk_bal, 86400) }}
-                  <span class="hud-res-cap-line">
+                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap timekeeper gc-mono">{{ T('timekeeper_hud_cap_short', '24h') }}</span>
                   </span>
@@ -351,10 +344,9 @@
               <div class="hud-res-body res-block res-block-energy">
                 {{ render_resource_icon('energy', hud=true, lazy=false, priority='high', alt=T('energy', 'Energie')) }}
                 <span class="hud-res-amount">
-                  <span class="hud-res-name">{{ T('energy_short', 'EN') }}</span>
                   <span class="res-value energy" data-energy-used>{{ eu|fmt_int }}</span>
                   {{ render_hud_capacity_bar('energy', eu, et) }}
-                  <span class="hud-res-cap-line">
+                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap energy" data-energy-total>{% if et > 0 %}{{ et|fmt_int }}{% else %}—{% endif %}</span>
                   </span>

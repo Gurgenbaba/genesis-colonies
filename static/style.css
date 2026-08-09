@@ -312,9 +312,11 @@ body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-rar
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd {
-  background:
+  /* Keep solid occluder; decorative tint only on top of opaque base. */
+  background-color: rgb(4, 10, 20);
+  background-image:
     radial-gradient(900px 70px at 30% 0%, rgba(120, 255, 220, 0.07), transparent 60%),
-    linear-gradient(180deg, var(--gc-hdr-bg-1), var(--gc-hdr-bg-2));
+    linear-gradient(180deg, rgb(6, 12, 22) 0%, rgb(5, 11, 20) 100%);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .gc-header-inner {
@@ -22191,13 +22193,14 @@ a.gc-ranking-alliance:hover{
   .gc-resource-sticky{
     position: sticky;
     top: var(--gc-safe-top);
-    z-index: 52;
+    z-index: var(--gc-z-sticky, 200);
     width: 100%;
     padding-bottom: 4px;
+    /* Opaque strip — content must not bleed through the faded glass edge. */
     background:
-      linear-gradient(180deg, rgba(6, 12, 22, 0.94) 0%, rgba(6, 12, 22, 0.88) 72%, transparent 100%);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+      linear-gradient(180deg, rgb(6, 12, 22) 0%, rgb(6, 12, 22) 88%, rgb(6, 12, 22) 100%);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .gc-resource-sticky.is-scrolled{
@@ -22790,7 +22793,7 @@ a.gc-ranking-alliance:hover{
   .gc-header-cmd{
     position: sticky;
     top: 0;
-    z-index: 80;
+    z-index: var(--gc-z-sticky, 200);
   }
 
   .gc-resource-sticky{
@@ -22811,6 +22814,24 @@ a.gc-ranking-alliance:hover{
   z-index: 80;
   overflow: visible;
   --gc-topnav-control-h: 32px;
+}
+
+/* GC-GUI-DECLUTTER-005: scrolling main content must occlude under sticky header + resource bar
+   (no glass show-through of research/building cards into the top chrome). */
+body.gc-body-ingame .gc-header.gc-header-cmd{
+  z-index: var(--gc-z-sticky, 200);
+  isolation: isolate;
+  background-color: rgb(4, 10, 20);
+  background-image:
+    radial-gradient(900px 70px at 30% 0%, rgba(120, 255, 220, 0.07), transparent 60%),
+    linear-gradient(180deg, rgb(6, 12, 22) 0%, rgb(5, 11, 20) 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.gc-body-ingame .gc-layout{
+  position: relative;
+  z-index: 0;
 }
 
 /* Top-nav controls share one control height (width may vary). */
@@ -24628,6 +24649,19 @@ body.gc-planet-sheet-open{
   line-height: 1;
   min-height: 0;
   width: 100%;
+}
+
+/* GC-GUI-DECLUTTER-003: numeric /cap lives for live patch targets; capacity bar is the visible cue. */
+.gc-header-cmd .hud-res-cap-line--sr{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .gc-header-cmd .hud-res-body .res-value,

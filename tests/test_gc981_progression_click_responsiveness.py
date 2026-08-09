@@ -24,10 +24,13 @@ def test_progression_actions_use_per_button_busy_not_global_lock():
     assert "setProgressionActionBusy(upgradeEl, true)" in block
 
 
-def test_global_queue_cancel_uses_per_button_busy():
+def test_queue_cancel_uses_per_button_busy():
+    """GC-GUI-DECLUTTER-004: header HUD cancel removed; mini-queue / page cancels stay per-button."""
     src = _read("static/main.js")
-    block = src.split("async function _handleGlobalQueueHudCancel(btn)")[1].split(
-        "function initGlobalQueueHud"
+    assert "_handleGlobalQueueHudCancel" not in src
+    assert "setProgressionActionBusy" in src
+    assert "GC.actionLocks.build" not in src.split("function initGameActions()")[1].split(
+        "function initToastStack()"
     )[0]
-    assert "GC.actionLocks.build" not in block
-    assert "setProgressionActionBusy(btn, true)" in block
+    # Mini-queue / build cancel paths still arm busy on the clicked control.
+    assert "setProgressionActionBusy(" in src

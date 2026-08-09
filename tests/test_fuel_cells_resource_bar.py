@@ -174,6 +174,12 @@ def test_base_template_shows_fuel_cells_panel():
     assert 'hud-res-cap-line' in metal_block
     assert 'hud-res-cap-line' in fuel_block
     assert '{% if fc_cap' not in fuel_block
+    # GC-GUI-DECLUTTER-003: no duplicate badge/name; /cap sr-only; live values remain.
+    assert 'hud-res-badge' not in metal_block
+    assert 'hud-res-name' not in metal_block
+    assert 'hud-res-cap-line--sr' in metal_block
+    assert 'hud-res-cap-line--sr' in fuel_block
+    assert 'hud-res-cap-line--sr' in css
 
 def test_main_js_patches_fuel_cells():
     root = Path(__file__).resolve().parent.parent

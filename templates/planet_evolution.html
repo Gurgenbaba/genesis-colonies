@@ -189,7 +189,8 @@
 {% endmacro %}
 
 {% macro pe_research_tech_card(tech, planet_id, queue_has_room, variant='') %}
-<article class="pe-tech-card gc-planet-tech-card{% if variant == 'locked' %} pe-tech-card--locked-req{% elif not tech.can_afford %} pe-tech-card--locked{% endif %}"
+{# GC-GUI-DECLUTTER-001: live ETA/TK only in #pe-planet-tech-queue-list — cards get in-queue class only. #}
+<article class="pe-tech-card gc-planet-tech-card{% if tech.queue_job %} gc-planet-tech-card--in-queue{% if tech.queue_job.status == 'active' %} gc-planet-tech-card--queue-active{% else %} gc-planet-tech-card--queue-pending{% endif %}{% endif %}{% if variant == 'locked' %} pe-tech-card--locked-req{% elif not tech.can_afford %} pe-tech-card--locked{% endif %}"
          id="pe-research-card-{{ tech.tech_key }}"
          data-planet-tech-card data-tech-key="{{ tech.tech_key }}" role="listitem">
   <div class="pe-tech-card-body">
