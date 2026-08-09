@@ -52,6 +52,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
 | [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) | Was es kann / Prioritäten (SQLite-first, ohne Postgres-Cutover) |
 | [GC_PERF_CORE.md](GC_PERF_CORE.md) | Performance Core — Budgets, State, optionaler PG-Code-Pfad |
+| [PERFORMANCE.md](PERFORMANCE.md) | GC-PERF-AUTO — APM, Pressure, Admin Performance Dashboard |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) | Sammler-Markt, Collectibles, Prestige |
@@ -145,7 +146,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4519 Tests)
+python -m pytest tests/ -v          # gesamt (4553 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

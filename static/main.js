@@ -2730,6 +2730,31 @@
   };
 
   /** Dedicated poll timer — not registered in pageLifecycle (survives until stopPolling). */
+  function getPollJitterFactor() {
+    const p = GC.polling;
+    if (typeof p.jitterFactor === "number" && p.jitterFactor > 0) return p.jitterFactor;
+    let seed = 0;
+    try {
+      let raw = sessionStorage.getItem("gc_poll_jitter_seed");
+      if (!raw) {
+        raw = String((Math.random() * 0xffffffff) >>> 0);
+        sessionStorage.setItem("gc_poll_jitter_seed", raw);
+      }
+      seed = parseInt(raw, 10) || 1;
+    } catch (_) {
+      seed = ((Date.now() % 100000) + 1);
+    }
+    // Stable ±12.5% around 1.0 for this tab session (GC-PERF-AUTO-005).
+    const unit = ((seed % 1000) / 999) * 2 - 1; // [-1, 1]
+    p.jitterFactor = 1 + unit * 0.125;
+    return p.jitterFactor;
+  }
+
+  function applyPollJitter(ms) {
+    const base = Math.max(0, Number(ms) || 0);
+    return Math.max(250, Math.round(base * getPollJitterFactor()));
+  }
+
   function scheduleGameStatePoll(ms) {
     const p = GC.polling;
     if (p.timeoutId) clearTimeout(p.timeoutId);
@@ -2752,7 +2777,7 @@
       if (active) interval = pol.intervalActive;
       if (document.hidden) interval = pol.intervalHidden;
       pol.lastInterval = interval;
-      scheduleGameStatePoll(interval);
+      scheduleGameStatePoll(applyPollJitter(interval));
     }), Math.max(0, ms));
   }
 

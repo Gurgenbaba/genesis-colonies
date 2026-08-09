@@ -1463,3 +1463,20 @@ body.gc-has-planet-landscape .admin-shell .admin-section {
 .admin-votes-player-row:hover {
   background: rgba(70, 229, 255, 0.04);
 }
+
+/* GC-PERF-AUTO — performance history spark bars */
+.admin-perf-history {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-height: 52px;
+  padding: 8px 0;
+}
+.admin-perf-bar {
+  display: inline-block;
+  width: 6px;
+  min-height: 2px;
+  background: var(--admin-accent, #46e5ff);
+  opacity: 0.75;
+  border-radius: var(--gc-radius-xs, 0);
+}

@@ -17,7 +17,7 @@ Grouped rail + filtered tab pills:
 | Players | players, planets |
 | Economy | balance, lootboxes, queues, fleets |
 | Moderation | chat, support, messages |
-| System | health, server, runtime, migrations, audit |
+| System | health, server, runtime, **performance**, migrations, audit |
 
 Deep-link: `?tab=pirates`. Last tab persisted in `sessionStorage`.
 

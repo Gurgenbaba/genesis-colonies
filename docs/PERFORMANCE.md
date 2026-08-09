@@ -1,0 +1,136 @@
+# Performance Intelligence (GC-PERF-AUTO)
+
+> Owner: `game/perf_intel.py` (aggregation / pressure / diagnosis)  
+> Request spans: `game/live_state.py` (`RequestPerfState`, `perf_span`)  
+> DB timing: `game/db.py`  
+> Admin: `GET /api/admin/performance` + Admin Control Center tab **performance**  
+> Related: [GC_PERF_CORE.md](GC_PERF_CORE.md) · [STATE_AJAX.md](STATE_AJAX.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
+
+## Prinzip
+
+**Erst messen, dann ändern.** Keine zweite Queue-/Fleet-/Game-State-Engine. Railway-Metriken sind optional; die App muss sich selbst erklären.
+
+## Wave 1 (shipped)
+
+| Ticket | Inhalt |
+|--------|--------|
+| GC-PERF-AUTO-001 | `/api/game-state` call-tree audit (this doc) |
+| GC-PERF-AUTO-002 | Always-on recorder, `perf_span`, DB query timing, process metrics |
+| GC-PERF-AUTO-003 | Ringbuffer, percentiles, hotspots, pressure + hysteresis, rule diagnosis |
+| GC-PERF-AUTO-004 | Admin API + SERVER PERFORMANCE tab |
+| GC-PERF-AUTO-005 | Stable poll jitter on `GC.polling` |
+
+## Follow-ups (not Wave 1)
+
+### GC-PERF-AUTO-006 — Load Guard (Phase F)
+
+Defer only non-gameplay work when pressure/critical:
+
+- Stretch ranking recompute intervals
+- Skip optional cosmetic / admin panel warmups
+- Soften noncritical maintenance bag steps
+
+**Never skip:** resource authority, due queue finish, fleet/combat results, player mutations.
+
+Single source: `perf_intel.get_pressure_state()`.
+
+### GC-PERF-AUTO-007 — Evidence-driven optimizations (Phase E)
+
+Only after live/staging samples prove a hotspot (diet finish, nav badges, N+1 SQL, …).
+
+---
+
+## `/api/game-state` call tree (audit)
+
+```text
+GET /api/game-state
+├─ before_request
+│  ├─ start_request_perf (+ perf_intel concurrent++)
+│  └─ _fleet_tick_before_authenticated_request
+│     └─ SKIPPED for endpoint api_game_state
+├─ api_game_state()
+│  ├─ [?since + diet + GC_STATE_DELTA]
+│  │  └─ try_diet_poll_early_unchanged → maybe {unchanged:true} (no finish)
+│  ├─ _build_game_state_payload
+│  │  ├─ diet: finish_source=game_state
+│  │  │  └─ _load_page_live_context → read_player_live_state_for_poll
+│  │  │     ├─ finish_player_due_work  (conditional: due/dirty/throttled)
+│  │  │     │  └─ finish_due_work → … → process_fleet_tick (per-player)
+│  │  │     └─ update_planet_resources(skip_queue_finish=True)  (throttled persist)
+│  │  ├─ panel: finish_source=game_state_panel
+│  │  │  └─ refresh_player_live_state → always finish + resource sync
+│  │  └─ _payload_from_live_context
+│  │     ├─ HUD: resources, queues slim, fleets, score, nav_badges, live_events, …
+│  │     ├─ diet: apply_lightweight_game_state_diet (strip catalogs)
+│  │     └─ attach_canonical_server_time
+│  └─ [?since] build_delta_game_state → maybe {unchanged:true}
+└─ after_request / teardown → finish_request_perf → perf_intel.record_request
+```
+
+### Diet vs panel
+
+| | Diet poll | Panel / full |
+|---|---|---|
+| Query | `GET /api/game-state` (+ `?since=`) | `?include_panel=1` |
+| Live path | `read_player_live_state_for_poll` | `refresh_player_live_state` |
+| Queue finish | Conditional | Always |
+| Resource write | Throttled (`GC_RESOURCE_PERSIST_SEC`) | Always |
+| Payload | HUD then strip heavy keys | Full catalogs |
+
+### What runs on diet (typical)
+
+- Queue finish only when due / dirty / pending interval
+- Per-player fleet tick inside finish (not global worker tick)
+- Nav badges / live_events / score reads (not ranking recompute)
+- Ranking / global fleet / maintenance bag: **maintenance sidecar / cron**, not diet
+
+### Diet strip (`apply_lightweight_game_state_diet`)
+
+Drops (among others): `player_stats`, `building_queue`, `research_queue`, `buildings`, `codex`, `imperial_directives` body, `planet_relocation`, heavy fleet rows. Keeps HUD resources, slim queues, fleets, score, nav badges.
+
+---
+
+## Metrics model
+
+- **In-memory only** (Wave 1): ringbuffer + minute buckets (60m history)
+- No DB writes per request
+- Bounded memory; thread-safe short locks
+- Process CPU/RSS via optional `psutil`, else stdlib fallbacks (never crash)
+
+### Performance state (not game-state)
+
+`NORMAL → WARM → PRESSURE → CRITICAL` with hysteresis; `RECOVERY` when leaving pressure/critical while metrics improve.
+
+### Slow request classes
+
+| Total | Class |
+|-------|-------|
+| > 500 ms | slow |
+| > 1000 ms | very_slow |
+| > 2500 ms | critical |
+
+Log line: `[GC PERF] CRITICAL REQUEST` (+ top component costs).
+
+Legacy detailed line `[GC REQUEST PERF]` remains env-gated (`GC_REQUEST_PERF_DEBUG` / `GC_PERF_DEBUG`).
+
+### Config
+
+| Env | Default | Role |
+|-----|---------|------|
+| `GC_PERF_INTEL` | `1` | Always-on aggregator |
+| `GC_PERF_INTEL_SAMPLE` | `1.0` | Detail span/SQL sample rate |
+| `GC_PERF_SLOW_MS` / `GC_REQUEST_PERF_SLOW_MS` | `500` | Slow threshold |
+| `GC_PERF_SLOW_QUERY_MS` | `100` | Slow query threshold |
+| `GC_REQUEST_PERF_DEBUG` | `0` | Verbose `[GC REQUEST PERF]` logs |
+
+---
+
+## Admin
+
+- Tab: System → **performance**
+- API: `GET /api/admin/performance` (`@require_admin_api`)
+- Poll interval ~12s (dashboard must stay light)
+
+## Poll jitter (GC-PERF-AUTO-005)
+
+Singleton `GC.polling` applies a **stable per-tab** jitter of ±12.5% around active/idle/hidden intervals. No second poll engine; `/api/game-state` remains SSoT.

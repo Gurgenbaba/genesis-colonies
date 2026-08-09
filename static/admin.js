@@ -24,7 +24,7 @@
     players: ["players", "planets"],
     economy: ["balance", "lootboxes", "queues", "fleets", "promos"],
     moderation: ["chat", "support", "messages"],
-    system: ["health", "server", "runtime", "migrations", "audit"],
+    system: ["health", "server", "runtime", "performance", "migrations", "audit"],
   };
   const ADMIN_TAB_TO_GROUP = {};
   Object.keys(ADMIN_TAB_GROUPS).forEach((group) => {
@@ -438,6 +438,9 @@
         break;
       case "runtime":
         result = await loadAdminRuntime();
+        break;
+      case "performance":
+        result = await loadAdminPerformance();
         break;
       case "votes":
         result = await loadAdminVotes();
@@ -4532,6 +4535,150 @@
     return data;
   }
 
+  let _perfRefreshTimer = null;
+
+  function stopPerfAutoRefresh() {
+    if (_perfRefreshTimer) {
+      clearInterval(_perfRefreshTimer);
+      _perfRefreshTimer = null;
+    }
+  }
+
+  function startPerfAutoRefresh() {
+    stopPerfAutoRefresh();
+    _perfRefreshTimer = setInterval(() => {
+      if (_activeTab !== "performance") {
+        stopPerfAutoRefresh();
+        return;
+      }
+      loadAdminPerformance({ quiet: true }).catch(() => {});
+    }, 12000);
+  }
+
+  async function loadAdminPerformance(opts) {
+    const quiet = !!(opts && opts.quiet);
+    const out = qs("#admin-performance-output");
+    if (out && !quiet) out.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/performance");
+    if (!data.ok) {
+      if (!quiet) showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
+      return data;
+    }
+    const status = String(data.status || "normal").toUpperCase();
+    const proc = data.process || {};
+    const req1m = (data.requests && data.requests["1m"]) || {};
+    const routes = data.routes || [];
+    const components = data.components || [];
+    const slowQueries = data.slow_queries || [];
+    const diagnosis = data.diagnosis || {};
+    const history = data.history_60m || [];
+    const statusLevel =
+      status === "CRITICAL" ? "error" : status === "PRESSURE" || status === "WARM" ? "warn" : "ok";
+
+    const routeRows = routes
+      .slice(0, 12)
+      .map(
+        (r) =>
+          `<tr><td>${esc(r.route)}</td><td>${esc(r.request_count)}</td><td>${esc(r.p50_ms)}</td><td>${esc(r.p95_ms)}</td><td>${esc(r.p99_ms)}</td><td>${esc(r.max_ms)}</td></tr>`
+      )
+      .join("");
+    const compRows = components
+      .slice(0, 10)
+      .map(
+        (c) =>
+          `<tr><td>${esc(c.component)}</td><td>${esc(c.avg_ms)}</td><td>${esc(Math.round((c.share || 0) * 100))}%</td><td>${esc(c.samples)}</td></tr>`
+      )
+      .join("");
+    const sqRows = slowQueries
+      .slice(0, 10)
+      .map(
+        (q) =>
+          `<tr><td><code>${esc(q.signature)}</code></td><td>${esc(q.count)}</td><td>${esc(q.p95_ms)}</td><td>${esc(q.max_ms)}</td></tr>`
+      )
+      .join("");
+    const histMax = Math.max(1, ...history.map((h) => Number(h.p95_ms) || 0));
+    const histBars = history
+      .slice(-30)
+      .map((h) => {
+        const hgt = Math.max(2, Math.round(((Number(h.p95_ms) || 0) / histMax) * 48));
+        return `<span class="admin-perf-bar" title="${esc(h.p95_ms)}ms / ${esc(h.request_count)} req" style="height:${hgt}px"></span>`;
+      })
+      .join("");
+
+    if (out) {
+      out.innerHTML = `
+        <div class="admin-metrics-grid">
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_status", "STATUS"))}</div>
+            <div class="admin-metric-value">${statusBadge(statusLevel, status)}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_cpu", "CPU"))}</div>
+            <div class="admin-metric-value">${esc(proc.cpu_percent != null ? proc.cpu_percent + "%" : "n/a")}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_memory", "MEMORY"))}</div>
+            <div class="admin-metric-value">${esc(proc.rss_mb != null ? proc.rss_mb + " MB" : "n/a")}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_rps", "RPS"))}</div>
+            <div class="admin-metric-value">${esc(req1m.requests_per_second != null ? req1m.requests_per_second : 0)}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_active", "ACTIVE REQ"))}</div>
+            <div class="admin-metric-value">${esc(data.active_requests != null ? data.active_requests : 0)}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_p50", "p50"))}</div>
+            <div class="admin-metric-value">${esc(req1m.p50_ms != null ? req1m.p50_ms + "ms" : "—")}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_p95", "p95"))}</div>
+            <div class="admin-metric-value">${esc(req1m.p95_ms != null ? req1m.p95_ms + "ms" : "—")}</div>
+          </div>
+          <div class="admin-metric-card admin-card">
+            <div class="admin-metric-label">${esc(t("admin_perf_p99", "p99"))}</div>
+            <div class="admin-metric-value">${esc(req1m.p99_ms != null ? req1m.p99_ms + "ms" : "—")}</div>
+          </div>
+        </div>
+
+        <section class="admin-section admin-card">
+          <h3 class="admin-subtitle">${esc(t("admin_perf_diagnosis", "Diagnose"))}</h3>
+          <p><strong>${esc(t("admin_perf_cause", "Wahrscheinlichste Ursache"))}:</strong> ${esc(diagnosis.cause || "—")}</p>
+          <p class="admin-small-hint">${esc(diagnosis.recommendation || "")}</p>
+        </section>
+
+        <section class="admin-section admin-card">
+          <h3 class="admin-subtitle">${esc(t("admin_perf_hot_routes", "HOT ROUTES"))}</h3>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr>
+            <th>${esc(t("admin_perf_col_route", "Route"))}</th><th>n</th><th>p50</th><th>p95</th><th>p99</th><th>max</th>
+          </tr></thead><tbody>${routeRows || `<tr><td colspan="6">${esc(t("admin_perf_empty", "Noch keine Samples."))}</td></tr>`}</tbody></table></div>
+        </section>
+
+        <section class="admin-section admin-card">
+          <h3 class="admin-subtitle">${esc(t("admin_perf_hot_components", "HOT COMPONENTS"))}</h3>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr>
+            <th>${esc(t("admin_perf_col_component", "Component"))}</th><th>avg</th><th>%</th><th>n</th>
+          </tr></thead><tbody>${compRows || `<tr><td colspan="4">${esc(t("admin_perf_empty", "Noch keine Samples."))}</td></tr>`}</tbody></table></div>
+        </section>
+
+        <section class="admin-section admin-card">
+          <h3 class="admin-subtitle">${esc(t("admin_perf_slow_queries", "SLOW QUERIES"))}</h3>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr>
+            <th>${esc(t("admin_perf_col_signature", "Signature"))}</th><th>n</th><th>p95</th><th>max</th>
+          </tr></thead><tbody>${sqRows || `<tr><td colspan="4">${esc(t("admin_perf_empty", "Keine Slow Queries."))}</td></tr>`}</tbody></table></div>
+        </section>
+
+        <section class="admin-section admin-card">
+          <h3 class="admin-subtitle">${esc(t("admin_perf_history", "Verlauf (p95, letzte 30 Min)"))}</h3>
+          <div class="admin-perf-history">${histBars || `<p class="admin-small-hint">${esc(t("admin_perf_empty", "Noch keine Samples."))}</p>`}</div>
+        </section>`;
+    }
+    startPerfAutoRefresh();
+    return data;
+  }
+
   function renderAdminSupportDetail(ticket) {
     const out = qs("#admin-support-detail");
     if (!out) return;
@@ -5004,6 +5151,7 @@
       return res;
     }
     if (act === "refresh-runtime") return loadAdminRuntime();
+    if (act === "refresh-performance") return loadAdminPerformance();
     if (act === "balance-save") return saveAdminBalance();
     if (act === "balance-preset-b") return applyBalancePresetB();
     if (act === "ranking-recompute") return runAdminRankingRecompute(btn);

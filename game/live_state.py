@@ -7,8 +7,9 @@ from __future__ import annotations
 import logging
 import random
 import time
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
         "handler_ms",
         "after_request_ms",
         "fleet_tick_ms",
+        "finish_fleet_ms",
         "account_deletion_worker_ms",
         "live_context_ms",
         "page_context_ms",
@@ -37,6 +39,11 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
         "db_begin_immediate_ms",
         "db_write_transaction_ms",
         "db_transaction_ms",
+        "db_query_ms",
+        "ranking_ms",
+        "maintenance_ms",
+        "politics_ms",
+        "liveops_ms",
     }
 )
 
@@ -1629,25 +1636,33 @@ class RequestPerfState:
 
     __slots__ = (
         "sampled",
+        "intel_enabled",
         "started_at",
         "phases",
         "meta",
         "sql_count",
         "sql_write_count",
+        "db_query_ms",
+        "slow_queries",
         "logged",
+        "intel_recorded",
         "_write_tx_started_at",
         "_handler_started_at",
         "_after_started_at",
     )
 
-    def __init__(self, *, sampled: bool) -> None:
+    def __init__(self, *, sampled: bool, intel_enabled: bool = True) -> None:
         self.sampled = bool(sampled)
+        self.intel_enabled = bool(intel_enabled)
         self.started_at = time.perf_counter()
         self.phases: Dict[str, float] = {}
         self.meta: Dict[str, Any] = {}
         self.sql_count = 0
         self.sql_write_count = 0
+        self.db_query_ms = 0.0
+        self.slow_queries: List[Dict[str, Any]] = []
         self.logged = False
+        self.intel_recorded = False
         self._write_tx_started_at: Optional[float] = None
         self._handler_started_at: Optional[float] = None
         self._after_started_at: Optional[float] = None
@@ -1675,37 +1690,87 @@ def is_request_perf_sampled() -> bool:
     return bool(state and state.sampled)
 
 
+def is_request_perf_active() -> bool:
+    """True when request perf state exists (always-on intel and/or debug sample)."""
+    return _request_perf_state() is not None
+
+
 def start_request_perf(
     *,
     method: str = "",
     endpoint: str = "",
     path: str = "",
 ) -> None:
-    """Begin request-scoped profiling when enabled and sampling selects this request."""
-    if not is_request_perf_debug_enabled():
-        return
+    """Begin request-scoped profiling (always-on light + optional detail sample)."""
     try:
         from flask import g, has_request_context
 
         if not has_request_context():
             return
-        sample_rate = 0.0
-        try:
-            from game.config import get_request_perf_sample
 
-            sample_rate = float(get_request_perf_sample())
+        from game.perf_intel import is_perf_intel_enabled, should_skip_path
+
+        intel_on = bool(is_perf_intel_enabled())
+        debug_on = bool(is_request_perf_debug_enabled())
+        if should_skip_path(path):
+            return
+        if not intel_on and not debug_on:
+            return
+
+        sample_rate = 1.0
+        try:
+            if debug_on:
+                from game.config import get_request_perf_sample
+
+                sample_rate = float(get_request_perf_sample())
+            else:
+                from game.config import get_perf_intel_sample
+
+                sample_rate = float(get_perf_intel_sample())
         except Exception:
             sample_rate = 1.0
         sampled = sample_rate >= 1.0 or (sample_rate > 0.0 and random.random() < sample_rate)
-        state = RequestPerfState(sampled=sampled)
+        # Debug mode always stores a state when selected by sample; intel always stores.
+        if debug_on and not sampled and not intel_on:
+            return
+        state = RequestPerfState(
+            sampled=bool(sampled),
+            intel_enabled=intel_on,
+        )
         g.gc_request_perf = state
-        if sampled:
-            set_request_perf_meta("method", str(method or ""))
-            set_request_perf_meta("endpoint", str(endpoint or ""))
-            set_request_perf_meta("path", str(path or ""))
-            set_request_perf_meta("sample", 1)
+        set_request_perf_meta("method", str(method or ""))
+        set_request_perf_meta("endpoint", str(endpoint or ""))
+        set_request_perf_meta("path", str(path or ""))
+        set_request_perf_meta("sample", 1 if state.sampled else 0)
+        if intel_on:
+            try:
+                from game.perf_intel import get_store
+
+                get_store().begin_request()
+            except Exception:
+                pass
     except Exception:
         logger.debug("start_request_perf failed", exc_info=True)
+
+
+@contextmanager
+def perf_span(name: str) -> Generator[None, None, None]:
+    """
+    GC-PERF-AUTO: reusable span that records into the current request profiler.
+
+    Friendly names (queue_finish, resource_tick, …) map to phase keys.
+    """
+    from game.perf_intel import resolve_phase_name
+
+    phase = resolve_phase_name(name)
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        try:
+            record_request_perf_phase(phase, (time.perf_counter() - t0) * 1000.0)
+        except Exception:
+            pass
 
 
 def mark_request_perf_enter_handler() -> None:
@@ -1741,13 +1806,36 @@ def mark_request_perf_enter_after() -> None:
 
 
 def record_request_perf_phase(name: str, duration_ms: float) -> None:
-    if not name or name not in _REQUEST_PERF_PHASE_KEYS:
+    from game.perf_intel import resolve_phase_name
+
+    key = resolve_phase_name(name) if name and not str(name).endswith("_ms") and name not in _REQUEST_PERF_PHASE_KEYS else str(name or "")
+    if key and key not in _REQUEST_PERF_PHASE_KEYS:
+        # Allow friendly names already resolved
+        key = resolve_phase_name(name)
+    if not key or key not in _REQUEST_PERF_PHASE_KEYS:
         return
     try:
         state = _request_perf_state()
-        if state is None or not state.sampled:
+        if state is None:
             return
-        key = str(name)
+        # Always-on intel records phases when sampled OR when duration is meaningful on slow path later;
+        # while request is open we only accumulate if sampled to keep overhead low.
+        if not state.sampled and not state.intel_enabled:
+            return
+        if not state.sampled:
+            # Light path: still allow core phases for later aggregation on every request
+            if key not in (
+                "finish_ms",
+                "finish_fleet_ms",
+                "resource_sync_ms",
+                "fleet_tick_ms",
+                "payload_ms",
+                "live_context_ms",
+                "db_query_ms",
+                "template_ms",
+                "template_render_ms",
+            ):
+                return
         state.phases[key] = float(state.phases.get(key, 0.0)) + max(0.0, float(duration_ms))
     except Exception:
         logger.debug("record_request_perf_phase failed name=%s", name, exc_info=True)
@@ -1758,7 +1846,7 @@ def set_request_perf_meta(name: str, value: Any) -> None:
         return
     try:
         state = _request_perf_state()
-        if state is None or not state.sampled:
+        if state is None:
             return
         state.meta[str(name)] = value
     except Exception:
@@ -1766,7 +1854,7 @@ def set_request_perf_meta(name: str, value: Any) -> None:
 
 
 def record_request_perf_sql_statement(sql: str) -> None:
-    """Count SQL statements via sqlite trace callback (no per-statement timing)."""
+    """Count SQL statements via sqlite trace callback (legacy count path)."""
     try:
         state = _request_perf_state()
         if state is None or not state.sampled:
@@ -1779,13 +1867,84 @@ def record_request_perf_sql_statement(sql: str) -> None:
         pass
 
 
+def record_request_perf_sql_timing(sql: str, duration_ms: float) -> None:
+    """GC-PERF-AUTO: per-statement timing + slow-query capture (normalized signature)."""
+    try:
+        state = _request_perf_state()
+        if state is None:
+            return
+        if not state.sampled and not state.intel_enabled:
+            return
+        ms = max(0.0, float(duration_ms))
+        state.sql_count += 1
+        state.db_query_ms += ms
+        state.phases["db_query_ms"] = float(state.phases.get("db_query_ms", 0.0)) + ms
+        normalized = str(sql or "").lstrip().upper()
+        if normalized.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
+            state.sql_write_count += 1
+        try:
+            from game.config import get_perf_slow_query_ms
+            from game.perf_intel import normalize_sql_signature
+
+            threshold = float(get_perf_slow_query_ms())
+        except Exception:
+            threshold = 100.0
+            from game.perf_intel import normalize_sql_signature
+        if ms >= threshold and len(state.slow_queries) < 20:
+            state.slow_queries.append(
+                {"signature": normalize_sql_signature(sql), "ms": round(ms, 2)}
+            )
+    except Exception:
+        pass
+
+
 def attach_request_perf_sql_trace(conn) -> None:
+    """
+    GC-PERF-AUTO: wrap execute for per-statement timing when this request is sampled.
+
+    Prefer execute wrap over set_trace_callback so we get durations without double-counting.
+    """
     if not is_request_perf_sampled():
         return
     try:
-        conn.set_trace_callback(record_request_perf_sql_statement)
+        if getattr(conn, "_gc_perf_sql_wrapped", False):
+            return
+        orig_execute = conn.execute
+        orig_executemany = getattr(conn, "executemany", None)
+
+        def _timed_execute(sql, *args, **kwargs):
+            t0 = time.perf_counter()
+            try:
+                return orig_execute(sql, *args, **kwargs)
+            finally:
+                try:
+                    record_request_perf_sql_timing(
+                        str(sql), (time.perf_counter() - t0) * 1000.0
+                    )
+                except Exception:
+                    pass
+
+        conn.execute = _timed_execute  # type: ignore[method-assign]
+        if orig_executemany is not None:
+            def _timed_executemany(sql, *args, **kwargs):
+                t0 = time.perf_counter()
+                try:
+                    return orig_executemany(sql, *args, **kwargs)
+                finally:
+                    try:
+                        record_request_perf_sql_timing(
+                            str(sql), (time.perf_counter() - t0) * 1000.0
+                        )
+                    except Exception:
+                        pass
+
+            conn.executemany = _timed_executemany  # type: ignore[method-assign]
+        conn._gc_perf_sql_wrapped = True  # type: ignore[attr-defined]
     except Exception:
-        pass
+        try:
+            conn.set_trace_callback(record_request_perf_sql_statement)
+        except Exception:
+            pass
 
 
 def mark_request_perf_write_tx_started() -> None:
@@ -1882,10 +2041,6 @@ def _emit_request_perf_log(
         slow_ms = 500.0
 
     total_ms = (time.perf_counter() - state.started_at) * 1000.0
-    if total_ms < slow_ms:
-        state.logged = True
-        return
-
     _merge_existing_perf_traces(state)
 
     state.meta["status"] = int(status)
@@ -1896,6 +2051,23 @@ def _emit_request_perf_log(
         state.meta["had_exception"] = 1
     state.meta["sql_count"] = int(state.sql_count)
     state.meta["sql_write_count"] = int(state.sql_write_count)
+
+    # GC-PERF-AUTO: always-on aggregator (independent of debug log gate).
+    _record_perf_intel_from_state(
+        state,
+        status=status,
+        response_bytes=response_bytes,
+        total_ms=total_ms,
+        had_exception=had_exception,
+    )
+
+    # Legacy verbose log remains debug-gated and sample-gated.
+    if not is_request_perf_debug_enabled() or not state.sampled:
+        state.logged = True
+        return
+    if total_ms < slow_ms:
+        state.logged = True
+        return
 
     misses = evaluate_request_perf_budgets(
         total_ms=total_ms,
@@ -1947,14 +2119,59 @@ def _emit_request_perf_log(
     state.logged = True
 
 
+def _record_perf_intel_from_state(
+    state: RequestPerfState,
+    *,
+    status: int,
+    response_bytes: int,
+    total_ms: float,
+    had_exception: bool = False,
+) -> None:
+    if state.intel_recorded or not state.intel_enabled:
+        return
+    try:
+        from game.perf_intel import get_store, record_request_sample
+
+        route = str(
+            state.meta.get("endpoint")
+            or state.meta.get("route")
+            or state.meta.get("path")
+            or ""
+        )
+        record_request_sample(
+            method=str(state.meta.get("method") or ""),
+            route=route,
+            path=str(state.meta.get("path") or ""),
+            status=int(status),
+            total_ms=float(total_ms),
+            phases=dict(state.phases),
+            sql_count=int(state.sql_count),
+            db_query_ms=float(state.db_query_ms or state.phases.get("db_query_ms") or 0.0),
+            slow_queries=list(state.slow_queries),
+            payload_bytes=int(response_bytes or 0),
+            error=bool(had_exception) or int(status) >= 500,
+        )
+        get_store().end_request()
+        state.intel_recorded = True
+    except Exception:
+        logger.debug("perf_intel record failed", exc_info=True)
+        try:
+            from game.perf_intel import get_store
+
+            get_store().end_request()
+        except Exception:
+            pass
+        state.intel_recorded = True
+
+
 def finish_request_perf_after(response):
     """Log slow requests after the handler returns a response."""
     state = _request_perf_state()
-    if state is None or not state.sampled:
+    if state is None:
         return response
     try:
         after_started = state._after_started_at
-        if after_started is not None and "after_request_ms" not in state.phases:
+        if state.sampled and after_started is not None and "after_request_ms" not in state.phases:
             record_request_perf_phase(
                 "after_request_ms",
                 (time.perf_counter() - float(after_started)) * 1000.0,
@@ -1968,7 +2185,7 @@ def finish_request_perf_after(response):
             response_bytes=response_bytes,
             content_type=content_type,
         )
-        if not is_production_request_perf_header():
+        if state.sampled and not is_production_request_perf_header():
             response.headers["X-GC-Request-Perf-Total-Ms"] = str(
                 round((time.perf_counter() - state.started_at) * 1000.0, 1)
             )
@@ -1980,19 +2197,29 @@ def finish_request_perf_after(response):
 def finish_request_perf_teardown(exc: BaseException | None = None) -> None:
     """Fallback when after_request did not emit (rare); never raises."""
     state = _request_perf_state()
-    if state is None or not state.sampled or state.logged:
+    if state is None:
+        return
+    if state.logged and state.intel_recorded:
         return
     try:
-        status = 500 if exc is not None else 0
+        status = 500 if exc is not None else int(state.meta.get("status") or 0)
         _emit_request_perf_log(
             state,
             status=status,
-            response_bytes=0,
+            response_bytes=int(state.meta.get("bytes") or 0),
             content_type="",
             had_exception=exc is not None,
         )
     except Exception:
         logger.debug("finish_request_perf_teardown failed", exc_info=True)
+        if state.intel_enabled and not state.intel_recorded:
+            try:
+                from game.perf_intel import get_store
+
+                get_store().end_request()
+                state.intel_recorded = True
+            except Exception:
+                pass
 
 
 def is_production_request_perf_header() -> bool:

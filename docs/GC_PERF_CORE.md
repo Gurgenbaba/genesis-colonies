@@ -53,6 +53,14 @@ Siehe `game.config.get_perf_budgets()` / [ARCHITECTURE.md](ARCHITECTURE.md). Bas
 |--------|--------|
 | GC-PERF-CORE-001 … LOAD-001 | ✅ (JS-001 = Scaffold) |
 
+## Ticket-Serie PERF-AUTO — Automatic Performance Intelligence
+
+| Ticket | Inhalt | Status |
+|--------|--------|--------|
+| **GC-PERF-AUTO-001…005** | Audit, instrumentation, rolling metrics, admin dashboard, poll jitter | ✅ Wave 1 — [PERFORMANCE.md](PERFORMANCE.md) |
+| GC-PERF-AUTO-006 | Load Guard (defer non-gameplay only) | 📋 after evidence |
+| GC-PERF-AUTO-007 | Evidence-driven optimizations | 📋 after evidence |
+
 ## Ticket-Serie B — Postgres Cutover (offen)
 
 Reihenfolge verbindlich:

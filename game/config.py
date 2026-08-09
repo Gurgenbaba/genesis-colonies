@@ -396,13 +396,32 @@ def is_request_perf_debug_enabled() -> bool:
 
 
 def get_request_perf_slow_ms() -> float:
-    """Minimum total_ms before emitting a [GC REQUEST PERF] log line."""
+    """Minimum total_ms before emitting a slow-request log line."""
+    # Prefer shared GC_PERF_SLOW_MS when set; keep REQUEST alias.
+    if os.environ.get("GC_PERF_SLOW_MS") is not None:
+        return _env_float("GC_PERF_SLOW_MS", 500.0, minimum=0.0, maximum=600_000.0)
     return _env_float("GC_REQUEST_PERF_SLOW_MS", 500.0, minimum=0.0, maximum=600_000.0)
 
 
 def get_request_perf_sample() -> float:
-    """Fraction of requests to measure (0.0–1.0)."""
+    """Fraction of requests to measure detail spans (0.0–1.0)."""
     return _env_float("GC_REQUEST_PERF_SAMPLE", 1.0, minimum=0.0, maximum=1.0)
+
+
+def is_perf_intel_enabled() -> bool:
+    """GC-PERF-AUTO: always-on in-memory performance aggregator (default on)."""
+    val = os.environ.get("GC_PERF_INTEL", "1")
+    return str(val).strip().lower() not in ("0", "false", "no", "off")
+
+
+def get_perf_intel_sample() -> float:
+    """Detail span/SQL sample rate for perf intel (0.0–1.0). Default 1.0."""
+    return _env_float("GC_PERF_INTEL_SAMPLE", 1.0, minimum=0.0, maximum=1.0)
+
+
+def get_perf_slow_query_ms() -> float:
+    """Slow-query threshold for DB profiler (ms)."""
+    return _env_float("GC_PERF_SLOW_QUERY_MS", 100.0, minimum=0.0, maximum=600_000.0)
 
 
 def get_perf_budgets() -> dict[str, float]:

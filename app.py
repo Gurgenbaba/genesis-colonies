@@ -14248,6 +14248,12 @@ def api_admin_runtime():
     return _admin_json(admin_api_logic.api_runtime())
 
 
+@app.route("/api/admin/performance", methods=["GET"])
+@require_admin_api
+def api_admin_performance():
+    return _admin_json(admin_api_logic.api_performance())
+
+
 @app.route("/api/admin/players", methods=["GET"])
 @require_admin_api
 def api_admin_players_search():

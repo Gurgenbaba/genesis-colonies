@@ -259,6 +259,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Queues (Finish-Pass) | `game/queue_engine.py` | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) |
 | Queue Card UX (Presentation Adapter) | `game/queue_card.py` | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
 | Live-State / Poll-Payload | `app.py` (`_build_game_state_payload`) + `game/logic.py` + `game/live_state.py` | [STATE_AJAX.md](STATE_AJAX.md) |
+| Performance Intelligence (APM) | `game/perf_intel.py` (+ spans in `game/live_state.py`, DB timing in `game/db.py`) | [PERFORMANCE.md](PERFORMANCE.md) |
 | Planet Scope | `game/planet_evolution/repository.py` (`get_context_planet`) | [PLANET_SCOPE.md](PLANET_SCOPE.md) |
 | Ressourcen / Tick | `game/resources.py` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | Produktionsformeln | `game/production_formula.py` | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) |

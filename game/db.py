@@ -142,9 +142,9 @@ def db() -> DbConn:
         except Exception as exc:
             raise NotImplementedError(f"{_POSTGRES_NOT_CONFIGURED} ({exc})") from exc
         try:
-            from game.live_state import is_request_perf_sampled, record_request_perf_phase
+            from game.live_state import is_request_perf_active, record_request_perf_phase
 
-            if is_request_perf_sampled():
+            if is_request_perf_active():
                 record_request_perf_phase(
                     "db_connection_ms",
                     (time.perf_counter() - conn_t0) * 1000.0,
@@ -166,9 +166,9 @@ def db() -> DbConn:
     conn_t0 = time.perf_counter()
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
-        from game.live_state import is_request_perf_sampled, record_request_perf_phase
+        from game.live_state import is_request_perf_active, record_request_perf_phase
 
-        if is_request_perf_sampled():
+        if is_request_perf_active():
             record_request_perf_phase(
                 "db_connection_ms",
                 (time.perf_counter() - conn_t0) * 1000.0,

@@ -134,6 +134,7 @@
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="support" data-admin-group="moderation" role="tab">{{ T("admin_support_title", "Support") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="messages" data-admin-group="moderation" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="runtime" data-admin-group="system" role="tab">{{ T("admin_runtime_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="performance" data-admin-group="system" role="tab">{{ T("admin_perf_title", "Performance") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="votes" data-admin-group="liveops" role="tab">{{ T("admin_votes_title", "Votes") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="balance" data-admin-group="economy" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="server" data-admin-group="system" role="tab">{{ T("admin_server_title", "Server") }}</button>
@@ -511,6 +512,17 @@
       </section>
 
       <div id="admin-runtime-output" class="admin-panel-body"></div>
+    </section>
+
+    <section id="admin-tab-performance" class="admin-panel admin-tab-panel" data-admin-panel="performance" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_perf_title", "Server Performance") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="refresh-performance">{{ T("admin_btn_refresh", "Aktualisieren") }}</button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_perf_hint", "In-memory server performance: latency, hotspots, pressure state. No Railway dependency.") }}</p>
+      <div id="admin-performance-output" class="admin-panel-body"></div>
     </section>
 
     <section id="admin-tab-votes" class="admin-panel admin-tab-panel" data-admin-panel="votes" role="tabpanel" hidden>

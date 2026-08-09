@@ -351,14 +351,19 @@ Chat (`static/js/chat.js`) und Messages (`static/js/messages.js`) haben eigenes 
 
 Abschaltbares Server-Logging für **langsame HTTP-Requests** — ergänzt `GC_PERF_DEBUG` (Actions) und `GC_SSR_PERF_DEBUG` (SSR-Seiten), ersetzt sie nicht.
 
+**GC-PERF-AUTO:** Always-on In-Memory-APM (`game/perf_intel.py`) aggregiert p50/p95/Hotspots/Pressure unabhängig von diesem Debug-Log. Admin: `GET /api/admin/performance` · Doc: [PERFORMANCE.md](PERFORMANCE.md).
+
 ### Flags
 
 | Variable | Default | Bedeutung |
 |----------|---------|-----------|
-| `GC_REQUEST_PERF_DEBUG` | `0` | `1` = Request-Trace aktiv |
+| `GC_PERF_INTEL` | `1` | Always-on Aggregator (Admin-Dashboard) |
+| `GC_PERF_INTEL_SAMPLE` | `1.0` | Detail-Spans / SQL-Timing Sample |
+| `GC_PERF_SLOW_QUERY_MS` | `100` | Slow-Query-Schwellwert |
+| `GC_REQUEST_PERF_DEBUG` | `0` | `1` = verbose `[GC REQUEST PERF]` Log |
 | `GC_PERF_DEBUG` | `0` | Aktiviert implizit auch Request-Trace (konsistent mit GC-841) |
-| `GC_REQUEST_PERF_SLOW_MS` | `500` | Nur Requests mit `total_ms` ≥ Schwellwert loggen |
-| `GC_REQUEST_PERF_SAMPLE` | `1.0` | Anteil gemessener Requests (`0.0`–`1.0`) |
+| `GC_REQUEST_PERF_SLOW_MS` / `GC_PERF_SLOW_MS` | `500` | Slow / `[GC PERF]` Klassen-Schwellwert |
+| `GC_REQUEST_PERF_SAMPLE` | `1.0` | Anteil gemessener Debug-Requests (`0.0`–`1.0`) |
 
 ### Production-Empfehlung (Railway)
 
@@ -428,7 +433,7 @@ Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · E
 
 ## Test-Suite
 
-**4519 pytest-Tests** (Stand v0.5.9.113 — `python -m pytest --collect-only -q`), u. a.:
+**4553 pytest-Tests** (Stand v0.5.9.113 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

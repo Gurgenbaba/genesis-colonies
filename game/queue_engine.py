@@ -873,7 +873,12 @@ def finish_due_work(
                 if not fleet_schema_ready(conn):
                     return
                 fleet_player = int(player_id) if player_id is not None else None
-                fleet_result = process_fleet_tick(player_id=fleet_player, now=float(now), conn=conn)
+                from .live_state import perf_span
+
+                with perf_span("finish_fleet"):
+                    fleet_result = process_fleet_tick(
+                        player_id=fleet_player, now=float(now), conn=conn
+                    )
                 result["finished"]["fleet_arrivals"] += int(fleet_result.get("processed_arrivals") or 0)
                 result["finished"]["fleet_returns"] += int(fleet_result.get("processed_returns") or 0)
                 if fleet_result.get("errors"):

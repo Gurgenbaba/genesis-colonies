@@ -247,6 +247,17 @@ def api_runtime() -> Dict[str, Any]:
     )
 
 
+def api_performance() -> Dict[str, Any]:
+    """GC-PERF-AUTO: in-memory performance intelligence snapshot."""
+    from game.perf_intel import build_admin_performance_payload
+
+    payload = build_admin_performance_payload()
+    # Ensure envelope matches other admin APIs
+    if not payload.get("ok", True):
+        return payload
+    return _ok(**{k: v for k, v in payload.items() if k != "ok"})
+
+
 def api_run_migrations(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     if is_production():
         return _err("forbidden", "Migrations cannot be run from UI in production.")
