@@ -363,9 +363,12 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert "sidebar_nav" not in ap
     assert ap.get("empire_role_key") or ap.get("is_homeworld") is not None
     assert body.get("notification_revision")
+    # Diet polls keep battle_pass claimable_count/ops for nav/toast, not full tracks.
+    bp = body.get("battle_pass") or {}
+    assert "levels" not in bp
     # GC-PERF-005 budget is compact wire size (~15KB via diet_payload_bytes), not
     # Flask pretty-print. Pretty-print grew past 16KB from intentional HUD slices
-    # (commander / battle_pass / Threat Net keys) while compact stayed under budget.
+    # (commander / battle_pass summary / Threat Net keys) while compact stayed under budget.
     import json as _json
 
     compact = _json.dumps(body, separators=(",", ":"), default=str)

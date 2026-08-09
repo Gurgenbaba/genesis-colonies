@@ -10455,16 +10455,15 @@ def _payload_from_live_context(
         payload["commander"] = {"ready": False}
 
     with perf_span("payload.panel"):
+        # Panel-only: diet/action_slim strip overview.status/rows anyway — never build then discard.
         if include_panel:
             from game.buildings import get_overview_building_rows
+            from game.buildings import get_buildings_panel_rows
+            from game.overview_page import build_overview_status
 
             payload["overview"]["rows"] = get_overview_building_rows(
                 planet, buildings, build_queue=build_queue
             )
-
-        from game.overview_page import build_overview_status
-
-        if not lightweight:
             payload["overview"]["status"] = build_overview_status(
                 user_id=user_id,
                 player_view=player_view,
@@ -10478,6 +10477,20 @@ def _payload_from_live_context(
                 planet=planet,
                 include_log=False,
                 conn=conn,
+            )
+            payload["buildings_panel"] = get_buildings_panel_rows(
+                planet,
+                buildings,
+                build_queue=build_queue,
+            )
+        if panel_delta_keys:
+            from game.buildings import get_buildings_panel_delta
+
+            payload["buildings_panel_delta"] = get_buildings_panel_delta(
+                planet,
+                buildings,
+                build_queue=build_queue,
+                building_keys=panel_delta_keys,
             )
 
     active_planet_id = int(planet.get("id") or 0)
@@ -10601,25 +10614,6 @@ def _payload_from_live_context(
                     is_homeworld=bool(planet.get("is_homeworld")),
                 ),
             }
-
-    with perf_span("payload.panel"):
-        if panel_delta_keys:
-            from game.buildings import get_buildings_panel_delta
-
-            payload["buildings_panel_delta"] = get_buildings_panel_delta(
-                planet,
-                buildings,
-                build_queue=build_queue,
-                building_keys=panel_delta_keys,
-            )
-        elif include_panel:
-            from game.buildings import get_buildings_panel_rows
-
-            payload["buildings_panel"] = get_buildings_panel_rows(
-                planet,
-                buildings,
-                build_queue=build_queue,
-            )
 
     with perf_span("payload.score"):
         score = get_player_score_cached(user_id, read_only=True) or {
@@ -10832,10 +10826,10 @@ def _payload_from_live_context(
     try:
         from game.battle_pass import serialize_for_client as bp_serialize
 
-        # Tracks required so /premium claimable cards update on diet polls / actions
-        # without forcing the player to re-click the selected preview card.
+        # Full tracks only when not diet — premium page / include_panel keep cards.
+        # Diet needs claimable_count + ops for nav badge / toast (GC-PERF live-safe).
         payload["battle_pass"] = bp_serialize(
-            int(user_id), conn=conn, include_tracks=True
+            int(user_id), conn=conn, include_tracks=not lightweight
         )
     except Exception:
         payload["battle_pass"] = {"ready": False}

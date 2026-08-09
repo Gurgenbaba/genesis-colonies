@@ -133,12 +133,25 @@ def get_slow_query_ms() -> float:
 
 
 def get_slow_request_ms() -> float:
+    """Threshold for intel slow/spike classification.
+
+    Debug often sets ``GC_REQUEST_PERF_SLOW_MS=0`` to log every request — that must
+    **not** flood the spike ring or mark 40ms polls as slow.
+    """
     try:
         from game.config import get_request_perf_slow_ms as _cfg
 
-        return float(_cfg())
+        configured = float(_cfg())
     except Exception:
         return _SLOW_MS
+    if configured <= 0:
+        return _SLOW_MS
+    return configured
+
+
+def get_spike_request_ms() -> float:
+    """Alias — spike ring uses the same floor-safe threshold as slow classification."""
+    return get_slow_request_ms()
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +383,8 @@ class PerfIntelStore:
     def record(self, sample: RequestSample) -> None:
         with self._lock:
             self._ring.append(sample)
-            if sample.slow_class:
+            # Defense: only true wall-clock slow requests (never debug threshold 0).
+            if sample.slow_class and float(sample.total_ms) >= get_spike_request_ms():
                 self._spikes.appendleft(self._spike_from_sample_unlocked(sample))
             minute = int(sample.ts) // 60
             bucket = self._buckets.get(minute)
@@ -459,6 +473,7 @@ class PerfIntelStore:
             return
         ordered = sorted(s.total_ms for s in samples)
         p95 = percentile(ordered, 95)
+        p50 = percentile(ordered, 50)
         cpu = None
         try:
             snap = collect_process_metrics()
@@ -471,8 +486,14 @@ class PerfIntelStore:
         enter_critical = p95 >= _CRITICAL_MS or (cpu is not None and cpu >= 95.0)
         enter_pressure = p95 >= 1500.0 or (cpu is not None and cpu >= 85.0)
         enter_warm = p95 >= 750.0 or (cpu is not None and cpu >= 70.0)
-        # Exit thresholds (hysteresis — lower)
-        exit_critical = p95 < 2000.0 and (cpu is None or cpu < 90.0)
+        # Exit thresholds (hysteresis — lower). Healthy p50 + idle CPU means
+        # cold/outlier tails must not pin CRITICAL (Bobby dashboard: p50~45, CPU 0%).
+        idle_cpu = cpu is None or float(cpu) < 40.0
+        healthy_median = p50 < 150.0
+        exit_critical = (
+            (p95 < 2000.0 or (healthy_median and idle_cpu))
+            and (cpu is None or float(cpu) < 90.0)
+        )
         exit_pressure = p95 < 1200.0 and (cpu is None or cpu < 80.0)
         exit_warm = p95 < 500.0 and (cpu is None or cpu < 65.0)
 

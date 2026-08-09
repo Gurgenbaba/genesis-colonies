@@ -292,6 +292,51 @@ def test_spike_ring_captures_slow_only():
     assert len(snap["spikes"]) == 1
 
 
+def test_spike_ring_ignores_debug_zero_threshold(monkeypatch):
+    """GC_REQUEST_PERF_SLOW_MS=0 must not flood spikes with healthy polls."""
+    monkeypatch.setenv("GC_REQUEST_PERF_SLOW_MS", "0")
+    monkeypatch.delenv("GC_PERF_SLOW_MS", raising=False)
+    from game.perf_intel import PerfIntelStore, RequestSample, classify_slow, get_spike_request_ms
+
+    assert get_spike_request_ms() >= 500.0
+    assert classify_slow(80.0) == ""
+    assert classify_slow(800.0) == "slow"
+
+    store = PerfIntelStore(spike_max=16)
+    now = time.time()
+    # Simulate a buggy caller that still set slow_class while total is fast
+    store.record(
+        RequestSample(
+            ts=now,
+            method="GET",
+            route="api_chat_messages",
+            path="/api/chat/messages",
+            status=200,
+            total_ms=45.0,
+            error=False,
+            phases={"db_connection_ms": 3.0},
+            slow_class="slow",
+        )
+    )
+    assert store.recent_spikes() == []
+    store.record(
+        RequestSample(
+            ts=now + 1,
+            method="GET",
+            route="api_game_state",
+            path="/api/game-state",
+            status=200,
+            total_ms=1800.0,
+            error=False,
+            phases={"live_context_ms": 900.0, "payload_panel_ms": 400.0},
+            slow_class="very_slow",
+        )
+    )
+    spikes = store.recent_spikes()
+    assert len(spikes) == 1
+    assert spikes[0]["route"] == "api_game_state"
+
+
 def test_pressure_ignores_sparse_traffic():
     from game.perf_intel import PerfIntelStore, RequestSample
 

@@ -51,13 +51,14 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 
 `payload_ms` is a **parent envelope** (like `handler_ms`) — hotspots/diagnosis prefer children.
 
-**Spike ring:** last ~48 slow requests (`≥ GC_PERF_SLOW_MS`) as `spikes[]` on admin API + **LETZTE SPIKES** UI (route + top costs + SQL). No always-on full tracing.
+**Spike ring:** last ~48 slow requests (`≥ max(GC_PERF_SLOW_MS, 500)` — debug `=0` does **not** flood spikes) as `spikes[]` on admin API + **LETZTE SPIKES** UI (route + top costs + SQL). No always-on full tracing.
 
 ### GC-PERF-AUTO-007B — Evidence-driven cut (partial)
 
 - Removed double-count: `_load_page_live_context` no longer records `page_context_ms` for live-refresh wall time (was twin of `live_context_ms`).
 - True `page_context.*` only on Overview/Shipyard/Fleet builders.
-- Further payload trims only after spike samples show a stable child hotspot (N≥20).
+- **Live-safe:** `build_overview_status` / overview rows only when `include_panel` (diet + action_slim used to build then strip).
+- Further live_context trims only after spike samples show a stable child hotspot (N≥20).
 
 ### GC-PERF-FEEL-001 — Shell background weight
 
@@ -116,6 +117,8 @@ GET /api/game-state
 ### Diet strip (`apply_lightweight_game_state_diet`)
 
 Drops (among others): `player_stats`, `building_queue`, `research_queue`, `buildings`, `codex`, `imperial_directives` body, `planet_relocation`, heavy fleet rows. Keeps HUD resources, slim queues, fleets, score, nav badges.
+
+**Battle Pass on diet:** `include_tracks=False` (no `levels` catalog) — claimable_count/ops stay for nav badge + toast. Full tracks on `include_panel` / action payloads / premium SSR.
 
 ---
 
