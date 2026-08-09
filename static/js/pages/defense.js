@@ -415,6 +415,9 @@
           } else if (!buildRes.state) {
             await refreshDefenseState(page);
           }
+          if (buildRes.state && typeof GC.finalizeTimekeeperQueueButtons === "function") {
+            GC.finalizeTimekeeperQueueButtons(GC.lastState || buildRes.state);
+          }
         } else {
           showNotify(reasonText((buildRes && buildRes.error) || apiError(buildRes)), "error");
         }

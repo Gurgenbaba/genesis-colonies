@@ -3009,10 +3009,12 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     src = _read("static/main.js")
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "_primeActionStateTimekeeper(state)" in apply
+    assert "syncServerClockFromState(state)" in apply
     assert "_finalizeTimekeeperQueueButtons(state)" in apply
     assert "syncMountedQueuePagesFromState(state, reasonStr)" in apply
     assert "resetQueueRenderSignaturesForImmediatePatch()" in apply
     assert "function _finalizeTimekeeperQueueButtons(state)" in src
+    assert "GC.finalizeTimekeeperQueueButtons = _finalizeTimekeeperQueueButtons" in src
     assert "function _refreshDomTimekeeperApplyBtns(serverNowTs)" in src
     assert "function _syncMiniQueueTimekeeperFromState(state)" in src
     assert "function _syncTimekeeperButtonsFromState(state)" in src
@@ -3024,6 +3026,7 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "patchResearchPanel(researchRaw.techs, researchRaw)" in patch_immediate
     assert "function syncMountedQueuePagesFromState(state, reason)" in src
     finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
+    assert "syncServerClockFromState(state)" in finalize
     assert "_syncTimekeeperButtonsFromState(state)" in finalize
     assert "_refreshDomTimekeeperApplyBtns(getTimerServerNow())" in finalize
     assert "_pruneInactiveTimekeeperApplyBtns()" in finalize
@@ -3361,10 +3364,17 @@ def test_production_build_skips_queue_repaint_when_state_present():
     assert 'skipQueue: true' in shipyard
     assert "shipyard_build" in shipyard
     assert "shipyard_cancel" in shipyard
+    assert "GC.finalizeTimekeeperQueueButtons" in shipyard
+    defense = _read("static/js/pages/defense.js")
+    assert "GC.finalizeTimekeeperQueueButtons" in defense
     main = _read("static/main.js")
     assert "skipQueue === true" in main
-    assert 'skipQueue: true' in main
-    assert "defense_build" in main
+    sync_prod = main.split("function syncProductionPanelsAfterGameState(data, reason, activePlanetId)")[1].split(
+        "const _HUD_LAST_STATE_KEYS"
+    )[0]
+    # Enqueue must not force async catalog refresh (wipes ⚡).
+    assert 'reasonStr === "shipyard_build"' not in sync_prod
+    assert 'reasonStr === "defense_build"' not in sync_prod
     collect = main.split("function _collectMiniQueueJobs(queueRaw, domain)")[1].split(
         "function "
     )[0]

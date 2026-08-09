@@ -204,6 +204,10 @@
           } else if (!res.state) {
             await refreshShipyardState(page);
           }
+          // GC-TK-SKIP-QUEUE-001: re-finalize ⚡ after stock paint (skipQueue path).
+          if (res.state && typeof GC.finalizeTimekeeperQueueButtons === "function") {
+            GC.finalizeTimekeeperQueueButtons(GC.lastState || res.state);
+          }
         } else {
           var errKey = (res && res.error) || apiError(res);
           showNotify(reasonText(errKey), "error");

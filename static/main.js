@@ -1738,6 +1738,10 @@
       research_owners: Object.keys(resolveCardJobsByOwner(state.research)).length,
     });
     _primeActionStateTimekeeper(state);
+    // Rem for ⚡ / timers must use action server_time — stale TIME.serverNow hides boost.
+    if (typeof syncServerClockFromState === "function") {
+      syncServerClockFromState(state);
+    }
     // GC-PERF-PLANET-SWITCH-004: late upgrade/queue patches must not fight an in-flight switch
     // (DOM already scoped to the new planet while mutation state is still the old one).
     const actionPlanetId = Number(state.active_planet_id || state.build_queue?.planet_id || 0);
@@ -9650,6 +9654,9 @@
 
   function _finalizeTimekeeperQueueButtons(state) {
     if (!state) return;
+    if (typeof syncServerClockFromState === "function") {
+      syncServerClockFromState(state);
+    }
     _primeActionStateTimekeeper(state);
     _syncTimekeeperButtonsFromState(state);
     _syncActiveMiniQueueTimekeeperButtons();
@@ -9657,6 +9664,8 @@
     _refreshDomTimekeeperApplyBtns(getTimerServerNow());
     patchShellHudTimekeeper(state);
   }
+
+  GC.finalizeTimekeeperQueueButtons = _finalizeTimekeeperQueueButtons;
 
   function _queueJobTimekeeperRemaining(queueJob) {
     if (!queueJob || typeof queueJob !== "object") return 0;
@@ -15352,13 +15361,12 @@
       reasonStr === "timer_done"
       || reasonStr === "queue_timer_zero"
       || reasonStr.endsWith("_finished")
-      || reasonStr === "shipyard_build"
-      || reasonStr === "shipyard_cancel"
-      || reasonStr === "defense_build"
-      || reasonStr === "defense_cancel"
       || reasonStr === "troops_train"
       || reasonStr === "troops_cancel"
       || reasonStr === "timekeeper_apply";
+    // Enqueue/cancel (shipyard_build / defense_build / *_cancel) must NOT force async
+    // catalog refresh — that second paint can wipe Timekeeper ⚡ until hard reload
+    // (GC-TK-SKIP-QUEUE-001). Queue already comes from include_panel state.
     // GC-TK-PANEL-REFRESH-001 / TK-004: queue-only slim slices must not skip
     // catalog refresh when a job finished (locks / stock / afford).
     const syHasCatalog = Boolean(
