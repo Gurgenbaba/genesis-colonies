@@ -57,6 +57,10 @@ _PHASE_ALIASES = {
     "fleets.active": "fleets_active_ms",
     "fleets.slots": "fleets_slots_ms",
     "live.hud_reads": "live_hud_reads_ms",
+    "panel.overview_rows": "panel_overview_rows_ms",
+    "panel.overview_status": "panel_overview_status_ms",
+    "panel.buildings_rows": "panel_buildings_rows_ms",
+    "panel.buildings_delta": "panel_buildings_delta_ms",
 }
 
 _COMPONENT_DISPLAY = {
@@ -72,6 +76,10 @@ _COMPONENT_DISPLAY = {
     "payload_panel_ms": "payload.panel",
     "payload_notifications_ms": "payload.notifications",
     "payload_liveops_ms": "payload.liveops",
+    "panel_overview_rows_ms": "panel.overview_rows",
+    "panel_overview_status_ms": "panel.overview_status",
+    "panel_buildings_rows_ms": "panel.buildings_rows",
+    "panel_buildings_delta_ms": "panel.buildings_delta",
     "fleets_dirty_tick_ms": "fleets.dirty_tick",
     "fleets_alerts_ms": "fleets.alerts",
     "fleets_radar_ms": "fleets.radar",
@@ -101,6 +109,8 @@ _PARENT_PHASE_KEYS = frozenset(
         "live_context_ms",
         # Fleet HUD rebuild wall — prefer fleets.* children
         "payload_fleets_hud_ms",
+        # Full panel wall — prefer panel.* children
+        "payload_panel_ms",
     }
 )
 _PARENT_COMPONENT_NAMES = frozenset(
@@ -111,6 +121,7 @@ _PARENT_COMPONENT_NAMES = frozenset(
         "state_build",
         "live_context",
         "payload.fleets_hud",
+        "payload.panel",
     }
 )
 _SPIKE_RING_MAX = 48
@@ -755,6 +766,11 @@ class PerfIntelStore:
                 recommendation = (
                     f"SSR/live context cost on '{(hot_route or {}).get('route')}' — "
                     "measure which panel/query inside the page load; cold first hit is common."
+                )
+            elif cause.startswith("panel."):
+                recommendation = (
+                    f"Panel section '{cause}' dominates include_panel builds — "
+                    "profile buildings rows vs overview status before trimming."
                 )
             elif cause.startswith("fleets."):
                 recommendation = (

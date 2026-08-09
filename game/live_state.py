@@ -45,6 +45,10 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
         "fleets_active_ms",
         "fleets_slots_ms",
         "live_hud_reads_ms",
+        "panel_overview_rows_ms",
+        "panel_overview_status_ms",
+        "panel_buildings_rows_ms",
+        "panel_buildings_delta_ms",
         "buildings_panel_ms",
         "cards_ms",
         "tech_data_ms",
@@ -1643,12 +1647,19 @@ def apply_action_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
         "building_queue",
         "research_queue",
         "codex",
+        "buildings_panel",
     ):
         payload.pop(key, None)
     overview = payload.get("overview")
     if isinstance(overview, dict):
         overview.pop("status", None)
         overview.pop("rows", None)
+    # Skilltree catalog is SSR / include_panel — action HUD only needs selected class + SP.
+    cmdr = payload.get("commander")
+    if isinstance(cmdr, dict) and "classes" in cmdr:
+        cmdr = dict(cmdr)
+        cmdr.pop("classes", None)
+        payload["commander"] = cmdr
     return payload
 
 
@@ -1869,6 +1880,10 @@ def record_request_perf_phase(name: str, duration_ms: float) -> None:
                 "fleets_active_ms",
                 "fleets_slots_ms",
                 "live_hud_reads_ms",
+                "panel_overview_rows_ms",
+                "panel_overview_status_ms",
+                "panel_buildings_rows_ms",
+                "panel_buildings_delta_ms",
                 "live_context_ms",
                 "page_context_ms",
                 "page_context_overview_ms",

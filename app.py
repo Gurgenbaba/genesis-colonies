@@ -5110,12 +5110,12 @@ def api_vote_rewards_claim():
     except Exception:
         rollback(conn)
         logger.exception("vote reward claim failed user_id=%s reward_id=%s", user_id, reward_id)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim")
+        state = _hud_only_game_state("api_vote_rewards_claim")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim")
+    state = _hud_only_game_state("api_vote_rewards_claim")
     vote_center: Dict[str, Any] = {}
     conn2 = db()
     try:
@@ -5163,12 +5163,12 @@ def api_vote_rewards_claim_all():
     except Exception:
         rollback(conn)
         logger.exception("vote reward claim-all failed user_id=%s", user_id)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim_all")
+        state = _hud_only_game_state("api_vote_rewards_claim_all")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim_all")
+    state = _hud_only_game_state("api_vote_rewards_claim_all")
     vote_center: Dict[str, Any] = {}
     conn2 = db()
     try:
@@ -5253,13 +5253,13 @@ def api_galactic_politics_vote():
         conn.commit()
     except Exception:
         logger.exception("galactic directive vote failed user_id=%s galaxy=%s", user_id, galaxy)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_vote")
+        state = _hud_only_game_state("api_galactic_politics_vote")
         return jsonify({"ok": False, "reason": "vote_failed", "state": state}), 500
     finally:
         conn.close()
 
     ok = bool(result.get("ok"))
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_vote")
+    state = _hud_only_game_state("api_galactic_politics_vote")
     conn2 = db()
     try:
         politics = get_galactic_politics_state(user_id, conn=conn2)
@@ -5309,13 +5309,13 @@ def api_galactic_politics_bloc():
         conn.commit()
     except Exception:
         logger.exception("galactic politics bloc failed user_id=%s galaxy=%s", user_id, galaxy)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_bloc")
+        state = _hud_only_game_state("api_galactic_politics_bloc")
         return jsonify({"ok": False, "reason": "bloc_failed", "state": state}), 500
     finally:
         conn.close()
 
     ok = bool(result.get("ok"))
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_bloc")
+    state = _hud_only_game_state("api_galactic_politics_bloc")
     conn2 = db()
     try:
         politics = get_galactic_politics_state(user_id, conn=conn2)
@@ -5358,13 +5358,13 @@ def api_galactic_politics_resolution_propose():
         conn.commit()
     except Exception:
         logger.exception("galactic resolution propose failed user_id=%s", user_id)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_propose")
+        state = _hud_only_game_state("api_galactic_politics_res_propose")
         return jsonify({"ok": False, "reason": "propose_failed", "state": state}), 500
     finally:
         conn.close()
 
     ok = bool(result.get("ok"))
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_propose")
+    state = _hud_only_game_state("api_galactic_politics_res_propose")
     conn2 = db()
     try:
         politics = get_galactic_politics_state(user_id, conn=conn2)
@@ -5412,13 +5412,13 @@ def api_galactic_politics_resolution_vote():
         conn.commit()
     except Exception:
         logger.exception("galactic resolution vote failed user_id=%s", user_id)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_vote")
+        state = _hud_only_game_state("api_galactic_politics_res_vote")
         return jsonify({"ok": False, "reason": "vote_failed", "state": state}), 500
     finally:
         conn.close()
 
     ok = bool(result.get("ok"))
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_vote")
+    state = _hud_only_game_state("api_galactic_politics_res_vote")
     conn2 = db()
     try:
         politics = get_galactic_politics_state(user_id, conn=conn2)
@@ -5663,16 +5663,12 @@ def api_login_rewards_claim():
     except Exception:
         rollback(conn)
         logger.exception("login reward claim failed user_id=%s", user_id)
-        state, _ = _build_game_state_payload(
-            include_panel=True, finish_source="api_login_rewards_claim"
-        )
+        state = _hud_only_game_state("api_login_rewards_claim")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(
-        include_panel=True, finish_source="api_login_rewards_claim"
-    )
+    state = _hud_only_game_state("api_login_rewards_claim")
     conn2 = db()
     try:
         login_rewards = (
@@ -5772,16 +5768,12 @@ def api_battle_pass_claim():
             level,
             track,
         )
-        state, _ = _build_game_state_payload(
-            include_panel=True, finish_source="api_battle_pass_claim"
-        )
+        state = _hud_only_game_state("api_battle_pass_claim")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(
-        include_panel=True, finish_source="api_battle_pass_claim"
-    )
+    state = _hud_only_game_state("api_battle_pass_claim")
     conn2 = db()
     try:
         battle_pass = (
@@ -5843,16 +5835,12 @@ def api_battle_pass_claim_op():
             user_id,
             op_key,
         )
-        state, _ = _build_game_state_payload(
-            include_panel=True, finish_source="api_battle_pass_claim_op"
-        )
+        state = _hud_only_game_state("api_battle_pass_claim_op")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(
-        include_panel=True, finish_source="api_battle_pass_claim_op"
-    )
+    state = _hud_only_game_state("api_battle_pass_claim_op")
     conn2 = db()
     try:
         battle_pass = (
@@ -6780,12 +6768,12 @@ def api_referrals_apply():
     except Exception:
         rollback(conn)
         logger.exception("referral apply failed user_id=%s", user_id)
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_apply")
+        state = _hud_only_game_state("api_referrals_apply")
         return jsonify({"ok": False, "reason": "server_error", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_apply")
+    state = _hud_only_game_state("api_referrals_apply")
     base = request.url_root.rstrip("/") + url_for("register")
     conn2 = db()
     try:
@@ -6843,12 +6831,12 @@ def api_referrals_claim():
             reward_scope,
             reward_key,
         )
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_claim")
+        state = _hud_only_game_state("api_referrals_claim")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_claim")
+    state = _hud_only_game_state("api_referrals_claim")
     base = request.url_root.rstrip("/") + url_for("register")
     conn2 = db()
     try:
@@ -10468,37 +10456,41 @@ def _payload_from_live_context(
             from game.buildings import get_buildings_panel_rows
             from game.overview_page import build_overview_status
 
-            payload["overview"]["rows"] = get_overview_building_rows(
-                planet, buildings, build_queue=build_queue
-            )
-            payload["overview"]["status"] = build_overview_status(
-                user_id=user_id,
-                player_view=player_view,
-                ratio=float(ratio),
-                energy_total=int(energy_total),
-                energy_used=int(energy_used),
-                storage_caps=storage_caps,
-                prod_per_hour=prod_per_hour,
-                build_queue=build_queue,
-                research=research,
-                planet=planet,
-                include_log=False,
-                conn=conn,
-            )
-            payload["buildings_panel"] = get_buildings_panel_rows(
-                planet,
-                buildings,
-                build_queue=build_queue,
-            )
+            with perf_span("panel.overview_rows"):
+                payload["overview"]["rows"] = get_overview_building_rows(
+                    planet, buildings, build_queue=build_queue
+                )
+            with perf_span("panel.overview_status"):
+                payload["overview"]["status"] = build_overview_status(
+                    user_id=user_id,
+                    player_view=player_view,
+                    ratio=float(ratio),
+                    energy_total=int(energy_total),
+                    energy_used=int(energy_used),
+                    storage_caps=storage_caps,
+                    prod_per_hour=prod_per_hour,
+                    build_queue=build_queue,
+                    research=research,
+                    planet=planet,
+                    include_log=False,
+                    conn=conn,
+                )
+            with perf_span("panel.buildings_rows"):
+                payload["buildings_panel"] = get_buildings_panel_rows(
+                    planet,
+                    buildings,
+                    build_queue=build_queue,
+                )
         if panel_delta_keys:
             from game.buildings import get_buildings_panel_delta
 
-            payload["buildings_panel_delta"] = get_buildings_panel_delta(
-                planet,
-                buildings,
-                build_queue=build_queue,
-                building_keys=panel_delta_keys,
-            )
+            with perf_span("panel.buildings_delta"):
+                payload["buildings_panel_delta"] = get_buildings_panel_delta(
+                    planet,
+                    buildings,
+                    build_queue=build_queue,
+                    building_keys=panel_delta_keys,
+                )
 
     active_planet_id = int(planet.get("id") or 0)
     payload["active_planet_id"] = active_planet_id
@@ -11127,7 +11119,29 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_fleet_send",
         "api_fleet_recall",
         "api_timekeeper_apply",
+        # Meta/reward HUD actions — no buildings/research catalog needed
+        "api_login_rewards_claim",
+        "api_battle_pass_claim",
+        "api_battle_pass_claim_op",
+        "api_vote_rewards_claim",
+        "api_vote_rewards_claim_all",
+        "api_galactic_politics_vote",
+        "api_galactic_politics_bloc",
+        "api_galactic_politics_res_propose",
+        "api_galactic_politics_res_vote",
+        "api_referrals_apply",
+        "api_referrals_claim",
     )
+
+
+def _hud_only_game_state(finish_source: str) -> dict:
+    """GC-PERF: meta/reward mutations — HUD + queues, skip full panel catalog."""
+    state, _ = _build_game_state_payload(
+        include_panel=False,
+        finish_source=str(finish_source or "action"),
+        action_slim=True,
+    )
+    return state if isinstance(state, dict) else {}
 
 
 def _fleet_mutation_game_state(finish_source: str) -> dict:

@@ -508,10 +508,12 @@ def test_payload_child_span_aliases():
     assert resolve_phase_name("page_context.overview") == "page_context_overview_ms"
     assert resolve_phase_name("fleets.radar") == "fleets_radar_ms"
     assert resolve_phase_name("live.hud_reads") == "live_hud_reads_ms"
+    assert resolve_phase_name("panel.buildings_rows") == "panel_buildings_rows_ms"
     assert "payload_fleets_hud_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "page_context_overview_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "fleets_radar_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "live_hud_reads_ms" in _REQUEST_PERF_PHASE_KEYS
+    assert "panel_buildings_rows_ms" in _REQUEST_PERF_PHASE_KEYS
 
 
 def test_admin_spikes_ui_contract():
@@ -523,6 +525,24 @@ def test_admin_spikes_ui_contract():
     assert 'perf_span("page_context.overview")' in _read("app.py")
     assert 'perf_span("fleets.radar")' in _read("game/live_state.py")
     assert 'perf_span("live.hud_reads")' in _read("app.py") or '_live_perf_span("live.hud_reads")' in _read("app.py")
+    assert 'perf_span("panel.buildings_rows")' in _read("app.py")
+
+
+def test_meta_reward_actions_use_hud_only_state():
+    src = _read("app.py")
+    diet = src.split("def _uses_action_state_diet(finish_source: str)")[1].split(
+        "def _hud_only_game_state"
+    )[0]
+    for key in (
+        "api_login_rewards_claim",
+        "api_battle_pass_claim",
+        "api_vote_rewards_claim",
+        "api_referrals_claim",
+        "api_galactic_politics_vote",
+    ):
+        assert f'"{key}"' in diet
+        assert f'_hud_only_game_state("{key}")' in src
+        assert f'include_panel=True, finish_source="{key}"' not in src
 
 
 def test_poll_jitter_contract_in_main_js():
