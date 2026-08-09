@@ -814,6 +814,7 @@ def global_queue_hud_for_game_state(
             user_id=int(user_id),
             buildings=bld,
             skip_finish=True,
+            include_techs=False,
             conn=conn,
         )
     hud_jobs.extend(_head_card_jobs(map_research_queue_to_card_jobs(research_status, now=now)))
@@ -1393,6 +1394,7 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
             user_id=uid,
             buildings=buildings,
             skip_finish=True,
+            include_techs=False,
             conn=conn,
         )
         fleets: Dict[str, Any] = {}

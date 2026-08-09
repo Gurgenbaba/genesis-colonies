@@ -60,7 +60,9 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 - **Live-safe:** `build_overview_status` / overview rows only when `include_panel` (diet + action_slim used to build then strip).
 - `live_context_ms` + `payload_fleets_hud_ms` are **parent envelopes** (like `payload_ms`) — diagnosis prefers children.
 - Child spans: `live.hud_reads`, `fleets.dirty_tick` / `.alerts` / `.radar` / `.active` / `.slots`.
-- Further live_context trims only after spike samples show a stable child hotspot (N≥20).
+- **Live cut (evidence):** diet / probe / non-research pages use `get_research_status(include_techs=False)` — queue HUD only; full catalog stays on `/research`, techtree, `include_panel`.
+- Idle poll + persist-only paths call `mark_request_live_refreshed()` so HUD `skip_finish=True` actually skips finish.
+- Further cuts only after spike samples show the next child hotspot (N≥20).
 
 ### GC-PERF-FEEL-001 — Shell background weight
 

@@ -384,6 +384,48 @@ def test_api_game_state_include_panel_has_full_research_catalog(game_client):
     assert len(research["techs"]) > 0
 
 
+def test_research_status_include_techs_false_skips_catalog(game_client):
+    """GC-PERF: HUD/diet path must not build the full tech catalog server-side."""
+    from game.research import RESEARCH_TECHS, get_research_status
+
+    _client, pid = game_client
+    conn = db()
+    try:
+        slim = get_research_status(
+            int(pid), skip_finish=True, include_techs=False, conn=conn
+        )
+        full = get_research_status(
+            int(pid), skip_finish=True, include_techs=True, conn=conn
+        )
+    finally:
+        conn.close()
+
+    assert "techs" not in slim
+    assert "queue" in slim and "summary" in slim
+    assert isinstance(full.get("techs"), list)
+    assert len(full["techs"]) == len(RESEARCH_TECHS)
+
+
+def test_idle_poll_marks_refreshed_so_hud_skip_finish_sticks(game_client):
+    """Idle diet poll must mark live-refreshed so coerce_skip_finish honors skip."""
+    from flask import Flask
+
+    from game.live_state import coerce_skip_finish, request_live_state_already_refreshed
+    from game.logic import read_player_live_state_for_poll
+
+    _client, pid = game_client
+    app = Flask("idle_poll_mark")
+    conn = db()
+    try:
+        with app.test_request_context("/api/game-state"):
+            assert request_live_state_already_refreshed() is False
+            read_player_live_state_for_poll(int(pid), conn=conn)
+            assert request_live_state_already_refreshed() is True
+            assert coerce_skip_finish(True) is True
+    finally:
+        conn.close()
+
+
 def test_api_game_state_include_panel_has_heavy_hud_slices(game_client):
     """GC-740B: panel polls include fleet HUD, global queue HUD, and overview rows."""
     client, _pid = game_client

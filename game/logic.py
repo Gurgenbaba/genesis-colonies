@@ -243,6 +243,11 @@ def read_player_live_state_for_poll(
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                     _read_player_live_state_no_writes(uid, conn, player, planet)
                 )
+                # Idle poll already proved no due work — let HUD skip_finish stick
+                # (coerce_skip_finish ignores the kwarg until refreshed).
+                from .live_state import mark_request_live_refreshed
+
+                mark_request_live_refreshed()
                 return player_view, buildings, ratio, energy_total, energy_used, storage_caps
 
             player_view = dict(player)
@@ -251,6 +256,12 @@ def read_player_live_state_for_poll(
             player_view["fuel_cells"] = planet.get("fuel_cells", 0)
             player_view["energy_total"] = int(energy_total)
             player_view["energy_used"] = int(energy_used)
+
+            # Persist-only path (no finish): due check already ran; HUD must not re-finish.
+            if not should_finish:
+                from .live_state import mark_request_live_refreshed
+
+                mark_request_live_refreshed()
 
             return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
 
@@ -648,12 +659,14 @@ def get_research_status(
     buildings: Optional[Dict[str, int]] = None,
     *,
     skip_finish: bool = False,
+    include_techs: bool = True,
     conn=None,
 ) -> dict:
     """
     Wrapper um game.research.get_research_status.
 
     skip_finish=True: Caller hat bereits refresh_player_live_state ausgeführt.
+    include_techs=False: queue HUD only (diet / probe / non-research pages).
     """
     from .live_state import coerce_skip_finish
 
@@ -661,6 +674,7 @@ def get_research_status(
         user_id=int(user_id),
         buildings=buildings,
         skip_finish=coerce_skip_finish(bool(skip_finish)),
+        include_techs=bool(include_techs),
         conn=conn,
     )
 

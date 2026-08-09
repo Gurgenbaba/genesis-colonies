@@ -1292,6 +1292,8 @@ def _load_page_live_context(
             from game.buildings import get_build_queue_status_for_planet
 
             planet = get_request_context_planet(user_id, conn=conn)
+            # Full research catalog only for research SSR / include_panel game-state.
+            include_research_techs = bool(include_panel) or src in ("research", "techtree")
 
             with _live_perf_span("live.hud_reads"):
                 build_queue = get_build_queue_status_for_planet(
@@ -1303,6 +1305,7 @@ def _load_page_live_context(
                     user_id=user_id,
                     buildings=buildings,
                     skip_finish=True,
+                    include_techs=include_research_techs,
                     conn=conn,
                 )
                 prod_per_hour = get_building_production_per_hour(
@@ -1353,10 +1356,12 @@ def _load_page_live_context(
                 conn=conn,
                 skip_finish=True,
             )
+            include_research_techs = bool(include_panel) or src in ("research", "techtree")
             research = get_research_status(
                 user_id=user_id,
                 buildings=buildings,
                 skip_finish=True,
+                include_techs=include_research_techs,
                 conn=conn,
             )
             prod_per_hour = get_building_production_per_hour(

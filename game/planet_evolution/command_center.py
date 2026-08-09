@@ -590,7 +590,9 @@ def _build_colony_status_block(
         resource_planet = _research_resource_planet(uid, conn)
         research_applies = int(resource_planet["id"]) == pid
         if research_applies:
-            research = get_research_status(uid, conn=conn, skip_finish=True)
+            research = get_research_status(
+                uid, conn=conn, skip_finish=True, include_techs=False
+            )
     except Exception:
         pass
     rs_summary = research.get("summary") if isinstance(research.get("summary"), dict) else {}

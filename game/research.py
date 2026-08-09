@@ -1252,6 +1252,7 @@ def get_research_status(
     buildings: Optional[Dict[str, int]] = None,
     *,
     skip_finish: bool = False,
+    include_techs: bool = True,
     conn=None,
 ) -> dict:
     uid = int(user_id)
@@ -1378,74 +1379,78 @@ def get_research_status(
     queue_free_slots = max(0, research_queue_limit - len(queue_list))
 
     techs: List[Dict[str, Any]] = []
-    for tech, cfg in RESEARCH_TECHS.items():
-        curr = int(levels.get(tech, 0) or 0)
-        q_count = int(queue_keys.get(tech, 0) or 0)
-        targ = curr + q_count + 1
+    # Diet/HUD/probe: queue timers only — full catalog is SSR / include_panel (GC-PERF live).
+    if include_techs:
+        for tech, cfg in RESEARCH_TECHS.items():
+            curr = int(levels.get(tech, 0) or 0)
+            q_count = int(queue_keys.get(tech, 0) or 0)
+            targ = curr + q_count + 1
 
-        cost_m, cost_c = get_research_cost(tech, targ)
-        t_sec = get_research_time(tech, targ, user_id=int(user_id), buildings=buildings)
+            cost_m, cost_c = get_research_cost(tech, targ)
+            t_sec = get_research_time(tech, targ, user_id=int(user_id), buildings=buildings)
 
-        req = cfg.get("requirements") or {}
-        req_met = _check_requirements(req, buildings, levels)
-        can_afford = planet_metal >= float(cost_m) and planet_crystal >= float(cost_c)
-        max_queue_preview: Dict[str, Any] = {"jobs": 0}
-        if req_met:
-            max_queue_preview = summarize_max_queueable_research_jobs(
-                tech,
-                current_level=curr,
-                queued_same=q_count,
-                metal=planet_metal,
-                crystal=planet_crystal,
-                queue_free_slots=queue_free_slots,
-                user_id=int(user_id),
-                buildings=buildings,
-            )
+            req = cfg.get("requirements") or {}
+            req_met = _check_requirements(req, buildings, levels)
+            can_afford = planet_metal >= float(cost_m) and planet_crystal >= float(cost_c)
+            max_queue_preview: Dict[str, Any] = {"jobs": 0}
+            if req_met:
+                max_queue_preview = summarize_max_queueable_research_jobs(
+                    tech,
+                    current_level=curr,
+                    queued_same=q_count,
+                    metal=planet_metal,
+                    crystal=planet_crystal,
+                    queue_free_slots=queue_free_slots,
+                    user_id=int(user_id),
+                    buildings=buildings,
+                )
 
-        is_active = bool(active and str(active.get("tech_key")) == tech)
-        in_queue = q_count > 0
+            is_active = bool(active and str(active.get("tech_key")) == tech)
+            in_queue = q_count > 0
 
-        effect_preview = get_research_effect_preview(tech, curr, targ)
+            effect_preview = get_research_effect_preview(tech, curr, targ)
 
-        techs.append({
-            "key": tech,
-            "label": cfg.get("label", tech),
-            "label_key": cfg.get("label_key"),
-            "description": cfg.get("description", ""),
-            "description_key": cfg.get("description_key"),
-            "category": cfg.get("category", ""),
-            "level": curr,
-            "target_level": targ,
-            "cost_metal": int(cost_m),
-            "cost_crystal": int(cost_c),
-            "time_seconds": int(t_sec),
-            "requirements_met": bool(req_met),
-            "can_afford": bool(can_afford),
-            "max_queueable": int(max_queue_preview.get("jobs") or 0),
-            "max_queue_preview": max_queue_preview,
-            "requirements_items": get_research_requirements_items(tech, buildings, levels),
-            "resource_items": [
-                {
-                    "kind": "resource",
-                    "key": "metal",
-                    "need": int(cost_m),
-                    "have": int(planet_metal),
-                    "met": planet_metal >= float(cost_m),
-                },
-                {
-                    "kind": "resource",
-                    "key": "crystal",
-                    "need": int(cost_c),
-                    "have": int(planet_crystal),
-                    "met": planet_crystal >= float(cost_c),
-                },
-            ],
-            "icon": cfg.get("icon"),
-            "queue_count": q_count,
-            "is_active": is_active,
-            "in_queue": in_queue,
-            **effect_preview,
-        })
+            techs.append({
+                "key": tech,
+                "label": cfg.get("label", tech),
+                "label_key": cfg.get("label_key"),
+                "description": cfg.get("description", ""),
+                "description_key": cfg.get("description_key"),
+                "category": cfg.get("category", ""),
+                "level": curr,
+                "target_level": targ,
+                "cost_metal": int(cost_m),
+                "cost_crystal": int(cost_c),
+                "time_seconds": int(t_sec),
+                "requirements_met": bool(req_met),
+                "can_afford": bool(can_afford),
+                "max_queueable": int(max_queue_preview.get("jobs") or 0),
+                "max_queue_preview": max_queue_preview,
+                "requirements_items": get_research_requirements_items(tech, buildings, levels),
+                "resource_items": [
+                    {
+                        "kind": "resource",
+                        "key": "metal",
+                        "need": int(cost_m),
+                        "have": int(planet_metal),
+                        "met": planet_metal >= float(cost_m),
+                    },
+                    {
+                        "kind": "resource",
+                        "key": "crystal",
+                        "need": int(cost_c),
+                        "have": int(planet_crystal),
+                        "met": planet_crystal >= float(cost_c),
+                    },
+                ],
+                "icon": cfg.get("icon"),
+                "queue_count": q_count,
+                "is_active": is_active,
+                "in_queue": in_queue,
+                **effect_preview,
+            })
+
+        _attach_queue_jobs_to_research_techs(techs, queue_list)
 
     summary = {
         "count": len(queue_list),
@@ -1453,8 +1458,6 @@ def get_research_status(
         "has_queue": bool(queue_list),
         "first_finish_in": int(queue_list[0]["remaining"]) if queue_list else 0,
     }
-
-    _attach_queue_jobs_to_research_techs(techs, queue_list)
 
     from .queue_card import (
         group_card_jobs_by_owner_key,
@@ -1465,17 +1468,19 @@ def get_research_status(
     card_jobs = map_research_queue_to_card_jobs({"queue": queue_list}, now=now)
     card_jobs_by_owner = group_card_jobs_by_owner_key(card_jobs)
 
-    return {
+    out: Dict[str, Any] = {
         "active": active,
         "queue": queue_list,
         "summary": summary,
-        "techs": techs,
         "lab_level": lab_level,
         "card_jobs_by_owner": card_jobs_by_owner,
         "mini_queue_jobs": map_card_jobs_to_mini_queue_jobs(
             card_jobs, domain="research", now=now
         ),
     }
+    if include_techs:
+        out["techs"] = techs
+    return out
 
 
 def _research_technical_level_row(
