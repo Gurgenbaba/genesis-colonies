@@ -20541,36 +20541,81 @@
   function initBattlePassTrackboard(page) {
     const board = page.querySelector("[data-bp-trackboard]");
     if (!board) return;
+    // GC-BP-TRACK-NAV-001: idempotent — PJAX re-init must not stack prev/next handlers
+    // (stacked listeners skip pages / hang at the last page).
+    if (typeof board._gcBpTrackCleanup === "function") {
+      try {
+        board._gcBpTrackCleanup();
+      } catch (_) {}
+      board._gcBpTrackCleanup = null;
+    }
+
     const tiers = Array.from(board.querySelectorAll("[data-bp-tier]"));
     if (!tiers.length) return;
 
-    const pageSize = Math.max(1, Number(board.getAttribute("data-page-size") || 6) || 6);
     const playerLevel = Math.max(
       1,
       Number(board.getAttribute("data-player-level") || 1) || 1
     );
-    const pageCount = Math.max(1, Math.ceil(tiers.length / pageSize));
-    let pageIndex = 0;
-
+    const viewport = board.querySelector("[data-bp-viewport]");
     const prevBtn = board.querySelector("[data-bp-page-prev]");
     const nextBtn = board.querySelector("[data-bp-page-next]");
     const labelEl = page.querySelector("[data-bp-page-label]");
     const jumpBtn = page.querySelector("[data-bp-jump-current]");
     const previewEmpty = page.querySelector("[data-bp-preview-empty]");
     const previewBody = page.querySelector("[data-bp-preview-body]");
+    const configured = Math.max(1, Number(board.getAttribute("data-page-size") || 3) || 3);
+
+    let pageSize = configured;
+    let pageCount = 1;
+    let pageIndex = 0;
+    let navLock = false;
+
+    function resolvePageSize() {
+      const fallback = configured;
+      if (!viewport) return fallback;
+      const styles = window.getComputedStyle(viewport);
+      const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+      const sample = tiers.find((tier) => !tier.hasAttribute("hidden")) || tiers[0];
+      let tierWidth = 0;
+      if (sample) {
+        const prevHidden = sample.hasAttribute("hidden");
+        if (prevHidden) sample.removeAttribute("hidden");
+        tierWidth = sample.getBoundingClientRect().width;
+        if (prevHidden) sample.setAttribute("hidden", "");
+      }
+      if (!(tierWidth > 8)) tierWidth = 88; // ~5.5rem CSS min-width
+      const width = viewport.clientWidth || 0;
+      if (!(width > 40)) return fallback;
+      const fit = Math.floor((width + gap) / (tierWidth + gap));
+      return Math.max(1, Math.min(6, fit || fallback));
+    }
+
+    function syncPagingMetrics() {
+      pageSize = resolvePageSize();
+      board.setAttribute("data-page-size", String(pageSize));
+      pageCount = Math.max(1, Math.ceil(tiers.length / pageSize));
+      if (pageIndex > pageCount - 1) pageIndex = pageCount - 1;
+      if (pageIndex < 0) pageIndex = 0;
+    }
 
     function pageForLevel(level) {
       const idx = tiers.findIndex((el) => Number(el.getAttribute("data-bp-level") || 0) === level);
       if (idx < 0) return 0;
-      return Math.floor(idx / pageSize);
+      return Math.min(pageCount - 1, Math.floor(idx / pageSize));
+    }
+
+    function visibleTiers() {
+      const start = pageIndex * pageSize;
+      return tiers.slice(start, start + pageSize);
     }
 
     function renderPage() {
+      syncPagingMetrics();
       const start = pageIndex * pageSize;
       const end = start + pageSize;
       tiers.forEach((tier, i) => {
-        const show = i >= start && i < end;
-        if (show) tier.removeAttribute("hidden");
+        if (i >= start && i < end) tier.removeAttribute("hidden");
         else tier.setAttribute("hidden", "");
       });
       if (labelEl) {
@@ -20579,8 +20624,15 @@
           .replace("{n}", String(pageIndex + 1))
           .replace("{m}", String(pageCount));
       }
-      if (prevBtn) prevBtn.disabled = pageIndex <= 0;
-      if (nextBtn) nextBtn.disabled = pageIndex >= pageCount - 1;
+      if (prevBtn) {
+        prevBtn.disabled = pageIndex <= 0;
+        prevBtn.setAttribute("aria-disabled", pageIndex <= 0 ? "true" : "false");
+      }
+      if (nextBtn) {
+        const atEnd = pageIndex >= pageCount - 1;
+        nextBtn.disabled = atEnd;
+        nextBtn.setAttribute("aria-disabled", atEnd ? "true" : "false");
+      }
     }
 
     function clearSelection() {
@@ -20613,26 +20665,51 @@
     }
 
     function pickDefaultCard() {
-      const claimable = board.querySelector("[data-bp-card].is-claimable");
-      if (claimable) return claimable;
+      const claimableVisible = visibleTiers()
+        .map((tier) => tier.querySelector("[data-bp-card].is-claimable"))
+        .find(Boolean);
+      if (claimableVisible) return claimableVisible;
       const currentTier = tiers.find(
         (el) => Number(el.getAttribute("data-bp-level") || 0) === playerLevel
       );
-      if (currentTier) {
+      if (currentTier && !currentTier.hasAttribute("hidden")) {
         const free = currentTier.querySelector('[data-bp-card][data-bp-track="free"]');
         if (free) return free;
+      }
+      const firstVisible = visibleTiers()[0];
+      if (firstVisible) {
+        return (
+          firstVisible.querySelector('[data-bp-card][data-bp-track="free"]') ||
+          firstVisible.querySelector("[data-bp-card]")
+        );
       }
       return board.querySelector("[data-bp-card]");
     }
 
+    function goToPage(nextIndex, opts) {
+      if (navLock) return;
+      navLock = true;
+      try {
+        syncPagingMetrics();
+        const clamped = Math.max(0, Math.min(pageCount - 1, Math.floor(Number(nextIndex) || 0)));
+        pageIndex = clamped;
+        renderPage();
+        if (!opts || opts.select !== false) {
+          const card = pickDefaultCard();
+          if (card) selectCard(card, { ensureVisible: false });
+        }
+      } finally {
+        navLock = false;
+      }
+    }
+
     function goToCurrent() {
-      pageIndex = pageForLevel(playerLevel);
-      renderPage();
-      const card = pickDefaultCard();
-      if (card) selectCard(card, { ensureVisible: true });
+      syncPagingMetrics();
+      goToPage(pageForLevel(playerLevel), { select: true });
     }
 
     const onBoardClick = (ev) => {
+      if (ev.target.closest("[data-bp-page-prev], [data-bp-page-next]")) return;
       if (ev.target.closest("[data-bp-claim]")) return;
       const card = ev.target.closest("[data-bp-card]");
       if (!card || !board.contains(card)) return;
@@ -20650,55 +20727,80 @@
 
     const onDocKeydown = (ev) => {
       if (!document.getElementById("premium-page")) return;
-      if (ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA")) {
+      if (ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA" || ev.target.isContentEditable)) {
         return;
       }
       if (ev.key === "ArrowLeft") {
         if (pageIndex <= 0) return;
         ev.preventDefault();
-        pageIndex -= 1;
-        renderPage();
+        goToPage(pageIndex - 1);
       } else if (ev.key === "ArrowRight") {
         if (pageIndex >= pageCount - 1) return;
         ev.preventDefault();
-        pageIndex += 1;
-        renderPage();
+        goToPage(pageIndex + 1);
       }
+    };
+
+    const onPrev = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (pageIndex <= 0) return;
+      goToPage(pageIndex - 1);
+    };
+    const onNext = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (pageIndex >= pageCount - 1) return;
+      goToPage(pageIndex + 1);
+    };
+    const onJump = (ev) => {
+      ev.preventDefault();
+      goToCurrent();
+    };
+
+    let resizeTimer = 0;
+    const onResize = () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        const selected = board.querySelector("[data-bp-card].is-selected");
+        const keepLevel = selected
+          ? Number(selected.getAttribute("data-bp-level") || 0)
+          : playerLevel;
+        syncPagingMetrics();
+        pageIndex = pageForLevel(keepLevel || playerLevel);
+        renderPage();
+        if (selected && board.contains(selected)) selectCard(selected, { ensureVisible: true });
+      }, 100);
     };
 
     board.addEventListener("click", onBoardClick);
     board.addEventListener("keydown", onBoardKeydown);
     document.addEventListener("keydown", onDocKeydown);
+    if (prevBtn) prevBtn.addEventListener("click", onPrev);
+    if (nextBtn) nextBtn.addEventListener("click", onNext);
+    if (jumpBtn) jumpBtn.addEventListener("click", onJump);
+    window.addEventListener("resize", onResize);
 
-    if (prevBtn) {
-      prevBtn.addEventListener("click", () => {
-        if (pageIndex <= 0) return;
-        pageIndex -= 1;
-        renderPage();
-      });
-    }
-    if (nextBtn) {
-      nextBtn.addEventListener("click", () => {
-        if (pageIndex >= pageCount - 1) return;
-        pageIndex += 1;
-        renderPage();
-      });
-    }
-    if (jumpBtn) {
-      jumpBtn.addEventListener("click", () => goToCurrent());
-    }
-
+    syncPagingMetrics();
     pageIndex = pageForLevel(playerLevel);
     renderPage();
     const initial = pickDefaultCard();
     if (initial) selectCard(initial, { ensureVisible: true });
 
+    const cleanup = () => {
+      window.clearTimeout(resizeTimer);
+      board.removeEventListener("click", onBoardClick);
+      board.removeEventListener("keydown", onBoardKeydown);
+      document.removeEventListener("keydown", onDocKeydown);
+      if (prevBtn) prevBtn.removeEventListener("click", onPrev);
+      if (nextBtn) nextBtn.removeEventListener("click", onNext);
+      if (jumpBtn) jumpBtn.removeEventListener("click", onJump);
+      window.removeEventListener("resize", onResize);
+      board._gcBpTrackCleanup = null;
+    };
+    board._gcBpTrackCleanup = cleanup;
     if (typeof GC.registerCleanup === "function") {
-      GC.registerCleanup(() => {
-        board.removeEventListener("click", onBoardClick);
-        board.removeEventListener("keydown", onBoardKeydown);
-        document.removeEventListener("keydown", onDocKeydown);
-      });
+      GC.registerCleanup(cleanup);
     }
   }
 

@@ -3424,6 +3424,25 @@ def test_production_build_skips_queue_repaint_when_state_present():
     assert "timekeeper_apply_unavailable" in submit
 
 
+def test_battle_pass_trackboard_nav_is_idempotent():
+    """GC-BP-TRACK-NAV-001: page arrows must not stack listeners or skip past the last page."""
+    src = _read("static/main.js")
+    track = src.split("function initBattlePassTrackboard(page)")[1].split(
+        "function initBattlePass()"
+    )[0]
+    assert "GC-BP-TRACK-NAV-001" in track
+    assert "board._gcBpTrackCleanup" in track
+    assert "function goToPage(nextIndex, opts)" in track
+    assert 'prevBtn.removeEventListener("click", onPrev)' in track
+    assert 'nextBtn.removeEventListener("click", onNext)' in track
+    assert "Math.min(pageCount - 1" in track
+    assert "function resolvePageSize()" in track
+    prem = _read("templates/premium.html")
+    assert 'data-page-size="3"' in prem
+    assert "data-bp-page-prev" in prem
+    assert "data-bp-page-next" in prem
+
+
 def test_app_story_state_api_is_read_only_ensure():
     """Arc/chapter tabbing must not run ensure_player_story (SQLite write hang)."""
     src = _read("app.py")
