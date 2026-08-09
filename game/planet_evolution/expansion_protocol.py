@@ -392,6 +392,39 @@ def can_found_colony(
     return True, ""
 
 
+def build_galaxy_colonize_gate(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    """
+    Galaxy empty-slot colonize CTA status (same gates as fleet colonize).
+
+    Surfaces reason + underleveled colony names so the UI can explain blocks
+    (e.g. colony_maturity_required) instead of a silent no-op.
+    """
+    uid = int(player_id)
+    ok, reason = can_found_colony(uid, conn=conn)
+    _mat_ok, _mat_reason, mat_meta = colony_maturity_gate(uid, conn=conn)
+    under = list(mat_meta.get("underleveled") or [])
+    names = ", ".join(
+        str(row.get("name") or "").strip()
+        for row in under
+        if str(row.get("name") or "").strip()
+    )
+    reason_key = str(reason or "")
+    return {
+        "ok": bool(ok),
+        "reason": reason_key,
+        "reason_key": reason_key,
+        "required_level": int(mat_meta.get("required_level") or COLONY_MATURITY_REQUIRED_LEVEL),
+        "underleveled": under,
+        "underleveled_names": names,
+        "colony_count": int(mat_meta.get("colony_count") or 0),
+        "mature_count": int(mat_meta.get("mature_count") or 0),
+    }
+
+
 def can_found_expansion_world(
     player_id: int,
     *,

@@ -2177,6 +2177,7 @@ def galaxy_view():
     conn = db()
     hold_mission_enabled = False
     has_seed_ark = False
+    galaxy_colonize_gate: dict[str, Any] = {"ok": True, "reason": "", "reason_key": ""}
     planet_relocation: dict[str, Any] = {"active": False, "can_start": False}
     command_map: dict[str, Any] = {"nodes": [], "edges": []}
     galactic_directive_banner: dict[str, Any] = {"visible": False}
@@ -2208,6 +2209,9 @@ def galaxy_view():
 
         hold_mission_enabled = _hold_mission_enabled(conn=conn)
         has_seed_ark = player_has_seed_ark(user_id, conn=conn)
+        from game.planet_evolution.expansion_protocol import build_galaxy_colonize_gate
+
+        galaxy_colonize_gate = build_galaxy_colonize_gate(user_id, conn=conn)
         if active_planet_id and relocation_schema_ready(conn):
             planet_relocation = get_relocation_client_state(
                 int(active_planet_id), conn=conn, now=time.time()
@@ -2259,6 +2263,7 @@ def galaxy_view():
         orbit_radii=galaxy_ring_orbit_radii_payload() if view != "command_map" else None,
         hold_mission_enabled=hold_mission_enabled,
         has_seed_ark=has_seed_ark,
+        galaxy_colonize_gate=galaxy_colonize_gate,
         planet_relocation=planet_relocation,
         galaxy_view=view,
         command_map=command_map,

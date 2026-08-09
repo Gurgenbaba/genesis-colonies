@@ -791,14 +791,17 @@ def test_galaxy_pjax_includes_active_planet_id_for_fleet_origin(galaxy_db, monke
     assert 'data-active-planet-id="0"' not in body
 
 def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch):
+    from conftest import unlock_colony_slots
     from game.db import commit
     from game.fleet import add_planet_ships
+    from game.models import get_homeworld
 
     client, uid = _galaxy_client(monkeypatch)
-    planet = get_planets_by_player(uid)[0]
     conn = db()
     try:
-        add_planet_ships(int(planet["id"]), uid, {"seed_ark": 1}, conn=conn)
+        hw = get_homeworld(player_id=uid, conn=conn)
+        unlock_colony_slots(conn, int(hw["id"]), slots=1)
+        add_planet_ships(int(hw["id"]), uid, {"seed_ark": 1}, conn=conn)
         commit(conn)
     finally:
         conn.close()
@@ -807,9 +810,51 @@ def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch)
     body = resp.get_data(as_text=True)
     assert "mission=colonize" in body
     assert "galaxy-fleet-action--colonize" in body
+    assert "galaxy-fleet-action--colonize-blocked" not in body
     assert "target_galaxy=1" in body
     assert "target_system=499" in body
     assert "galaxy-fleet-expansion-cta" not in body
+
+
+def test_galaxy_colonize_shows_maturity_block_message(galaxy_db, monkeypatch):
+    """Empty-slot colonize CTA must explain PE maturity gate (not a silent no-op)."""
+    from conftest import unlock_colony_slots
+    from game.db import commit
+    from game.fleet import add_planet_ships
+    from game.models import get_homeworld
+    from game.planet_evolution.expansion_protocol import build_galaxy_colonize_gate
+
+    client, uid = _galaxy_client(monkeypatch)
+    conn = db()
+    try:
+        hw = get_homeworld(player_id=uid, conn=conn)
+        unlock_colony_slots(conn, int(hw["id"]), slots=2)
+        conn.execute(
+            """
+            INSERT INTO planets (
+                player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update
+            )
+            VALUES (?, 'YoungColony', 1, 50, 3, 0, 5, ?);
+            """,
+            (uid, time.time()),
+        )
+        add_planet_ships(int(hw["id"]), uid, {"seed_ark": 1}, conn=conn)
+        commit(conn)
+        gate = build_galaxy_colonize_gate(uid, conn=conn)
+        assert gate["ok"] is False
+        assert gate["reason"] == "colony_maturity_required"
+        assert "YoungColony" in (gate.get("underleveled_names") or "")
+    finally:
+        conn.close()
+
+    resp = client.get("/galaxy?view=system&galaxy=1&system=499")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "galaxy-fleet-action--colonize-blocked" in body
+    assert "galaxy-colonize-blocked-hint" in body
+    assert 'data-block-reason="colony_maturity_required"' in body
+    assert "YoungColony" in body
+    assert "mission=colonize" not in body
 
 
 def test_galaxy_expedition_slot_shortcut(galaxy_db, monkeypatch):

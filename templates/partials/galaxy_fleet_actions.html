@@ -102,13 +102,35 @@
     {% endif %}
   {% else %}
   {% set reloc = planet_relocation if planet_relocation is defined else {} %}
+  {% set colonize_gate = galaxy_colonize_gate if galaxy_colonize_gate is defined else {} %}
   {% if has_seed_ark is defined and has_seed_ark %}
+    {% if colonize_gate.get('ok', True) %}
   <a href="{{ base }}&mission=colonize"
      class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--colonize"
      title="{{ T('fleet_mission_colonize') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2C8.1 2 5 5.1 5 9c0 4.5 5.1 10.7 6.3 12.1.4.5 1 0 1.4 0C13.9 19.7 19 13.5 19 9c0-3.9-3.1-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5zM4 20h16v2H4v-2z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_colonize') }}</span>
   </a>
+    {% else %}
+      {% set block_reason = colonize_gate.get('reason') or colonize_gate.get('reason_key') or 'colony_maturity_required' %}
+      {% set block_title = T('fleet_error_' ~ block_reason, T(block_reason, T('colony_maturity_required'))) %}
+  <button type="button"
+     class="galaxy-fleet-action galaxy-fleet-action--colonize galaxy-fleet-action--colonize-blocked"
+     disabled
+     aria-disabled="true"
+     data-galaxy-colonize-blocked
+     data-block-reason="{{ block_reason }}"
+     title="{{ block_title }}">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2C8.1 2 5 5.1 5 9c0 4.5 5.1 10.7 6.3 12.1.4.5 1 0 1.4 0C13.9 19.7 19 13.5 19 9c0-3.9-3.1-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5zM4 20h16v2H4v-2z"/></svg>
+    <span class="galaxy-fleet-action-label">{{ T('fleet_mission_colonize') }}</span>
+  </button>
+  <p class="hint galaxy-colonize-blocked-hint" role="status">
+    {{ block_title }}
+    {% if block_reason == 'colony_maturity_required' and colonize_gate.get('underleveled_names') %}
+      <span class="gc-mono">{{ T('expansion_checklist_colony_maturity_detail', 'Noch unter Entwicklungsstufe %(level)s: %(names)s', level=(colonize_gate.get('required_level') or 30), names=colonize_gate.get('underleveled_names')) }}</span>
+    {% endif %}
+  </p>
+    {% endif %}
   {% elif reloc.get('active') %}
   <p class="hint galaxy-relocation-hint">{{ T('galaxy_relocation_in_progress') }} <span class="gc-mono">{{ reloc.get('target') or '' }}</span></p>
   {% elif reloc.get('can_start') %}
