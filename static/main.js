@@ -32472,9 +32472,12 @@
       const trigger = wrap.querySelector(".gc-hud-select-trigger");
       if (trigger) trigger.setAttribute("aria-expanded", "false");
     });
-    document.querySelectorAll("body > .gc-hud-select-menu.gc-popover-layer").forEach((menu) => {
+    // Orphans after Admin innerHTML swaps — with or without popover-layer class.
+    document.querySelectorAll("body > .gc-hud-select-menu").forEach((menu) => {
       menu.hidden = true;
       menu.style.pointerEvents = "none";
+      menu.style.top = "-9999px";
+      menu.style.left = "-9999px";
       const wrapId = menu.dataset.gcHudSelectWrapId;
       let reparented = false;
       if (wrapId) {
@@ -32492,7 +32495,7 @@
   function releaseShellNavigationBlockers(reason) {
     closeAllHudSelects();
     teardownHudSelectPortals();
-    document.querySelectorAll("body > .gc-hud-select-menu.gc-popover-layer").forEach((menu) => {
+    document.querySelectorAll("body > .gc-hud-select-menu").forEach((menu) => {
       menu.hidden = true;
       menu.style.pointerEvents = "none";
       menu.remove();
@@ -33476,7 +33479,8 @@
 
     document.addEventListener("click", (e) => {
       const groupToggle = e.target.closest(".gc-nav-group-toggle, #gc-nav-trading-parent");
-      let sidebar = groupToggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer");
+      // Prefer shell class; fall back to any .gc-sidebar (Railway/admin must keep toggles live).
+      let sidebar = groupToggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer, .gc-sidebar");
       if (groupToggle && sidebar) {
         e.preventDefault();
         const group = groupToggle.closest("[data-nav-group-key]");
@@ -33486,7 +33490,7 @@
       }
 
       const toggle = e.target.closest(".gc-nav-section-toggle");
-      sidebar = toggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer");
+      sidebar = toggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer, .gc-sidebar");
       if (!toggle || !sidebar) {
         return;
       }
@@ -33496,6 +33500,9 @@
       setNavSectionExpanded(section, !section.classList.contains("is-expanded"), true);
     });
 
+    if (typeof releaseShellNavigationBlockers === "function") {
+      releaseShellNavigationBlockers("sidebar_accordion_init");
+    }
     GC.restoreLeftmenuState(window.location.href);
   }
 

@@ -1010,6 +1010,9 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   width: 100%;
   text-align: left;
   cursor: pointer;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 .gc-nav-section-body,
@@ -33833,11 +33836,13 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .gc-hud-select-menu.gc-popover-layer{
   position: fixed;
-  top: 0;
-  left: 0;
+  /* Park off-screen until positionHudSelectMenu runs — top/left 0 covered the left nav. */
+  top: -9999px;
+  left: -9999px;
   right: auto;
   width: auto;
   max-height: min(240px, calc(100vh - 16px));
+  pointer-events: none;
 }
 .gc-hud-select-menu[hidden]{
   display: none !important;

@@ -56,3 +56,15 @@ def test_gc849_infrastructure_section_toggle_does_not_restore_leftmenu():
 def test_gc849_accordion_bound_once():
     src = _read("static/main.js")
     assert src.count("GC._sidebarSectionAccordionBound = true") == 1
+    accordion = src.split("function initSidebarSectionAccordion()")[1].split(
+        "function initSidebarRightDrawer"
+    )[0]
+    assert ".gc-sidebar-desktop, .gc-sidebar-mobile-drawer, .gc-sidebar" in accordion
+    assert 'releaseShellNavigationBlockers("sidebar_accordion_init")' in accordion
+
+
+def test_hud_select_popover_does_not_default_cover_left_nav():
+    css = _read("static/style.css")
+    block = css.split(".gc-hud-select-menu.gc-popover-layer{")[1].split(".gc-hud-select-item{")[0]
+    assert "top: -9999px" in block
+    assert "pointer-events: none" in block

@@ -78,7 +78,9 @@
     if (!scope || typeof GC.initHudSelects !== "function") return;
     // Portaled menus live on document.body — wrap.querySelector misses them and
     // leaves pointer-events:auto orphans that freeze the shell after Admin.
-    if (typeof GC.teardownHudSelectPortals === "function") {
+    if (typeof GC.releaseShellNavigationBlockers === "function") {
+      GC.releaseShellNavigationBlockers("admin_hud_select_sync");
+    } else if (typeof GC.teardownHudSelectPortals === "function") {
       GC.teardownHudSelectPortals();
     } else if (typeof GC.closeAllHudSelects === "function") {
       GC.closeAllHudSelects();

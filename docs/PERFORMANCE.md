@@ -81,6 +81,8 @@ Spike evidence: `live.hud_reads` ~80–110ms on slow polls (envelope).
 
 Admin keeps the game shell sidebar. HUD sync used to call `restoreLeftmenuState(/admin)` and break Infrastruktur expand/nested clicks (GC-849). Skip sidebar restore + role sync while on `/admin`; stop perf auto-refresh on leave.
 
+**Follow-up GC-INFRA-ADMIN-002:** Orphan `body > .gc-hud-select-menu` (default CSS `top:0;left:0`) blocked left/right nav clicks. Park off-screen + `pointer-events:none` until positioned; teardown removes all body menus; accordion closest falls back to `.gc-sidebar`.
+
 ### GC-PERF-FLEET-HUD-001 — Drawer without mission resolve
 
 Spike evidence: `fleets.active` 70–120ms on slow `/api/game-state` while drawer only needs labels/timers.
