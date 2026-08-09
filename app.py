@@ -1288,26 +1288,28 @@ def _load_page_live_context(
 
             if wrote_live or try_visit:
                 commit(conn)
-            from game.live_state import get_request_context_planet
+            from game.live_state import get_request_context_planet, perf_span as _live_perf_span
             from game.buildings import get_build_queue_status_for_planet
 
             planet = get_request_context_planet(user_id, conn=conn)
-            build_queue = get_build_queue_status_for_planet(
-                int(planet["id"]),
-                conn=conn,
-                skip_finish=True,
-            )
-            research = get_research_status(
-                user_id=user_id,
-                buildings=buildings,
-                skip_finish=True,
-                conn=conn,
-            )
-            prod_per_hour = get_building_production_per_hour(
-                buildings=buildings,
-                ratio=ratio,
-                user_id=user_id,
-            )
+
+            with _live_perf_span("live.hud_reads"):
+                build_queue = get_build_queue_status_for_planet(
+                    int(planet["id"]),
+                    conn=conn,
+                    skip_finish=True,
+                )
+                research = get_research_status(
+                    user_id=user_id,
+                    buildings=buildings,
+                    skip_finish=True,
+                    conn=conn,
+                )
+                prod_per_hour = get_building_production_per_hour(
+                    buildings=buildings,
+                    ratio=ratio,
+                    user_id=user_id,
+                )
             try:
                 from flask import g as _flask_g, has_request_context
 

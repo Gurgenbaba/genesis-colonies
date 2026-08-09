@@ -50,6 +50,13 @@ _PHASE_ALIASES = {
     "page_context.overview": "page_context_overview_ms",
     "page_context.shipyard": "page_context_shipyard_ms",
     "page_context.fleet": "page_context_fleet_ms",
+    # GC-PERF-AUTO-007B — fleets_hud / live_context children
+    "fleets.dirty_tick": "fleets_dirty_tick_ms",
+    "fleets.alerts": "fleets_alerts_ms",
+    "fleets.radar": "fleets_radar_ms",
+    "fleets.active": "fleets_active_ms",
+    "fleets.slots": "fleets_slots_ms",
+    "live.hud_reads": "live_hud_reads_ms",
 }
 
 _COMPONENT_DISPLAY = {
@@ -65,6 +72,12 @@ _COMPONENT_DISPLAY = {
     "payload_panel_ms": "payload.panel",
     "payload_notifications_ms": "payload.notifications",
     "payload_liveops_ms": "payload.liveops",
+    "fleets_dirty_tick_ms": "fleets.dirty_tick",
+    "fleets_alerts_ms": "fleets.alerts",
+    "fleets_radar_ms": "fleets.radar",
+    "fleets_active_ms": "fleets.active",
+    "fleets_slots_ms": "fleets.slots",
+    "live_hud_reads_ms": "live.hud_reads",
     "live_context_ms": "live_context",
     "page_context_ms": "page_context",
     "page_context_overview_ms": "page_context.overview",
@@ -84,10 +97,21 @@ _PARENT_PHASE_KEYS = frozenset(
         "after_request_ms",
         # GC-PERF-AUTO-007A/B: envelope around payload children (same wall as children sum)
         "payload_ms",
+        # Diet live refresh wall (finish + resource + hud_reads) — prefer children
+        "live_context_ms",
+        # Fleet HUD rebuild wall — prefer fleets.* children
+        "payload_fleets_hud_ms",
     }
 )
 _PARENT_COMPONENT_NAMES = frozenset(
-    {"handler", "before_request", "after_request", "state_build"}
+    {
+        "handler",
+        "before_request",
+        "after_request",
+        "state_build",
+        "live_context",
+        "payload.fleets_hud",
+    }
 )
 _SPIKE_RING_MAX = 48
 
@@ -731,6 +755,16 @@ class PerfIntelStore:
                 recommendation = (
                     f"SSR/live context cost on '{(hot_route or {}).get('route')}' — "
                     "measure which panel/query inside the page load; cold first hit is common."
+                )
+            elif cause.startswith("fleets."):
+                recommendation = (
+                    f"Fleet HUD section '{cause}' dominates — "
+                    "check dirty re-tick vs radar vs active list before trimming."
+                )
+            elif cause == "live.hud_reads":
+                recommendation = (
+                    "Post-finish queue/research/prod reads are hot — "
+                    "profile get_build_queue_status / research_status on diet."
                 )
             elif cause.startswith("payload."):
                 recommendation = (

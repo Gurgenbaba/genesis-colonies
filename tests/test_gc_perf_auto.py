@@ -230,6 +230,8 @@ def test_payload_child_hotspot_not_state_build_envelope():
                 phases={
                     "payload_ms": 700.0,
                     "payload_fleets_hud_ms": 420.0,
+                    "fleets_radar_ms": 300.0,
+                    "fleets_active_ms": 80.0,
                     "payload_nav_badges_ms": 80.0,
                     "finish_ms": 40.0,
                 },
@@ -238,11 +240,48 @@ def test_payload_child_hotspot_not_state_build_envelope():
         )
     comps = store.component_stats(300.0)
     names = [c["component"] for c in comps]
-    assert "payload.fleets_hud" in names
-    assert names[0] == "payload.fleets_hud"
+    assert "fleets.radar" in names
+    assert names[0] == "fleets.radar"
     assert "state_build" not in names
+    assert "payload.fleets_hud" not in names
     diag = store.build_diagnosis(300.0)
-    assert diag["cause"] == "payload.fleets_hud"
+    assert diag["cause"] == "fleets.radar"
+
+
+def test_live_context_envelope_prefers_finish_child():
+    """GC-PERF-AUTO-007B: live_context wall must not beat finish_ms in diagnosis."""
+    from game.perf_intel import PerfIntelStore, RequestSample
+
+    store = PerfIntelStore()
+    now = time.time()
+    for _ in range(12):
+        store.record(
+            RequestSample(
+                ts=now,
+                method="GET",
+                route="api_game_state",
+                path="/api/game-state",
+                status=200,
+                total_ms=1400.0,
+                error=False,
+                phases={
+                    "live_context_ms": 900.0,
+                    "finish_ms": 700.0,
+                    "resource_sync_ms": 80.0,
+                    "live_hud_reads_ms": 40.0,
+                    "payload_fleets_hud_ms": 200.0,
+                    "fleets_active_ms": 150.0,
+                },
+                slow_class="very_slow",
+            )
+        )
+    comps = store.component_stats(300.0)
+    names = [c["component"] for c in comps]
+    assert "live_context" not in names
+    assert "payload.fleets_hud" not in names
+    assert names[0] == "queue_finish"
+    diag = store.build_diagnosis(300.0)
+    assert diag["cause"] == "queue_finish"
 
 
 def test_spike_ring_captures_slow_only():
@@ -467,8 +506,12 @@ def test_payload_child_span_aliases():
 
     assert resolve_phase_name("payload.fleets_hud") == "payload_fleets_hud_ms"
     assert resolve_phase_name("page_context.overview") == "page_context_overview_ms"
+    assert resolve_phase_name("fleets.radar") == "fleets_radar_ms"
+    assert resolve_phase_name("live.hud_reads") == "live_hud_reads_ms"
     assert "payload_fleets_hud_ms" in _REQUEST_PERF_PHASE_KEYS
     assert "page_context_overview_ms" in _REQUEST_PERF_PHASE_KEYS
+    assert "fleets_radar_ms" in _REQUEST_PERF_PHASE_KEYS
+    assert "live_hud_reads_ms" in _REQUEST_PERF_PHASE_KEYS
 
 
 def test_admin_spikes_ui_contract():
@@ -478,6 +521,8 @@ def test_admin_spikes_ui_contract():
     assert "LETZTE SPIKES" in admin or 't("admin_perf_spikes"' in admin
     assert 'perf_span("payload.fleets_hud")' in _read("app.py")
     assert 'perf_span("page_context.overview")' in _read("app.py")
+    assert 'perf_span("fleets.radar")' in _read("game/live_state.py")
+    assert 'perf_span("live.hud_reads")' in _read("app.py") or '_live_perf_span("live.hud_reads")' in _read("app.py")
 
 
 def test_poll_jitter_contract_in_main_js():

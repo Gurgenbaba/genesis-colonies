@@ -39,6 +39,12 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
         "payload_panel_ms",
         "payload_notifications_ms",
         "payload_liveops_ms",
+        "fleets_dirty_tick_ms",
+        "fleets_alerts_ms",
+        "fleets_radar_ms",
+        "fleets_active_ms",
+        "fleets_slots_ms",
+        "live_hud_reads_ms",
         "buildings_panel_ms",
         "cards_ms",
         "tech_data_ms",
@@ -644,14 +650,21 @@ def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
         return None
 
     uid = int(user_id)
-    if player_fleet_is_dirty(uid, conn=conn):
-        process_fleet_tick(player_id=uid, conn=conn)
+    with perf_span("fleets.dirty_tick"):
+        if player_fleet_is_dirty(uid, conn=conn):
+            process_fleet_tick(player_id=uid, conn=conn)
 
-    alerts = build_fleet_incoming_attack_alerts(uid, conn=conn)
-    alerts = enrich_fleet_alerts_with_radar(alerts, uid, conn=conn)
+    with perf_span("fleets.alerts"):
+        alerts = build_fleet_incoming_attack_alerts(uid, conn=conn)
+    with perf_span("fleets.radar"):
+        alerts = enrich_fleet_alerts_with_radar(alerts, uid, conn=conn)
+    with perf_span("fleets.active"):
+        active_fleets = build_active_fleets_payload(uid, conn=conn)
+    with perf_span("fleets.slots"):
+        fleet_slots = get_fleet_slot_status(uid, conn=conn)
     return {
-        "active_fleets": build_active_fleets_payload(uid, conn=conn),
-        "fleet_slots": get_fleet_slot_status(uid, conn=conn),
+        "active_fleets": active_fleets,
+        "fleet_slots": fleet_slots,
         "fleet_alerts": alerts,
     }
 
@@ -1848,6 +1861,12 @@ def record_request_perf_phase(name: str, duration_ms: float) -> None:
                 "payload_panel_ms",
                 "payload_notifications_ms",
                 "payload_liveops_ms",
+                "fleets_dirty_tick_ms",
+                "fleets_alerts_ms",
+                "fleets_radar_ms",
+                "fleets_active_ms",
+                "fleets_slots_ms",
+                "live_hud_reads_ms",
                 "live_context_ms",
                 "page_context_ms",
                 "page_context_overview_ms",
