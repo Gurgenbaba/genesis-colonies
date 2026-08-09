@@ -1409,6 +1409,26 @@ def test_main_js_gc802_fleet_timer_and_url_prefill():
     assert "position: static" in card_actions
 
 
+def test_main_js_gc_galaxy_fleet_nav_force_mission_deeplinks():
+    """GC-GALAXY-FLEET-NAV-001: Transport/Hold must cut through hung PJAX coalesce."""
+    src = _read("static/main.js")
+    assert "function isGalaxyFleetMissionDeepLink(link)" in src
+    assert "onFleetMissionDeepLinkClick" in src
+    assert 'GC.releaseShellNavigationBlockers("galaxy_fleet_mission")' in src
+    pjax_fn = src.split("function pjaxNavigateFromLink(link)")[1].split("function _clearSidebarNavActive")[0]
+    assert "forceFleetMission" in pjax_fn
+    assert "force: true" in pjax_fn
+    assert "galaxy_fleet_mission" in pjax_fn
+    ring = src.split("function onFleetMissionDeepLinkClick(ev)")[1].split("function onKeyDown(ev)")[0]
+    assert "stopPropagation" in ring
+    assert "{ push: true, force: true }" in ring
+    galaxy_tpl = _read("templates/partials/galaxy_fleet_actions.html")
+    assert "mission=transport" in galaxy_tpl
+    assert "mission=hold" in galaxy_tpl
+    assert 'class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--transport"' in galaxy_tpl
+    assert 'class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--hold"' in galaxy_tpl
+
+
 def test_main_js_gc801_action_state_and_stale_poll_guards():
     src = _read("static/main.js")
     assert "_clientStateGen" in src

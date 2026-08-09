@@ -39291,6 +39291,29 @@
       closeInspector();
     }
 
+    // GC-GALAXY-FLEET-NAV-001: own handler so mission CTAs are not swallowed by
+    // document PJAX coalesce / stuck data-pjax-busy while a galaxy fetch waits.
+    function onFleetMissionDeepLinkClick(ev) {
+      const link = ev.target.closest("a.galaxy-fleet-action.gc-nav-link[href]");
+      if (!link || !root.contains(link)) return;
+      if (!isGalaxyFleetMissionDeepLink(link)) return;
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      link.dataset.pjaxBusy = "0";
+      if (typeof GC.releaseShellNavigationBlockers === "function") {
+        try {
+          GC.releaseShellNavigationBlockers("galaxy_fleet_mission");
+        } catch (_) {}
+      }
+      if (typeof GC.navigateTo === "function") {
+        Promise.resolve(GC.navigateTo(href, { push: true, force: true })).catch(() => {});
+      } else {
+        window.location.assign(href);
+      }
+    }
+
     function onKeyDown(ev) {
       if (ev.key === "Escape" && GC.GalaxyQuickAction?._attackMenu) {
         GC.GalaxyQuickAction.handleEscape();
@@ -39304,6 +39327,7 @@
     root.addEventListener("click", onSlotClick);
     root.addEventListener("click", onOpenPlanetClick);
     root.addEventListener("click", onCloseClick);
+    root.addEventListener("click", onFleetMissionDeepLinkClick);
     document.addEventListener("keydown", onKeyDown);
 
     initGalaxyHudCoordInputs(root);
@@ -39324,6 +39348,7 @@
       }
       root.removeEventListener("click", onOpenPlanetClick);
       root.removeEventListener("click", onCloseClick);
+      root.removeEventListener("click", onFleetMissionDeepLinkClick);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", layoutGalaxyRingOrbits);
       if (ringResizeObs) {
@@ -43186,15 +43211,36 @@
     }
   }
 
+  function isGalaxyFleetMissionDeepLink(link) {
+    // Inspector CTAs (transport/hold/attack/deploy/…) — not quick-spy (API path).
+    return !!(
+      link
+      && link.classList
+      && link.classList.contains("galaxy-fleet-action")
+      && link.classList.contains("gc-nav-link")
+      && !link.hasAttribute("data-galaxy-quick-spy")
+    );
+  }
+
   function pjaxNavigateFromLink(link) {
     let href = link.getAttribute("href");
     if (!href) return;
     if (link.dataset.navModule === "galaxy") {
       href = resolveGalaxyNavHref(href);
     }
-    if (link.dataset.pjaxBusy === "1") return;
+    const forceFleetMission = isGalaxyFleetMissionDeepLink(link);
+    // GC-GALAXY-FLEET-NAV-001: mission CTAs must retry even if a prior coalesce left pjaxBusy=1.
+    if (link.dataset.pjaxBusy === "1" && !forceFleetMission) return;
     link.dataset.pjaxBusy = "1";
-    Promise.resolve(GC.navigateTo(href)).finally(() => {
+    const navOpts = forceFleetMission ? { push: true, force: true } : {};
+    if (forceFleetMission && typeof GC.releaseShellNavigationBlockers === "function") {
+      try {
+        GC.releaseShellNavigationBlockers("galaxy_fleet_mission");
+      } catch (_) {}
+    }
+    // force:true cuts through hung/coalesced PJAX (slow galaxy SSR / write-lock waits)
+    // so Transport/Hold/Attack leave the inspector instead of a silent no-op.
+    Promise.resolve(GC.navigateTo(href, navOpts)).finally(() => {
       link.dataset.pjaxBusy = "0";
     });
   }
