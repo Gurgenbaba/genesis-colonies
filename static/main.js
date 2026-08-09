@@ -16407,6 +16407,7 @@
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
+            "X-GC-Page": "overview",
           },
           body: JSON.stringify({ action: "sync", boss_key: bossKey }),
         });
@@ -16416,7 +16417,7 @@
         if (res && res.ok) {
           const companions = res.state?.overview?.status?.companions;
           if (companions) applyCompanionState(companions);
-          else if (activeHotspot === btn && !pop.hidden) renderPopover(btn);
+          // Without companions, do not re-render from stale hotspot attrs.
         }
       } catch (_err) {
         /* keep watching; next tick retries */
@@ -16573,6 +16574,7 @@
             "Content-Type": "application/json",
             Accept: "application/json",
             "X-Request-Id": requestId,
+            "X-GC-Page": "overview",
           },
           body: JSON.stringify({
             action,
@@ -16601,9 +16603,9 @@
               t("overview_companion_mission_ok", "Companion auf Mission geschickt."),
               "success"
             );
-            if (activeHotspot) renderPopover(activeHotspot);
-            else closeCompanionPopover();
-            ensureAwayWatcher();
+            // applyCompanionState already re-renders open popover from fresh attrs.
+            if (!companions) closeCompanionPopover();
+            else ensureAwayWatcher();
           } else {
             closeCompanionPopover();
           }
@@ -41033,7 +41035,8 @@
     const wbApplyCooldownUi = (card, cooldownUntil) => {
       if (!card || !(cooldownUntil > 0)) return;
       const until = Math.floor(Number(cooldownUntil));
-      card.querySelectorAll("[data-wb-instant-attack], [data-wb-auto-attack]").forEach((btn) => {
+      // Instant strikes only — auto-attack stays clickable during CD (SSR + server allow enable).
+      card.querySelectorAll("[data-wb-instant-attack]").forEach((btn) => {
         btn.classList.add("is-disabled");
         btn.setAttribute("aria-disabled", "true");
         btn.setAttribute("tabindex", "-1");

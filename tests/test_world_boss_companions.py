@@ -486,3 +486,108 @@ def test_admin_gets_max_titan_slots_without_purchase(wb_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
+    """Mission POST must include overview.status.companions for live hotspot patches."""
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+
+    uid = _player()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        event = _spawn_phase3(conn, "planet_eater")
+        credit(uid, CATCH_COST_SEC, "test", conn=conn)
+
+        class _Ok:
+            def random(self):
+                return 0.0
+
+        tame = attempt_tame(uid, int(event["id"]), conn=conn, rng=_Ok())
+        assert tame["ok"] and tame["success"]
+        commit(conn)
+    finally:
+        conn.close()
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    start = client.post(
+        "/api/world-boss/companion/mission",
+        json={
+            "action": "start",
+            "boss_key": "planet_eater",
+            "variant_key": "patrol",
+            "request_id": "cmp-start-1",
+        },
+        headers={
+            "Accept": "application/json",
+            "X-Request-Id": "cmp-start-1",
+            "X-GC-Page": "overview",
+        },
+    )
+    assert start.status_code == 200, start.get_data(as_text=True)
+    start_body = start.get_json()
+    assert start_body["ok"] is True
+    companions = (start_body.get("state") or {}).get("overview", {}).get("status", {}).get(
+        "companions"
+    )
+    assert companions and companions.get("ready")
+    slot = next(s for s in companions["slots"] if s["boss_key"] == "planet_eater")
+    assert slot["status"] == "away"
+    assert slot["mission"]["can_start"] is False
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE player_boss_missions SET ends_at = ? WHERE player_id = ? AND boss_key = ?;",
+            (time.time() - 1, uid, "planet_eater"),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    sync = client.post(
+        "/api/world-boss/companion/mission",
+        json={"action": "sync", "boss_key": "planet_eater"},
+        headers={"Accept": "application/json", "X-GC-Page": "overview"},
+    )
+    assert sync.status_code == 200, sync.get_data(as_text=True)
+    sync_body = sync.get_json()
+    assert sync_body["ok"] is True
+    sync_companions = (sync_body.get("state") or {}).get("overview", {}).get("status", {}).get(
+        "companions"
+    )
+    sync_slot = next(s for s in sync_companions["slots"] if s["boss_key"] == "planet_eater")
+    assert sync_slot["status"] == "ready"
+    assert sync_slot["mission"]["can_claim"] is True
+
+    claim = client.post(
+        "/api/world-boss/companion/mission",
+        json={
+            "action": "claim",
+            "boss_key": "planet_eater",
+            "request_id": "cmp-claim-1",
+        },
+        headers={
+            "Accept": "application/json",
+            "X-Request-Id": "cmp-claim-1",
+            "X-GC-Page": "overview",
+        },
+    )
+    assert claim.status_code == 200, claim.get_data(as_text=True)
+    claim_body = claim.get_json()
+    assert claim_body["ok"] is True
+    claim_companions = (claim_body.get("state") or {}).get("overview", {}).get("status", {}).get(
+        "companions"
+    )
+    claim_slot = next(s for s in claim_companions["slots"] if s["boss_key"] == "planet_eater")
+    assert claim_slot["status"] == "idle"
+    assert claim_slot["mission"]["can_start"] is True

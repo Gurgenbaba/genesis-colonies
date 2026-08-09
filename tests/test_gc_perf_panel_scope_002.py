@@ -96,6 +96,13 @@ def test_finish_source_legacy_sites_set_panel_page_contract():
     assert mapping["api_shipyard_build"] == "shipyard"
     assert mapping["api_defense_overview"] == "defense"
     assert mapping["api_research_start"] == "research"
+    assert mapping["api_world_boss_companion_mission"] == "overview"
+    assert mapping["api_world_boss_catch"] == "overview"
+    assert (
+        app_module._resolve_effective_panel_page("", "api_world_boss_companion_mission")
+        == "overview"
+    )
+    assert "overview" in app_module._heavy_panels_for_page("overview")
     assert "game_state" not in mapping
     assert "game_state_panel" not in mapping
 

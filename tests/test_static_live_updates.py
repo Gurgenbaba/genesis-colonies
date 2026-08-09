@@ -1323,6 +1323,15 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "data-companion-progress-walker" in progress_fn
     # Fire cadence is local DOM only — no extra companion API from the FX path.
     assert "/api/world-boss/companion" not in progress_fn
+    # Companion mission actions must scope overview panel for live hotspot patches.
+    companion_mod = src.split("function initOverviewCompanions()")[1].split(
+        "function parseInventoryPageState"
+    )[0]
+    assert '"X-GC-Page": "overview"' in companion_mod
+    assert companion_mod.count('"X-GC-Page": "overview"') >= 2
+    assert "if (companions) applyCompanionState(companions)" in companion_mod
+    # Do not re-render popover from stale attrs when companions missing after start/sync.
+    assert "else if (activeHotspot === btn && !pop.hidden) renderPopover(btn)" not in companion_mod
     hero_img = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[1].split(".overview-hero-hud{")[0]
     assert "transform: none" in hero_img
     assert ":hover .overview-hero-bg picture" not in css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[0][-200:] + hero_img
@@ -3409,6 +3418,20 @@ def test_liveops_claims_are_state_first_without_soft_reload():
     shop = src.split("function bindShopBuyOnce()")[1].split("function initShop()")[0]
     assert "_markShopSkuOwned(sku)" in shop
     assert 'reason: "shop_fulfilled"' not in shop
+
+
+def test_world_boss_cooldown_ui_keeps_auto_attack_clickable():
+    """Live CD must lock instant strikes only — auto toggle stays available (SSR-aligned)."""
+    src = _read("static/main.js")
+    cooldown_ui = src.split("const wbApplyCooldownUi = (card, cooldownUntil) => {")[1].split(
+        "const wbUpdateFormation"
+    )[0]
+    assert 'querySelectorAll("[data-wb-instant-attack]")' in cooldown_ui
+    assert "[data-wb-auto-attack]" not in cooldown_ui
+    page = _read("templates/world_boss.html")
+    # SSR cooldown branch still renders a clickable auto-attack control.
+    assert "data-wb-auto-attack" in page
+    assert "world_boss_cooldown" in page
 
 
 def test_production_build_skips_queue_repaint_when_state_present():

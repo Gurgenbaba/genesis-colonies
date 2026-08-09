@@ -1234,6 +1234,8 @@ _FINISH_SOURCE_PANEL_PAGE: Dict[str, str] = {
     "shipyard": "shipyard",
     "defense": "defense",
     "overview": "overview",
+    "api_world_boss_companion_mission": "overview",
+    "api_world_boss_catch": "overview",
     "auction_house": "auction_house",
     "trader_hub": "trader_hub",
 }
@@ -8100,6 +8102,7 @@ def api_world_boss_catch():
 
     state, _ = _build_game_state_payload(
         include_panel=True,
+        panel_page="overview",
         finish_source="api_world_boss_catch",
     )
     body: Dict[str, Any] = {
@@ -8175,6 +8178,7 @@ def api_world_boss_companion_mission():
 
     state, _ = _build_game_state_payload(
         include_panel=True,
+        panel_page="overview",
         finish_source="api_world_boss_companion_mission",
     )
     body: Dict[str, Any] = {
