@@ -9,6 +9,8 @@
   let _activeTab = "health";
   let _isProduction = false;
   let _adminPanelBootstrapped = false;
+  /** Set on leave so in-flight loadTab/perf cannot recreate body HUD portals. */
+  let _adminLeaveInProgress = false;
   let _selectedSupportTicketId = null;
   let _selectedAdminMessageId = null;
   let _adminMessagesExpanded = false;
@@ -73,9 +75,19 @@
 
   const ADMIN_SELECT_ATTRS = 'class="admin-input admin-select" data-gc-hud-select';
 
+  function stillOnAdminPanel() {
+    if (_adminLeaveInProgress) return false;
+    const root = adminRoot();
+    if (!root || !root.isConnected) return false;
+    if (typeof GC.detectPage === "function" && GC.detectPage() !== "admin") return false;
+    return true;
+  }
+
   function syncAdminHudSelects(root) {
     const scope = root && root.querySelectorAll ? root : adminRoot();
-    if (!scope || typeof GC.initHudSelects !== "function") return;
+    // Detached Admin DOM after leave/PJAX — never re-init (creates body portal orphans).
+    if (!scope || !scope.isConnected || typeof GC.initHudSelects !== "function") return;
+    if (!stillOnAdminPanel()) return;
     // Portaled menus live on document.body — wrap.querySelector misses them and
     // leaves pointer-events:auto orphans that freeze the shell after Admin.
     if (typeof GC.releaseShellNavigationBlockers === "function") {
@@ -85,6 +97,7 @@
     } else if (typeof GC.closeAllHudSelects === "function") {
       GC.closeAllHudSelects();
     }
+    if (!stillOnAdminPanel() || !scope.isConnected) return;
     GC.initHudSelects(scope);
     if (typeof GC.rebuildHudSelect === "function") {
       scope.querySelectorAll("select[data-gc-hud-select]").forEach((sel) => {
@@ -95,6 +108,7 @@
   }
 
   function adminLeaveShellCleanup() {
+    _adminLeaveInProgress = true;
     stopPerfAutoRefresh();
     _activeTab = "health";
     _adminPanelBootstrapped = false;
@@ -473,6 +487,8 @@
       default:
         result = null;
     }
+    // Leave-admin can finish while a tab fetch was in flight — skip HUD re-init.
+    if (!stillOnAdminPanel()) return result;
     syncAdminHudSelects(qs(`[data-admin-panel="${name}"]`) || adminRoot());
     return result;
   }
@@ -4549,8 +4565,9 @@
 
   function startPerfAutoRefresh() {
     stopPerfAutoRefresh();
+    if (!stillOnAdminPanel()) return;
     _perfRefreshTimer = setInterval(() => {
-      if (_activeTab !== "performance") {
+      if (_activeTab !== "performance" || !stillOnAdminPanel()) {
         stopPerfAutoRefresh();
         return;
       }
@@ -4563,6 +4580,7 @@
     const out = qs("#admin-performance-output");
     if (out && !quiet) out.innerHTML = loadingHtml();
     const data = await adminGet("/api/admin/performance");
+    if (!stillOnAdminPanel()) return data;
     if (!data.ok) {
       if (!quiet) showAlert(data.message, "error");
       if (out) out.innerHTML = errorCard(data);
@@ -4713,7 +4731,7 @@
           <div class="admin-perf-history">${histBars || `<p class="admin-small-hint">${esc(t("admin_perf_empty", "Noch keine Samples."))}</p>`}</div>
         </section>`;
     }
-    startPerfAutoRefresh();
+    if (stillOnAdminPanel()) startPerfAutoRefresh();
     return data;
   }
 
@@ -5862,6 +5880,7 @@
     const root = adminRoot();
     if (!root) return;
 
+    _adminLeaveInProgress = false;
     bindAdminPanelOnce();
     initUniverseResetDomainCheckboxes();
 

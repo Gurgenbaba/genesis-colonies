@@ -3195,7 +3195,12 @@
     if (!shouldRunGameLoop()) {
       console.debug("[GC] game loop skipped (auth/simple page)");
       initSimplePageAmbience();
-      GC.abortGameLoop("initPage");
+      // Admin keeps the ingame shell — do not treat as auth loss (streak / abort).
+      if (!isAdminShellPage(page)) {
+        GC.abortGameLoop("initPage");
+      } else {
+        GC.stopPolling();
+      }
       return;
     }
 
@@ -32135,15 +32140,25 @@
         btn.disabled = false;
       });
     });
-    // Stuck mid-close sheet: not [hidden], not .is-open — backdrop still captured clicks
-    // (child pointer-events:auto under parent pointer-events:none).
+    // Stuck mid-close sheet always; fully open sheet only on leave/cleanup/pjax
+    // (not on every admin HUD select sync — shell stays mounted on /admin).
     const planetSheet = document.getElementById("gc-planet-registry-sheet");
-    if (planetSheet && !planetSheet.hidden && !planetSheet.classList.contains("is-open")) {
-      planetSheet.hidden = true;
-      planetSheet.setAttribute("aria-hidden", "true");
-      document.body.classList.remove("gc-planet-sheet-open");
-      if (typeof syncPlanetRegistrySheetToggle === "function") {
-        syncPlanetRegistrySheetToggle(false);
+    if (planetSheet && !planetSheet.hidden) {
+      const reasonStr = String(reason || "");
+      const stuckMidClose = !planetSheet.classList.contains("is-open");
+      const forceOpenClose =
+        reasonStr === "leave_admin"
+        || reasonStr === "admin_panel_cleanup"
+        || reasonStr === "cleanup"
+        || reasonStr.startsWith("pjax_");
+      if (stuckMidClose || forceOpenClose) {
+        planetSheet.classList.remove("is-open");
+        planetSheet.hidden = true;
+        planetSheet.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("gc-planet-sheet-open");
+        if (typeof syncPlanetRegistrySheetToggle === "function") {
+          syncPlanetRegistrySheetToggle(false);
+        }
       }
     }
     GC._planetSwitchInFlight = false;
@@ -42903,6 +42918,9 @@
   }
 
   function _syncNavActive(url) {
+    // Still on /admin (PJAX coalesce / optimistic active): never mutate accordion
+    // against the mounted shell — collapses Infra and can leave nested nav dead.
+    if (typeof GC.detectPage === "function" && GC.detectPage() === "admin") return;
     GC.restoreLeftmenuState(url);
   }
 
@@ -43366,12 +43384,25 @@
       && !isAdminRoutePath(new URL(target, window.location.origin).pathname);
     if (leavingAdmin) {
       _pjaxPendingNav = null;
-      if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
+      // Full Admin teardown first (stops perf refresh / resets bootstrap) so
+      // in-flight loadTab/syncAdminHudSelects cannot recreate body HUD portals.
+      if (typeof GC.teardownAdminPanel === "function") {
+        GC.teardownAdminPanel();
+      } else if (typeof GC.teardownHudSelectPortals === "function") {
+        GC.teardownHudSelectPortals();
+      }
       if (typeof GC.quiesceLiveClientFetches === "function") GC.quiesceLiveClientFetches("leave_admin");
       else if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
       GC.stopPolling();
       if (typeof GC.releaseShellNavigationBlockers === "function") {
         GC.releaseShellNavigationBlockers("leave_admin");
+      }
+      if (typeof GC.closePlanetRegistrySheet === "function") {
+        try {
+          GC.closePlanetRegistrySheet();
+        } catch (_e) {
+          /* ignore */
+        }
       }
     } else {
       // Always abort hung /api/game-state + chat polls before HTML PJAX.
@@ -47040,21 +47071,11 @@
     initPlanetRegistrySheet();
     initPjax();
     initShellChrome();
-    // Shell overlays must bind even on Admin hard-load (PJAX leave never re-runs shell init).
+    // Shell overlays + game interactions must bind even on Admin hard-load —
+    // PJAX leave never re-enters initShellOnce (GC._shellReady stays true).
     initShipDetailOnce();
     initBuildingTechnicalDataOnce();
     initPlayerCardOnce();
-
-    if (!shouldRunGameLoop()) {
-      syncPerfBodyClasses();
-      try {
-        history.replaceState({ gcPjax: true }, "", window.location.href);
-      } catch (_) {}
-      return;
-    }
-
-    _authLoopAborted = false;
-
     bindBuildingTabsOnce();
     initGameActions();
     initGlobalQueueHud();
@@ -47067,11 +47088,7 @@
     initGcPopoversOnce();
     initCardRequirementsHoverOnce();
     initMaxQueueHoverOnce();
-    initVisibilityPolling();
-    initGalaxyPrefetchHints();
-    initNotificationSounds();
     initMilitaryUnitCostPreviewDelegation();
-    bootstrapPlanetLandscapeFromBoot();
     initStickyResourceBar();
     initSidebarSticky();
     initTimekeeperOnce();
@@ -47083,6 +47100,20 @@
       quiesceLiveClientFetches("logout-click");
       window.location.assign(link.href);
     }, true);
+
+    if (!shouldRunGameLoop()) {
+      syncPerfBodyClasses();
+      try {
+        history.replaceState({ gcPjax: true }, "", window.location.href);
+      } catch (_) {}
+      return;
+    }
+
+    _authLoopAborted = false;
+    initVisibilityPolling();
+    initGalaxyPrefetchHints();
+    initNotificationSounds();
+    bootstrapPlanetLandscapeFromBoot();
 
     syncPerfBodyClasses();
     try {

@@ -528,23 +528,52 @@ def test_admin_pjax_exit_hard_load_entry():
     assert "data-no-pjax" in admin_nav
     nav = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "leavingAdmin" in nav
-    assert "teardownHudSelectPortals" in nav
-    assert "quiesceLiveClientFetches" in nav
+    leave_block = nav.split("const leavingAdmin")[1].split("} else {")[0]
+    assert "teardownAdminPanel" in leave_block
+    assert "quiesceLiveClientFetches" in leave_block
+    assert 'releaseShellNavigationBlockers("leave_admin")' in leave_block
+    assert "closePlanetRegistrySheet" in leave_block
     # Safety: ensure stale nav blockers cannot survive admin → ingame PJAX.
     cleanup_fn = src.split("GC.cleanupPage = function cleanupPage")[1][:2500]
     assert "releaseShellNavigationBlockers" in cleanup_fn
     assert "beginPjaxNavigation" in nav
     assert "shouldPjaxHardLoad" not in nav
     assert "[GC] PJAX timeout (no hard-load)" in nav
+    # Optimistic nav sync must not mutate accordion while still on Admin.
+    sync_nav = src.split("function _syncNavActive(url)")[1].split("const SUBNAV_PARENT_TOGGLE")[0]
+    assert 'GC.detectPage() === "admin"' in sync_nav
     # Admin must tear down body-portaled HUD menus (not wrap.querySelector close).
     sync_fn = admin_src.split("function syncAdminHudSelects")[1].split("function adminLeaveShellCleanup")[0]
-    assert "teardownHudSelectPortals" in sync_fn
+    assert "teardownHudSelectPortals" in sync_fn or "releaseShellNavigationBlockers" in sync_fn
+    assert "!scope.isConnected" in sync_fn
+    assert "stillOnAdminPanel" in sync_fn
     assert 'wrap.querySelector(".gc-hud-select-menu")' not in sync_fn
     leave_fn = admin_src.split("function adminLeaveShellCleanup")[1].split("function playerNameLink")[0]
     assert "releaseShellNavigationBlockers" in leave_fn
     assert "stopPerfAutoRefresh" in leave_fn
     assert "adminLeaveShellCleanup" in admin_src.split("GC.teardownAdminPanel")[1][:400]
     assert "adminLeaveShellCleanup" in admin_src.split("adminPanelCleanup")[1][:200]
+    # loadTab / perf refresh must not recreate portals after leave starts.
+    load_tab = admin_src.split("async function loadTab(name)")[1].split("function balanceFieldElements")[0]
+    assert "stillOnAdminPanel()" in load_tab
+    assert "function stillOnAdminPanel()" in admin_src
+    assert "_adminLeaveInProgress" in admin_src
+    assert "_adminLeaveInProgress = true" in admin_src.split("function adminLeaveShellCleanup")[1].split(
+        "function playerNameLink"
+    )[0]
+    assert "_adminLeaveInProgress = false" in admin_src.split("function initAdminPanel()")[1].split(
+        "GC.teardownAdminPanel"
+    )[0]
+    release = src.split("function releaseShellNavigationBlockers(reason)")[1].split(
+        "function syncHudSelectLabelsInRoot"
+    )[0]
+    assert 'reasonStr === "leave_admin"' in release
+    assert "gc-planet-registry-sheet" in release
+    # Admin initPage must not call abortGameLoop/handleAuthFailure (auth streak).
+    init_page = src.split("GC.initPage = function initPage")[1].split("GC.cleanupPage")[0]
+    skip_branch = init_page.split("if (!shouldRunGameLoop())")[1].split("_authLoopAborted = false")[0]
+    assert "isAdminShellPage(page)" in skip_branch
+    assert 'GC.abortGameLoop("initPage")' in skip_branch
 
 def test_pjax_navigation_owner_clears_stale_timeouts():
     """PJAX nav ID guard — stale timeouts must not hard-load superseded destinations."""
@@ -898,10 +927,24 @@ def test_codex_shell_init_before_game_loop_gate():
         "initPlayerCardOnce();",
         "initShipDetailOnce();",
         "initBuildingTechnicalDataOnce();",
+        # Admin hard-load previously skipped these — PJAX leave never rebound them.
+        "initPlanetRegistry();",
+        "initGameActions();",
+        "bindBuildingTabsOnce();",
+        "initGlobalFleetDrawer();",
+        "bindFleetOnce();",
     ):
         assert needle in init_shell
         assert init_shell.index(needle) < early
         assert needle not in after
+    # Polling / ambience-only work stays after the Admin game-loop gate.
+    for needle in (
+        "initVisibilityPolling();",
+        "initGalaxyPrefetchHints();",
+        "initNotificationSounds();",
+        "bootstrapPlanetLandscapeFromBoot();",
+    ):
+        assert needle in after
 
 
 def test_alliance_project_start_reloads_hub():
@@ -1875,7 +1918,11 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert "function playNotificationSound(kind)" in src
     assert 'attack: "/static/sounds/notify/notify.mp3"' in src
     assert 'message: "/static/sounds/notify/message.mp3"' in src
-    assert "initNotificationSounds();" in src.split("function initShellOnce()")[1].split("document.addEventListener(\"click\"")[0]
+    # Notification sounds bind after the Admin game-loop gate (poll/audio, not click shell).
+    shell_once = src.split("function initShellOnce()")[1].split("// Boot")[0]
+    early = shell_once.find("if (!shouldRunGameLoop())")
+    assert early != -1
+    assert "initNotificationSounds();" in shell_once[early:]
     assert "playNotificationSound(\"attack\")" in src.split("function playIncomingAttackNotifySound()")[1].split("function playNewMessageNotifySound()")[0]
     assert "playNotificationSound(\"message\")" in src.split("function playNewMessageNotifySound()")[1].split("function lootTileAmountLabel")[0]
     assert "notifySoundVolumeForKind(kind)" in src.split("function playNotificationSound(kind)")[1].split("GC.playNotificationSound = playNotificationSound")[0]
