@@ -562,6 +562,23 @@
     debouncedSaveState({});
   }
 
+  function openChatPopoutWindow() {
+    // Named window: a second click while it's already open just refocuses it
+    // instead of spawning a duplicate. Sized for a docked second-monitor pane.
+    const win = window.open(
+      "/chat/popout",
+      "gc_chat_popout",
+      "width=440,height=720,resizable=yes,noopener"
+    );
+    if (win) {
+      try { win.focus(); } catch (_) {}
+    }
+    // Collapse the in-page panel back to the FAB — the popout window is now
+    // the live chat surface; avoids two open panels (and double notification
+    // sounds) fighting for attention on the same monitor.
+    if (!CHAT.isMobile) setMinimized();
+  }
+
   function formatTime(ts) {
     if (typeof GC.formatLocaleDateTime === "function") return GC.formatLocaleDateTime(ts);
     const n = Number(ts);
@@ -1608,6 +1625,11 @@
         e.stopPropagation();
         if (!cacheElements()) return;
         toggleMaximize();
+      }
+      if (e.target.closest("[data-chat-popout]")) {
+        e.preventDefault();
+        e.stopPropagation();
+        openChatPopoutWindow();
       }
     });
 

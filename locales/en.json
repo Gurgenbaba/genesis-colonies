@@ -1670,6 +1670,7 @@
   "chat_error_rate_limited": "Too many messages – please wait.",
   "chat_global": "Global",
   "chat_maximize": "Maximize",
+  "chat_popout": "Open in its own window",
   "chat_mentioned_you": "You were mentioned",
   "chat_message_deleted": "Message removed",
   "chat_minimize": "Minimize",

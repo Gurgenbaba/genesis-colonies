@@ -67,7 +67,7 @@
 {% set _motd_banner = motd_banner if motd_banner is defined else none %}
 {% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
 
-<body class="gc-body gc-theme-dark gc-perf-idle {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}{% if current_planet_landscape_url %} gc-has-planet-landscape{% endif %}"
+<body class="gc-body gc-theme-dark gc-perf-idle {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}{% if current_planet_landscape_url %} gc-has-planet-landscape{% endif %}{% if CHAT_POPOUT %} gc-chat-popout-body{% endif %}"
       data-theme="dark"
       {% if not SIMPLE_LAYOUT %}data-identity-theme="{{ IDENTITY_THEME|default('cyan') }}" data-identity-aura="{{ IDENTITY_AURA|default('none') }}"{% endif %}
       data-endpoint="{{ request.endpoint or '' }}"

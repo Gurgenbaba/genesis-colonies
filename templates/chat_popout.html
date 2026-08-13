@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{# GC-CHAT-POPOUT: standalone chat window for second-monitor setups.
+   Reuses the full base.html boot chain (auth, i18n, CSRF, GC.* namespace,
+   chat.js) so nothing has to be re-implemented — CHAT_POPOUT (passed from
+   app.py's chat_popout_view) drives the .gc-chat-popout-body CSS below,
+   which hides everything except the chat panel and forces it to fill the
+   window instead of floating as a small docked widget. #}
+
+{% block extra_head %}
+<title>{{ T('chat_title', 'TChat') }} — Genesis Colonies</title>
+<style>
+  body.gc-chat-popout-body {
+    overflow: hidden;
+  }
+  body.gc-chat-popout-body .gc-app-shell,
+  body.gc-chat-popout-body .gc-bg {
+    display: none !important;
+  }
+  body.gc-chat-popout-body #gc-chat-root {
+    display: block !important;
+  }
+  body.gc-chat-popout-body .gc-chat-panel {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+  }
+  /* Redundant in a dedicated OS window — close the window itself instead. */
+  body.gc-chat-popout-body .gc-chat-fab,
+  body.gc-chat-popout-body [data-chat-popout],
+  body.gc-chat-popout-body [data-chat-minimize],
+  body.gc-chat-popout-body [data-chat-maximize],
+  body.gc-chat-popout-body [data-chat-close],
+  body.gc-chat-popout-body [data-chat-resize],
+  body.gc-chat-popout-body [data-chat-drag-handle] {
+    display: none !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    function openChatPopoutPanel() {
+      if (window.GC && typeof GC.openTChat === "function") {
+        GC.openTChat();
+      } else {
+        setTimeout(openChatPopoutPanel, 100);
+      }
+    }
+    document.addEventListener("DOMContentLoaded", openChatPopoutPanel);
+  })();
+</script>
+{% endblock %}

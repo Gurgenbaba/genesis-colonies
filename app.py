@@ -7729,6 +7729,18 @@ def banned_players_view():
     )
 
 
+@app.route("/chat/popout")
+@require_login
+def chat_popout_view():
+    """Standalone chat window (GC-CHAT-POPOUT) — for second-monitor setups.
+
+    Reuses the normal in-game layout/boot so chat.js's existing bootstrap
+    (auth, i18n, CSRF, GC.* namespace) works unchanged; base.html hides
+    everything except the chat panel via the CHAT_POPOUT body class.
+    """
+    return render_template("chat_popout.html", CHAT_POPOUT=True)
+
+
 @app.route("/news")
 @require_login
 def news_view():
