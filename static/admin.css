@@ -128,6 +128,70 @@
   color: var(--gc-text);
 }
 
+/* ── GC-ADMIN-NAV: left-column nav instead of wrapping horizontal tab rows ── */
+.admin-body-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-nav-col {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* .gc-page-tabs base rule is display:grid (4 cols) — every nav rail here
+   holds either one group header or a vertical stack of sub-tabs, so force
+   flex/column regardless of the shared component's grid default. */
+.admin-nav-group .admin-group-rail {
+  display: flex;
+}
+
+.admin-nav-group .admin-group-btn {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
+.admin-nav-group .admin-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.admin-nav-group .admin-tab-btn {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  border-right: none;
+  border-left: 2px solid transparent;
+}
+
+/* Sidebar-style selected indicator (left accent) instead of the horizontal
+   tab bar's bottom-underline, which reads oddly once stacked vertically. */
+.admin-nav-group .admin-tab-btn.is-active {
+  border-left-color: var(--admin-accent, #46e5ff);
+  box-shadow: none;
+}
+
+.admin-panels-col {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .admin-body-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-nav-col {
+    position: static;
+  }
+}
+
 /* ── Command tabs: both group + detail rails use canonical .gc-page-tabs ── */
 .admin-nav {
   display: flex;

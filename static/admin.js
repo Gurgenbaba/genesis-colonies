@@ -356,16 +356,14 @@
   }
 
   function applyGroupVisibility(group) {
-    const tabs = ADMIN_TAB_GROUPS[group] || [];
+    // GC-ADMIN-NAV: the left-column nav shows every group's sub-tabs at
+    // once (like the main game sidebar) instead of hiding all but the
+    // clicked group's — only the group-button highlight is still tracked
+    // here, purely as a "current section" indicator.
     qsa(".admin-group-btn").forEach((btn) => {
       const on = btn.dataset.adminGroup === group;
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
-    });
-    qsa(".admin-tab-btn, .admin-cc-tab").forEach((btn) => {
-      const tab = btn.dataset.adminTab;
-      const show = !tab || tabs.includes(tab);
-      btn.hidden = !show;
     });
   }
 

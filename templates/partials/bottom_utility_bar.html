@@ -55,7 +55,9 @@
       <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
       <a href="{{ url_for('admin_panel') }}"
          class="gc-bottom-util-link gc-bottom-util-link--admin{% if request.endpoint == 'admin_panel' %} is-active{% endif %}"
-         data-no-pjax="1">{{ T("nav_admin") }}</a>
+         data-no-pjax="1"
+         target="_blank"
+         rel="noopener">{{ T("nav_admin") }}</a>
       {% endif %}
     </nav>
     <div class="gc-bottom-util-end">
