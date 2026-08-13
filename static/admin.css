@@ -13,7 +13,12 @@
 }
 
 .admin-shell .admin-wrapper {
-  max-width: 1160px;
+  /* GC-ADMIN-NAV: admin page now runs in .gc-empire-focus (game's own
+     wide-content mode — hides both game sidebars, #main-content goes full
+     width), so let this actually use the freed-up space instead of staying
+     capped at the old narrow single-column width — that's what made forms
+     and tables feel cramped/edit-hostile before. */
+  max-width: 1800px;
   margin: 0 auto;
 }
 
