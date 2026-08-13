@@ -3835,6 +3835,7 @@
       <h3 class="admin-subtitle">#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
       <p>Homeworld: ${esc(hw.name || "–")} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)} · ${t("fuel_cells", "Brennzellen")}: ${fmtInt(hw.fuel_cells)}</p>
+      <div class="admin-section-title"><span class="admin-section-title-text">${t("admin_section_actions", "Aktionen")}</span></div>
       <div class="admin-toolbar">
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-effects" data-player-id="${p.id}">${t("admin_btn_effects", "Effekte")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-set-admin" data-player-id="${p.id}" data-is-admin="${p.is_admin ? 0 : 1}">${p.is_admin ? t("admin_btn_remove_admin", "Admin entfernen") : t("admin_btn_grant_admin", "Admin setzen")}</button>
@@ -3842,17 +3843,35 @@
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-ban" data-player-id="${p.id}">${t("admin_btn_ban", "Bannen")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-unban" data-player-id="${p.id}">${t("admin_btn_unban", "Entbannen")}</button>
       </div>
+      <div class="admin-section-title"><span class="admin-section-title-text">${t("admin_section_resources", "Ressourcen")}</span></div>
+      <div class="admin-form-grid-3">
+        <label class="admin-field">
+          <span class="admin-label">${t("metal", "Ferronit")}</span>
+          <input type="number" min="0" class="admin-input" id="admin-player-metal" placeholder="0">
+        </label>
+        <label class="admin-field">
+          <span class="admin-label">${t("crystal", "Crytite")}</span>
+          <input type="number" min="0" class="admin-input" id="admin-player-crystal" placeholder="0">
+        </label>
+        <label class="admin-field">
+          <span class="admin-label">${t("fuel_cells", "Brennzellen")}</span>
+          <input type="number" min="0" class="admin-input" id="admin-player-fuel" placeholder="0">
+        </label>
+      </div>
+      <p class="admin-small-hint">${t("admin_resources_add_set_hint", "Addieren zählt zum aktuellen Bestand dazu — Setzen überschreibt ihn komplett.")}</p>
+      <div class="admin-btn-row">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">+ ${t("admin_btn_apply", "Addieren")}</button>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">= ${t("admin_btn_set_resources", "Setzen")}</button>
+      </div>
       <div class="admin-danger-zone">
         <p class="admin-small-hint">${t("admin_player_delete_hint", "Account unwiderruflich löschen. Spielernamen zur Bestätigung eingeben.")}</p>
-        <input type="text" class="admin-input admin-input-sm" id="admin-player-delete-username" placeholder="${t("admin_player_delete_username", "Spielername")}" autocomplete="off">
-        <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-delete" data-player-id="${p.id}" data-player-name="${esc(p.username || "")}">${t("admin_btn_delete_player", "Account löschen")}</button>
-      </div>
-      <div class="admin-toolbar admin-toolbar--tight">
-        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-metal" placeholder="${t("metal", "Ferronit")}">
-        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
-        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-fuel" placeholder="${t("fuel_cells", "Brennzellen")}">
-        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
-        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
+        <label class="admin-field">
+          <span class="admin-label">${t("admin_player_delete_username", "Spielername")}</span>
+          <input type="text" class="admin-input" id="admin-player-delete-username" placeholder="${esc(p.username || "")}" autocomplete="off">
+        </label>
+        <div class="admin-btn-row">
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-delete" data-player-id="${p.id}" data-player-name="${esc(p.username || "")}">${t("admin_btn_delete_player", "Account löschen")}</button>
+        </div>
       </div>
       <div class="admin-section-title"><span class="admin-section-title-text">${t("admin_player_planets", "Planeten")}</span></div>
       ${
@@ -3970,11 +3989,23 @@
       <h3 class="admin-subtitle">#${pl.id} ${esc(pl.name || "")}</h3>
       <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)} · ${t("fuel_cells", "Brennzellen")}: ${fmtInt(pl.fuel_cells)}</p>
       <p class="admin-small-hint">${t("admin_storage_caps", "Lager-Caps")}: ${t("metal", "Ferronit")} ${fmtInt(caps.metal)} · ${t("crystal", "Crytite")} ${fmtInt(caps.crystal)} · ${t("fuel_cells", "Brennzellen")} ${fmtInt(caps.fuel_cells)}</p>
-      <div class="admin-toolbar admin-toolbar--tight">
-        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-metal" placeholder="${t("metal", "Ferronit")}">
-        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-crystal" placeholder="${t("crystal", "Crytite")}">
-        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-fuel" placeholder="${t("fuel_cells", "Brennzellen")}">
-        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">${t("admin_btn_set_resources", "Setzen")}</button>
+      <div class="admin-section-title"><span class="admin-section-title-text">${t("admin_section_resources", "Ressourcen")}</span></div>
+      <div class="admin-form-grid-3">
+        <label class="admin-field">
+          <span class="admin-label">${t("metal", "Ferronit")}</span>
+          <input type="number" min="0" class="admin-input" id="admin-planet-metal" placeholder="0">
+        </label>
+        <label class="admin-field">
+          <span class="admin-label">${t("crystal", "Crytite")}</span>
+          <input type="number" min="0" class="admin-input" id="admin-planet-crystal" placeholder="0">
+        </label>
+        <label class="admin-field">
+          <span class="admin-label">${t("fuel_cells", "Brennzellen")}</span>
+          <input type="number" min="0" class="admin-input" id="admin-planet-fuel" placeholder="0">
+        </label>
+      </div>
+      <div class="admin-btn-row">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">= ${t("admin_btn_set_resources", "Setzen")}</button>
       </div>
       <details class="admin-buildings-detail" open>
         <summary>${t("admin_buildings", "Gebäude")}</summary>
