@@ -534,7 +534,10 @@ def test_main_js_patches_planet_limit_from_state():
     fn = src.split("function patchHeaderPlanetLimitFromState(data, force)")[1].split(
         "GC.patchHeaderPlanetLimitFromState"
     )[0]
-    assert "if (!force) return" in fn
+    # GC-PERF-HUD-BOOT-001: force only zeroes the display when the payload
+    # actually attempted to carry planet data — a payload missing both keys
+    # (e.g. the SSR HUD boot snapshot) must not stomp the correct SSR value.
+    assert "if (!force || !hasPlanetPayload) return" in fn
 
 
 def test_game_state_includes_planets_list(switcher_db, monkeypatch):

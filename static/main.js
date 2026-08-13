@@ -1515,7 +1515,13 @@
     if (GC._chatBootScheduled) return;
     GC._chatBootScheduled = true;
     GC.setSafeTimeout(() => {
-      if (!shouldRunGameLoop() || _authLoopAborted || isAdminShellPage()) return;
+      if (!shouldRunGameLoop() || _authLoopAborted || isAdminShellPage()) {
+        // Boot aborted before running — clear the latch so a later call
+        // (e.g. after PJAX nav) can retry instead of chat staying dark
+        // for the rest of the session.
+        GC._chatBootScheduled = false;
+        return;
+      }
       if (typeof GC.initChat === "function") GC.initChat();
     }, GC_DEFER_CHAT_BOOT_MS);
   }
@@ -11384,7 +11390,11 @@
       owned = Number(block.current) + 1;
     }
     if (!Number.isFinite(owned) || owned < 0) {
-      if (!force) return;
+      // GC-PERF-HUD-BOOT-001: only force a 0 when this payload actually
+      // attempted to carry planet data — an SSR boot payload that never
+      // included planet_limit/planets must not stomp the correct SSR value.
+      const hasPlanetPayload = !!(data && (("planet_limit" in data) || ("planets" in data)));
+      if (!force || !hasPlanetPayload) return;
       owned = 0;
     }
     owned = Math.floor(owned);
@@ -38747,11 +38757,25 @@
     galaxyInp.addEventListener("blur", onBlur);
     systemInp.addEventListener("blur", onBlur);
 
+    // GC-PERF-GALAXY-ARROW-001: wire the prev/next arrows directly to the
+    // same navigateTo() path as the proven-working Enter-key commit, instead
+    // of relying solely on the generic PJAX click delegate.
+    const arrowLinks = Array.from(root.querySelectorAll(".galaxy-hud-arrow[href]"));
+    const onArrowClick = (ev) => {
+      const href = ev.currentTarget.getAttribute("href");
+      if (!href) return;
+      ev.preventDefault();
+      if (typeof GC.navigateTo === "function") GC.navigateTo(href);
+      else window.location.href = href;
+    };
+    arrowLinks.forEach((a) => a.addEventListener("click", onArrowClick));
+
     GC.registerCleanup(() => {
       galaxyInp.removeEventListener("keydown", onKeyDown);
       systemInp.removeEventListener("keydown", onKeyDown);
       galaxyInp.removeEventListener("blur", onBlur);
       systemInp.removeEventListener("blur", onBlur);
+      arrowLinks.forEach((a) => a.removeEventListener("click", onArrowClick));
     });
   }
 
