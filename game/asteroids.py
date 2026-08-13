@@ -10,7 +10,7 @@ import logging
 import math
 import random
 import time
-from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from .db import table_exists
 from .runtime_state import get_runtime_value, set_runtime_value
@@ -96,18 +96,24 @@ MEGA_BELT_INTER_WAVE_COOLDOWN_SEC = 24 * 3600
 MEGA_BELT_TTL_SECONDS = 6 * 3600
 MEGA_BELT_SPAWN_RUNTIME_KEY = "mega_asteroid_belt_last_spawn_at"
 
-# Pool sizing: hours of the server's own top-N mine production per resource —
-# anchors mega-belt value directly to the live economy (game/economy_balance.py
-# reference_production_per_hour) instead of an invented constant.
-MEGA_BELT_TOP_N_MINES = 10
-MEGA_BELT_HOURS_OF_TOP_PRODUCTION = 6.0
-MEGA_BELT_MIN_POOL_PER_RESOURCE = 20_000_000
-MEGA_BELT_MAX_POOL_PER_RESOURCE = 500_000_000
+# Pool sizing: a fraction of the server's own top-N *storage capacity* per
+# resource (game/economy_balance.py storage_capacity_at_depot_level). Storage
+# is what players actually see and compare against on their resource bar, and
+# — unlike a fixed absolute pool — this scales automatically forever as the
+# server's economy grows (storage capacity is exponential in building level,
+# same curve as production), so a mega-belt stays a meaningful, "wow" amount
+# whether the server is young or deep into the sextillion-resource lategame.
+# No hard ceiling: capping this at a fixed number is exactly what made the
+# very first version of mega-belts (a flat 500M cap) trivially worthless
+# against multi-sextillion storage — never repeat that mistake here.
+MEGA_BELT_TOP_N_STORAGE = 10
+MEGA_BELT_STORAGE_FRACTION = 0.02
+MEGA_BELT_MIN_POOL_PER_RESOURCE = 5_000_000
 
-MEGA_BELT_MINE_BUILDING_BY_RESOURCE = {
-    "metal": "metal_mine",
-    "crystal": "crystal_mine",
-    "fuel_cells": "fuel_cell_plant",
+MEGA_BELT_STORAGE_BUILDING_BY_RESOURCE = {
+    "metal": "metal_storage",
+    "crystal": "crystal_storage",
+    "fuel_cells": "fuel_storage",
 }
 
 
@@ -446,33 +452,44 @@ def _pick_weighted_key(*, rng: Optional[random.Random] = None) -> str:
     return str(roll.choices(keys, weights=weights, k=1)[0])
 
 
-def _top_n_mine_avg_level(conn, building_type: str, *, n: int = MEGA_BELT_TOP_N_MINES) -> float:
-    if building_type not in MEGA_BELT_MINE_BUILDING_BY_RESOURCE.values():
-        return 0.0
+def _top_n_building_levels(conn, building_type: str, *, valid: Iterable[str], n: int) -> List[int]:
+    if building_type not in valid:
+        return []
     rows = conn.execute(
         f"SELECT {building_type} AS lvl FROM planet_buildings "
         f"ORDER BY {building_type} DESC LIMIT ?;",
         (max(1, int(n)),),
     ).fetchall()
-    levels = [int(r["lvl"] or 0) for r in rows]
-    if not levels:
-        return 0.0
-    return sum(levels) / len(levels)
+    return [int(r["lvl"] or 0) for r in rows]
 
 
 def _mega_belt_resource_pool(conn) -> Dict[str, int]:
-    """Size a mega-belt off the server's own top-N mine production."""
-    from .economy_balance import reference_production_per_hour
+    """Size a mega-belt as a fraction of the server's own top-N storage capacity.
+
+    Averages each top planet's *capacity* individually, not its level —
+    storage_capacity_at_depot_level() is exponential in level, so averaging
+    levels first (then converting to capacity) systematically understates the
+    top players' actual storage size whenever levels are spread out
+    (Jensen's inequality). Averaging capacities instead reflects what those
+    players actually have.
+    """
+    from .economy_balance import storage_capacity_at_depot_level
 
     out: Dict[str, int] = {}
-    for resource, building_type in MEGA_BELT_MINE_BUILDING_BY_RESOURCE.items():
-        avg_level = _top_n_mine_avg_level(conn, building_type)
-        hourly = reference_production_per_hour(resource, int(round(avg_level)))
-        pool = int(float(hourly) * MEGA_BELT_HOURS_OF_TOP_PRODUCTION)
-        out[resource] = max(
-            MEGA_BELT_MIN_POOL_PER_RESOURCE,
-            min(MEGA_BELT_MAX_POOL_PER_RESOURCE, pool),
+    for resource, building_type in MEGA_BELT_STORAGE_BUILDING_BY_RESOURCE.items():
+        levels = _top_n_building_levels(
+            conn,
+            building_type,
+            valid=MEGA_BELT_STORAGE_BUILDING_BY_RESOURCE.values(),
+            n=MEGA_BELT_TOP_N_STORAGE,
         )
+        if levels:
+            capacities = [storage_capacity_at_depot_level(lvl) for lvl in levels]
+            avg_capacity = sum(capacities) / len(capacities)
+        else:
+            avg_capacity = 0.0
+        pool = int(avg_capacity * MEGA_BELT_STORAGE_FRACTION)
+        out[resource] = max(MEGA_BELT_MIN_POOL_PER_RESOURCE, pool)
     return out
 
 
