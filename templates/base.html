@@ -346,11 +346,11 @@
                 {{ render_resource_icon('energy', hud=true, lazy=false, priority='high', alt=T('energy', 'Energie')) }}
                 <span class="hud-res-amount">
                   <span class="res-value energy" data-energy-used>{{ eu|fmt_int }}</span>
-                  {{ render_hud_capacity_bar('energy', eu, et) }}
-                  <span class="hud-res-cap-line hud-res-cap-line--sr" aria-hidden="true">
+                  <span class="hud-res-cap-line" title="{{ T('hud_storage_capacity', 'Lagerkapazität') }}">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap energy" data-energy-total>{% if et > 0 %}{{ et|fmt_int }}{% else %}—{% endif %}</span>
                   </span>
+                  {{ render_hud_capacity_bar('energy', eu, et) }}
                 </span>
               </div>
               <span class="hud-res-footer">
