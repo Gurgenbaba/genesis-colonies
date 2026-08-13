@@ -2,11 +2,27 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-08-05** · Spieler-Meilenstein **v0.9.3 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
+Stand: **2026-08-13** · Spieler-Meilenstein **v0.9.4 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
 
 > **Versionsregel:** Alpha bleibt **`v0.9.x`**. **`v1.0` / `v1.0.0-beta`** ist der Beta-Gate ([docs/BETA_GATE.md](docs/BETA_GATE.md)) — nicht für Alpha-Patches verwenden.  
 > Spieler: Patchnotes live unter **News** (`/news`) und im NEWS-Banner.  
 > Admins: Release-Publisher im Admin-Panel → Server → Universums-News (nicht Git-Commits).
+
+---
+
+## v0.9.4 — Live Galaxy & Mega-Belts *(Alpha · 2026-08-13)*
+
+### Added
+- **Spieler-News Pack** `v0.9.4` — Live-Galaxy-Push und Mega-Belts
+- **Mega-Belt-Asteroiden** — seltenes, riesiges Feld pro Server; Größe skaliert mit der Top-Minenproduktion, mehrere Flotten können nacheinander abbauen statt „erster gewinnt alles"
+- **Galaxy Live Push** — Asteroiden-Abbau wird sofort an alle offenen Galaxy-Ansichten gemeldet (WebSocket), kein Warten mehr auf Reload/Timer
+
+### Changed
+- Asteroiden-Board zeigt Feld-Tier und verbleibenden Pool bei Mega-Belts
+- Abbau-Report nennt die Restmenge eines Mega-Belts, wenn noch etwas übrig ist
+
+### Fixed
+- Galaxy-Ansicht zeigte bereits abgebaute Asteroiden bis zu 2 Stunden lang weiter an, obwohl der Mission-Report den Abbau schon bestätigt hatte
 
 ---
 
