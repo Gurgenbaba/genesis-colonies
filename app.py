@@ -2505,6 +2505,13 @@ def ws_galaxy_system(ws, galaxy: int, system: int):
         unsubscribe_all,
     )
 
+    # GC-AST-LIVE: default True (production runs gunicorn -k gevent, where the
+    # __main__ dev-server block below never executes). Only False when this
+    # process is known to be the non-threaded local Werkzeug dev server,
+    # where holding this connection open would freeze every other request.
+    if not app.config.get("GC_WS_LONG_LIVED_SAFE", True):
+        return
+
     user_id = session.get("user_id")
     if not user_id:
         return
@@ -15009,6 +15016,19 @@ if __name__ == "__main__":
     use_reloader = reloader_raw in ("1", "true", "yes", "on")
     if not threaded and not is_production() and db_backend == "sqlite":
         print("[GC] Flask threaded=0 (SQLite local default — set GC_FLASK_THREADED=1 to override)")
+    # GC-AST-LIVE: the /ws/galaxy/<g>/<s> route holds a long-lived connection
+    # open. Under the non-threaded local Werkzeug dev server that would pin
+    # the server's single worker thread for as long as the socket is open,
+    # freezing every other request on the site. Only mark WS safe here when
+    # this process can actually serve concurrent requests (threaded=1); under
+    # gunicorn -k gevent in production this __main__ block never runs, so the
+    # route defaults to "safe" there (see ws_galaxy_system in this file).
+    app.config["GC_WS_LONG_LIVED_SAFE"] = bool(threaded)
+    if not threaded:
+        print(
+            "[GC] Galaxy live-push (WS) disabled on this non-threaded dev server — "
+            "falls back to polling. Set GC_FLASK_THREADED=1 to test it locally."
+        )
     # One local server only: free PORT before bind (skip in production / GC_SINGLE_INSTANCE=0).
     # With Werkzeug reloader, only the child process binds — free there.
     if (not use_reloader) or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
