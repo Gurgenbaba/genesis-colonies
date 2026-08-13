@@ -172,7 +172,7 @@ def _month_anchor_ts(year: int, month: int, day: int = 1) -> int:
 
 def _extract_release_hint_ts(version_label: str) -> int | None:
     label = str(version_label or "")
-    match = re.search(r"\*\((\d{4}-\d{2}-\d{2})\)\*", label)
+    match = re.search(r"\*\([^)]*?(\d{4}-\d{2}-\d{2})\s*\)\*", label)
     if match:
         return _date_to_ts(match.group(1))
     match = re.search(r"\*\(\s*(\d{4}-\d{2})\s*[—–-]\s*(\d{4}-\d{2})\s*\)\*", label)
@@ -193,7 +193,7 @@ def _changelog_release_dates(
     repo_root: Path | None = None,
 ) -> Dict[str, int]:
     """Map version_tag → release timestamp from CHANGELOG hints (monotonic, oldest→newest)."""
-    version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
+    version_header_re = re.compile(r"^##\s+(v\d+(?:\.\d+){1,2})\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
     versions: List[Tuple[str, str, Tuple[int, int, str]]] = []
     for match in version_header_re.finditer(text):
         tag = match.group(1).strip()
@@ -1138,7 +1138,7 @@ def import_changelog_markdown(
         inserted = 0
         skipped_versions: List[str] = []
 
-        version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
+        version_header_re = re.compile(r"^##\s+(v\d+(?:\.\d+){1,2})\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
         matches = list(version_header_re.finditer(text))
         if not matches:
             return {"ok": True, "inserted": 0, "skipped_versions": []}
@@ -1301,7 +1301,7 @@ def _changelog_path(path: Path | None = None) -> Path:
 
 
 def _parse_changelog_version_tags(text: str) -> List[str]:
-    version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s", re.I | re.M)
+    version_header_re = re.compile(r"^##\s+(v\d+(?:\.\d+){1,2})\s", re.I | re.M)
     tags: List[str] = []
     for match in version_header_re.finditer(text):
         tag = match.group(1).strip()
