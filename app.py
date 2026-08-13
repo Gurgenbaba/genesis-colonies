@@ -110,6 +110,10 @@ from game.security import (
 
 app = Flask(__name__)
 
+from flask_sock import Sock
+
+sock = Sock(app)
+
 BASE_DIR = Path(__file__).resolve().parent
 LOCALES_DIR = BASE_DIR / "locales"
 VERSION_FILE = BASE_DIR / "VERSION"
@@ -2482,6 +2486,44 @@ def api_galaxy_system():
     except Exception as e:
         logger.exception("api_galaxy_system failed")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@sock.route("/ws/galaxy/<int:galaxy>/<int:system>")
+def ws_galaxy_system(ws, galaxy: int, system: int):
+    """Live push for galaxy-system viewers (GC-AST-LIVE).
+
+    Thin invalidation channel only — never touches the DB. Auth reuses the
+    standard Flask session cookie (sent automatically on the WS upgrade
+    request), same as require_login_api elsewhere.
+    """
+    from game.ws_hub import (
+        WSClient,
+        galaxy_topic,
+        release_connection_slot,
+        subscribe,
+        try_acquire_connection_slot,
+        unsubscribe_all,
+    )
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return
+
+    if not try_acquire_connection_slot():
+        return
+
+    client = WSClient(ws, int(user_id))
+    subscribe(client, galaxy_topic(galaxy, system))
+    try:
+        while True:
+            # No inbound protocol — client only pings to keep the connection
+            # alive; receive() with a timeout doubles as our heartbeat.
+            ws.receive(timeout=30)
+    except Exception:
+        pass
+    finally:
+        unsubscribe_all(client)
+        release_connection_slot()
 
 
 @app.route("/api/command-map/sectors")

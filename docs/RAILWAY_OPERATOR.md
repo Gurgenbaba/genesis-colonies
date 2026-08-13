@@ -35,6 +35,7 @@ HTTP endpoints `POST /api/internal/cron/*` remain for manual/force runs (`GC_INT
 | Replicas | **1** | Volume + SQLite single-writer |
 | Serverless / scale-to-zero | **Off** | Game + embedded cron must stay warm |
 | `GUNICORN_WORKERS` | **1** (SQLite) | Multi-worker not used on SQLite production |
+| `GUNICORN_WORKER_CLASS` | **gevent** (default) | GC-AST-LIVE: lets WS galaxy-push connections coexist with HTTP on the single worker. Set to `sync` for emergency rollback — WS route/client both degrade gracefully, no redeploy of app code needed |
 | Separate ranking worker service | **Do not create** | Volume is service-bound |
 
 ---
@@ -68,6 +69,7 @@ Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `
 | `GC_DB_BACKEND` | `sqlite` until cutover |
 | `GC_DB_PATH` | `/data/game.db` |
 | `GUNICORN_WORKERS` | `1` |
+| `GUNICORN_WORKER_CLASS` | `gevent` (default; `sync` for rollback) |
 | `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` |
 | `GC_EMBEDDED_CRON` | unset or `1` (default on in production) |
 | `GC_EMBEDDED_CRON_SEC` | unset → `60` |

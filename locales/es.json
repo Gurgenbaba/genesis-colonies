@@ -1168,6 +1168,8 @@
   "asteroid_type_ferronite_rock_desc": "Roca rica en hierro — mucha Ferronita.",
   "asteroid_type_fuel_ice": "Hielo de combustible",
   "asteroid_type_fuel_ice_desc": "Venas de combustible congeladas — tesoro de celdas.",
+  "asteroid_type_mega_belt": "Mega cinturón",
+  "asteroid_type_mega_belt_desc": "Campo raro y enorme — escala con la economía del servidor. Requiere flotas grandes o coordinadas.",
   "asteroid_type_mixed_belt": "Asteroide mixto",
   "asteroid_type_mixed_belt_desc": "Cinturón mixto — recursos equilibrados.",
   "auction_bid_ok": "Oferta realizada.",

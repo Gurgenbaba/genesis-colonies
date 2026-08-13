@@ -6,7 +6,7 @@
 {% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
 {% set en_route = asteroid.viewer_en_route if asteroid.viewer_en_route is defined else false %}
 {% set harvest_locked = asteroid.viewer_harvest_locked if asteroid.viewer_harvest_locked is defined else false %}
-<div class="galaxy-slot-asteroid galaxy-asteroid-block{% if en_route %} is-en-route{% endif %}"
+<div class="galaxy-slot-asteroid galaxy-asteroid-block{% if en_route %} is-en-route{% endif %}{% if asteroid.tier == 'mega' %} is-mega-belt{% endif %}"
      role="group"
      aria-label="{{ T(asteroid.name_key, asteroid.asteroid_key) }}"
      data-galaxy-ring-asteroid-wrap
@@ -14,10 +14,16 @@
      data-target-system="{{ s }}"
      data-target-position="{{ p }}"
      data-recycler-slots="{{ asteroid.recycler_slots_needed or 0 }}"
+     data-asteroid-tier="{{ asteroid.tier or 'standard' }}"
      {% if harvest_locked %}data-harvest-locked="1"{% endif %}>
   <div class="galaxy-asteroid-block-head">
     <span class="galaxy-asteroid-icon" aria-hidden="true"></span>
     <span class="galaxy-asteroid-title">{{ T(asteroid.name_key, asteroid.asteroid_key) }}</span>
+    {% if asteroid.tier == 'mega' %}
+    <span class="galaxy-asteroid-board-badge galaxy-asteroid-board-badge--mega">
+      {{ T('galaxy_asteroid_mega_badge', 'Mega') }}
+    </span>
+    {% endif %}
     {% if en_route %}
     <span class="galaxy-asteroid-board-badge galaxy-asteroid-board-badge--en-route">
       {{ T('galaxy_asteroid_en_route', 'Unterwegs') }}

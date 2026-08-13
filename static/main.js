@@ -34607,6 +34607,114 @@
     _galaxyPjaxCache.clear();
   }
 
+  // =========================
+  // Galaxy live push (GC-AST-LIVE) — WS-only invalidation channel.
+  // Server pushes a thin "asteroid_claimed" event; we never trust it to carry
+  // full state, we just invalidate the stale PJAX cache and, if the viewer is
+  // currently on that exact system, force a PJAX refresh (same idiom already
+  // used everywhere else in this file, e.g. world_boss_defeated/mine_evolve).
+  // No hard dependency: if the socket never connects or drops, the existing
+  // polling/TTL-countdown fallback still applies, just slower.
+  // =========================
+  let _galaxyWs = null;
+  let _galaxyWsTopic = null;
+  let _galaxyWsReconnectAttempts = 0;
+  let _galaxyWsReconnectTimer = null;
+  let _galaxyWsLastRefreshAt = 0;
+  const GALAXY_WS_MAX_BACKOFF_MS = 30000;
+  const GALAXY_WS_REFRESH_DEBOUNCE_MS = 1500;
+
+  function galaxyWsUrlFor(g, s) {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/ws/galaxy/${g}/${s}`;
+  }
+
+  function disconnectGalaxyWs() {
+    if (_galaxyWsReconnectTimer) {
+      clearTimeout(_galaxyWsReconnectTimer);
+      _galaxyWsReconnectTimer = null;
+    }
+    if (_galaxyWs) {
+      try {
+        _galaxyWs.close();
+      } catch (_) {}
+      _galaxyWs = null;
+    }
+    _galaxyWsTopic = null;
+  }
+
+  function handleGalaxyWsMessage(g, s, ev) {
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch (_) {
+      return;
+    }
+    if (!msg || msg.type !== "asteroid_claimed") return;
+    invalidateGalaxyPjaxCache();
+    const page = getGalaxyPageRoot();
+    if (!page) return;
+    const onSameSystem =
+      Number(page.dataset.galaxy) === Number(g) && Number(page.dataset.system) === Number(s);
+    if (!onSameSystem) return;
+    const now = Date.now();
+    if (now - _galaxyWsLastRefreshAt < GALAXY_WS_REFRESH_DEBOUNCE_MS) return;
+    _galaxyWsLastRefreshAt = now;
+    if (typeof GC.reloadCurrentPage === "function") {
+      GC.reloadCurrentPage({ force: true, reason: "asteroid_claimed" });
+    }
+  }
+
+  function scheduleGalaxyWsReconnect(g, s) {
+    if (_galaxyWsReconnectTimer) return;
+    const delay = Math.min(GALAXY_WS_MAX_BACKOFF_MS, 1000 * Math.pow(2, _galaxyWsReconnectAttempts++));
+    _galaxyWsReconnectTimer = setTimeout(() => {
+      _galaxyWsReconnectTimer = null;
+      if (getGalaxyPageRoot()) connectGalaxyWs(g, s);
+    }, delay);
+  }
+
+  function connectGalaxyWs(g, s) {
+    if (!g || !s || !shouldRunGameLoop()) return;
+    if (typeof WebSocket === "undefined") return;
+    const topic = `${g}:${s}`;
+    if (_galaxyWs && _galaxyWsTopic === topic && _galaxyWs.readyState <= 1) return;
+    disconnectGalaxyWs();
+    _galaxyWsTopic = topic;
+    let socket;
+    try {
+      socket = new WebSocket(galaxyWsUrlFor(g, s));
+    } catch (_) {
+      return;
+    }
+    _galaxyWs = socket;
+    socket.addEventListener("open", () => {
+      _galaxyWsReconnectAttempts = 0;
+    });
+    socket.addEventListener("message", (ev) => handleGalaxyWsMessage(g, s, ev));
+    socket.addEventListener("close", () => {
+      if (_galaxyWs === socket) _galaxyWs = null;
+      scheduleGalaxyWsReconnect(g, s);
+    });
+    socket.addEventListener("error", () => {
+      try {
+        socket.close();
+      } catch (_) {}
+    });
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      disconnectGalaxyWs();
+      return;
+    }
+    const page = getGalaxyPageRoot();
+    if (page) connectGalaxyWs(Number(page.dataset.galaxy) || 0, Number(page.dataset.system) || 0);
+  });
+
+  GC.connectGalaxyWs = connectGalaxyWs;
+  GC.disconnectGalaxyWs = disconnectGalaxyWs;
+
   function parseCssUrlVar(styleText, varName) {
     const re = new RegExp(`${varName}\\s*:\\s*url\\(['"]?([^'")]+)`);
     const m = String(styleText || "").match(re);
@@ -39165,6 +39273,10 @@
     if (!document.querySelector(".galaxy-page")) return;
     persistGalaxyViewFromPage();
     const galaxyRoot = document.getElementById("galaxy-page-root");
+    connectGalaxyWs(Number(galaxyRoot?.dataset?.galaxy) || 0, Number(galaxyRoot?.dataset?.system) || 0);
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => disconnectGalaxyWs());
+    }
     initGalaxyTabs(galaxyRoot);
     if (galaxyRoot?.dataset?.galaxyView === "command_map") {
       logCommandMapTelemetry("map_open");

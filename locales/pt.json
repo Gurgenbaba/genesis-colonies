@@ -1168,6 +1168,8 @@
   "asteroid_type_ferronite_rock_desc": "Rocha rica em ferro — muita Ferronite.",
   "asteroid_type_fuel_ice": "Gelo de combustível",
   "asteroid_type_fuel_ice_desc": "Veias de combustível congeladas — tesouro de células.",
+  "asteroid_type_mega_belt": "Mega cinturão",
+  "asteroid_type_mega_belt_desc": "Campo raro e enorme — escala com a economia do servidor. Requer frotas grandes ou coordenadas.",
   "asteroid_type_mixed_belt": "Asteroide misto",
   "asteroid_type_mixed_belt_desc": "Cinturão misto — recursos equilibrados.",
   "auction_bid_ok": "Lance colocado.",

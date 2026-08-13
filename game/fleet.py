@@ -4956,6 +4956,7 @@ def _format_asteroid_report(
     missed: bool = False,
     expired: bool = False,
     locale: str | None = None,
+    remaining_pool: Mapping[str, Any] | None = None,
 ) -> str:
     from .i18n import tr
 
@@ -4984,7 +4985,7 @@ def _format_asteroid_report(
             coords=coords,
             origin=origin_name,
         )
-    return tr(
+    base = tr(
         "fleet_asteroid_report",
         "Asteroid harvest at %(coords)s: %(cargo)s loaded. Fleet returning to %(origin)s.",
         locale=locale,
@@ -4992,6 +4993,17 @@ def _format_asteroid_report(
         origin=origin_name,
         cargo=cargo_txt,
     )
+    if remaining_pool is not None:
+        remaining_total = loaded_resource_total(remaining_pool)
+        if remaining_total > 0:
+            remaining_txt = _format_transport_cargo(remaining_pool, locale=locale)
+            base += " " + tr(
+                "fleet_asteroid_report_remaining",
+                "Mega-belt still holds %(remaining)s — send another wave.",
+                locale=locale,
+                remaining=remaining_txt,
+            )
+    return base
 
 
 def _format_collect_report(
@@ -5344,7 +5356,27 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                     "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
                     "asteroid_key": claim.get("asteroid_key") or asteroid_stamp_key,
                     "pool": claim.get("pool") or {},
+                    "remaining_pool": claim.get("remaining_pool"),
                 }
+                # GC-AST-LIVE: stage a thin invalidation event for the galaxy
+                # viewers of this system. Drained and published by the caller
+                # (_run_one_movement_short_tx) only after commit() returns —
+                # never inside this write transaction.
+                from .ws_hub import galaxy_topic, stage_event
+
+                stage_event(
+                    galaxy_topic(tg, ts),
+                    {
+                        "type": "asteroid_claimed",
+                        "galaxy": tg,
+                        "system": ts,
+                        "position": tp,
+                        "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
+                        "claimed_by_player_id": player_id,
+                        "remaining_pool": claim.get("remaining_pool"),
+                        "at": float(now),
+                    },
+                )
             elif asteroid_stamp_id > 0:
                 # Explicit asteroid hunt — never fall through to combat/world-boss debris.
                 if status == "missed":
@@ -5398,6 +5430,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 missed=asteroid_missed,
                 expired=asteroid_expired,
                 locale=sender_locale,
+                remaining_pool=asteroid_meta.get("remaining_pool"),
             )
             subject = tr(
                 "fleet_asteroid_report_subject",
@@ -6671,8 +6704,18 @@ def process_fleet_tick(
             )
             if own:
                 commit(conn)
+                # GC-AST-LIVE: only publish when this call owned (and just
+                # closed) the transaction — if the caller manages its own
+                # transaction (own=False), staged events stay queued on this
+                # thread until that caller commits and drains them itself.
+                from .ws_hub import publish_staged_events
+
+                publish_staged_events()
     except Exception as exc:
         if own or manage_transaction:
+            from .ws_hub import drain_staged_events
+
+            drain_staged_events()  # discard — transaction rolled back
             try:
                 rollback(conn)
             except Exception:
@@ -6830,9 +6873,18 @@ def _run_one_movement_short_tx(
         try:
             ok = bool(handler(mv, conn=conn, now=now))
             commit(conn)
+            # GC-AST-LIVE: publish any WS events staged during the handler
+            # only now that the write transaction (and mutex) has been
+            # released — never call this while still inside the transaction.
+            from .ws_hub import publish_staged_events
+
+            publish_staged_events()
             return ok, None
         except Exception as exc:
             logger.exception("fleet %s failed fleet=%s", expect_status, mid)
+            from .ws_hub import drain_staged_events
+
+            drain_staged_events()  # discard — transaction rolled back
             try:
                 rollback(conn)
             except Exception:

@@ -35,6 +35,9 @@ SPAWN_SEARCH_SYSTEM_LIMIT = 64
 
 SPAWN_RUNTIME_KEY = "asteroid_belt_last_spawn_at"
 
+TIER_STANDARD = "standard"
+TIER_MEGA = "mega"
+
 # Catalog: weighted types with resource split hints.
 # Each resource (metal / crystal / fuel_cells) rolls independently in this band.
 ASTEROID_RESOURCE_RANGE = (500_000, 5_000_000)
@@ -46,6 +49,7 @@ ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
         "spawn_weight": 35,
         "split": {"metal": 0.70, "crystal": 0.25, "fuel_cells": 0.05},
         "resource_range": ASTEROID_RESOURCE_RANGE,
+        "tier": TIER_STANDARD,
     },
     "crytite_shard": {
         "name_key": "asteroid_type_crytite_shard",
@@ -53,6 +57,7 @@ ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
         "spawn_weight": 30,
         "split": {"metal": 0.25, "crystal": 0.70, "fuel_cells": 0.05},
         "resource_range": ASTEROID_RESOURCE_RANGE,
+        "tier": TIER_STANDARD,
     },
     "fuel_ice": {
         "name_key": "asteroid_type_fuel_ice",
@@ -60,6 +65,7 @@ ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
         "spawn_weight": 20,
         "split": {"metal": 0.15, "crystal": 0.15, "fuel_cells": 0.70},
         "resource_range": ASTEROID_RESOURCE_RANGE,
+        "tier": TIER_STANDARD,
     },
     "mixed_belt": {
         "name_key": "asteroid_type_mixed_belt",
@@ -67,7 +73,41 @@ ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
         "spawn_weight": 15,
         "split": {"metal": 0.40, "crystal": 0.40, "fuel_cells": 0.20},
         "resource_range": ASTEROID_RESOURCE_RANGE,
+        "tier": TIER_STANDARD,
     },
+    "mega_belt": {
+        "name_key": "asteroid_type_mega_belt",
+        "desc_key": "asteroid_type_mega_belt_desc",
+        # Not used by the weighted standard-spawn roll (see _pick_weighted_key,
+        # which filters to tier=="standard"); mega belts are placed by
+        # maybe_spawn_mega_belt via its own separate, rare schedule.
+        "spawn_weight": 0,
+        "split": {"metal": 0.34, "crystal": 0.33, "fuel_cells": 0.33},
+        "resource_range": ASTEROID_RESOURCE_RANGE,
+        "tier": TIER_MEGA,
+    },
+}
+
+# GC-AST-MEGA: rare, server-economy-scaled fields. Orthogonal to the standard
+# belt rotation — own cap/cooldown/TTL, never counted against
+# MAX_ACTIVE_ASTEROIDS/INTER_WAVE_COOLDOWN_SEC.
+MEGA_BELT_MAX_CONCURRENT = 1
+MEGA_BELT_INTER_WAVE_COOLDOWN_SEC = 24 * 3600
+MEGA_BELT_TTL_SECONDS = 6 * 3600
+MEGA_BELT_SPAWN_RUNTIME_KEY = "mega_asteroid_belt_last_spawn_at"
+
+# Pool sizing: hours of the server's own top-N mine production per resource —
+# anchors mega-belt value directly to the live economy (game/economy_balance.py
+# reference_production_per_hour) instead of an invented constant.
+MEGA_BELT_TOP_N_MINES = 10
+MEGA_BELT_HOURS_OF_TOP_PRODUCTION = 6.0
+MEGA_BELT_MIN_POOL_PER_RESOURCE = 20_000_000
+MEGA_BELT_MAX_POOL_PER_RESOURCE = 500_000_000
+
+MEGA_BELT_MINE_BUILDING_BY_RESOURCE = {
+    "metal": "metal_mine",
+    "crystal": "crystal_mine",
+    "fuel_cells": "fuel_cell_plant",
 }
 
 
@@ -304,10 +344,19 @@ def build_asteroid_board_entries(
         coords = format_coordinates(g, s, p)
         href = galaxy_view_href(coords) or f"/galaxy?q={coords}"
         remaining = max(0, int(float(enriched.get("expires_at") or 0) - ts))
+        claim_count = 0
+        if enriched.get("tier") == TIER_MEGA and table_exists(conn, "asteroid_field_claims"):
+            row_ct = conn.execute(
+                "SELECT COUNT(*) AS n FROM asteroid_field_claims WHERE asteroid_id = ?;",
+                (int(enriched["id"]),),
+            ).fetchone()
+            claim_count = int(row_ct["n"] or 0) if row_ct else 0
         entries.append(
             {
                 "id": int(enriched["id"]),
                 "asteroid_key": enriched["asteroid_key"],
+                "tier": enriched.get("tier") or TIER_STANDARD,
+                "claim_count": claim_count,
                 "name_key": enriched["name_key"],
                 "desc_key": enriched.get("desc_key") or "",
                 "galaxy": g,
@@ -392,9 +441,39 @@ def _roll_loot(asteroid_key: str, *, rng: Optional[random.Random] = None) -> Dic
 
 def _pick_weighted_key(*, rng: Optional[random.Random] = None) -> str:
     roll = rng or random
-    keys = list(ASTEROID_CATALOG.keys())
+    keys = [k for k, v in ASTEROID_CATALOG.items() if v.get("tier", TIER_STANDARD) == TIER_STANDARD]
     weights = [int(ASTEROID_CATALOG[k]["spawn_weight"]) for k in keys]
     return str(roll.choices(keys, weights=weights, k=1)[0])
+
+
+def _top_n_mine_avg_level(conn, building_type: str, *, n: int = MEGA_BELT_TOP_N_MINES) -> float:
+    if building_type not in MEGA_BELT_MINE_BUILDING_BY_RESOURCE.values():
+        return 0.0
+    rows = conn.execute(
+        f"SELECT {building_type} AS lvl FROM planet_buildings "
+        f"ORDER BY {building_type} DESC LIMIT ?;",
+        (max(1, int(n)),),
+    ).fetchall()
+    levels = [int(r["lvl"] or 0) for r in rows]
+    if not levels:
+        return 0.0
+    return sum(levels) / len(levels)
+
+
+def _mega_belt_resource_pool(conn) -> Dict[str, int]:
+    """Size a mega-belt off the server's own top-N mine production."""
+    from .economy_balance import reference_production_per_hour
+
+    out: Dict[str, int] = {}
+    for resource, building_type in MEGA_BELT_MINE_BUILDING_BY_RESOURCE.items():
+        avg_level = _top_n_mine_avg_level(conn, building_type)
+        hourly = reference_production_per_hour(resource, int(round(avg_level)))
+        pool = int(float(hourly) * MEGA_BELT_HOURS_OF_TOP_PRODUCTION)
+        out[resource] = max(
+            MEGA_BELT_MIN_POOL_PER_RESOURCE,
+            min(MEGA_BELT_MAX_POOL_PER_RESOURCE, pool),
+        )
+    return out
 
 
 def _row_to_asteroid(row) -> Dict[str, Any]:
@@ -407,9 +486,14 @@ def _row_to_asteroid(row) -> Dict[str, Any]:
     g = int(row["galaxy"])
     s = int(row["system"])
     p = int(row["position"])
+    try:
+        tier = str(row["tier"] or TIER_STANDARD)
+    except (KeyError, IndexError):
+        tier = str(catalog.get("tier") or TIER_STANDARD)
     return {
         "id": int(row["id"]),
         "asteroid_key": key,
+        "tier": tier,
         "name_key": str(catalog.get("name_key") or "asteroid_type_mixed_belt"),
         "desc_key": str(catalog.get("desc_key") or "asteroid_type_mixed_belt_desc"),
         "galaxy": g,
@@ -419,6 +503,9 @@ def _row_to_asteroid(row) -> Dict[str, Any]:
         "metal": metal,
         "crystal": crystal,
         "fuel_cells": fuel,
+        # For mega-tier fields metal/crystal/fuel_cells already ARE the live
+        # remaining pool (see try_claim_harvest) — same field, same semantics
+        # for both tiers, no separate "remaining" column needed.
         "total": total,
         "status": str(row["status"] or STATUS_ACTIVE),
         "spawned_at": float(row["spawned_at"] or 0),
@@ -705,23 +792,29 @@ def insert_asteroid(
     now: Optional[float] = None,
     rng: Optional[random.Random] = None,
     ttl_seconds: int = TTL_SECONDS,
+    tier: str = TIER_STANDARD,
 ) -> Dict[str, Any]:
     """Insert one active asteroid at coords (caller enforces uniqueness)."""
     if not asteroid_schema_ready(conn):
         return {"ok": False, "error": "schema_not_ready"}
     ts = float(now if now is not None else _now())
-    key = str(asteroid_key or _pick_weighted_key(rng=rng))
-    if key not in ASTEROID_CATALOG:
-        key = "mixed_belt"
-    loot = _roll_loot(key, rng=rng)
+    tier_eff = str(tier or TIER_STANDARD)
+    if tier_eff == TIER_MEGA:
+        key = "mega_belt"
+        loot = _mega_belt_resource_pool(conn)
+    else:
+        key = str(asteroid_key or _pick_weighted_key(rng=rng))
+        if key not in ASTEROID_CATALOG:
+            key = "mixed_belt"
+        loot = _roll_loot(key, rng=rng)
     expires = ts + float(ttl_seconds)
     cur = conn.execute(
         """
         INSERT INTO asteroid_fields (
             asteroid_key, galaxy, system, position,
             metal, crystal, fuel_cells, status,
-            spawned_at, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            spawned_at, expires_at, tier
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             key,
@@ -734,6 +827,7 @@ def insert_asteroid(
             STATUS_ACTIVE,
             ts,
             expires,
+            tier_eff,
         ),
     )
     aid = int(cur.lastrowid)
@@ -935,6 +1029,117 @@ def maybe_tick_asteroid_schedule(*, conn, now: Optional[float] = None) -> Dict[s
         return {"ok": False, "error": "tick_failed", "expired_ids": [], "spawned": []}
 
 
+def spawn_mega_belt(
+    *,
+    conn,
+    now: Optional[float] = None,
+    force: bool = False,
+    rng: Optional[random.Random] = None,
+) -> Dict[str, Any]:
+    """Place one rare mega-belt (GC-AST-MEGA), orthogonal to the standard rotation."""
+    if not asteroid_schema_ready(conn):
+        return {"ok": False, "error": "schema_not_ready", "spawned": None}
+
+    from .galaxy import POSITION_MAX, POSITION_MIN
+
+    ts = float(now if now is not None else _now())
+    roll = rng or random
+    active_mega = [
+        a
+        for a in list_active_asteroids(
+            conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + MEGA_BELT_MAX_CONCURRENT + 20
+        )
+        if a.get("tier") == TIER_MEGA
+    ]
+    if len(active_mega) >= int(MEGA_BELT_MAX_CONCURRENT) and not force:
+        return {"ok": False, "error": "concurrent_cap", "spawned": None}
+
+    blocked = _blocked_spawn_coords(conn, now=ts)
+    dense = _spawn_candidate_systems(conn, limit=SPAWN_SEARCH_SYSTEM_LIMIT)
+    for g, s, _n in dense:
+        free = _free_slots_in_system(
+            conn, g, s, blocked=blocked, position_min=POSITION_MIN, position_max=POSITION_MAX
+        )
+        if not free:
+            continue
+        pos = int(roll.choice(free))
+        result = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            now=ts,
+            rng=roll,
+            ttl_seconds=MEGA_BELT_TTL_SECONDS,
+            tier=TIER_MEGA,
+        )
+        if not result.get("ok"):
+            continue
+        set_runtime_value(MEGA_BELT_SPAWN_RUNTIME_KEY, str(ts), conn=conn)
+        return {"ok": True, "spawned": result["asteroid"], "error": None}
+
+    return {"ok": False, "error": "no_free_slots", "spawned": None}
+
+
+def build_mega_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
+    ts = float(now if now is not None else _now())
+    active = (
+        [a for a in list_active_asteroids(conn=conn, now=ts) if a.get("tier") == TIER_MEGA]
+        if asteroid_schema_ready(conn)
+        else []
+    )
+    last_spawn: Optional[float] = None
+    if asteroid_schema_ready(conn):
+        raw = get_runtime_value(MEGA_BELT_SPAWN_RUNTIME_KEY, conn=conn)
+        if raw not in (None, ""):
+            try:
+                last_spawn = float(raw)
+            except (TypeError, ValueError):
+                last_spawn = None
+    if last_spawn is not None and last_spawn > 0:
+        next_eligible_at = float(last_spawn) + float(MEGA_BELT_INTER_WAVE_COOLDOWN_SEC)
+    else:
+        next_eligible_at = ts
+    under_cap = len(active) < int(MEGA_BELT_MAX_CONCURRENT)
+    spawn_ready = bool(under_cap and ts >= next_eligible_at)
+    return {
+        "active_count": len(active),
+        "max_concurrent": int(MEGA_BELT_MAX_CONCURRENT),
+        "inter_wave_cooldown_sec": int(MEGA_BELT_INTER_WAVE_COOLDOWN_SEC),
+        "ttl_seconds": int(MEGA_BELT_TTL_SECONDS),
+        "last_spawn_at": last_spawn,
+        "next_eligible_at": float(next_eligible_at),
+        "seconds_until_next": max(0, int(next_eligible_at - ts)) if not spawn_ready else 0,
+        "spawn_ready": spawn_ready,
+        "under_cap": under_cap,
+    }
+
+
+def maybe_spawn_mega_belt(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
+    """Cron entry — rare mega-belt spawn, orthogonal to the standard rotation.
+
+    Call after maybe_tick_asteroid_schedule from the same cron tick
+    (game/fleet_worker.py asteroids stage / scripts/run_maintenance_worker.py).
+    """
+    if not asteroid_schema_ready(conn):
+        return {"ok": False, "error": "schema_not_ready", "spawned": None}
+    ts = float(now if now is not None else _now())
+    try:
+        schedule = build_mega_schedule_info(conn=conn, now=ts)
+        if not schedule.get("spawn_ready"):
+            return {"ok": False, "error": "not_ready", "spawned": None, "schedule": schedule}
+        result = spawn_mega_belt(conn=conn, now=ts)
+        return {
+            "ok": bool(result.get("ok")),
+            "spawned": result.get("spawned"),
+            "error": result.get("error"),
+            "schedule": build_mega_schedule_info(conn=conn, now=ts),
+        }
+    except Exception:
+        logger.exception("mega asteroid belt schedule tick failed")
+        return {"ok": False, "error": "tick_failed", "spawned": None}
+
+
 def _split_load(pool: Mapping[str, int], cargo_total: int) -> Dict[str, int]:
     """Proportional take up to cargo capacity (same idea as fleet collect load)."""
     metal = max(0, int(pool.get("metal") or 0))
@@ -1059,7 +1264,22 @@ def try_claim_harvest(
         "crystal": int(row["crystal"] or 0),
         "fuel_cells": int(row["fuel_cells"] or 0),
     }
+    try:
+        tier = str(row["tier"] or TIER_STANDARD)
+    except (KeyError, IndexError):
+        tier = TIER_STANDARD
     harvested = _split_load(pool, int(cargo_capacity))
+
+    if tier == TIER_MEGA:
+        return _claim_mega_harvest(
+            conn,
+            row=row,
+            aid=aid,
+            pool=pool,
+            harvested=harvested,
+            player_id=int(player_id),
+            ts=ts,
+        )
 
     cur = conn.execute(
         """
@@ -1100,5 +1320,103 @@ def try_claim_harvest(
         "asteroid_id": aid,
         "asteroid_key": asteroid.get("asteroid_key"),
         "pool": pool,
+        "asteroid": asteroid,
+    }
+
+
+def _claim_mega_harvest(
+    conn,
+    *,
+    row,
+    aid: int,
+    pool: Dict[str, int],
+    harvested: Dict[str, int],
+    player_id: int,
+    ts: float,
+) -> Dict[str, Any]:
+    """Atomic partial/sequential claim for a mega-tier field (GC-AST-MEGA).
+
+    Same pattern as world_boss.py's shared-HP decrement: UPDATE ... SET x =
+    MAX(0, x - ?) WHERE status='active'. The field stays active (with a
+    reduced pool) until fully depleted, instead of flipping to 'claimed' on
+    the first arrival. Callers within a process are already serialized by
+    the SQLite write mutex (BEGIN IMMEDIATE), so no lost updates across
+    concurrent claimers.
+    """
+    cur = conn.execute(
+        """
+        UPDATE asteroid_fields
+        SET metal = MAX(0, metal - ?),
+            crystal = MAX(0, crystal - ?),
+            fuel_cells = MAX(0, fuel_cells - ?)
+        WHERE id = ? AND status = ?;
+        """,
+        (
+            int(harvested["metal"]),
+            int(harvested["crystal"]),
+            int(harvested["fuel_cells"]),
+            aid,
+            STATUS_ACTIVE,
+        ),
+    )
+    if cur.rowcount != 1:
+        return {
+            "status": "missed",
+            "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0},
+            "asteroid_id": aid,
+        }
+
+    conn.execute(
+        """
+        INSERT INTO asteroid_field_claims (
+            asteroid_id, player_id, claimed_at, metal, crystal, fuel_cells
+        ) VALUES (?, ?, ?, ?, ?, ?);
+        """,
+        (
+            aid,
+            int(player_id),
+            ts,
+            int(harvested["metal"]),
+            int(harvested["crystal"]),
+            int(harvested["fuel_cells"]),
+        ),
+    )
+
+    remaining = {
+        "metal": max(0, int(pool["metal"]) - int(harvested["metal"])),
+        "crystal": max(0, int(pool["crystal"]) - int(harvested["crystal"])),
+        "fuel_cells": max(0, int(pool["fuel_cells"]) - int(harvested["fuel_cells"])),
+    }
+    remaining_total = remaining["metal"] + remaining["crystal"] + remaining["fuel_cells"]
+    if remaining_total <= 0:
+        conn.execute(
+            """
+            UPDATE asteroid_fields
+            SET status = ?, claimed_at = ?, claimed_by_player_id = ?
+            WHERE id = ? AND status = ?;
+            """,
+            (STATUS_CLAIMED, ts, int(player_id), aid, STATUS_ACTIVE),
+        )
+
+    try:
+        from .pirates.hooks import safe_record_heat
+
+        safe_record_heat(conn, int(row["galaxy"]), "asteroid")
+    except Exception:
+        logger.exception("pirate heat asteroid hook failed asteroid_id=%s", aid)
+
+    asteroid = _row_to_asteroid(row)
+    asteroid["metal"] = remaining["metal"]
+    asteroid["crystal"] = remaining["crystal"]
+    asteroid["fuel_cells"] = remaining["fuel_cells"]
+    asteroid["total"] = remaining_total
+    asteroid["status"] = STATUS_CLAIMED if remaining_total <= 0 else STATUS_ACTIVE
+    return {
+        "status": "claimed",
+        "harvested": harvested,
+        "asteroid_id": aid,
+        "asteroid_key": asteroid.get("asteroid_key"),
+        "pool": pool,
+        "remaining_pool": remaining,
         "asteroid": asteroid,
     }

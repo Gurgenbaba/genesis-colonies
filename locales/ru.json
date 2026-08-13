@@ -1168,6 +1168,8 @@
   "asteroid_type_ferronite_rock_desc": "Железистый камень — много Ферронита.",
   "asteroid_type_fuel_ice": "Топливный лёд",
   "asteroid_type_fuel_ice_desc": "Ледяные топливные жилы — запас ячеек.",
+  "asteroid_type_mega_belt": "Мега-пояс",
+  "asteroid_type_mega_belt_desc": "Редкое, огромное поле — масштабируется вместе с экономикой сервера. Требует крупных или скоординированных флотов.",
   "asteroid_type_mixed_belt": "Смешанный астероид",
   "asteroid_type_mixed_belt_desc": "Смешанный пояс — сбалансированные ресурсы.",
   "auction_bid_ok": "Ставка размещена.",

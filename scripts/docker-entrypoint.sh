@@ -50,6 +50,12 @@ if not ok:
 "
 
 WORKERS="${GUNICORN_WORKERS:-1}"
+# GC-AST-LIVE: gevent worker class lets long-lived WS connections (galaxy
+# live push) coexist with normal HTTP requests on a single gunicorn worker
+# without pinning a worker slot per socket. Flip to "sync" for emergency
+# rollback without a redeploy — the WS route/client both degrade gracefully
+# (client falls back to existing polling) if unreachable.
+WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gevent}"
 
 # GC-PERF-PROD-002: run the maintenance bag in a sibling OS process so gunicorn
 # does not share GIL/CPU with Soft-On autoplay/pirate ticks. Opt out with
@@ -76,7 +82,7 @@ else
   echo "[GC] Maintenance sidecar off (GC_MAINTENANCE_WORKER=${MAINT_WORKER}); embedded cron may run in-process."
 fi
 
-echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS})..."
-exec gunicorn -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 \
+echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS}, worker_class=${WORKER_CLASS})..."
+exec gunicorn -k "${WORKER_CLASS}" -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 \
   --access-logfile - --error-logfile - --log-level info \
   app:app

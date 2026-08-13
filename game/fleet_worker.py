@@ -189,7 +189,7 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                 )
 
         def _asteroids() -> None:
-            from .asteroids import maybe_tick_asteroid_schedule
+            from .asteroids import maybe_spawn_mega_belt, maybe_tick_asteroid_schedule
 
             ast_tick = maybe_tick_asteroid_schedule(conn=conn)
             if ast_tick.get("expired_ids") or ast_tick.get("spawned"):
@@ -197,6 +197,11 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"asteroids expired={ast_tick.get('expired_ids')} "
                     f"spawned={len(ast_tick.get('spawned') or [])}"
                 )
+            # GC-AST-MEGA: rare, orthogonal mega-belt spawn — own cap/cooldown,
+            # never counted against the standard belt rotation above.
+            mega_tick = maybe_spawn_mega_belt(conn=conn)
+            if mega_tick.get("spawned"):
+                _worker_log(f"mega asteroid belt spawned={mega_tick.get('spawned')}")
 
         def _pirates() -> None:
             from .pirates.bases import maybe_tick_pirate_bases

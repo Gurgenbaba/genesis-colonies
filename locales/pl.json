@@ -1168,6 +1168,8 @@
   "asteroid_type_ferronite_rock_desc": "Bogata w żelazo skała — dużo Ferronitu.",
   "asteroid_type_fuel_ice": "Lód paliwowy",
   "asteroid_type_fuel_ice_desc": "Zamarznięte żyły paliwa — skarb ogniw.",
+  "asteroid_type_mega_belt": "Mega pas",
+  "asteroid_type_mega_belt_desc": "Rzadkie, ogromne pole — skaluje się wraz z gospodarką serwera. Wymaga dużych lub skoordynowanych flot.",
   "asteroid_type_mixed_belt": "Mieszana asteroida",
   "asteroid_type_mixed_belt_desc": "Mieszany pas — zrównoważone zasoby.",
   "auction_bid_ok": "Oferta złożona.",

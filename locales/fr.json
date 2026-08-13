@@ -1168,6 +1168,8 @@
   "asteroid_type_ferronite_rock_desc": "Roche riche en fer — beaucoup de Ferronite.",
   "asteroid_type_fuel_ice": "Glace de carburant",
   "asteroid_type_fuel_ice_desc": "Veines de carburant gelées — réserve de cellules.",
+  "asteroid_type_mega_belt": "Méga-ceinture",
+  "asteroid_type_mega_belt_desc": "Champ rare et immense — évolue avec l'économie du serveur. Nécessite de grandes flottes coordonnées.",
   "asteroid_type_mixed_belt": "Astéroïde mixte",
   "asteroid_type_mixed_belt_desc": "Ceinture mixte — ressources équilibrées.",
   "auction_bid_ok": "Enchère placée.",

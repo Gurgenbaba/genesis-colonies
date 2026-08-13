@@ -1168,6 +1168,8 @@
   "asteroid_type_ferronite_rock_desc": "Demir zengin kaya — bol Ferronite.",
   "asteroid_type_fuel_ice": "Yakıt buzu",
   "asteroid_type_fuel_ice_desc": "Donmuş yakıt damarları — yakıt hücresi hazinesi.",
+  "asteroid_type_mega_belt": "Mega kuşak",
+  "asteroid_type_mega_belt_desc": "Nadir, dev bir alan — sunucu ekonomisiyle birlikte ölçeklenir. Büyük veya koordineli filolar gerektirir.",
   "asteroid_type_mixed_belt": "Karışık asteroid",
   "asteroid_type_mixed_belt_desc": "Karışık kuşak — dengeli kaynaklar.",
   "auction_bid_ok": "Teklif verildi.",
