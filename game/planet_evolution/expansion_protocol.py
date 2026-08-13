@@ -19,7 +19,7 @@ INTERSTELLAR_EXPANSION_TECH = "interstellar_expansion"
 INTERSTELLAR_EXPANSION_MAX_LEVEL = 6
 
 # Non-homeworld colonies must reach this PE level before another colony may be founded.
-COLONY_MATURITY_REQUIRED_LEVEL = 30
+COLONY_MATURITY_REQUIRED_LEVEL = 15
 
 # Nth expansion world (1 = first colony after homeworld).
 EXPANSION_SLOT_GATES: Tuple[Dict[str, int], ...] = (

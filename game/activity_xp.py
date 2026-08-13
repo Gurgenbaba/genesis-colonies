@@ -24,18 +24,18 @@ SOURCE_SHIPYARD_FINISH = "shipyard_finish"
 SOURCE_DEFENSE_FINISH = "defense_finish"
 
 EXPEDITION_BONUS_EVERY = 10
-EXPEDITION_BONUS_AMOUNT = 25
+EXPEDITION_BONUS_AMOUNT = 75
 
 _SOURCE_CONFIG: Dict[str, Dict[str, Any]] = {
-    SOURCE_EXPEDITION: {"amount": 5, "daily_cap": None},
+    SOURCE_EXPEDITION: {"amount": 15, "daily_cap": None},
     SOURCE_EXPEDITION_BONUS: {"amount": EXPEDITION_BONUS_AMOUNT, "daily_cap": None},
-    SOURCE_SPY: {"amount": 2, "daily_cap": 20},
-    SOURCE_RECYCLE: {"amount": 3, "daily_cap": 30},
-    SOURCE_COLONIZE: {"amount": 100, "daily_cap": None},
-    SOURCE_BUILDING_FINISH: {"amount": 1, "daily_cap": 30},
-    SOURCE_ACCOUNT_RESEARCH_FINISH: {"amount": 10, "daily_cap": None},
-    SOURCE_SHIPYARD_FINISH: {"amount": 1, "daily_cap": 30},
-    SOURCE_DEFENSE_FINISH: {"amount": 1, "daily_cap": 30},
+    SOURCE_SPY: {"amount": 6, "daily_cap": 60},
+    SOURCE_RECYCLE: {"amount": 9, "daily_cap": 90},
+    SOURCE_COLONIZE: {"amount": 300, "daily_cap": None},
+    SOURCE_BUILDING_FINISH: {"amount": 3, "daily_cap": 90},
+    SOURCE_ACCOUNT_RESEARCH_FINISH: {"amount": 30, "daily_cap": None},
+    SOURCE_SHIPYARD_FINISH: {"amount": 3, "daily_cap": 90},
+    SOURCE_DEFENSE_FINISH: {"amount": 3, "daily_cap": 90},
 }
 
 

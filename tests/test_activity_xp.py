@@ -61,18 +61,18 @@ def test_grant_activity_xp_writes_log_and_planet_xp(axp_db):
 
     result = grant_activity_xp(uid, pid, SOURCE_SPY, conn=conn, idempotency_key="spy:test:1")
     assert result["granted"] is True
-    assert result["amount"] == 2
-    assert result["planet_xp"]["xp_gained"] == 2
+    assert result["amount"] == 6
+    assert result["planet_xp"]["xp_gained"] == 6
 
     row = conn.execute("SELECT planet_xp FROM planets WHERE id = ?;", (pid,)).fetchone()
-    assert int(row["planet_xp"]) == 2
+    assert int(row["planet_xp"]) == 6
 
     log = conn.execute(
         "SELECT * FROM activity_xp_log WHERE player_id = ? AND source_key = ?;",
         (uid, SOURCE_SPY),
     ).fetchone()
     assert log is not None
-    assert int(log["amount"]) == 2
+    assert int(log["amount"]) == 6
     assert log["idempotency_key"] == "spy:test:1"
     conn.close()
 
@@ -106,7 +106,7 @@ def test_daily_cap_blocks_spy_farm(axp_db):
         res = grant_fleet_activity_xp(uid, pid, SOURCE_SPY, 10000 + i, conn=conn)
         if res["granted"]:
             granted += 1
-    assert granted == 10  # 2 XP * 10 = 20 cap
+    assert granted == 10  # 6 XP * 10 = 60 cap
 
     blocked = grant_fleet_activity_xp(uid, pid, SOURCE_SPY, 20000, conn=conn)
     assert blocked["granted"] is False
@@ -131,7 +131,7 @@ def test_tenth_expedition_grants_bonus(axp_db):
             assert bonus.get("granted") is True
             assert int(bonus.get("amount") or 0) == EXPEDITION_BONUS_AMOUNT
 
-    assert total_xp == 5 * 10 + EXPEDITION_BONUS_AMOUNT
+    assert total_xp == 15 * 10 + EXPEDITION_BONUS_AMOUNT
     conn.close()
 
 
@@ -197,7 +197,7 @@ def test_activity_xp_dashboard_summary(axp_db):
 
     dash = get_activity_xp_dashboard(uid, pid, conn=conn)
     assert dash["visible"] is True
-    assert dash["today_earned"] == 7
+    assert dash["today_earned"] == 21
     assert dash["expedition_count_today"] == 1
     assert dash["expedition_progress"] == 1
     conn.close()

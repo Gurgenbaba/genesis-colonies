@@ -183,7 +183,7 @@ def test_survey_mandate_unlocks_eighth_world(mandates_db):
         conn.close()
 
 
-def test_colony_maturity_blocks_second_colony_until_pe_30(mandates_db):
+def test_colony_maturity_blocks_second_colony_until_required_level(mandates_db):
     from game.planet_evolution.expansion_protocol import COLONY_MATURITY_REQUIRED_LEVEL
 
     uid = _player()
@@ -193,9 +193,9 @@ def test_colony_maturity_blocks_second_colony_until_pe_30(mandates_db):
         conn.execute(
             """
             INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update)
-            VALUES (?, 'YoungColony', 1, 50, 3, 0, 29, ?);
+            VALUES (?, 'YoungColony', 1, 50, 3, 0, ?, ?);
             """,
-            (uid, time.time()),
+            (uid, COLONY_MATURITY_REQUIRED_LEVEL - 1, time.time()),
         )
         conn.commit()
         ok, reason = check_planet_cap_available(uid, conn=conn)
