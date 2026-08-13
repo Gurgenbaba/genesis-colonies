@@ -9,6 +9,18 @@
 
 {% block extra_head %}
 <title>{{ T('chat_title', 'TChat') }} — Genesis Colonies</title>
+{% endblock %}
+
+{% block content %}{% endblock %}
+
+{% block extra_scripts %}
+{# Loaded after css/chat.css (linked earlier in <head>) so these rules win
+   the cascade at equal specificity/!important — critically, this MUST come
+   after chat.css's own @media (max-width: 768px) block, which otherwise
+   wins ties by source order and silently reintroduces the phone-sized
+   layout (cramped 44px room-tool strip, hidden buttons) the moment this
+   popout window is narrower than 768px — a completely ordinary width for a
+   second-monitor chat pane. #}
 <style>
   body.gc-chat-popout-body {
     overflow: hidden;
@@ -29,6 +41,23 @@
     max-height: none !important;
     border-radius: 0 !important;
   }
+  /* Always the full desktop layout, regardless of window width — this is a
+     resizable OS window on a real screen, never an actual phone, so the
+     narrow-viewport squeeze (44px sidebar, stacked body) must never apply. */
+  body.gc-chat-popout-body .gc-chat-body {
+    flex-direction: row !important;
+  }
+  body.gc-chat-popout-body .gc-chat-sidebar {
+    width: 110px !important;
+    max-height: none !important;
+    border-right: 1px solid var(--gc-border) !important;
+    border-bottom: none !important;
+    overflow-x: visible !important;
+    overflow-y: auto !important;
+  }
+  body.gc-chat-popout-body .gc-chat-rooms {
+    flex-direction: column !important;
+  }
   /* Redundant in a dedicated OS window — close the window itself instead. */
   body.gc-chat-popout-body .gc-chat-fab,
   body.gc-chat-popout-body [data-chat-popout],
@@ -40,16 +69,15 @@
     display: none !important;
   }
 </style>
-{% endblock %}
-
-{% block content %}{% endblock %}
-
-{% block extra_scripts %}
 <script>
   (function () {
     function openChatPopoutPanel() {
       if (window.GC && typeof GC.openTChat === "function") {
         GC.openTChat();
+        // Never treat this OS window as a phone — chat.js's own media-query
+        // check (max-width: 768px) would otherwise flip this back to true
+        // any time the window is narrower than 768px.
+        if (window.GC.TChat) window.GC.TChat.isMobile = false;
       } else {
         setTimeout(openChatPopoutPanel, 100);
       }
