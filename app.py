@@ -114,6 +114,29 @@ from flask_sock import Sock
 
 sock = Sock(app)
 
+
+def ws_long_lived_safe() -> bool:
+    """GC-AST-LIVE: can this process hold a long-lived WS connection open
+    without starving every other request?
+
+    Explicit override (set in the local __main__ dev-server block below,
+    based on the actual threaded= flag Werkzeug is running with) always
+    wins. Otherwise — i.e. under gunicorn — this mirrors
+    scripts/docker-entrypoint.sh's own GUNICORN_WORKER_CLASS default
+    exactly: only gevent/eventlet workers multiplex connections via
+    greenlets, so only those are safe. sync/gthread (e.g. after a manual
+    rollback) would pin the single worker for as long as a galaxy tab
+    stays open, so default to "unsafe" for anything else — the client
+    already degrades to polling with no live push, which beats freezing
+    the whole site.
+    """
+    override = app.config.get("GC_WS_LONG_LIVED_SAFE")
+    if override is not None:
+        return bool(override)
+    worker_class = os.environ.get("GUNICORN_WORKER_CLASS", "gevent").strip().lower()
+    return worker_class in ("gevent", "eventlet")
+
+
 BASE_DIR = Path(__file__).resolve().parent
 LOCALES_DIR = BASE_DIR / "locales"
 VERSION_FILE = BASE_DIR / "VERSION"
@@ -2505,11 +2528,10 @@ def ws_galaxy_system(ws, galaxy: int, system: int):
         unsubscribe_all,
     )
 
-    # GC-AST-LIVE: default True (production runs gunicorn -k gevent, where the
-    # __main__ dev-server block below never executes). Only False when this
-    # process is known to be the non-threaded local Werkzeug dev server,
-    # where holding this connection open would freeze every other request.
-    if not app.config.get("GC_WS_LONG_LIVED_SAFE", True):
+    # GC-AST-LIVE: refuses to hold this connection open on a worker that
+    # can't multiplex it (sync/gthread gunicorn, or the non-threaded local
+    # Werkzeug dev server) — see ws_long_lived_safe() docstring.
+    if not ws_long_lived_safe():
         return
 
     user_id = session.get("user_id")
@@ -15020,9 +15042,9 @@ if __name__ == "__main__":
     # open. Under the non-threaded local Werkzeug dev server that would pin
     # the server's single worker thread for as long as the socket is open,
     # freezing every other request on the site. Only mark WS safe here when
-    # this process can actually serve concurrent requests (threaded=1); under
-    # gunicorn -k gevent in production this __main__ block never runs, so the
-    # route defaults to "safe" there (see ws_galaxy_system in this file).
+    # this process can actually serve concurrent requests (threaded=1); this
+    # __main__ block never runs under gunicorn, where ws_long_lived_safe()
+    # instead checks GUNICORN_WORKER_CLASS (see that function's docstring).
     app.config["GC_WS_LONG_LIVED_SAFE"] = bool(threaded)
     if not threaded:
         print(
