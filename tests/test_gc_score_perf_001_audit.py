@@ -245,6 +245,35 @@ def test_admin_source_runs_full_reconcile(score_audit_db):
     assert get_player_score_dirty(pid) is None
 
 
+def test_ordinary_tick_uses_dirty_batch_not_full_reconcile(score_audit_db):
+    """GC-SCORE-PERF-001: the regular unforced 10-min cron must stay dirty-batch only."""
+    import json
+
+    from game.ranking_worker import RANKING_WORKER_INTERVAL_SEC, RANKING_WORKER_KEY
+
+    dirty = _player()
+    clean = _player()
+    mark_player_score_dirty(dirty, reason="ordinary_tick")
+
+    # Interval already elapsed -> the 10-min guard allows this run to proceed.
+    stale_at = time.time() - RANKING_WORKER_INTERVAL_SEC - 5
+    set_runtime_value(
+        RANKING_WORKER_KEY,
+        json.dumps({"at": stale_at, "ok": True}),
+    )
+    # score_audit_db fixture already marks FULL_RECONCILE_KEY as "just now",
+    # so the daily safety net is not due either.
+
+    result = run_ranking_worker(source="cron", force=False, persist=False)
+    assert result.get("ok") is True
+    assert result.get("skipped_interval") is False
+    assert result.get("mode") == "dirty"
+    assert get_player_score_dirty(dirty) is None
+    assert get_player_score_dirty(clean) is None
+    row = get_player_score_row(dirty)
+    assert row is not None
+
+
 def test_apply_score_updates_never_calls_ranks(score_audit_db):
     pid = _player()
     with patch("game.ranking.recalculate_ranks") as mock_ranks:

@@ -433,9 +433,14 @@ def run_ranking_worker(
         conn.commit()
 
         with _RANKING_LOCK:
-            # Cadence (~10 min): refresh scores for ALL players, then rewrite ranks.
-            # Dirty-batch helper remains for targeted tests/tooling: process_dirty_score_batch.
-            result = run_full_score_reconcile(conn=conn)
+            # Cadence (~10 min): ordinary ticks refresh a bounded dirty batch
+            # (short per-player transactions). A full universe reconcile only
+            # runs when forced (admin/CLI) or when the daily safety net is due.
+            do_full = bool(force) or bool(full_reconcile) or _full_reconcile_due(conn=conn, now=now)
+            if do_full:
+                result = run_full_score_reconcile(conn=conn)
+            else:
+                result = process_dirty_score_batch(conn=conn)
 
         after_stats = gather_score_stats(conn)
         result["skipped_interval"] = False

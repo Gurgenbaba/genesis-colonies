@@ -2689,6 +2689,10 @@
   let _progressTickerActive = false;
   let _progressTickerTimerId = null;
   let _progressTickerInTick = false;
+  // GC-PERF-TICKER-001: min remaining countdown seconds, computed as a
+  // byproduct of updatePageTimers()'s own sweep (see there) so
+  // _progressTickerDelayMs() doesn't need a second full-document scan.
+  let _lastMinCountdownRemaining = Infinity;
 
   GC.stopProgressTicker = function stopProgressTicker() {
     _progressTickerActive = false;
@@ -2713,7 +2717,7 @@
   }
 
   function _progressTickerDelayMs(serverNow) {
-    const minRem = _minMovementCountdownRemaining(serverNow);
+    const minRem = _lastMinCountdownRemaining;
     if (minRem <= 3) return 50;
     if (minRem <= 10) return 100;
     if (minRem <= 30) return 250;
@@ -9785,6 +9789,11 @@
   function _applyProgressFill(fillEl, pct) {
     if (!fillEl) return;
     const clamped = Math.max(0, Math.min(100, pct));
+    // GC-PERF-TICKER-001: skip the style/attr write (forces style recalc)
+    // when the rounded percentage hasn't actually changed since last tick.
+    const rounded = Math.round(clamped * 10) / 10;
+    if (fillEl._gcLastPct === rounded) return;
+    fillEl._gcLastPct = rounded;
     fillEl.style.width = `${clamped}%`;
     fillEl.setAttribute("aria-valuenow", String(Math.round(clamped)));
   }
@@ -10534,9 +10543,15 @@
     const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
     let fleetExpired = false;
     let overviewExpired = false;
+    // GC-PERF-TICKER-001: track the soonest countdown while we're already
+    // iterating these elements, so _progressTickerDelayMs() can reuse it
+    // instead of re-querying the whole document a second time per tick.
+    let minRemaining = Infinity;
 
     queryTimerElements().forEach((el) => {
       syncTimerElement(el);
+      const remForDelay = timerRemainingSeconds(el, now);
+      if (remForDelay > 0 && remForDelay < minRemaining) minRemaining = remForDelay;
       if (el.closest("[data-fleet-drawer-row]") && el.hasAttribute("data-fleet-drawer-countdown")) {
         return;
       }
@@ -10620,8 +10635,11 @@
     document.querySelectorAll("[data-preview-arrival][data-countdown-at]").forEach((el) => {
       syncTimerElement(el);
       const remaining = timerRemainingSeconds(el, now);
+      if (remaining > 0 && remaining < minRemaining) minRemaining = remaining;
       _setIfChanged(el, formatCountdownRemain(remaining));
     });
+
+    _lastMinCountdownRemaining = minRemaining;
 
     if (fleetExpired) requestMovementCountdownRefresh("fleet");
     if (overviewExpired) requestMovementCountdownRefresh("overview");

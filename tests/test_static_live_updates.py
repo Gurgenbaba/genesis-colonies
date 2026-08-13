@@ -2954,8 +2954,12 @@ def test_gc804_leftmenu_ui_state_independent_from_game_state_poll():
     assert 'id="gc-bottom-buildings-menu"' in base
     assert "initBottomBuildingsMenu" in src
     assert ".gc-bottom-buildings-menu" in _read("static/style.css")
-    assert "run_full_score_reconcile" in _read("game/ranking_worker.py").split("with _RANKING_LOCK:")[1].split("after_stats")[0]
-    assert "process_dirty_score_batch(conn=conn)" not in _read("game/ranking_worker.py").split("with _RANKING_LOCK:")[1].split("after_stats")[0]
+    # GC-SCORE-PERF-001: ordinary ticks use the bounded dirty batch (short
+    # per-player transactions); a full universe reconcile only runs when
+    # forced or when the daily safety net is due.
+    ranking_lock_block = _read("game/ranking_worker.py").split("with _RANKING_LOCK:")[1].split("after_stats")[0]
+    assert "run_full_score_reconcile" in ranking_lock_block
+    assert "process_dirty_score_batch(conn=conn)" in ranking_lock_block
 
 
 def test_main_js_mini_queue_research_label_resolution():
