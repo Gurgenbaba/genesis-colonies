@@ -164,6 +164,20 @@ def ensure_player_chat_rooms(player_id: int, conn) -> None:
         ensure_alliance_room(int(ally["alliance_id"]), str(ally.get("tag") or ""), conn)
 
 
+def player_chat_rooms_missing(player_id: int, conn) -> bool:
+    """Read-only check: does anything ensure_player_chat_rooms would touch
+    actually need creating? Lets high-frequency callers (chat_bootstrap polls
+    every client on an interval) skip acquiring the SQLite write mutex on the
+    overwhelmingly common case where every room already exists (GC-PERF-LOCK-001)."""
+    for key in (ROOM_GLOBAL, ROOM_SYSTEM, ROOM_ADMIN):
+        if not _get_room_by_key(conn, key):
+            return True
+    ally = get_player_alliance(player_id, conn=conn)
+    if ally and not _get_room_by_key(conn, f"alliance:{int(ally['alliance_id'])}"):
+        return True
+    return False
+
+
 def dm_room_key(a: int, b: int) -> str:
     x, y = sorted((int(a), int(b)))
     return f"dm:{x}:{y}"
@@ -793,7 +807,7 @@ def list_rooms_for_player(player_id: int, conn=None) -> List[Dict[str, Any]]:
     if own:
         conn = db()
     try:
-        if own:
+        if own and player_chat_rooms_missing(player_id, conn):
             begin_write_transaction(conn)
             ensure_player_chat_rooms(player_id, conn)
             commit(conn)
@@ -1325,9 +1339,10 @@ def chat_bootstrap(player_id: int) -> Dict[str, Any]:
         if not table_exists(conn, "chat_rooms"):
             return _json_error("chat_not_ready")
 
-        begin_write_transaction(conn)
-        ensure_player_chat_rooms(player_id, conn)
-        commit(conn)
+        if player_chat_rooms_missing(player_id, conn):
+            begin_write_transaction(conn)
+            ensure_player_chat_rooms(player_id, conn)
+            commit(conn)
 
         player = load_player(player_id, conn=conn) or {}
         ally = get_player_alliance(player_id, conn=conn)

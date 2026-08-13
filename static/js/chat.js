@@ -458,12 +458,33 @@
     };
     CHAT.uiState = sanitizeUiState({ ...(CHAT.uiState || {}), ...body });
     saveLocalUiState(CHAT.uiState);
+    // apiFetch() never rejects on a non-2xx status (it swallows a failed
+    // res.json() into `data: {}` and resolves normally) — check res.ok
+    // explicitly, a try/catch here would never see a 502.
+    let ok = false;
     try {
-      await apiFetch("/api/chat/state", {
+      const { res } = await apiFetch("/api/chat/state", {
         method: "POST",
         body: JSON.stringify(CHAT.uiState),
       });
-    } catch (_) {}
+      ok = !!res?.ok;
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && !CHAT._stateSaveRetryPending) {
+      // Don't drop a failed save silently (e.g. transient 502) — retry once
+      // after a short delay instead of losing this UI-state write forever.
+      // localStorage already has the latest state either way, so the user
+      // never sees a visual regression while this retry is pending.
+      CHAT._stateSaveRetryPending = true;
+      setTimeout(() => {
+        CHAT._stateSaveRetryPending = false;
+        apiFetch("/api/chat/state", {
+          method: "POST",
+          body: JSON.stringify(CHAT.uiState),
+        }).catch(() => {});
+      }, 4000);
+    }
   }
 
   function persistState(patch, immediate) {
@@ -684,18 +705,30 @@
   async function markRead() {
     if (!CHAT.activeRoomId) return;
     const lastId = CHAT.lastMsgIdByRoom[CHAT.activeRoomId] || 0;
-    CHAT.unread[String(CHAT.activeRoomId)] = 0;
-    CHAT.mentionUnread[String(CHAT.activeRoomId)] = false;
+    const roomKey = String(CHAT.activeRoomId);
+    if (!CHAT.lastReadSentByRoom) CHAT.lastReadSentByRoom = {};
+    // Fires on every scroll-near-bottom/panel-open/room-switch — skip the
+    // write entirely when the read pointer hasn't actually advanced since
+    // the last successful send (GC-PERF-LOCK-001: avoid redundant SQLite
+    // write-mutex acquisitions on a no-op mark-read).
+    if ((CHAT.lastReadSentByRoom[roomKey] || 0) >= lastId) return;
+    CHAT.unread[roomKey] = 0;
+    CHAT.mentionUnread[roomKey] = false;
     updateFabBadge();
     renderRoomList();
     try {
-      await apiFetch("/api/chat/read", {
+      // apiFetch() never rejects on a non-2xx status — check res.ok, a
+      // try/catch alone would never see a 502 here.
+      const { res } = await apiFetch("/api/chat/read", {
         method: "POST",
         body: JSON.stringify({
           room_id: CHAT.activeRoomId,
           last_read_message_id: lastId,
         }),
       });
+      // Only remember success — a failed call leaves this stale so the next
+      // markRead() trigger (scroll/focus/poll) retries automatically.
+      if (res?.ok) CHAT.lastReadSentByRoom[roomKey] = lastId;
     } catch (_) {}
   }
 
@@ -989,11 +1022,20 @@
     }
   }
 
+  const CHAT_POLL_BACKOFF_MAX_MS = 60000;
+
   function pollDelayMs() {
     // Hidden tab first (battery / background), then closed panel, else active open poll.
-    if (document.hidden) return CHAT.polling.intervalHidden;
-    if (!isChatPanelVisible()) return CHAT.polling.intervalClosed;
-    return CHAT.polling.interval;
+    const base = document.hidden
+      ? CHAT.polling.intervalHidden
+      : (!isChatPanelVisible() ? CHAT.polling.intervalClosed : CHAT.polling.interval);
+    const fails = CHAT.polling.failCount || 0;
+    if (fails <= 0) return base;
+    // Exponential backoff with jitter on consecutive failures (e.g. a 502
+    // storm) — retrying at the fixed cadence just piles more load onto an
+    // already-struggling server. Resets to 0 on the next successful poll.
+    const backoff = Math.min(CHAT_POLL_BACKOFF_MAX_MS, base * Math.pow(2, Math.min(fails, 5)));
+    return Math.round(backoff * (0.85 + Math.random() * 0.3));
   }
 
   function schedulePoll() {
@@ -1022,6 +1064,10 @@
         headers: { "X-Requested-With": "XMLHttpRequest" },
         signal: ctrl.signal,
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Reached the server and got a real HTTP response — clear any pending
+      // backoff so the very next poll goes back to the normal cadence.
+      CHAT.polling.failCount = 0;
       const data = await res.json();
       chatDebug("[chat] poll", {
         roomId,
@@ -1044,7 +1090,10 @@
         applyIncomingPollMessages(roomId, data.data.messages);
       }
     } catch (e) {
-      if (e.name !== "AbortError") chatDebug("[chat] poll", e);
+      if (e.name !== "AbortError") {
+        chatDebug("[chat] poll", e);
+        CHAT.polling.failCount = (CHAT.polling.failCount || 0) + 1;
+      }
     } finally {
       CHAT.polling.abort = null;
       schedulePoll();
