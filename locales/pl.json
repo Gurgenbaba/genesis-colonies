@@ -8817,5 +8817,6 @@
   "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s zniszczonej wartości floty wroga",
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s obrażeń zadanych World Bossowi",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s przetransportowanych zasobów",
-  "unit_technical_build_time_total": "Razem"
+  "unit_technical_build_time_total": "Razem",
+  "logistics_preview_select_hub": "Najpierw wybierz kolonię hub."
 }

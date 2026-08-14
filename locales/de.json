@@ -8820,5 +8820,6 @@
   "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s zerstörter Flottenwert",
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s Schaden an einem World Boss",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s transportierte Ressourcen",
-  "unit_technical_build_time_total": "Gesamt"
+  "unit_technical_build_time_total": "Gesamt",
+  "logistics_preview_select_hub": "Zuerst eine Hub-Kolonie auswählen."
 }

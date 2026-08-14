@@ -8817,5 +8817,6 @@
   "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s yok edilen düşman filo değeri",
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s World Boss'a verilen hasar",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s taşınan kaynak",
-  "unit_technical_build_time_total": "Toplam"
+  "unit_technical_build_time_total": "Toplam",
+  "logistics_preview_select_hub": "Önce bir merkez koloni seçin."
 }

@@ -29598,10 +29598,13 @@
     const colonyIds = getLogisticsSelectedColonyIds(page, mode);
 
     if (!originId || !colonyIds.length) {
+      // Always show a reason — a disabled submit button with a blank "–"
+      // status gives the player nothing to act on (they end up re-clicking
+      // colonies at random hoping something changes, GC-LOGISTICS-STATUS-001).
       if (!colonyIds.length && originId) {
         resetLogisticsPreview(page, "logistics_preview_select_colonies");
       } else {
-        resetLogisticsPreview(page);
+        resetLogisticsPreview(page, "logistics_preview_select_hub");
       }
       return;
     }
