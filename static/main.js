@@ -29105,6 +29105,8 @@
 
   let _logisticsBound = false;
   const _logisticsPreviewTimers = new WeakMap();
+  const _logisticsLiveStatePollers = new WeakMap();
+  const LOGISTICS_LIVE_STATE_POLL_MS = 2000;
 
   const tt = (key, fallback) => t(key, fallback);
   const apiError = (res) => (res && (res.error || res.reason)) || "generic";
@@ -29875,11 +29877,34 @@
     resetLogisticsPreview(page);
     refreshLogisticsLiveState(page);
     bindLogisticsHelp(page);
+
+    // GC-LOGISTICS-STATUS-001 — the submit button only re-evaluates cargo/
+    // slot availability on user interaction or the next general game-state
+    // poll (which can lag several seconds behind a short flight time). Poll
+    // live fleet/ship state directly while this page is open so a colony
+    // whose freighters just returned "wakes" the button on its own instead
+    // of requiring a manual re-click.
+    const existingPoller = _logisticsLiveStatePollers.get(page);
+    if (existingPoller) clearInterval(existingPoller);
+    const poller = setInterval(() => {
+      if (!page.isConnected || page.dataset.ready !== "1") {
+        clearInterval(poller);
+        _logisticsLiveStatePollers.delete(page);
+        return;
+      }
+      if (document.hidden) return; // background tab — don't burn requests
+      scheduleLogisticsRefreshFromState(); // has its own in-flight guard
+    }, LOGISTICS_LIVE_STATE_POLL_MS);
+    _logisticsLiveStatePollers.set(page, poller);
+
     GC.registerCleanup(() => {
       page._logisticsLivePending = false;
       const prev = _logisticsPreviewTimers.get(page);
       if (prev) clearTimeout(prev);
       _logisticsPreviewTimers.delete(page);
+      const livePoller = _logisticsLiveStatePollers.get(page);
+      if (livePoller) clearInterval(livePoller);
+      _logisticsLiveStatePollers.delete(page);
       closeLogisticsHelpModal(page);
     });
   }
