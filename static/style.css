@@ -11346,6 +11346,36 @@ a.gc-bld-head-action-btn--go:focus-visible{
   margin-left: 44px;
   width: calc(100% - 44px);
 }
+.gc-sf-role-list{
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.gc-sf-role-row{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--gc-radius-sm, 2px);
+  color: rgba(200, 210, 225, 0.75);
+}
+.gc-sf-role-row.is-over-cap{
+  border-color: rgba(255, 120, 110, 0.5);
+  background: rgba(90, 30, 24, 0.25);
+  color: rgba(255, 190, 180, 0.95);
+}
+.gc-sf-role-label{
+  text-transform: capitalize;
+}
+.gc-sf-role-value{
+  color: inherit;
+}
 .gc-sf-protocol-list{
   list-style: none;
   margin: 8px 0 0;

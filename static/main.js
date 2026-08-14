@@ -44360,6 +44360,31 @@
         : 0;
       manuBar.style.width = pct + "%";
     }
+    const manuRoles = document.getElementById("gc-sf-manu-roles");
+    if (manuRoles) {
+      manuRoles.innerHTML = "";
+      const roles = forge.stellar_forge_hull_mass_roles || {};
+      const total = Object.values(roles).reduce((sum, v) => sum + (Number(v) || 0), 0);
+      const capPct = Number(forge.stellar_forge_hull_mass_role_cap_pct) || 60;
+      Object.keys(roles)
+        .sort((a, b) => (Number(roles[b]) || 0) - (Number(roles[a]) || 0))
+        .forEach((role) => {
+          const value = Number(roles[role]) || 0;
+          if (value <= 0) return;
+          const sharePct = total > 0 ? Math.round((value / total) * 100) : 0;
+          const li = document.createElement("li");
+          li.className = "gc-sf-role-row" + (sharePct > capPct ? " is-over-cap" : "");
+          const label = document.createElement("span");
+          label.className = "gc-sf-role-label";
+          label.textContent = t("shipyard_role_" + role, role);
+          const val = document.createElement("span");
+          val.className = "gc-mono gc-sf-role-value";
+          val.textContent = fmtNumber(value) + " (" + sharePct + "%)";
+          li.appendChild(label);
+          li.appendChild(val);
+          manuRoles.appendChild(li);
+        });
+    }
 
     const opCheck = document.getElementById("gc-sf-op-check");
     const opList = document.getElementById("gc-sf-op-list");
