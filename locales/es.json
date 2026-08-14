@@ -8808,7 +8808,7 @@
   "stellar_forge_open": "Forja Estelar",
   "stellar_forge_intro": "Cuando tu Astillero Orbital alcance el nivel máximo, podrás ascenderlo mediante una campaña de 4 pilares: pagar un Tributo Industrial, producir nueva Masa de Casco, completar Pruebas Operacionales y reunir Núcleos de Forja. Al completar los cuatro se desbloquea el siguiente Rango de Forja.",
   "stellar_forge_pillar_tribute_hint": "Paga recursos desde las reservas de este planeta, según su producción horaria actual.",
-  "stellar_forge_pillar_manufacturing_hint": "Construye naves nuevas tras iniciar la campaña — en al menos 3 categorías, ninguna por encima del 60% del total.",
+  "stellar_forge_pillar_manufacturing_hint": "Construye naves nuevas tras iniciar la campaña — repartidas en al menos 3 categorías.",
   "stellar_forge_pillar_operational_hint": "Completa al menos 3 de 5 protocolos jugando: expediciones, rescate, combate, daño a World Boss o transportes logísticos.",
   "stellar_forge_pillar_cores_hint": "Caídas raras de Expediciones y World Boss — no se pueden comprar con recursos.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s pilares completados",

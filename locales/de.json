@@ -8811,7 +8811,7 @@
   "stellar_forge_open": "Stellar Forge",
   "stellar_forge_intro": "Sobald deine Orbitalwerft die Maximalstufe erreicht, kannst du sie über eine 4-Säulen-Kampagne aufsteigen lassen: Tribut zahlen, neue Hull Mass produzieren, Operational Trials abschließen und Forge Cores sammeln. Sind alle vier Säulen erfüllt, schaltest du den nächsten Forge-Rang frei.",
   "stellar_forge_pillar_tribute_hint": "Ressourcen vom Lager dieses Planeten — abhängig von seiner aktuellen Stundenproduktion.",
-  "stellar_forge_pillar_manufacturing_hint": "Baue nach Kampagnenstart neue Schiffe — über mindestens 3 Kategorien verteilt, keine über 60% des Gesamtwerts.",
+  "stellar_forge_pillar_manufacturing_hint": "Baue nach Kampagnenstart neue Schiffe — über mindestens 3 Kategorien verteilt.",
   "stellar_forge_pillar_operational_hint": "Schließe mindestens 3 von 5 Protokollen durch Spielen ab: Expeditionen, Bergung, Kampf, World-Boss-Schaden oder Logistik-Transporte.",
   "stellar_forge_pillar_cores_hint": "Seltene Drops aus Expeditionen und World-Boss-Kills — nicht mit Ressourcen kaufbar.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s Säulen abgeschlossen",

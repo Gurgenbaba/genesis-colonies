@@ -44365,7 +44365,7 @@
       manuRoles.innerHTML = "";
       const roles = forge.stellar_forge_hull_mass_roles || {};
       const total = Object.values(roles).reduce((sum, v) => sum + (Number(v) || 0), 0);
-      const capPct = Number(forge.stellar_forge_hull_mass_role_cap_pct) || 60;
+      // Informational only — no per-role cap anymore, just the >= 3 categories requirement.
       Object.keys(roles)
         .sort((a, b) => (Number(roles[b]) || 0) - (Number(roles[a]) || 0))
         .forEach((role) => {
@@ -44373,7 +44373,7 @@
           if (value <= 0) return;
           const sharePct = total > 0 ? Math.round((value / total) * 100) : 0;
           const li = document.createElement("li");
-          li.className = "gc-sf-role-row" + (sharePct > capPct ? " is-over-cap" : "");
+          li.className = "gc-sf-role-row";
           const label = document.createElement("span");
           label.className = "gc-sf-role-label";
           label.textContent = t("shipyard_role_" + role, role);

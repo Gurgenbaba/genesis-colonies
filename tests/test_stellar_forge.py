@@ -87,7 +87,7 @@ def _grant_cores(uid: int, amount: int) -> None:
 
 
 def _complete_manufacturing(pid: int, rank: int) -> None:
-    """Deliver enough Hull Mass across 3 roles, none over the 60% cap, to satisfy Pillar 2."""
+    """Deliver enough Hull Mass across 3 distinct roles to satisfy Pillar 2."""
     target = hull_mass_target(rank)
     per_ship = target // 3 + 1000
     # spark_drone=scout, mule_courier=cargo, falcon_interceptor=combat.
@@ -162,9 +162,14 @@ class TestStellarForgeFormulas:
         target = hull_mass_target(1)
         # Single role, total met — should still fail (min 3 roles).
         assert not manufacturing_trial_complete(target, 1, {"combat": target})
-        # 3 roles but one role over the 60% cap.
+        # Two roles, total met — still fails (min 3 roles).
+        two_roles = {"combat": target - 10, "cargo": 10}
+        assert not manufacturing_trial_complete(sum(two_roles.values()), 1, two_roles)
+        # No per-role cap anymore (GC-3008) — heavily skewed but 3 distinct
+        # roles must still pass, since unit-cost tiers vary too much for a
+        # flat 60%-of-total ceiling to be a fair constraint.
         skewed = {"combat": int(target * 0.9), "cargo": int(target * 0.05), "expedition": int(target * 0.05)}
-        assert not manufacturing_trial_complete(sum(skewed.values()), 1, skewed)
+        assert manufacturing_trial_complete(sum(skewed.values()), 1, skewed)
         # Balanced across 3 roles, total met.
         balanced = {"combat": target // 3, "cargo": target // 3, "expedition": target // 3 + 10}
         assert manufacturing_trial_complete(sum(balanced.values()), 1, balanced)

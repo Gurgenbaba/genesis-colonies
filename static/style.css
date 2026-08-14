@@ -11365,11 +11365,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
   border-radius: var(--gc-radius-sm, 2px);
   color: rgba(200, 210, 225, 0.75);
 }
-.gc-sf-role-row.is-over-cap{
-  border-color: rgba(255, 120, 110, 0.5);
-  background: rgba(90, 30, 24, 0.25);
-  color: rgba(255, 190, 180, 0.95);
-}
 .gc-sf-role-label{
   text-transform: capitalize;
 }

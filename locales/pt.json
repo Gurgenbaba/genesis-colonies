@@ -8808,7 +8808,7 @@
   "stellar_forge_open": "Forja Estelar",
   "stellar_forge_intro": "Quando o seu Estaleiro Orbital atingir o nível máximo, você pode fazê-lo ascender através de uma campanha de 4 pilares: pagar um Tributo Industrial, produzir nova Massa de Casco, completar Provas Operacionais e reunir Núcleos da Forja. Completar os quatro desbloqueia o próximo Posto da Forja.",
   "stellar_forge_pillar_tribute_hint": "Pague recursos do estoque deste planeta — com base na sua produção horária atual.",
-  "stellar_forge_pillar_manufacturing_hint": "Construa novas naves após iniciar a campanha — em pelo menos 3 categorias, nenhuma acima de 60% do total.",
+  "stellar_forge_pillar_manufacturing_hint": "Construa novas naves após iniciar a campanha — distribuídas em pelo menos 3 categorias.",
   "stellar_forge_pillar_operational_hint": "Complete pelo menos 3 de 5 protocolos jogando: expedições, resgate, combate, dano ao World Boss ou transportes logísticos.",
   "stellar_forge_pillar_cores_hint": "Itens raros de Expedições e World Boss — não podem ser comprados com recursos.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s pilares concluídos",

@@ -33,7 +33,6 @@ def tribute_cost_for_rank(rank: int, production_per_hour: Mapping[str, float]) -
 
 HULL_MASS_BASE = 2_000_000
 HULL_MASS_STEP = 1_000_000
-HULL_MASS_ROLE_CAP_FRACTION = 0.60
 HULL_MASS_MIN_ROLES = 3
 HULL_MASS_FUEL_CELL_WEIGHT = 3
 
@@ -52,17 +51,18 @@ def ship_hull_mass(build_cost: Mapping[str, int]) -> int:
 
 
 def manufacturing_trial_complete(total: int, rank: int, by_role: Mapping[str, int]) -> bool:
-    """Total target reached, no role over the cap fraction, and enough distinct roles."""
+    """Total target reached and enough distinct roles contributed.
+
+    No per-role cap — ship unit costs vary too much by tier (e.g. a capital
+    combat hull can be 10x+ the Hull Mass of a scout/cargo unit of the same
+    quantity) for a flat 60%-of-total ceiling to be a fair "diversify your
+    production" signal. Diversity is enforced purely by role count.
+    """
     target = hull_mass_target(rank)
     if total < target:
         return False
     contributing_roles = [v for v in by_role.values() if v > 0]
-    if len(contributing_roles) < HULL_MASS_MIN_ROLES:
-        return False
-    if total <= 0:
-        return False
-    cap = total * HULL_MASS_ROLE_CAP_FRACTION
-    return all(v <= cap for v in by_role.values())
+    return len(contributing_roles) >= HULL_MASS_MIN_ROLES
 
 
 # --- Pillar 3: Operational Trial ---------------------------------------------------

@@ -13,7 +13,6 @@ from ..models import db, get_planet_buildings
 from .formulas import (
     FORGE_BUILDING,
     HULL_MASS_MIN_ROLES,
-    HULL_MASS_ROLE_CAP_FRACTION,
     OPERATIONAL_PROTOCOLS,
     OPERATIONAL_PROTOCOLS_REQUIRED,
     forge_cores_required,
@@ -325,7 +324,6 @@ def panel_forge_fields(
             "stellar_forge_hull_mass_progress": hull_progress,
             "stellar_forge_hull_mass_roles": state["hull_mass_by_role"],
             "stellar_forge_hull_mass_min_roles": HULL_MASS_MIN_ROLES,
-            "stellar_forge_hull_mass_role_cap_pct": int(HULL_MASS_ROLE_CAP_FRACTION * 100),
             "stellar_forge_manufacturing_done": pillar2_done,
             "stellar_forge_operational_protocols": {
                 p: {

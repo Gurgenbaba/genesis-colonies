@@ -89,10 +89,15 @@ Must be **paid from the shipyard planet's own stockpile** (`try_spend_resources_
 New metric: **Hull Mass**, defined per ship as `sum(build_cost.metal, build_cost.crystal, build_cost.fuel_cells * 3)` at production-complete time (fuel_cells weighted 3x — they're the scarcer resource per `docs/ECONOMY_SYSTEM.md`). Computed at the point a shipyard order **completes**, not from the existing fleet snapshot.
 
 ```text
-manufacturing_target(rank) = base_hull_mass(rank) with category minimums:
-  - no single ship category > 60% of total Hull Mass
+manufacturing_target(rank) = base_hull_mass(rank) with category minimum:
   - >= 3 distinct ship categories represented (per SHIP_ROLE_DISPLAY_ORDER, game/fleet_defs.py:111)
 ```
+
+No per-category cap (dropped post-launch — GC-3008): ship unit costs vary too much by
+tier (a capital combat hull can be 10x+ the Hull Mass of a scout/cargo unit at the same
+quantity) for a flat 60%-of-total ceiling to be a fair signal. Diversity is enforced
+purely by category count; the UI still shows the per-role % breakdown for transparency,
+just without a hard block.
 
 Counter resets to 0 at campaign start; only orders completed **after** `campaign_started_at` count. Implemented as a running counter column, incremented inside the shipyard order-completion path (wherever `game/shipyard_queue.py` finalizes a build), not recomputed from history.
 

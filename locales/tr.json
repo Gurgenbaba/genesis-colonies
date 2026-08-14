@@ -8808,7 +8808,7 @@
   "stellar_forge_open": "Yıldız Dövmesi",
   "stellar_forge_intro": "Yörünge Tersaneniz maksimum seviyeye ulaştığında, 4 sütunlu bir kampanyayla onu yükseltebilirsiniz: Endüstriyel Haraç ödeyin, yeni Gövde Kütlesi üretin, Operasyonel Denemeleri tamamlayın ve Dövme Çekirdekleri toplayın. Dördünü de tamamlamak bir sonraki Dövme Rütbesini açar.",
   "stellar_forge_pillar_tribute_hint": "Bu gezegenin kendi stokundan kaynak ödeyin — mevcut saatlik üretimine göre.",
-  "stellar_forge_pillar_manufacturing_hint": "Kampanya başladıktan sonra yeni gemiler inşa edin — en az 3 kategoride, hiçbiri toplamın %60'ını geçmeyecek şekilde.",
+  "stellar_forge_pillar_manufacturing_hint": "Kampanya başladıktan sonra yeni gemiler inşa edin — en az 3 kategoriye yayılmış olarak.",
   "stellar_forge_pillar_operational_hint": "Oynayarak 5 protokolden en az 3'ünü tamamlayın: keşifler, kurtarma, savaş, World Boss hasarı veya lojistik taşımalar.",
   "stellar_forge_pillar_cores_hint": "Keşiflerden ve World Boss öldürmelerinden nadir düşenler — kaynaklarla satın alınamaz.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s sütun tamamlandı",
