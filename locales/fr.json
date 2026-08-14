@@ -8811,5 +8811,10 @@
   "stellar_forge_pillar_manufacturing_hint": "Construisez de nouveaux vaisseaux après le début de la campagne — sur au moins 3 catégories, aucune au-delà de 60 % du total.",
   "stellar_forge_pillar_operational_hint": "Accomplissez au moins 3 des 5 protocoles en jouant : expéditions, récupération, combat, dégâts au World Boss ou transports logistiques.",
   "stellar_forge_pillar_cores_hint": "Butin rare des expéditions et des World Boss — non achetable avec des ressources.",
-  "stellar_forge_pillars_done": "%(done)s / %(total)s piliers accomplis"
+  "stellar_forge_pillars_done": "%(done)s / %(total)s piliers accomplis",
+  "stellar_forge_protocol_detail_exploration": "%(progress)s / %(target)s expéditions terminées",
+  "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s valeur de récupération collectée",
+  "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s valeur de flotte ennemie détruite",
+  "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s dégâts infligés à un World Boss",
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s ressources transportées"
 }

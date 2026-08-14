@@ -8811,5 +8811,10 @@
   "stellar_forge_pillar_manufacturing_hint": "Стройте новые корабли после начала кампании — минимум в 3 категориях, ни одна не должна превышать 60% от общего числа.",
   "stellar_forge_pillar_operational_hint": "Выполните минимум 3 из 5 протоколов, играя: экспедиции, утилизация, бой, урон World Boss или логистические перевозки.",
   "stellar_forge_pillar_cores_hint": "Редкие трофеи с экспедиций и World Boss — нельзя купить за ресурсы.",
-  "stellar_forge_pillars_done": "%(done)s / %(total)s столпов выполнено"
+  "stellar_forge_pillars_done": "%(done)s / %(total)s столпов выполнено",
+  "stellar_forge_protocol_detail_exploration": "%(progress)s / %(target)s завершённых экспедиций",
+  "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s восстановленной стоимости утиля",
+  "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s уничтоженной стоимости вражеского флота",
+  "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s урона по World Boss",
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s перевезённых ресурсов"
 }

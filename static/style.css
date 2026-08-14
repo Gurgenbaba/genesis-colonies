@@ -11344,6 +11344,14 @@ a.gc-bld-head-action-btn--go:focus-visible{
   font-size: 0.68rem;
   color: rgba(200, 210, 225, 0.75);
   transition: all 0.15s ease;
+  cursor: help;
+}
+.gc-sf-protocol-chip:hover,
+.gc-sf-protocol-chip:focus-visible{
+  border-color: rgba(var(--sf-pillar-accent, 255, 180, 100), 0.7);
+  background: rgba(var(--sf-pillar-accent, 255, 180, 100), 0.14);
+  color: rgba(240, 244, 250, 0.95);
+  outline: none;
 }
 .gc-sf-protocol-chip img{
   width: 16px;

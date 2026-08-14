@@ -8811,5 +8811,10 @@
   "stellar_forge_pillar_manufacturing_hint": "Construye naves nuevas tras iniciar la campaña — en al menos 3 categorías, ninguna por encima del 60% del total.",
   "stellar_forge_pillar_operational_hint": "Completa al menos 3 de 5 protocolos jugando: expediciones, rescate, combate, daño a World Boss o transportes logísticos.",
   "stellar_forge_pillar_cores_hint": "Caídas raras de Expediciones y World Boss — no se pueden comprar con recursos.",
-  "stellar_forge_pillars_done": "%(done)s / %(total)s pilares completados"
+  "stellar_forge_pillars_done": "%(done)s / %(total)s pilares completados",
+  "stellar_forge_protocol_detail_exploration": "%(progress)s / %(target)s expediciones completadas",
+  "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s valor de rescate recuperado",
+  "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s valor de flota enemiga destruido",
+  "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s daño infligido a un World Boss",
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s recursos transportados"
 }

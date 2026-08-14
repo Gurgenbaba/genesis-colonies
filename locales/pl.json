@@ -8811,5 +8811,10 @@
   "stellar_forge_pillar_manufacturing_hint": "Buduj nowe statki po rozpoczęciu kampanii — w co najmniej 3 kategoriach, żadna nie może przekroczyć 60% całości.",
   "stellar_forge_pillar_operational_hint": "Ukończ co najmniej 3 z 5 protokołów, grając: ekspedycje, odzysk, walkę, obrażenia World Bossa lub transporty logistyczne.",
   "stellar_forge_pillar_cores_hint": "Rzadkie łupy z ekspedycji i World Bossów — nie można ich kupić za zasoby.",
-  "stellar_forge_pillars_done": "%(done)s / %(total)s filarów ukończonych"
+  "stellar_forge_pillars_done": "%(done)s / %(total)s filarów ukończonych",
+  "stellar_forge_protocol_detail_exploration": "%(progress)s / %(target)s ukończonych ekspedycji",
+  "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s odzyskanej wartości złomu",
+  "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s zniszczonej wartości floty wroga",
+  "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s obrażeń zadanych World Bossowi",
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s przetransportowanych zasobów"
 }

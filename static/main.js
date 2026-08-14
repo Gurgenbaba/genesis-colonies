@@ -44214,6 +44214,14 @@
     return t("stellar_forge_protocol_" + key, key);
   }
 
+  function _sfProtocolDetail(key, progress, target) {
+    return tf(
+      "stellar_forge_protocol_detail_" + key,
+      { progress: fmtNumber(progress || 0), target: fmtNumber(target || 0) },
+      fmtNumber(progress || 0) + " / " + fmtNumber(target || 0)
+    );
+  }
+
   function _sfIcon(key) {
     const modal = document.getElementById("gc-stellar-forge-modal");
     return modal ? modal.getAttribute("data-icon-" + key) || "" : "";
@@ -44324,8 +44332,11 @@
       const protocols = forge.stellar_forge_operational_protocols || {};
       Object.keys(protocols).forEach((key) => {
         const li = document.createElement("li");
-        const done = !!(protocols[key] && protocols[key].done);
+        const entry = protocols[key] || {};
+        const done = !!entry.done;
         li.className = "gc-sf-protocol-chip" + (done ? " is-done" : "");
+        li.title = _sfProtocolLabel(key) + " — " + _sfProtocolDetail(key, entry.progress, entry.target);
+        li.tabIndex = 0;
         const icon = _sfIcon("p-" + key);
         if (icon) {
           const img = document.createElement("img");

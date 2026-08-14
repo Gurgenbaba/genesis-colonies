@@ -8814,5 +8814,10 @@
   "stellar_forge_pillar_manufacturing_hint": "Build new ships after starting the campaign — across at least 3 categories, none over 60% of the total.",
   "stellar_forge_pillar_operational_hint": "Complete at least 3 of 5 protocols by playing: expeditions, salvage, combat, World Boss damage, or logistics runs.",
   "stellar_forge_pillar_cores_hint": "Rare drops from Expeditions and World Boss kills — cannot be bought with resources.",
-  "stellar_forge_pillars_done": "%(done)s / %(total)s pillars complete"
+  "stellar_forge_pillars_done": "%(done)s / %(total)s pillars complete",
+  "stellar_forge_protocol_detail_exploration": "%(progress)s / %(target)s expeditions completed",
+  "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s salvage value recovered",
+  "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s enemy fleet value destroyed",
+  "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s damage dealt to a World Boss",
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s resources transported"
 }
