@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, Mapping
+import random
+from typing import Dict, List, Mapping, Sequence
 
 FORGE_BUILDING = "orbital_shipyard"
 
@@ -36,6 +37,14 @@ HULL_MASS_STEP = 1_000_000
 HULL_MASS_MIN_ROLES = 3
 HULL_MASS_FUEL_CELL_WEIGHT = 3
 
+# Ship categories eligible to be rolled as a campaign's 3 required categories.
+# Excludes "colony" — colony ships (seed_ark) are meant to stay rare/limited-
+# purpose, not mass-produced for a Hull Mass grind.
+MANUFACTURING_ROLE_POOL: Sequence[str] = (
+    "cargo", "combat", "expedition", "expedition_combat", "recycle", "scout", "siege", "spy",
+)
+MANUFACTURING_REQUIRED_ROLE_COUNT = 3
+
 
 def hull_mass_target(rank: int) -> int:
     n = max(1, int(rank or 1))
@@ -50,17 +59,36 @@ def ship_hull_mass(build_cost: Mapping[str, int]) -> int:
     return metal + crystal + fuel * HULL_MASS_FUEL_CELL_WEIGHT
 
 
-def manufacturing_trial_complete(total: int, rank: int, by_role: Mapping[str, int]) -> bool:
-    """Total target reached and enough distinct roles contributed.
+def roll_manufacturing_roles() -> List[str]:
+    """Pick this campaign's 3 required ship categories at random (GC-3009)."""
+    picked = random.sample(list(MANUFACTURING_ROLE_POOL), MANUFACTURING_REQUIRED_ROLE_COUNT)
+    return sorted(picked)
+
+
+def manufacturing_trial_complete(
+    total: int,
+    rank: int,
+    by_role: Mapping[str, int],
+    required_roles: Sequence[str] | None = None,
+) -> bool:
+    """Total target reached, and each of the campaign's required categories was built.
 
     No per-role cap — ship unit costs vary too much by tier (e.g. a capital
     combat hull can be 10x+ the Hull Mass of a scout/cargo unit of the same
     quantity) for a flat 60%-of-total ceiling to be a fair "diversify your
-    production" signal. Diversity is enforced purely by role count.
+    production" signal. Diversity is instead enforced by requiring production
+    in 3 specific categories, rolled randomly per campaign (GC-3009) — a
+    player can't just pick whichever 3 are cheapest/already stocked.
+
+    Falls back to "any 3 distinct roles" when ``required_roles`` is empty
+    (campaigns started before this rolled-categories feature shipped).
     """
     target = hull_mass_target(rank)
     if total < target:
         return False
+    roles = list(required_roles or [])
+    if roles:
+        return all(float(by_role.get(r, 0) or 0) > 0 for r in roles)
     contributing_roles = [v for v in by_role.values() if v > 0]
     return len(contributing_roles) >= HULL_MASS_MIN_ROLES
 

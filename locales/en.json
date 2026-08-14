@@ -8811,7 +8811,7 @@
   "stellar_forge_open": "Stellar Forge",
   "stellar_forge_intro": "Once your Orbital Shipyard reaches max level, ascend it through a 4-pillar campaign: pay an Industrial Tribute, produce new Hull Mass, complete Operational Trials, and gather Forge Cores. Completing all four unlocks the next Forge Rank.",
   "stellar_forge_pillar_tribute_hint": "Pay resources from this planet's own stockpile — based on its current hourly production.",
-  "stellar_forge_pillar_manufacturing_hint": "Build new ships after starting the campaign — spread across at least 3 categories.",
+  "stellar_forge_pillar_manufacturing_hint": "Build new ships after starting the campaign — in each of the 3 categories rolled below.",
   "stellar_forge_pillar_operational_hint": "Complete at least 3 of 5 protocols by playing: expeditions, salvage, combat, World Boss damage, or logistics runs.",
   "stellar_forge_pillar_cores_hint": "Rare drops from Expeditions and World Boss kills — cannot be bought with resources.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s pillars complete",

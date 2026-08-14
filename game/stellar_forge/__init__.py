@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from .formulas import (
     FORGE_BUILDING,
+    MANUFACTURING_ROLE_POOL,
+    MANUFACTURING_REQUIRED_ROLE_COUNT,
     OPERATIONAL_PROTOCOLS,
     OPERATIONAL_PROTOCOLS_REQUIRED,
     forge_cores_required,
@@ -16,6 +18,7 @@ from .formulas import (
     manufacturing_trial_complete,
     operational_target,
     operational_trial_complete,
+    roll_manufacturing_roles,
     ship_hull_mass,
     tribute_cost_for_rank,
     tribute_hours,
@@ -36,6 +39,8 @@ from .service import (
 
 __all__ = [
     "FORGE_BUILDING",
+    "MANUFACTURING_ROLE_POOL",
+    "MANUFACTURING_REQUIRED_ROLE_COUNT",
     "OPERATIONAL_PROTOCOLS",
     "OPERATIONAL_PROTOCOLS_REQUIRED",
     "ascend",
@@ -52,6 +57,7 @@ __all__ = [
     "pay_tribute",
     "record_hull_mass_delivery",
     "record_operational_progress",
+    "roll_manufacturing_roles",
     "schema_ready",
     "ship_hull_mass",
     "start_campaign",

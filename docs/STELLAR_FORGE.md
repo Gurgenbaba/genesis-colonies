@@ -89,15 +89,25 @@ Must be **paid from the shipyard planet's own stockpile** (`try_spend_resources_
 New metric: **Hull Mass**, defined per ship as `sum(build_cost.metal, build_cost.crystal, build_cost.fuel_cells * 3)` at production-complete time (fuel_cells weighted 3x — they're the scarcer resource per `docs/ECONOMY_SYSTEM.md`). Computed at the point a shipyard order **completes**, not from the existing fleet snapshot.
 
 ```text
-manufacturing_target(rank) = base_hull_mass(rank) with category minimum:
-  - >= 3 distinct ship categories represented (per SHIP_ROLE_DISPLAY_ORDER, game/fleet_defs.py:111)
+manufacturing_target(rank) = base_hull_mass(rank) with category requirement:
+  - the campaign's 3 rolled categories (below) must each have Hull Mass > 0
 ```
 
 No per-category cap (dropped post-launch — GC-3008): ship unit costs vary too much by
 tier (a capital combat hull can be 10x+ the Hull Mass of a scout/cargo unit at the same
-quantity) for a flat 60%-of-total ceiling to be a fair signal. Diversity is enforced
-purely by category count; the UI still shows the per-role % breakdown for transparency,
-just without a hard block.
+quantity) for a flat 60%-of-total ceiling to be a fair signal. The UI still shows the
+per-role % breakdown for transparency, just without a hard block.
+
+**Rolled categories (GC-3009):** "any 3 categories of your choice" let players always
+pick the 3 cheapest ships, defeating the diversification intent. `start_campaign` now
+rolls 3 distinct categories at random from `MANUFACTURING_ROLE_POOL` (all ship roles
+except `colony` — Seed Ark stays rare/limited-purpose, not a Hull Mass grind target)
+via `roll_manufacturing_roles()`, stored in `planet_shipyard_ascension.manufacturing_roles`
+(migration `151_stellar_forge_manufacturing_roles.sql`) and reset to `[]` on ascend.
+`manufacturing_trial_complete(total, rank, by_role, required_roles)` checks total ≥
+target **and** every required role has `by_role[role] > 0` — falls back to the old
+"any 3 distinct roles" behavior when `required_roles` is empty (campaigns started
+before this shipped).
 
 Counter resets to 0 at campaign start; only orders completed **after** `campaign_started_at` count. Implemented as a running counter column, incremented inside the shipyard order-completion path (wherever `game/shipyard_queue.py` finalizes a build), not recomputed from history.
 

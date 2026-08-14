@@ -8808,7 +8808,7 @@
   "stellar_forge_open": "Forge Stellaire",
   "stellar_forge_intro": "Une fois votre Chantier Orbital au niveau maximum, faites-le progresser via une campagne à 4 piliers : payer un Tribut Industriel, produire de la Masse de Coque, accomplir des Épreuves Opérationnelles et récolter des Noyaux de Forge. Les quatre accomplis débloquent le rang de Forge suivant.",
   "stellar_forge_pillar_tribute_hint": "Payez des ressources depuis le stock de cette planète, selon sa production horaire actuelle.",
-  "stellar_forge_pillar_manufacturing_hint": "Construisez de nouveaux vaisseaux après le début de la campagne — répartis sur au moins 3 catégories.",
+  "stellar_forge_pillar_manufacturing_hint": "Construisez de nouveaux vaisseaux après le début de la campagne — dans chacune des 3 catégories tirées ci-dessous.",
   "stellar_forge_pillar_operational_hint": "Accomplissez au moins 3 des 5 protocoles en jouant : expéditions, récupération, combat, dégâts au World Boss ou transports logistiques.",
   "stellar_forge_pillar_cores_hint": "Butin rare des expéditions et des World Boss — non achetable avec des ressources.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s piliers accomplis",

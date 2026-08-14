@@ -86,16 +86,34 @@ def _grant_cores(uid: int, amount: int) -> None:
         conn.close()
 
 
+# One representative buildable ship per MANUFACTURING_ROLE_POOL entry (GC-3009 —
+# roles are rolled randomly per campaign, so tests must build whatever got rolled).
+_SHIP_KEY_BY_ROLE = {
+    "cargo": "mule_courier",
+    "combat": "falcon_interceptor",
+    "expedition": "solar_skiff",
+    "expedition_combat": "eclipse_runner",
+    "recycle": "harvest_reclaimer",
+    "scout": "spark_drone",
+    "siege": "planet_breaker",
+    "spy": "veil_probe",
+}
+
+
 def _complete_manufacturing(pid: int, rank: int) -> None:
-    """Deliver enough Hull Mass across 3 distinct roles to satisfy Pillar 2."""
+    """Deliver enough Hull Mass across the campaign's 3 rolled roles to satisfy Pillar 2."""
+    from game.fleet_defs import get_ship
+
+    state = get_raw_state(pid)
+    required_roles = state["manufacturing_roles"]
+    assert len(required_roles) == 3, required_roles
     target = hull_mass_target(rank)
-    per_ship = target // 3 + 1000
-    # spark_drone=scout, mule_courier=cargo, falcon_interceptor=combat.
-    for ship_key, build_cost in (
-        ("spark_drone", {"metal": 625, "crystal": 250, "fuel_cells": 0}),
-        ("mule_courier", {"metal": 1000, "crystal": 400, "fuel_cells": 0}),
-        ("falcon_interceptor", {"metal": 1500, "crystal": 600, "fuel_cells": 0}),
-    ):
+    # Generous per-role buffer — integer division across 3 roles must clear the
+    # exact target, not just approach it (floor(units) loses a bit each time).
+    per_ship = target // 3 + 50_000
+    for role in required_roles:
+        ship_key = _SHIP_KEY_BY_ROLE[role]
+        build_cost = get_ship(ship_key)["build_cost"]
         mass_per_unit = max(1, ship_hull_mass(build_cost))
         units = max(1, per_ship // mass_per_unit)
         _add_hull_mass(pid, ship_key, units)
@@ -179,6 +197,33 @@ class TestStellarForgeFormulas:
         assert cost["metal"] == int(round(1000 * 24 * 0.55))
         assert cost["crystal"] == int(round(500 * 24 * 0.30))
         assert cost["fuel_cells"] == int(round(100 * 24 * 0.15))
+
+    def test_manufacturing_trial_requires_specific_rolled_roles(self):
+        """GC-3009 — with required_roles given, diversity is exact-3-roles, not any-3."""
+        target = hull_mass_target(1)
+        required = ["cargo", "combat", "scout"]
+        # Total met, but one required role has zero — must fail even though 3
+        # OTHER roles (not the required ones) are present.
+        wrong_roles = {"expedition": target // 3, "recycle": target // 3, "spy": target // 3 + 10}
+        assert not manufacturing_trial_complete(sum(wrong_roles.values()), 1, wrong_roles, required)
+        # Extra unrelated roles built too — still fine, as long as all 3
+        # required roles have something > 0.
+        mixed = {"cargo": 10, "combat": 10, "scout": 10, "spy": target}
+        assert manufacturing_trial_complete(sum(mixed.values()), 1, mixed, required)
+        # All 3 required present but total under target — must fail.
+        under_target = {"cargo": 10, "combat": 10, "scout": 10}
+        assert not manufacturing_trial_complete(sum(under_target.values()), 1, under_target, required)
+
+    def test_roll_manufacturing_roles_picks_three_distinct_from_pool(self):
+        from game.stellar_forge import MANUFACTURING_ROLE_POOL, roll_manufacturing_roles
+
+        for _ in range(25):
+            roles = roll_manufacturing_roles()
+            assert len(roles) == 3
+            assert len(set(roles)) == 3
+            assert all(r in MANUFACTURING_ROLE_POOL for r in roles)
+            assert "colony" not in roles
+            assert roles == sorted(roles)
 
 
 class TestStellarForgeUnlock:

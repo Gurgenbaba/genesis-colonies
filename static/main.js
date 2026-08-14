@@ -44348,6 +44348,27 @@
     const manuHint = document.getElementById("gc-sf-manu-hint");
     _sfSetCheck(manuCheck, forge.stellar_forge_manufacturing_done);
     if (manuHint) manuHint.hidden = !!forge.stellar_forge_manufacturing_done;
+    const manuRequiredList = document.getElementById("gc-sf-manu-required-roles");
+    if (manuRequiredList) {
+      manuRequiredList.innerHTML = "";
+      const requiredRoles = forge.stellar_forge_manufacturing_roles || [];
+      const builtRoles = forge.stellar_forge_hull_mass_roles || {};
+      requiredRoles.forEach((role) => {
+        const built = Number(builtRoles[role] || 0) > 0;
+        const li = document.createElement("li");
+        li.className = "gc-sf-protocol-chip" + (built ? " is-done" : "");
+        const label = document.createElement("span");
+        label.textContent = t("shipyard_role_" + role, role);
+        li.appendChild(label);
+        if (built) {
+          const check = document.createElement("span");
+          check.className = "gc-sf-protocol-check";
+          check.textContent = "✓";
+          li.appendChild(check);
+        }
+        manuRequiredList.appendChild(li);
+      });
+    }
     if (manuProgress) {
       manuProgress.textContent =
         fmtNumber(forge.stellar_forge_hull_mass_progress || 0) +

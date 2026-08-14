@@ -8808,7 +8808,7 @@
   "stellar_forge_open": "Gwiezdna Kuźnia",
   "stellar_forge_intro": "Gdy Twoja Stocznia Orbitalna osiągnie maksymalny poziom, możesz ją wznieść poprzez kampanię 4 filarów: zapłać Trybut Przemysłowy, wyprodukuj nową Masę Kadłuba, ukończ Próby Operacyjne i zbierz Rdzenie Kuźni. Ukończenie wszystkich czterech odblokowuje kolejną Rangę Kuźni.",
   "stellar_forge_pillar_tribute_hint": "Zapłać zasobami z magazynu tej planety — na podstawie jej aktualnej produkcji godzinowej.",
-  "stellar_forge_pillar_manufacturing_hint": "Buduj nowe statki po rozpoczęciu kampanii — w co najmniej 3 kategoriach.",
+  "stellar_forge_pillar_manufacturing_hint": "Buduj nowe statki po rozpoczęciu kampanii — w każdej z 3 wylosowanych poniżej kategorii.",
   "stellar_forge_pillar_operational_hint": "Ukończ co najmniej 3 z 5 protokołów, grając: ekspedycje, odzysk, walkę, obrażenia World Bossa lub transporty logistyczne.",
   "stellar_forge_pillar_cores_hint": "Rzadkie łupy z ekspedycji i World Bossów — nie można ich kupić za zasoby.",
   "stellar_forge_pillars_done": "%(done)s / %(total)s filarów ukończonych",

@@ -22,6 +22,7 @@ from .formulas import (
     operational_target,
     operational_trial_complete,
     queue_slot_bonus,
+    roll_manufacturing_roles,
     ship_hull_mass,
     specialization_unlocked,
     tribute_cost_for_rank,
@@ -58,6 +59,7 @@ def _default_state(planet_id: int) -> Dict[str, Any]:
         "tribute_paid": False,
         "hull_mass_progress": 0,
         "hull_mass_by_role": {},
+        "manufacturing_roles": [],
         "operational_progress": {},
         "forge_cores_committed": 0,
         "updated_at": 0.0,
@@ -73,6 +75,12 @@ def _parse_row(row: sqlite3.Row) -> Dict[str, Any]:
         operational_progress = json.loads(row["operational_protocols_done"] or "{}")
     except (TypeError, ValueError):
         operational_progress = {}
+    try:
+        # GC-3009 — column added post-launch (migration 151); tolerate rows/DBs
+        # from before it existed instead of raising.
+        manufacturing_roles = json.loads(row["manufacturing_roles"] or "[]")
+    except (TypeError, ValueError, IndexError, KeyError):
+        manufacturing_roles = []
     return {
         "planet_id": int(row["planet_id"]),
         "forge_rank": int(row["forge_rank"] or 0),
@@ -81,6 +89,7 @@ def _parse_row(row: sqlite3.Row) -> Dict[str, Any]:
         "tribute_paid": bool(row["tribute_paid"]),
         "hull_mass_progress": int(row["hull_mass_progress"] or 0),
         "hull_mass_by_role": hull_by_role if isinstance(hull_by_role, dict) else {},
+        "manufacturing_roles": manufacturing_roles if isinstance(manufacturing_roles, list) else [],
         "operational_progress": operational_progress if isinstance(operational_progress, dict) else {},
         "forge_cores_committed": int(row["forge_cores_committed"] or 0),
         "updated_at": float(row["updated_at"] or 0),
@@ -169,9 +178,9 @@ def _upsert_state(conn: sqlite3.Connection, planet_id: int, **fields: Any) -> No
             """
             INSERT INTO planet_shipyard_ascension (
                 planet_id, forge_rank, campaign_active, campaign_started_at,
-                tribute_paid, hull_mass_progress, hull_mass_by_role,
+                tribute_paid, hull_mass_progress, hull_mass_by_role, manufacturing_roles,
                 operational_protocols_done, forge_cores_committed, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 int(planet_id),
@@ -181,6 +190,7 @@ def _upsert_state(conn: sqlite3.Connection, planet_id: int, **fields: Any) -> No
                 1 if base["tribute_paid"] else 0,
                 int(base["hull_mass_progress"]),
                 json.dumps(base["hull_mass_by_role"]),
+                json.dumps(base["manufacturing_roles"]),
                 json.dumps(base["operational_progress"]),
                 int(base["forge_cores_committed"]),
                 now,
@@ -197,6 +207,7 @@ def _upsert_state(conn: sqlite3.Connection, planet_id: int, **fields: Any) -> No
         "tribute_paid": "tribute_paid",
         "hull_mass_progress": "hull_mass_progress",
         "hull_mass_by_role": "hull_mass_by_role",
+        "manufacturing_roles": "manufacturing_roles",
         "operational_progress": "operational_protocols_done",
         "forge_cores_committed": "forge_cores_committed",
     }
@@ -208,7 +219,7 @@ def _upsert_state(conn: sqlite3.Connection, planet_id: int, **fields: Any) -> No
             val = 1 if val else 0
         elif key == "tribute_paid":
             val = 1 if val else 0
-        elif key in ("hull_mass_by_role", "operational_progress"):
+        elif key in ("hull_mass_by_role", "manufacturing_roles", "operational_progress"):
             val = json.dumps(val)
         sets.append(f"{col} = ?")
         params.append(val)
@@ -306,8 +317,11 @@ def panel_forge_fields(
         cores_required = forge_cores_required(next_rank)
         cores_have = get_forge_cores(player_id, conn=conn)
 
+        manufacturing_roles = state["manufacturing_roles"]
         pillar1_done = bool(state["tribute_paid"])
-        pillar2_done = manufacturing_trial_complete(hull_progress, next_rank, state["hull_mass_by_role"])
+        pillar2_done = manufacturing_trial_complete(
+            hull_progress, next_rank, state["hull_mass_by_role"], manufacturing_roles
+        )
         pillar3_done = operational_trial_complete(op_done)
         pillar4_done = cores_have >= cores_required
 
@@ -324,6 +338,7 @@ def panel_forge_fields(
             "stellar_forge_hull_mass_progress": hull_progress,
             "stellar_forge_hull_mass_roles": state["hull_mass_by_role"],
             "stellar_forge_hull_mass_min_roles": HULL_MASS_MIN_ROLES,
+            "stellar_forge_manufacturing_roles": manufacturing_roles,
             "stellar_forge_manufacturing_done": pillar2_done,
             "stellar_forge_operational_protocols": {
                 p: {
@@ -373,6 +388,7 @@ def start_campaign(user_id: int, planet: Dict[str, Any]) -> Tuple[bool, str, Dic
             return False, "campaign_active", {"msg": "A Forge campaign is already running"}
 
         now = time.time()
+        manufacturing_roles = roll_manufacturing_roles()
         _upsert_state(
             conn,
             planet_id,
@@ -382,12 +398,17 @@ def start_campaign(user_id: int, planet: Dict[str, Any]) -> Tuple[bool, str, Dic
             tribute_paid=False,
             hull_mass_progress=0,
             hull_mass_by_role={},
+            manufacturing_roles=manufacturing_roles,
             operational_progress={},
             forge_cores_committed=0,
             updated_at=now,
         )
         commit(conn)
-        return True, "ok", {"forge_rank": int(state["forge_rank"]), "next_rank": int(state["forge_rank"]) + 1}
+        return True, "ok", {
+            "forge_rank": int(state["forge_rank"]),
+            "next_rank": int(state["forge_rank"]) + 1,
+            "manufacturing_roles": manufacturing_roles,
+        }
     except Exception:
         try:
             rollback(conn)
@@ -558,11 +579,14 @@ def ascend(user_id: int, planet: Dict[str, Any]) -> Tuple[bool, str, Dict[str, A
 
         next_rank = int(state["forge_rank"]) + 1
 
-        if not manufacturing_trial_complete(int(state["hull_mass_progress"]), next_rank, state["hull_mass_by_role"]):
+        if not manufacturing_trial_complete(
+            int(state["hull_mass_progress"]), next_rank, state["hull_mass_by_role"], state["manufacturing_roles"]
+        ):
             rollback(conn)
             return False, "manufacturing_incomplete", {
                 "hull_mass_progress": state["hull_mass_progress"],
                 "hull_mass_target": hull_mass_target(next_rank),
+                "manufacturing_roles": state["manufacturing_roles"],
             }
 
         op_done = {
@@ -598,6 +622,7 @@ def ascend(user_id: int, planet: Dict[str, Any]) -> Tuple[bool, str, Dict[str, A
             tribute_paid=False,
             hull_mass_progress=0,
             hull_mass_by_role={},
+            manufacturing_roles=[],
             operational_progress={},
             forge_cores_committed=0,
             updated_at=now,
