@@ -30486,18 +30486,48 @@
       if (!card) return;
       const page = card.closest("#shipyard-page,#defense-page");
       syncUnitCardCostPreview(card, militaryPageResources(page));
+      syncUnitCardBuildTimePreview(card);
     });
   }
 
-  function renderUnitBuildTimeFooterHtml(sec, tt) {
+  function renderUnitBuildTimeFooterHtml(sec, tt, qty, batchCapacity) {
     const s = Math.max(0, Math.floor(Number(sec) || 0));
     if (s <= 0) return "";
+    const cap = Math.max(0, Math.floor(Number(batchCapacity) || 0));
     const label = tt("unit_technical_build_time", "Bauzeit");
-    return (
-      `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--time" data-unit-build-time>` +
+    const stashAttrs =
+      batchCapacity != null ? ` data-unit-build-seconds="${s}" data-unit-batch-capacity="${cap}"` : "";
+    // Single wrapper element is the swap unit (see render_unit_build_time_footer
+    // Jinja macro) — both rows must live inside it so outerHTML replacement is
+    // atomic and never leaves a stale total row behind on the next keystroke.
+    let inner =
+      `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--time">` +
       `<span class="gc-card-lr-label"><span aria-hidden="true">⏱</span> ${escapeHtml(label)}</span>` +
-      `<span class="gc-card-lr-value gc-mono">${escapeHtml(formatDuration(s))}</span></div>`
-    );
+      `<span class="gc-card-lr-value gc-mono">${escapeHtml(formatDuration(s))}</span></div>`;
+    const q = Math.max(1, Math.floor(Number(qty) || 1));
+    if (q > 1 && cap > 0) {
+      const batches = Math.ceil(q / cap);
+      const total = batches * s;
+      const totalLabel = tt("unit_technical_build_time_total", "Gesamt");
+      inner +=
+        `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--time-total" data-unit-build-time-total>` +
+        `<span class="gc-card-lr-label">${escapeHtml(totalLabel)}</span>` +
+        `<span class="gc-card-lr-value gc-mono">${escapeHtml(formatDuration(total))}</span></div>`;
+    }
+    return `<div data-unit-build-time${stashAttrs}>${inner}</div>`;
+  }
+
+  function syncUnitCardBuildTimePreview(card) {
+    if (!card) return;
+    const timeRow = card.querySelector("[data-unit-build-time]");
+    if (!timeRow || timeRow.dataset.unitBuildSeconds == null) return;
+    const sec = Number(timeRow.dataset.unitBuildSeconds) || 0;
+    const cap = Number(timeRow.dataset.unitBatchCapacity) || 0;
+    if (sec <= 0 || cap <= 0) return;
+    const qtyInp = card.querySelector("[data-shipyard-qty],[data-defense-qty],[data-troop-amount]");
+    const qty = resolveUnitCardPreviewQty(qtyInp);
+    const html = renderUnitBuildTimeFooterHtml(sec, t, qty, cap);
+    if (html && timeRow.outerHTML.trim() !== html.trim()) timeRow.outerHTML = html;
   }
 
   function shipyardReqItemVisible(item) {
@@ -30615,7 +30645,13 @@
       if (benefit.innerHTML.trim() !== wrapHtml.trim()) benefit.innerHTML = wrapHtml;
     }
     let timeRow = card?.querySelector("[data-unit-build-time]");
-    const timeHtml = sec > 0 ? renderUnitBuildTimeFooterHtml(sec, tt) : "";
+    const syPage = card?.closest("#shipyard-page");
+    const batchCapacity = syPage ? Number(syPage.dataset.shipyardBatchCapacity) || 0 : 0;
+    const qtyForTime = syPage
+      ? resolveUnitCardPreviewQty(card?.querySelector("[data-shipyard-qty]"))
+      : 1;
+    const timeHtml =
+      sec > 0 ? renderUnitBuildTimeFooterHtml(sec, tt, qtyForTime, batchCapacity || null) : "";
     if (!timeHtml) {
       timeRow?.remove();
       return;
@@ -30797,6 +30833,7 @@
   GC.shipyardActionReasonText = shipyardActionReasonText;
   GC.militaryPageResources = militaryPageResources;
   GC.syncUnitCardCostPreview = syncUnitCardCostPreview;
+  GC.syncUnitCardBuildTimePreview = syncUnitCardBuildTimePreview;
   GC.clearShipyardQueueSignature = function clearShipyardQueueSignature() {
     _lastShipyardQueueSignature = "";
   };

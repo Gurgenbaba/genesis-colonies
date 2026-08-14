@@ -67,6 +67,12 @@
     }
   }
 
+  function syncUnitCardBuildTimePreview(card) {
+    if (typeof GC.syncUnitCardBuildTimePreview === "function") {
+      GC.syncUnitCardBuildTimePreview(card);
+    }
+  }
+
   function bindShipyardOnce() {
     if (_shipyardBound) return;
     _shipyardBound = true;
@@ -90,7 +96,10 @@
           qtyInpMax.dataset.inputMax = String(maxQty);
           setNumberInputValue(qtyInpMax, maxQty);
           var cardMax = maxBtn.closest("[data-ship-card]");
-          if (cardMax) syncUnitCardCostPreview(cardMax, militaryPageResources(page));
+          if (cardMax) {
+            syncUnitCardCostPreview(cardMax, militaryPageResources(page));
+            syncUnitCardBuildTimePreview(cardMax);
+          }
         }
         return;
       }

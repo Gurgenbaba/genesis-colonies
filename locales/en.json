@@ -8819,5 +8819,6 @@
   "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s salvage value recovered",
   "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s enemy fleet value destroyed",
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s damage dealt to a World Boss",
-  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s resources transported"
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s resources transported",
+  "unit_technical_build_time_total": "Total"
 }

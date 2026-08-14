@@ -10778,6 +10778,27 @@ a.gc-bld-head-action-btn--go:focus-visible{
   color: rgba(180, 245, 255, 0.88);
 }
 
+/* Total batch build time — sub-line under the per-unit Bauzeit row (qty > 1) */
+.gc-card-lr-row.gc-card-footer-row--time-total{
+  justify-content: space-between;
+  padding: 0 6px 4px;
+  width: 100%;
+  font-size: 0.66rem;
+  color: rgba(180, 210, 230, 0.6);
+}
+
+.gc-card-footer-row--time-total .gc-card-lr-label{
+  text-align: left;
+  justify-content: flex-start;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: rgba(160, 190, 210, 0.6);
+}
+
+.gc-card-footer-row--time-total .gc-card-lr-value{
+  color: rgba(160, 215, 235, 0.72);
+}
+
 .gc-card-req-block{
   margin-top: 6px;
   padding: 6px 8px;

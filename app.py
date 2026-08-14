@@ -13355,6 +13355,7 @@ def _build_logistics_preview(
 ) -> Dict[str, Any]:
     """Server-side logistics plan preview (collect / distribute legs)."""
     from game.fleet import (
+        _fleet_cargo_multiplier,
         build_collect_route,
         build_distribute_route,
         build_fleet_send_preview,
@@ -13421,6 +13422,14 @@ def _build_logistics_preview(
         if ships_mode == "manual" and not ships:
             base["block_reason"] = "no_ships"
             return base
+        distinct_galaxies = {
+            int(planet_rows[sid]["galaxy"])
+            for sid in source_ids
+            if sid in planet_rows and planet_rows[sid].get("galaxy") is not None
+        }
+        cargo_multiplier_by_galaxy = {
+            g: _fleet_cargo_multiplier(int(user_id), conn, galaxy=g) for g in distinct_galaxies
+        }
         route_ok, route_reason, route_legs = build_collect_route(
             origin_planet_id=hub_id,
             source_planet_ids=source_ids,
@@ -13431,6 +13440,7 @@ def _build_logistics_preview(
             ships_selection_mode=ships_mode,
             manual_ships=manual_ships,
             speed_percent=speed_percent,
+            cargo_multiplier_by_galaxy=cargo_multiplier_by_galaxy,
             skip_empty_ship_legs=skip_empty,
             skip_invalid_planets=skip_empty,
         )
@@ -13503,6 +13513,9 @@ def _build_logistics_preview(
             base["block_reason"] = "no_ships"
             return base
         base["ships_used"] = dict(ships)
+        origin_row_for_mult = planet_rows.get(origin_id) or {}
+        hub_galaxy = int(origin_row_for_mult.get("galaxy") or 0) or None
+        cargo_multiplier = _fleet_cargo_multiplier(int(user_id), conn, galaxy=hub_galaxy)
         route_ok, route_reason, route_legs, delivered_total = build_distribute_route(
             origin_planet_id=origin_id,
             target_planet_ids=target_ids,
@@ -13514,6 +13527,7 @@ def _build_logistics_preview(
             free_fleet_slots=int(slots["free"]),
             player_id=int(user_id),
             conn=conn,
+            cargo_multiplier=cargo_multiplier,
             for_preview=True,
             clamp_to_cargo=clamp_to_cargo,
             skip_invalid_planets=clamp_to_cargo,

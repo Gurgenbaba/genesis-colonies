@@ -132,7 +132,7 @@
              {% if ship.cost_fuel_cells %}data-unit-cost-fuel="{{ ship.cost_fuel_cells }}"{% endif %}>
           {{ render_card_costs_block(ship.cost_metal, ship.cost_crystal, ship.cost_fuel_cells if ship.cost_fuel_cells else none) }}
         </div>
-        {{ render_unit_build_time_footer(ship.build_seconds) }}
+        {{ render_unit_build_time_footer(ship.build_seconds, qty=1, batch_capacity=sy.production_batch_capacity|default(0)) }}
         <footer class="gc-ship-card-action shipyard-ship-actions">
           <input type="text" inputmode="numeric" value="1" maxlength="20"
                  class="gc-input shipyard-qty-input gc-num-input" data-shipyard-qty="{{ ship.ship_key }}"

@@ -8816,5 +8816,6 @@
   "stellar_forge_protocol_detail_salvage": "%(progress)s / %(target)s восстановленной стоимости утиля",
   "stellar_forge_protocol_detail_warfare": "%(progress)s / %(target)s уничтоженной стоимости вражеского флота",
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s урона по World Boss",
-  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s перевезённых ресурсов"
+  "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s перевезённых ресурсов",
+  "unit_technical_build_time_total": "Всего"
 }

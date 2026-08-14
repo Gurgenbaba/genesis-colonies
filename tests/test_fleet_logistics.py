@@ -11,7 +11,9 @@ from game.resources import get_storage_capacity
 from game.models import get_planet_buildings, get_research_levels
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.planet_evolution.service import colonize_planet
-from tests.test_fleet import _fund_planet, _planet_coords, _player, _second_colony, _seed_ships, _unlock_expansion_for_colonize, fleet_db
+from tests.test_fleet import _extra_colonies, _fund_planet, _planet_coords, _player, _second_colony, _seed_ships, _unlock_expansion_for_colonize, fleet_db
+from game.fleet import build_distribute_route
+from game.fleet_calc import build_collect_route, calculate_total_cargo
 
 @pytest.fixture
 def logistics_db(tmp_path, monkeypatch):
@@ -1094,3 +1096,195 @@ def test_logistics_bind_once_does_not_reset_on_cleanup():
     assert "body.gc-fleet-sheet-open .gc-bottom-nav" in (
         Path(__file__).resolve().parent.parent / "static" / "style.css"
     ).read_text(encoding="utf-8")
+
+
+def _set_galaxy_directive(galaxy: int, primary: str) -> None:
+    """Grants +50% cargo_multiplier via the 'logistics' galactic directive (see EffectResolver)."""
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO gd_galaxy_state (
+                galaxy, primary_directive, secondary_directive,
+                consecutive_primary_wins, updated_at
+            ) VALUES (?, ?, NULL, 0, 0)
+            ON CONFLICT(galaxy) DO UPDATE SET
+                primary_directive = excluded.primary_directive,
+                updated_at = excluded.updated_at;
+            """,
+            (int(galaxy), str(primary)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_build_collect_route_applies_cargo_multiplier(fleet_db):
+    """GC-CARGO-FIX-001 — collect route must not silently drop the player's cargo bonus (bug: 'zusammenziehen' loaded ~3x less than transport)."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    source = _second_colony(uid, conn=conn)
+    _fund_planet(conn.cursor(), source, metal=10_000_000, crystal=0, fuel_cells=1_000_000)
+    conn.commit()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM planets WHERE id IN (?, ?);", (hub, source))
+    rows = {int(r["id"]): dict(r) for r in cur.fetchall()}
+    galaxy = int(rows[source]["galaxy"])
+    conn.close()
+
+    route_kwargs = dict(
+        origin_planet_id=hub,
+        source_planet_ids=[source],
+        planet_rows_by_id=rows,
+        ships_stock_by_source={source: {"mule_courier": 10}},
+        free_fleet_slots=5,
+        player_id=uid,
+        ships_selection_mode="manual",
+        manual_ships={"mule_courier": 10},
+    )
+
+    ok_base, reason_base, legs_base = build_collect_route(**route_kwargs)
+    assert ok_base, reason_base
+    base_total = sum(int(v) for v in legs_base[0]["resources"].values())
+
+    ok_boosted, reason_boosted, legs_boosted = build_collect_route(
+        **route_kwargs, cargo_multiplier_by_galaxy={galaxy: 2.0}
+    )
+    assert ok_boosted, reason_boosted
+    boosted_total = sum(int(v) for v in legs_boosted[0]["resources"].values())
+
+    # Stock (10M) vastly exceeds base cargo cap (10 ships x 5000 = 50000), so both
+    # legs are cargo-capped, not stock-capped — the 2x multiplier must show up directly.
+    assert boosted_total == pytest.approx(base_total * 2, rel=0.01)
+    assert boosted_total == calculate_total_cargo({"mule_courier": 10}, cargo_multiplier=2.0)
+
+
+def test_build_distribute_route_applies_cargo_multiplier(fleet_db):
+    """GC-CARGO-FIX-001 — distribute route must apply the same cargo bonus as collect/transport."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    target = _second_colony(uid, conn=conn)
+    conn.commit()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM planets WHERE id IN (?, ?);", (hub, target))
+    rows = {int(r["id"]): dict(r) for r in cur.fetchall()}
+    conn.close()
+
+    route_kwargs = dict(
+        origin_planet_id=hub,
+        target_planet_ids=[target],
+        planet_rows_by_id=rows,
+        ships={"mule_courier": 10},
+        resources={"metal": 10_000_000, "crystal": 0, "fuel_cells": 0},
+        resources_mode="equal",
+        free_fleet_slots=5,
+        player_id=uid,
+        conn=None,
+        clamp_to_cargo=True,
+    )
+
+    ok_base, reason_base, legs_base, _ = build_distribute_route(**route_kwargs)
+    assert ok_base, reason_base
+    base_total = sum(int(v) for v in legs_base[0]["resources"].values())
+
+    ok_boosted, reason_boosted, legs_boosted, _ = build_distribute_route(
+        **route_kwargs, cargo_multiplier=2.0
+    )
+    assert ok_boosted, reason_boosted
+    boosted_total = sum(int(v) for v in legs_boosted[0]["resources"].values())
+
+    assert boosted_total == pytest.approx(base_total * 2, rel=0.01)
+    assert boosted_total == calculate_total_cargo({"mule_courier": 10}, cargo_multiplier=2.0)
+
+
+def test_collect_resources_applies_galaxy_directive_cargo_bonus(logistics_db):
+    """End-to-end: 'logistics' directive (+50% cargo) must reach the real collect send, not just preview."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = sources[0]
+    _fund_planet(conn.cursor(), source, metal=10_000_000, crystal=0, fuel_cells=1_000_000)
+    _seed_collect_ships(uid, [source], {"mule_courier": 10}, conn)
+    galaxy = _planet_coords(source, conn=conn)[0]
+    conn.commit()
+    conn.close()
+
+    conn = db()
+    ok, reason, payload = collect_resources(
+        player_id=uid, target_planet_id=hub, source_planet_ids=[source],
+        ships={"mule_courier": 10}, ships_selection_mode="manual", conn=conn,
+    )
+    assert ok, reason
+    unboosted_total = sum(int(v or 0) for v in json.loads(
+        conn.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (int(payload["started"][0]["fleet_id"]),)).fetchone()["resources_json"]
+    ).values())
+    conn.commit()
+    conn.close()
+
+    _set_galaxy_directive(galaxy, "logistics")
+
+    conn = db()
+    _fund_planet(conn.cursor(), source, metal=10_000_000, crystal=0, fuel_cells=1_000_000)
+    _seed_collect_ships(uid, [source], {"mule_courier": 10}, conn)
+    conn.commit()
+    ok2, reason2, payload2 = collect_resources(
+        player_id=uid, target_planet_id=hub, source_planet_ids=[source],
+        ships={"mule_courier": 10}, ships_selection_mode="manual", conn=conn,
+    )
+    assert ok2, reason2
+    boosted_total = sum(int(v or 0) for v in json.loads(
+        conn.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (int(payload2["started"][0]["fleet_id"]),)).fetchone()["resources_json"]
+    ).values())
+    conn.commit()
+    conn.close()
+
+    assert boosted_total == pytest.approx(unboosted_total * 1.5, rel=0.02)
+
+
+def test_distribute_resources_applies_galaxy_directive_cargo_bonus(logistics_db):
+    """End-to-end: 'logistics' directive (+50% cargo) must reach the real distribute send.
+
+    Manual mode has no clamp_to_cargo — 'equal' requests a fixed amount that must
+    fit under cargo cap or the send is rejected. Request an amount between the
+    unboosted cap (10 ships x 5000 = 50000) and the boosted cap (x1.5 = 75000) so
+    the fix is proven by unboosted failing and boosted succeeding, not just a ratio.
+    """
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    _unlock_expansion_for_colonize(conn, uid, slots=1)
+    target = _second_colony(uid, conn=conn)
+    _fund_planet(conn.cursor(), hub, metal=60_000, crystal=0, fuel_cells=1_000_000)
+    _seed_ships(hub, uid, {"mule_courier": 10}, conn=conn)
+    galaxy = _planet_coords(hub, conn=conn)[0]
+    conn.commit()
+    conn.close()
+
+    conn = db()
+    ok, reason, payload = distribute_resources(
+        player_id=uid, origin_planet_id=hub, target_planet_ids=[target],
+        ships={"mule_courier": 10}, resources={"metal": 60_000, "crystal": 0, "fuel_cells": 0},
+        resources_mode="equal", ships_selection_mode="manual", conn=conn,
+    )
+    assert not ok
+    assert reason == "not_enough_cargo"
+    conn.close()
+
+    _set_galaxy_directive(galaxy, "logistics")
+
+    conn = db()
+    ok2, reason2, payload2 = distribute_resources(
+        player_id=uid, origin_planet_id=hub, target_planet_ids=[target],
+        ships={"mule_courier": 10}, resources={"metal": 60_000, "crystal": 0, "fuel_cells": 0},
+        resources_mode="equal", ships_selection_mode="manual", conn=conn,
+    )
+    assert ok2, reason2
+    delivered_total = sum(int(v or 0) for v in json.loads(
+        conn.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (int(payload2["started"][0]["fleet_id"]),)).fetchone()["resources_json"]
+    ).values())
+    conn.commit()
+    conn.close()
+
+    assert delivered_total == pytest.approx(60_000, rel=0.02)

@@ -593,6 +593,7 @@ def build_collect_route(
     ships_selection_mode: str = "auto_cargo",
     manual_ships: Mapping[str, int] | None = None,
     speed_percent: int = 100,
+    cargo_multiplier_by_galaxy: Mapping[int, float] | None = None,
     skip_empty_ship_legs: bool = False,
     skip_invalid_planets: bool = False,
 ) -> Tuple[bool, str, Optional[List[CollectRouteLeg]]]:
@@ -601,6 +602,11 @@ def build_collect_route(
 
     Freighters and cargo are taken from each **source** colony; hub is the
     delivery target. Resources are locked at plan time (debit happens on send).
+
+    ``cargo_multiplier_by_galaxy`` keys each source planet's cargo bonus
+    (research/alliance/commander) by its galaxy — sources can span different
+    galaxies than each other and the hub, mirroring how plain transport scopes
+    the multiplier by origin galaxy. Missing/absent → 1.0 (no bonus).
     """
     from .resources import load_resources_up_to_cargo
 
@@ -710,7 +716,8 @@ def build_collect_route(
         )
         distance = calculate_distance(origin_coords, hub_target)
         fuel_cost = calculate_fuel_cost(ships_n, distance, pct)
-        cargo_cap = calculate_total_cargo(ships_n)
+        cargo_mult = float((cargo_multiplier_by_galaxy or {}).get(int(entry["galaxy"]), 1.0) or 1.0)
+        cargo_cap = calculate_total_cargo(ships_n, cargo_multiplier=cargo_mult)
         loadable = {
             "metal": int(res_stock["metal"]),
             "crystal": int(res_stock["crystal"]),

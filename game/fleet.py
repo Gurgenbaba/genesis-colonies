@@ -7523,11 +7523,16 @@ def build_distribute_route(
     free_fleet_slots: int,
     player_id: int,
     conn,
+    cargo_multiplier: float = 1.0,
     for_preview: bool = False,
     clamp_to_cargo: bool = False,
     skip_invalid_planets: bool = False,
 ) -> Tuple[bool, str, Optional[List[DistributeRouteLeg]], Optional[Dict[str, int]]]:
-    """Validate distribute targets, compute per-leg cargo/ships, enforce slots and cargo caps."""
+    """Validate distribute targets, compute per-leg cargo/ships, enforce slots and cargo caps.
+
+    ``cargo_multiplier`` — the player's research/alliance/commander cargo bonus,
+    scoped by the origin hub's galaxy (all legs share one origin, unlike collect).
+    """
     origin = int(origin_planet_id or 0)
     targets = normalize_collect_source_planet_ids(origin, target_planet_ids)
     if not targets:
@@ -7648,7 +7653,7 @@ def build_distribute_route(
             if for_preview
             else leg["resources"]
         )
-        cargo_cap = calculate_total_cargo(alloc)
+        cargo_cap = calculate_total_cargo(alloc, cargo_multiplier=cargo_multiplier)
         if loaded_resource_total(cargo) > cargo_cap:
             if clamp_to_cargo:
                 from .resources import load_resources_up_to_cargo
@@ -7819,6 +7824,14 @@ def collect_resources(
 
         slots = get_fleet_slot_status(player_id, conn=conn)
         skip_empty = mode == "auto_cargo"
+        distinct_galaxies = {
+            int(planet_rows[sid]["galaxy"])
+            for sid in source_ids
+            if sid in planet_rows and planet_rows[sid].get("galaxy") is not None
+        }
+        cargo_multiplier_by_galaxy = {
+            g: _fleet_cargo_multiplier(player_id, conn, galaxy=g) for g in distinct_galaxies
+        }
         ok_route, route_reason, legs = build_collect_route(
             origin_planet_id=hub_id,
             source_planet_ids=source_ids,
@@ -7829,6 +7842,7 @@ def collect_resources(
             ships_selection_mode=mode,
             manual_ships=manual_ships if mode == "manual" else None,
             speed_percent=pct,
+            cargo_multiplier_by_galaxy=cargo_multiplier_by_galaxy,
             skip_empty_ship_legs=skip_empty,
             skip_invalid_planets=skip_empty,
         )
@@ -8046,6 +8060,9 @@ def distribute_resources(
         else:
             slots = get_fleet_slot_status(player_id, conn=conn)
 
+        hub_galaxy = int(hub_row.get("galaxy") or 0) or None
+        cargo_multiplier = _fleet_cargo_multiplier(player_id, conn, galaxy=hub_galaxy)
+
         ok_route, route_reason, legs, delivered_total = build_distribute_route(
             origin_planet_id=hub_id,
             target_planet_ids=target_ids,
@@ -8057,6 +8074,7 @@ def distribute_resources(
             free_fleet_slots=int(slots["free"]),
             player_id=int(player_id),
             conn=conn,
+            cargo_multiplier=cargo_multiplier,
             clamp_to_cargo=(sel_mode == "auto_cargo"),
             skip_invalid_planets=(sel_mode == "auto_cargo"),
         )
