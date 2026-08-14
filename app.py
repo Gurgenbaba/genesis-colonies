@@ -14112,6 +14112,140 @@ def api_buildings_mine_evolve():
     return resp
 
 
+@app.route("/api/shipyard/forge-campaign", methods=["GET"])
+@require_login
+def api_shipyard_forge_campaign():
+    """EPIC-30 / GC-3006: Stellar Forge — current 4-pillar campaign state."""
+    from game.planet_evolution.repository import get_context_planet
+    from game.stellar_forge import panel_forge_fields
+
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    planet = get_context_planet(int(user_id))
+    if not planet:
+        return jsonify({"ok": False, "reason": "no_planet"}), 400
+
+    fields = panel_forge_fields(planet)
+    return jsonify({"ok": True, "forge": fields})
+
+
+@app.route("/api/shipyard/forge-campaign/start", methods=["POST"])
+@require_login
+def api_shipyard_forge_campaign_start():
+    """EPIC-30 / GC-3006: Begin a Stellar Forge Ascension campaign for the next rank."""
+    from game.planet_evolution.repository import get_context_planet
+    from game.stellar_forge import start_campaign
+
+    data = request.get_json(silent=True) or {}
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    user_id = int(user_id)
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    planet = get_context_planet(user_id)
+    if not planet:
+        return jsonify({"ok": False, "reason": "no_planet"}), 400
+
+    ok, reason, extra = start_campaign(user_id, planet)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_shipyard_forge_campaign_start",
+        include_panel=False,
+    )
+    response_obj = resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
+
+
+@app.route("/api/shipyard/forge-tribute", methods=["POST"])
+@require_login
+def api_shipyard_forge_tribute():
+    """EPIC-30 / GC-3006: Pay the Industrial Tribute (Pillar 1) for the active campaign."""
+    from game.planet_evolution.repository import get_context_planet
+    from game.stellar_forge import pay_tribute
+
+    data = request.get_json(silent=True) or {}
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    user_id = int(user_id)
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    planet = get_context_planet(user_id)
+    if not planet:
+        return jsonify({"ok": False, "reason": "no_planet"}), 400
+
+    ok, reason, extra = pay_tribute(user_id, planet)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_shipyard_forge_tribute",
+        include_panel=False,
+    )
+    response_obj = resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
+
+
+@app.route("/api/shipyard/forge-ascend", methods=["POST"])
+@require_login
+def api_shipyard_forge_ascend():
+    """EPIC-30 / GC-3006: Complete the Stellar Forge Ascension once all 4 pillars are done."""
+    from game.planet_evolution.repository import get_context_planet
+    from game.stellar_forge import ascend
+
+    data = request.get_json(silent=True) or {}
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    user_id = int(user_id)
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    planet = get_context_planet(user_id)
+    if not planet:
+        return jsonify({"ok": False, "reason": "no_planet"}), 400
+
+    ok, reason, extra = ascend(user_id, planet)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_shipyard_forge_ascend",
+        include_panel=False,
+        panel_delta_keys=["orbital_shipyard"],
+    )
+    response_obj = resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
+
+
 @app.route("/api/buildings/cancel", methods=["POST"])
 @require_login
 def api_buildings_cancel():

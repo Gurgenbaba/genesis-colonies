@@ -1218,6 +1218,20 @@ def execute_instant_attack(
     applied = max(0, before_hp - new_hp)
     defeated = new_hp <= 0
 
+    if applied > 0:
+        try:
+            from .stellar_forge import grant_forge_cores, record_operational_progress
+
+            record_operational_progress(origin_id, "titan", applied, conn=conn, now=ts)
+            if defeated and random.random() < 0.5:
+                grant_forge_cores(pid, 1, conn=conn, now=ts)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "stellar_forge world boss hook failed event=%s player=%s", eid, pid
+            )
+
     new_phase, remaining_def = _resolve_phase_stacks(
         definition,
         current_hp=new_hp,

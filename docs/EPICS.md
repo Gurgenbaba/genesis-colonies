@@ -35,6 +35,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-27 | Commander Classes & Skill Trees | 🔄 | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) · GC-CLASS-000…007 |
 | EPIC-28 | Space Lottery (Chrono Chamber) | 🔄 | [SPACE_LOTTERY.md](SPACE_LOTTERY.md) · GC-2800…2806 |
 | EPIC-29 | Mine Evolution / Industrial Ascension | 🔄 | [MINE_EVOLUTION.md](MINE_EVOLUTION.md) · GC-2900…2905 (Phase 1 Kern-Loop + Ascension feel-fix) |
+| EPIC-30 | Stellar Forge (Orbital Shipyard Ascension) | 📋 | [STELLAR_FORGE.md](STELLAR_FORGE.md) · GC-3000…3007 (Phase 1: 4-Pillar Campaign) |
 
 ---
 

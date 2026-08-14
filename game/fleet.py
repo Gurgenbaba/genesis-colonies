@@ -4848,6 +4848,17 @@ def _resolve_attack_arrival(
 
     from .combat import remaining_stock
 
+    try:
+        from .combat import calculate_debris_from_losses
+        from .stellar_forge import record_operational_progress
+
+        d_metal, d_crystal = calculate_debris_from_losses(combat_result.defender_losses)
+        destroyed_value = d_metal + d_crystal
+        if destroyed_value > 0:
+            record_operational_progress(origin_id, "warfare", destroyed_value, conn=conn, now=time.time())
+    except Exception:
+        logger.exception("stellar_forge warfare hook failed movement_id=%s", movement_id)
+
     return_ships = remaining_stock(ships, combat_result.attacker_losses, canonical_ship_keys=True)
     if int(target_id) > 0 and defender_id > 0:
         _apply_attack_combat_to_planet(
@@ -5422,6 +5433,15 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
         orow = cur.fetchone()
         origin_name = str(orow["name"] if orow else "")
+        if not (asteroid_harvested or asteroid_missed or asteroid_expired):
+            try:
+                from .stellar_forge import record_operational_progress
+
+                salvage_value = int(collected.get("metal") or 0) + int(collected.get("crystal") or 0)
+                if salvage_value > 0:
+                    record_operational_progress(origin_id, "salvage", salvage_value, conn=conn, now=now)
+            except Exception:
+                logger.exception("stellar_forge salvage hook failed movement_id=%s", movement_id)
         if asteroid_harvested or asteroid_missed or asteroid_expired:
             body = _format_asteroid_report(
                 coords=coords,
@@ -5534,6 +5554,19 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         if target_id and loaded_resource_total(delivery) > 0:
             _credit_planet_resources(int(target_id), delivery, conn=conn)
             credited_target = True
+            try:
+                from .stellar_forge import record_operational_progress
+
+                trow = conn.execute(
+                    "SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(target_id),)
+                ).fetchone()
+                if trow and int(trow["player_id"]) == player_id:
+                    origin_pid = int(movement["origin_planet_id"])
+                    record_operational_progress(
+                        origin_pid, "logistics", loaded_resource_total(delivery), conn=conn, now=now
+                    )
+            except Exception:
+                logger.exception("stellar_forge logistics hook failed movement_id=%s", movement_id)
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -6326,6 +6359,18 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     if world_key:
         rewards["world_key"] = world_key
     rewards["expedition_hours"] = _expedition_hours_from_movement(movement)
+    try:
+        from .stellar_forge import grant_forge_cores, record_operational_progress
+
+        _forge_origin_id = int(movement.get("origin_planet_id") or 0) or None
+        if _forge_origin_id:
+            record_operational_progress(_forge_origin_id, "exploration", 1, conn=conn, now=now)
+        if str(outcome.get("event_key") or "") in (
+            "spatial_rift", "time_anomaly", "ancient_beacon", "lost_colony", "rogue_ai",
+        ) and random.random() < 0.15:
+            grant_forge_cores(int(player_id), 1, conn=conn, now=now)
+    except Exception:
+        logger.exception("stellar_forge expedition hook failed movement_id=%s", movement_id)
     record_expedition_daily_value(
         player_id,
         movement_id,

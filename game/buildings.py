@@ -1707,6 +1707,19 @@ def _make_panel_row(
             except Exception:
                 pass
     row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
+    if pid is not None and building_type == "orbital_shipyard":
+        try:
+            from .stellar_forge import panel_forge_fields
+
+            _forge_conn = getattr(panel_ctx.resolver, "_conn", None) if panel_ctx is not None else None
+            _forge_prod = panel_ctx.production_per_hour if panel_ctx is not None else None
+            row.update(
+                panel_forge_fields(planet, conn=_forge_conn, production_per_hour=_forge_prod)
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("stellar_forge panel fields failed planet=%s", pid)
     if uncapped:
         # Keep enqueue math working with sentinel; UI uses uncapped / at_queue_max=False.
         row["max_level"] = int(UNCAPPED_BUILDING_LEVEL)

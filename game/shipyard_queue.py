@@ -698,6 +698,18 @@ def _finish_due_shipyard_jobs_impl(
         if is_known_ship_key(sk):
             add_planet_ships(int(planet_id), int(player_id), {sk: to_deliver}, conn=conn)
             try:
+                from .stellar_forge import record_hull_mass_delivery
+
+                record_hull_mass_delivery(int(planet_id), sk, to_deliver, conn=conn, now=ts)
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "stellar_forge hull mass record failed player=%s planet=%s",
+                    player_id,
+                    planet_id,
+                )
+            try:
                 from .directives.progress import emit_ship_built_events
 
                 delivered_before = remaining_amt

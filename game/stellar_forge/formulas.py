@@ -1,0 +1,120 @@
+"""Stellar Forge / Orbital Shipyard Ascension balance formulas (EPIC-30). Server authority only."""
+
+from __future__ import annotations
+
+from typing import Dict, Mapping
+
+FORGE_BUILDING = "orbital_shipyard"
+
+# --- Pillar 1: Industrial Tribute -------------------------------------------------
+
+TRIBUTE_BASE_HOURS = 24
+TRIBUTE_HOURS_STEP = 12
+TRIBUTE_WEIGHTS: Dict[str, float] = {"metal": 0.55, "crystal": 0.30, "fuel_cells": 0.15}
+
+
+def tribute_hours(rank: int) -> int:
+    """Trailing-production window (hours) tributed for ascending to ``rank``."""
+    n = max(1, int(rank or 1))
+    return int(TRIBUTE_BASE_HOURS + (n - 1) * TRIBUTE_HOURS_STEP)
+
+
+def tribute_cost_for_rank(rank: int, production_per_hour: Mapping[str, float]) -> Dict[str, int]:
+    """Metal/crystal/fuel_cells tribute — trailing production × window × resource weight."""
+    hours = tribute_hours(rank)
+    out: Dict[str, int] = {}
+    for resource, weight in TRIBUTE_WEIGHTS.items():
+        rate = max(0.0, float(production_per_hour.get(resource, 0) or 0))
+        out[resource] = int(round(rate * hours * weight))
+    return out
+
+
+# --- Pillar 2: Manufacturing Trial (Hull Mass) ------------------------------------
+
+HULL_MASS_BASE = 2_000_000
+HULL_MASS_STEP = 1_000_000
+HULL_MASS_ROLE_CAP_FRACTION = 0.60
+HULL_MASS_MIN_ROLES = 3
+HULL_MASS_FUEL_CELL_WEIGHT = 3
+
+
+def hull_mass_target(rank: int) -> int:
+    n = max(1, int(rank or 1))
+    return int(HULL_MASS_BASE + (n - 1) * HULL_MASS_STEP)
+
+
+def ship_hull_mass(build_cost: Mapping[str, int]) -> int:
+    """Hull Mass contributed per unit — build_cost value with fuel_cells weighted 3x."""
+    metal = int(build_cost.get("metal") or 0)
+    crystal = int(build_cost.get("crystal") or 0)
+    fuel = int(build_cost.get("fuel_cells") or 0)
+    return metal + crystal + fuel * HULL_MASS_FUEL_CELL_WEIGHT
+
+
+def manufacturing_trial_complete(total: int, rank: int, by_role: Mapping[str, int]) -> bool:
+    """Total target reached, no role over the cap fraction, and enough distinct roles."""
+    target = hull_mass_target(rank)
+    if total < target:
+        return False
+    contributing_roles = [v for v in by_role.values() if v > 0]
+    if len(contributing_roles) < HULL_MASS_MIN_ROLES:
+        return False
+    if total <= 0:
+        return False
+    cap = total * HULL_MASS_ROLE_CAP_FRACTION
+    return all(v <= cap for v in by_role.values())
+
+
+# --- Pillar 3: Operational Trial ---------------------------------------------------
+
+OPERATIONAL_PROTOCOLS = ("exploration", "salvage", "warfare", "titan", "logistics")
+OPERATIONAL_PROTOCOLS_REQUIRED = 3
+
+OPERATIONAL_TARGETS_BASE: Dict[str, int] = {
+    "exploration": 10,          # completed expedition missions
+    "salvage": 5_000_000,       # resource value harvested from debris fields
+    "warfare": 5_000_000,       # enemy fleet value destroyed in combat
+    "titan": 2_000_000,         # damage dealt to a World Boss
+    "logistics": 10_000_000,    # resources transported between own colonies
+}
+
+
+def operational_target(protocol: str, rank: int) -> int:
+    base = int(OPERATIONAL_TARGETS_BASE.get(protocol, 0))
+    n = max(1, int(rank or 1))
+    return int(round(base * (1.0 + 0.5 * (n - 1))))
+
+
+def operational_trial_complete(protocols_done: set) -> bool:
+    return len({p for p in protocols_done if p in OPERATIONAL_PROTOCOLS}) >= OPERATIONAL_PROTOCOLS_REQUIRED
+
+
+# --- Pillar 4: Forge Cores ----------------------------------------------------------
+
+FORGE_CORES_BASE = 3
+FORGE_CORES_STEP = 4
+
+
+def forge_cores_required(rank: int) -> int:
+    n = max(1, int(rank or 1))
+    return int(FORGE_CORES_BASE + (n - 1) * FORGE_CORES_STEP)
+
+
+# --- Rank rewards --------------------------------------------------------------------
+
+def queue_slot_bonus(rank: int) -> int:
+    """Extra shipyard queue slots granted by completed Forge ranks (Rank I+)."""
+    return 1 if int(rank or 0) >= 1 else 0
+
+
+def nanite_assist_unlocked(rank: int) -> bool:
+    return int(rank or 0) >= 2
+
+
+NANITE_ASSIST_SPEED_BONUS = 0.25
+NANITE_ASSIST_FUEL_CELL_SURCHARGE = 0.35
+
+
+def specialization_unlocked(rank: int) -> bool:
+    """Rank III+ unlocks the Forge Specialization slot (Phase 2 — docs-only until built)."""
+    return int(rank or 0) >= 3

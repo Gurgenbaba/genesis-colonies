@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_req_hover_attrs, render_max_queue_preview_attrs, render_resource_icon with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_prog_costs with context %}
 {% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
@@ -132,11 +132,18 @@
             {% set _bld_webp = _bld_png|webp_static %}
             {% set _card_load = 'high' if (_lcp_hero and loop.index0 == 0) else 'lazy' %}
             {{ render_hero_img_stack(_bld_webp, _bld_png, none, _card_load, _lcp_hero and loop.index0 == 0) }}
-            {% if _evo and _evo_rank > 0 %}
+            {% if (_evo and _evo_rank > 0) or (b.stellar_forge_unlocked is defined and b.stellar_forge_unlocked and b.stellar_forge_rank > 0) %}
             <div class="gc-bld-hero-left-stack">
+              {% if _evo and _evo_rank > 0 %}
               <span class="gc-hero-stat-badge gc-bld-evo-badge"
                     title="{{ T('buildings_mine_evo_badge') }}"
                     aria-label="{{ T('buildings_mine_evo_badge') }}">{{ T('buildings_mine_evo_short') }} {{ b.evolution_roman }}</span>
+              {% endif %}
+              {% if b.stellar_forge_unlocked is defined and b.stellar_forge_unlocked and b.stellar_forge_rank > 0 %}
+              <span class="gc-hero-stat-badge gc-bld-forge-badge"
+                    title="{{ T('stellar_forge_title') }}"
+                    aria-label="{{ T('stellar_forge_title') }}">{{ T('stellar_forge_badge') }} {{ b.stellar_forge_rank_roman }}</span>
+              {% endif %}
             </div>
             {% endif %}
             <div class="gc-bld-hero-right-stack">
@@ -194,6 +201,26 @@
             </button>
             {% endif %}
           </div>
+          {% endif %}
+
+          {% if b.stellar_forge_unlocked is defined and b.stellar_forge_unlocked %}
+          {% set _forge_done = (
+            (1 if b.stellar_forge_tribute_paid else 0)
+            + (1 if b.stellar_forge_manufacturing_done else 0)
+            + (1 if b.stellar_forge_operational_done else 0)
+            + (1 if b.stellar_forge_forge_cores_done else 0)
+          ) if b.stellar_forge_campaign_active else 0 %}
+          <button type="button"
+                  class="gc-btn gc-btn-ghost gc-bld-forge-trigger{% if b.stellar_forge_can_ascend %} gc-bld-forge-trigger--ready{% endif %}"
+                  data-stellar-forge-open="{{ building_type }}">
+            {% if not b.stellar_forge_campaign_active %}
+              {{ T('stellar_forge_open') }}
+            {% elif b.stellar_forge_can_ascend %}
+              {{ T('stellar_forge_ascend') }}
+            {% else %}
+              {{ T('stellar_forge_open') }} · {{ T('stellar_forge_pillars_done', done=_forge_done, total=4) }}
+            {% endif %}
+          </button>
           {% endif %}
 
           <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
@@ -443,6 +470,114 @@
         </button>
         <button type="button" class="gc-btn gc-btn-secondary" data-mine-evo-confirm-cancel>
           {{ T('buildings_mine_evo_modal_cancel', 'Abbrechen') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="gc-stellar-forge-modal"
+     class="gc-player-card-modal gc-sf-modal"
+     hidden
+     aria-hidden="true"
+     data-icon-metal="{{ url_for('static', filename='img/res/Ferronit.webp') }}"
+     data-icon-crystal="{{ url_for('static', filename='img/res/Crytite.webp') }}"
+     data-icon-fuel_cells="{{ url_for('static', filename='img/res/Brennzellen.webp') }}"
+     data-icon-p-exploration="{{ url_for('static', filename='img/expedition/expedition.webp') }}"
+     data-icon-p-salvage="{{ url_for('static', filename='img/lootboxes/Wreckage_Container.webp') }}"
+     data-icon-p-warfare="{{ url_for('static', filename='img/pass/combat_order.webp') }}"
+     data-icon-p-titan="{{ url_for('static', filename='img/bosses/void_titan.webp') }}"
+     data-icon-p-logistics="{{ url_for('static', filename='img/classes/icons/cargo.webp') }}">
+  <div class="gc-player-card-overlay" data-sf-modal-cancel tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-sf-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-sf-title">
+    <header class="gc-player-card-head gc-sf-head">
+      <img class="gc-sf-head-icon" src="{{ url_for('static', filename='img/buildings/shipyard.webp') }}" alt="" aria-hidden="true">
+      <div class="gc-sf-head-titles">
+        <h2 id="gc-sf-title" class="gc-player-card-head-title">{{ T('stellar_forge_title') }}</h2>
+        <span class="gc-sf-rank-chip" id="gc-sf-rank-chip"></span>
+      </div>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-sf-modal-cancel
+              aria-label="{{ T('close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body gc-sf-body">
+      <p class="gc-sf-intro" id="gc-sf-intro">{{ T('stellar_forge_intro') }}</p>
+
+      <div class="gc-sf-loading" id="gc-sf-loading" hidden>{{ T('loading', 'Lädt…') }}</div>
+
+      <div class="gc-sf-content" id="gc-sf-content" hidden>
+        <button type="button" class="gc-btn gc-btn-primary gc-sf-start-btn" id="gc-sf-start-btn" hidden>
+          {{ T('stellar_forge_start_campaign') }}
+        </button>
+
+        <div class="gc-sf-pillars" id="gc-sf-pillars" hidden>
+          <section class="gc-sf-pillar gc-sf-pillar--tribute" id="gc-sf-pillar-tribute">
+            <div class="gc-sf-pillar-head">
+              <span class="gc-sf-pillar-icon-wrap">
+                {{ render_resource_icon('metal', size='sm') }}
+              </span>
+              <div class="gc-sf-pillar-head-text">
+                <h3 class="gc-sf-pillar-title">{{ T('stellar_forge_pillar_tribute') }}</h3>
+                <p class="gc-sf-pillar-hint" id="gc-sf-tribute-hint">{{ T('stellar_forge_pillar_tribute_hint') }}</p>
+              </div>
+              <span class="gc-sf-pillar-check" id="gc-sf-tribute-check" aria-hidden="true"></span>
+            </div>
+            <div class="gc-sf-cost-row" id="gc-sf-tribute-cost"></div>
+            <button type="button" class="gc-btn gc-btn-ghost gc-sf-tribute-btn" id="gc-sf-tribute-btn">
+              {{ T('stellar_forge_pay_tribute') }}
+            </button>
+          </section>
+
+          <section class="gc-sf-pillar gc-sf-pillar--manufacturing" id="gc-sf-pillar-manufacturing">
+            <div class="gc-sf-pillar-head">
+              <span class="gc-sf-pillar-icon-wrap">
+                <img src="{{ url_for('static', filename='img/buildings/shipyard.webp') }}" alt="" aria-hidden="true">
+              </span>
+              <div class="gc-sf-pillar-head-text">
+                <h3 class="gc-sf-pillar-title">{{ T('stellar_forge_pillar_manufacturing') }}</h3>
+                <p class="gc-sf-pillar-hint" id="gc-sf-manu-hint">{{ T('stellar_forge_pillar_manufacturing_hint') }}</p>
+              </div>
+              <span class="gc-sf-pillar-check" id="gc-sf-manu-check" aria-hidden="true"></span>
+            </div>
+            <div class="gc-mono gc-sf-pillar-value" id="gc-sf-manu-progress"></div>
+            <div class="gc-bld-evo-bar gc-sf-bar" aria-hidden="true"><span class="gc-bld-evo-bar-fill" id="gc-sf-manu-bar"></span></div>
+          </section>
+
+          <section class="gc-sf-pillar gc-sf-pillar--operational" id="gc-sf-pillar-operational">
+            <div class="gc-sf-pillar-head">
+              <span class="gc-sf-pillar-icon-wrap">
+                <img src="{{ url_for('static', filename='img/expedition/expedition.webp') }}" alt="" aria-hidden="true">
+              </span>
+              <div class="gc-sf-pillar-head-text">
+                <h3 class="gc-sf-pillar-title">{{ T('stellar_forge_pillar_operational') }}</h3>
+                <p class="gc-sf-pillar-hint" id="gc-sf-op-hint">{{ T('stellar_forge_pillar_operational_hint') }}</p>
+              </div>
+              <span class="gc-sf-pillar-check" id="gc-sf-op-check" aria-hidden="true"></span>
+            </div>
+            <ul class="gc-sf-protocol-list" id="gc-sf-op-list"></ul>
+          </section>
+
+          <section class="gc-sf-pillar gc-sf-pillar--cores" id="gc-sf-pillar-cores">
+            <div class="gc-sf-pillar-head">
+              <span class="gc-sf-pillar-icon-wrap">
+                <img src="{{ url_for('static', filename='img/collectibles/fragment_artifact_alpha.webp') }}" alt="" aria-hidden="true">
+              </span>
+              <div class="gc-sf-pillar-head-text">
+                <h3 class="gc-sf-pillar-title">{{ T('stellar_forge_pillar_cores') }}</h3>
+                <p class="gc-sf-pillar-hint" id="gc-sf-cores-hint">{{ T('stellar_forge_pillar_cores_hint') }}</p>
+              </div>
+              <span class="gc-sf-pillar-check" id="gc-sf-cores-check" aria-hidden="true"></span>
+            </div>
+            <div class="gc-mono gc-sf-pillar-value" id="gc-sf-cores-progress"></div>
+          </section>
+        </div>
+
+        <button type="button" class="gc-btn gc-btn-primary gc-bld-forge-ascend-btn" id="gc-sf-ascend-btn" hidden>
+          {{ T('stellar_forge_ascend') }}
         </button>
       </div>
     </div>

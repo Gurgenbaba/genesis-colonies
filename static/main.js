@@ -4156,6 +4156,77 @@
     }
   }
 
+  /** EPIC-30 — patch the Stellar Forge hero badge + compact card trigger on planet switch
+   *  (buildings page never full-reloads on switch — see GC-PERF-PLANET-SWITCH-004 — so
+   *  without this the trigger stays stuck showing the previous planet's campaign state). */
+  function patchStellarForge(row, b) {
+    if (!row || !b || b.stellar_forge_unlocked === undefined) return;
+    const unlocked = !!b.stellar_forge_unlocked;
+    const rank = Math.max(0, Math.floor(Number(b.stellar_forge_rank) || 0));
+    const roman = String(b.stellar_forge_rank_roman || "");
+
+    const hero = row.querySelector(".gc-bld-card-hero");
+    let leftStack = row.querySelector(".gc-bld-hero-left-stack");
+    let badge = row.querySelector(".gc-bld-forge-badge");
+    if (unlocked && rank > 0 && hero) {
+      if (!leftStack) {
+        leftStack = document.createElement("div");
+        leftStack.className = "gc-bld-hero-left-stack";
+        const rightStack = hero.querySelector(".gc-bld-hero-right-stack");
+        if (rightStack) rightStack.insertAdjacentElement("beforebegin", leftStack);
+        else hero.appendChild(leftStack);
+      }
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "gc-hero-stat-badge gc-bld-forge-badge";
+        badge.title = t("stellar_forge_title", "Stellar Forge");
+        badge.setAttribute("aria-label", t("stellar_forge_title", "Stellar Forge"));
+        leftStack.appendChild(badge);
+      } else if (badge.parentElement !== leftStack) {
+        leftStack.appendChild(badge);
+      }
+      _setIfChanged(badge, `${t("stellar_forge_badge", "Forge")} ${roman}`);
+    } else {
+      if (badge) badge.remove();
+      if (leftStack && !leftStack.childElementCount) leftStack.remove();
+    }
+
+    let trigger = row.querySelector("[data-stellar-forge-open]");
+    const meta = row.querySelector(".gc-bld-card-meta");
+    if (unlocked) {
+      if (!trigger) {
+        trigger = document.createElement("button");
+        trigger.type = "button";
+        trigger.className = "gc-btn gc-btn-ghost gc-bld-forge-trigger";
+        if (meta) meta.insertAdjacentElement("beforebegin", trigger);
+        else row.appendChild(trigger);
+      }
+      trigger.setAttribute("data-stellar-forge-open", String(b.key || ""));
+      const active = !!b.stellar_forge_campaign_active;
+      const canAscend = !!b.stellar_forge_can_ascend;
+      trigger.classList.toggle("gc-bld-forge-trigger--ready", canAscend);
+      let label;
+      if (!active) {
+        label = t("stellar_forge_open", "Stellar Forge");
+      } else if (canAscend) {
+        label = t("stellar_forge_ascend", "Initiate Ascension");
+      } else {
+        const done =
+          (b.stellar_forge_tribute_paid ? 1 : 0) +
+          (b.stellar_forge_manufacturing_done ? 1 : 0) +
+          (b.stellar_forge_operational_done ? 1 : 0) +
+          (b.stellar_forge_forge_cores_done ? 1 : 0);
+        label =
+          t("stellar_forge_open", "Stellar Forge") +
+          " · " +
+          tf("stellar_forge_pillars_done", { done, total: 4 }, "{done} / {total} pillars complete");
+      }
+      _setIfChanged(trigger, label);
+    } else if (trigger) {
+      trigger.remove();
+    }
+  }
+
   function applyResearchRowState(row, tech) {
     if (!row || !tech) return;
     const locked = !tech.requirements_met;
@@ -4533,6 +4604,7 @@
           patchBuildingProduction(row, b);
           patchBuildingCosts(row, b);
           patchBuildingEvolution(row, b);
+          patchStellarForge(row, b);
 
           // GC-PERF-CARD-TIMERS-001: catalog duration for next enqueueable level
           // (server already includes queued_same). Must update even while in-queue.
@@ -15572,6 +15644,9 @@
           planetSwitchReload: reasonStr === "planet_switch_panel",
         });
         if (reasonStr === "planet_switch_panel") {
+          if (typeof closeStellarForgeModal === "function") {
+            closeStellarForgeModal();
+          }
           try {
             syncMountedQueuePagesFromState(data, reasonStr);
           } catch (_) {}
@@ -44124,6 +44199,225 @@
     }
   }
 
+  let _sfBuildingType = "";
+
+  function closeStellarForgeModal() {
+    const modal = document.getElementById("gc-stellar-forge-modal");
+    if (modal) {
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+    }
+    _sfBuildingType = "";
+  }
+
+  function _sfProtocolLabel(key) {
+    return t("stellar_forge_protocol_" + key, key);
+  }
+
+  function _sfIcon(key) {
+    const modal = document.getElementById("gc-stellar-forge-modal");
+    return modal ? modal.getAttribute("data-icon-" + key) || "" : "";
+  }
+
+  function _sfSetCheck(el, done) {
+    if (!el) return;
+    el.classList.toggle("is-done", !!done);
+    el.textContent = "✓";
+    const pillar = el.closest(".gc-sf-pillar");
+    if (pillar) pillar.classList.toggle("is-complete", !!done);
+  }
+
+  function _sfCostChip(resKey, amount) {
+    const chip = document.createElement("span");
+    chip.className = "gc-sf-cost-chip";
+    const icon = _sfIcon(resKey);
+    if (icon) {
+      const img = document.createElement("img");
+      img.src = icon;
+      img.alt = "";
+      img.setAttribute("aria-hidden", "true");
+      chip.appendChild(img);
+    }
+    const val = document.createElement("span");
+    val.className = "gc-mono";
+    val.textContent = fmtNumber(amount);
+    chip.appendChild(val);
+    return chip;
+  }
+
+  function renderStellarForgeModal(forge) {
+    const rankChip = document.getElementById("gc-sf-rank-chip");
+    if (rankChip) {
+      rankChip.textContent = forge.stellar_forge_rank_roman
+        ? t("stellar_forge_badge", "Forge") + " " + forge.stellar_forge_rank_roman
+        : "";
+    }
+
+    const loadingEl = document.getElementById("gc-sf-loading");
+    const contentEl = document.getElementById("gc-sf-content");
+    if (loadingEl) loadingEl.hidden = true;
+    if (contentEl) contentEl.hidden = false;
+
+    const startBtn = document.getElementById("gc-sf-start-btn");
+    const pillars = document.getElementById("gc-sf-pillars");
+    const ascendBtn = document.getElementById("gc-sf-ascend-btn");
+    const introEl = document.getElementById("gc-sf-intro");
+    const active = !!forge.stellar_forge_campaign_active;
+
+    // Progressive disclosure: once a campaign is running, the explanation has
+    // done its job — collapse it so the pillar list fits without scrolling past it.
+    if (introEl) introEl.hidden = active;
+    if (startBtn) startBtn.hidden = active;
+    if (pillars) pillars.hidden = !active;
+    if (ascendBtn) ascendBtn.hidden = !(active && forge.stellar_forge_can_ascend);
+
+    if (!active) return;
+
+    const tributeCheck = document.getElementById("gc-sf-tribute-check");
+    const tributeCost = document.getElementById("gc-sf-tribute-cost");
+    const tributeBtn = document.getElementById("gc-sf-tribute-btn");
+    const tributeHint = document.getElementById("gc-sf-tribute-hint");
+    _sfSetCheck(tributeCheck, forge.stellar_forge_tribute_paid);
+    if (tributeBtn) tributeBtn.hidden = !!forge.stellar_forge_tribute_paid;
+    if (tributeHint) tributeHint.hidden = !!forge.stellar_forge_tribute_paid;
+    if (tributeCost) {
+      tributeCost.innerHTML = "";
+      if (forge.stellar_forge_tribute_paid) {
+        const span = document.createElement("span");
+        span.className = "gc-sf-cost-paid";
+        span.textContent = t("stellar_forge_tribute_paid", "Tribute paid");
+        tributeCost.appendChild(span);
+      } else {
+        const cost = forge.stellar_forge_tribute_cost || {};
+        if (cost.metal) tributeCost.appendChild(_sfCostChip("metal", cost.metal));
+        if (cost.crystal) tributeCost.appendChild(_sfCostChip("crystal", cost.crystal));
+        if (cost.fuel_cells) tributeCost.appendChild(_sfCostChip("fuel_cells", cost.fuel_cells));
+      }
+    }
+
+    const manuCheck = document.getElementById("gc-sf-manu-check");
+    const manuProgress = document.getElementById("gc-sf-manu-progress");
+    const manuBar = document.getElementById("gc-sf-manu-bar");
+    const manuHint = document.getElementById("gc-sf-manu-hint");
+    _sfSetCheck(manuCheck, forge.stellar_forge_manufacturing_done);
+    if (manuHint) manuHint.hidden = !!forge.stellar_forge_manufacturing_done;
+    if (manuProgress) {
+      manuProgress.textContent =
+        fmtNumber(forge.stellar_forge_hull_mass_progress || 0) +
+        " / " +
+        fmtNumber(forge.stellar_forge_hull_mass_target || 0);
+    }
+    if (manuBar) {
+      const pct = forge.stellar_forge_hull_mass_target
+        ? Math.max(0, Math.min(100, ((forge.stellar_forge_hull_mass_progress || 0) / forge.stellar_forge_hull_mass_target) * 100))
+        : 0;
+      manuBar.style.width = pct + "%";
+    }
+
+    const opCheck = document.getElementById("gc-sf-op-check");
+    const opList = document.getElementById("gc-sf-op-list");
+    const opHint = document.getElementById("gc-sf-op-hint");
+    _sfSetCheck(opCheck, forge.stellar_forge_operational_done);
+    if (opHint) opHint.hidden = !!forge.stellar_forge_operational_done;
+    if (opList) {
+      opList.innerHTML = "";
+      const protocols = forge.stellar_forge_operational_protocols || {};
+      Object.keys(protocols).forEach((key) => {
+        const li = document.createElement("li");
+        const done = !!(protocols[key] && protocols[key].done);
+        li.className = "gc-sf-protocol-chip" + (done ? " is-done" : "");
+        const icon = _sfIcon("p-" + key);
+        if (icon) {
+          const img = document.createElement("img");
+          img.src = icon;
+          img.alt = "";
+          img.setAttribute("aria-hidden", "true");
+          li.appendChild(img);
+        }
+        const label = document.createElement("span");
+        label.textContent = _sfProtocolLabel(key);
+        li.appendChild(label);
+        if (done) {
+          const check = document.createElement("span");
+          check.className = "gc-sf-protocol-check";
+          check.textContent = "✓";
+          li.appendChild(check);
+        }
+        opList.appendChild(li);
+      });
+    }
+
+    const coresCheck = document.getElementById("gc-sf-cores-check");
+    const coresProgress = document.getElementById("gc-sf-cores-progress");
+    const coresHint = document.getElementById("gc-sf-cores-hint");
+    _sfSetCheck(coresCheck, forge.stellar_forge_forge_cores_done);
+    if (coresHint) coresHint.hidden = !!forge.stellar_forge_forge_cores_done;
+    if (coresProgress) {
+      coresProgress.textContent =
+        fmtNumber(forge.stellar_forge_forge_cores_have || 0) +
+        " / " +
+        fmtNumber(forge.stellar_forge_forge_cores_required || 0);
+    }
+  }
+
+  async function refreshStellarForgeModal() {
+    try {
+      const res = await fetch("/api/shipyard/forge-campaign", {
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json();
+      if (json.ok) renderStellarForgeModal(json.forge);
+    } catch (err) {
+      console.error("Stellar Forge state fetch failed:", err);
+    }
+  }
+
+  async function openStellarForgeModal(triggerEl) {
+    const modal = document.getElementById("gc-stellar-forge-modal");
+    if (!modal || !triggerEl) return;
+    _sfBuildingType = triggerEl.getAttribute("data-stellar-forge-open") || "";
+    const loadingEl = document.getElementById("gc-sf-loading");
+    const contentEl = document.getElementById("gc-sf-content");
+    if (loadingEl) loadingEl.hidden = false;
+    if (contentEl) contentEl.hidden = true;
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    await refreshStellarForgeModal();
+  }
+
+  async function submitStellarForgeAction(btn, endpoint, successKey) {
+    if (!btn || btn.dataset.busy === "1") return;
+    btn.dataset.busy = "1";
+    btn.classList.add("is-busy");
+    try {
+      const json = await GC.fetchGameAction(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ request_id: newRequestId() }),
+      });
+      applyActionState(json, json.ok ? "stellar_forge_success" : "stellar_forge_error");
+      if (json.ok) {
+        showNotify(t(successKey, successKey), "success");
+        if (endpoint.endsWith("/forge-ascend")) {
+          closeStellarForgeModal();
+          if (typeof GC.reloadCurrentPage === "function") {
+            GC.reloadCurrentPage({ reason: "stellar_forge_ascend" });
+          }
+        } else {
+          await refreshStellarForgeModal();
+        }
+      } else {
+        showNotify(mapActionError(json.reason, json.payload), "error");
+      }
+    } catch (err) {
+      console.error("Stellar Forge AJAX failed:", err);
+      showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+    } finally {
+      btn.dataset.busy = "0";
+      btn.classList.remove("is-busy");
+    }
+  }
+
   function initGameActions() {
     if (GC._gameActionsBound) return;
     GC._gameActionsBound = true;
@@ -44134,6 +44428,12 @@
       if (modal && !modal.hidden) {
         e.preventDefault();
         closeMineEvolutionConfirm();
+        return;
+      }
+      const sfModal = document.getElementById("gc-stellar-forge-modal");
+      if (sfModal && !sfModal.hidden) {
+        e.preventDefault();
+        closeStellarForgeModal();
       }
     });
 
@@ -44156,6 +44456,40 @@
       if (mineEvoSubmit) {
         e.preventDefault();
         await submitMineEvolutionConfirm(mineEvoSubmit);
+        return;
+      }
+
+      const sfOpenEl = e.target.closest("button[data-stellar-forge-open]");
+      if (sfOpenEl) {
+        e.preventDefault();
+        await openStellarForgeModal(sfOpenEl);
+        return;
+      }
+
+      if (e.target.closest("[data-sf-modal-cancel]")) {
+        e.preventDefault();
+        closeStellarForgeModal();
+        return;
+      }
+
+      const sfStartBtn = e.target.closest("#gc-sf-start-btn:not([disabled])");
+      if (sfStartBtn) {
+        e.preventDefault();
+        await submitStellarForgeAction(sfStartBtn, "/api/shipyard/forge-campaign/start", "stellar_forge_start_campaign");
+        return;
+      }
+
+      const sfTributeBtn = e.target.closest("#gc-sf-tribute-btn:not([disabled])");
+      if (sfTributeBtn) {
+        e.preventDefault();
+        await submitStellarForgeAction(sfTributeBtn, "/api/shipyard/forge-tribute", "stellar_forge_tribute_paid");
+        return;
+      }
+
+      const sfAscendBtn = e.target.closest("#gc-sf-ascend-btn:not([disabled])");
+      if (sfAscendBtn) {
+        e.preventDefault();
+        await submitStellarForgeAction(sfAscendBtn, "/api/shipyard/forge-ascend", "stellar_forge_ascend");
         return;
       }
 
