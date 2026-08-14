@@ -14130,6 +14130,7 @@ def api_buildings_mine_evolve():
 @require_login
 def api_shipyard_forge_campaign():
     """EPIC-30 / GC-3006: Stellar Forge — current 4-pillar campaign state."""
+    from game.db import db
     from game.planet_evolution.repository import get_context_planet
     from game.stellar_forge import panel_forge_fields
 
@@ -14137,11 +14138,18 @@ def api_shipyard_forge_campaign():
     if user_id is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
 
-    planet = get_context_planet(int(user_id))
-    if not planet:
-        return jsonify({"ok": False, "reason": "no_planet"}), 400
+    conn = db()
+    try:
+        planet = get_context_planet(int(user_id), conn=conn)
+        if not planet:
+            return jsonify({"ok": False, "reason": "no_planet"}), 400
+        # GC-PERF-PANEL-CONN-001: one connection for both lookups instead of
+        # panel_forge_fields opening its own — this endpoint was measurably
+        # slow to open (two connections + a second, orphaned EffectResolver).
+        fields = panel_forge_fields(planet, conn=conn)
+    finally:
+        conn.close()
 
-    fields = panel_forge_fields(planet)
     return jsonify({"ok": True, "forge": fields})
 
 

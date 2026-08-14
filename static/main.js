@@ -44237,6 +44237,7 @@
   }
 
   let _sfBuildingType = "";
+  let _sfRequestToken = 0;
 
   function closeStellarForgeModal() {
     const modal = document.getElementById("gc-stellar-forge-modal");
@@ -44245,6 +44246,7 @@
       modal.setAttribute("aria-hidden", "true");
     }
     _sfBuildingType = "";
+    _sfRequestToken += 1; // invalidate any in-flight fetch's response
   }
 
   function _sfProtocolLabel(key) {
@@ -44409,13 +44411,20 @@
   }
 
   async function refreshStellarForgeModal() {
+    // Guard against out-of-order responses (e.g. a slow first fetch resolving
+    // after a newer one, or after the modal was closed/reopened) — only the
+    // response matching the CURRENT token is allowed to touch the DOM.
+    _sfRequestToken += 1;
+    const myToken = _sfRequestToken;
     try {
       const res = await fetch("/api/shipyard/forge-campaign", {
         headers: { Accept: "application/json" },
       });
       const json = await res.json();
+      if (myToken !== _sfRequestToken) return; // superseded — drop silently
       if (json.ok) renderStellarForgeModal(json.forge);
     } catch (err) {
+      if (myToken !== _sfRequestToken) return;
       console.error("Stellar Forge state fetch failed:", err);
     }
   }
@@ -44434,6 +44443,11 @@
     _sfBuildingType = triggerEl.getAttribute("data-stellar-forge-open") || "";
     const loadingEl = document.getElementById("gc-sf-loading");
     const contentEl = document.getElementById("gc-sf-content");
+    const introEl = document.getElementById("gc-sf-intro");
+    // Reset to a clean "loading" slate — otherwise the intro (or pillar list,
+    // or start button) from a *previous* open/campaign-state briefly flashes
+    // before the fresh fetch resolves and overwrites it.
+    if (introEl) introEl.hidden = true;
     if (loadingEl) loadingEl.hidden = false;
     if (contentEl) contentEl.hidden = true;
     modal.hidden = false;
