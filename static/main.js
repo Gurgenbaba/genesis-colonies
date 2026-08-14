@@ -44375,6 +44375,14 @@
   async function openStellarForgeModal(triggerEl) {
     const modal = document.getElementById("gc-stellar-forge-modal");
     if (!modal || !triggerEl) return;
+    // .gc-layout carries its own stacking context (z-index:0) that traps any
+    // z-index set on descendants below the sticky header (z-index:200) — the
+    // header then visually overlaps the modal regardless of the modal's own
+    // z-index. Port to <body> so it escapes that context, same pattern as
+    // the fleet sheet portal (gc-fleet-sheet-portal).
+    if (modal.parentNode !== document.body) {
+      document.body.appendChild(modal);
+    }
     _sfBuildingType = triggerEl.getAttribute("data-stellar-forge-open") || "";
     const loadingEl = document.getElementById("gc-sf-loading");
     const contentEl = document.getElementById("gc-sf-content");
