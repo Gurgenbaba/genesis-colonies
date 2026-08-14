@@ -135,7 +135,7 @@ _PARENT_COMPONENT_NAMES = frozenset(
 )
 _SPIKE_RING_MAX = 48
 
-_SKIP_PATH_PREFIXES = ("/healthz", "/health", "/static/")
+_SKIP_PATH_PREFIXES = ("/healthz", "/health", "/static/", "/ws/")
 _PRESSURE_MIN_SAMPLES = 8
 
 _SQL_LITERAL_RE = re.compile(r"'([^']|'')*'")

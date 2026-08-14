@@ -258,3 +258,22 @@ def test_gc_request_perf_dev_header_not_in_testing(game_client, monkeypatch):
     resp = client.get("/api/game-state")
     assert resp.status_code == 200
     assert "X-GC-Request-Perf-Total-Ms" in resp.headers
+
+
+def test_gc_ws_routes_excluded_from_request_perf_duration():
+    """WebSocket routes must not be timed as request duration.
+
+    before_request/teardown_request bracket the ENTIRE handler lifetime — for
+    a flask-sock route that's `while True: ws.receive(...)`, i.e. the whole
+    connection's open duration, not real server work. Left unexcluded, a
+    long-lived galaxy-view WS connection reports as a multi-minute "request"
+    and false-alarms the perf dashboard into CRITICAL status while masking
+    the real hot spots.
+    """
+    from game.perf_intel import should_skip_path
+
+    assert should_skip_path("/ws/galaxy/1/5") is True
+    assert should_skip_path("/ws/galaxy/12/34") is True
+    # Sanity: normal API/game routes must still be tracked.
+    assert should_skip_path("/api/game-state") is False
+    assert should_skip_path("/galaxy/1/5") is False
