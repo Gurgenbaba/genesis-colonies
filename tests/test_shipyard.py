@@ -424,6 +424,30 @@ def test_orbital_production_batch_capacity_curve():
     assert orbital_production_batch_capacity(50) == 8335
 
 
+def test_orbital_production_batch_capacity_scales_with_forge_rank():
+    from game.shipyard import orbital_production_batch_capacity
+
+    base = orbital_production_batch_capacity(50)
+    assert orbital_production_batch_capacity(50, forge_rank=0) == base
+    # +150% capacity per completed Forge rank (additive multiplier).
+    assert orbital_production_batch_capacity(50, forge_rank=1) == int(base * 2.5)
+    assert orbital_production_batch_capacity(50, forge_rank=10) == pytest.approx(base * 16, abs=2)
+    # Rank 10 + Level 50 should comfortably clear the ~130k/cycle needed to
+    # build 300M ships in ~4-5h at a 7s unit cycle (GC-endgame-shipyard-speed).
+    assert orbital_production_batch_capacity(50, forge_rank=10) >= 130_000
+
+
+def test_get_shipyard_queue_limit_forge_rank_bonus(monkeypatch):
+    import game.shipyard_queue as shipyard_queue_mod
+
+    monkeypatch.setattr(
+        "game.shipyard.forge_rank_for_planet", lambda planet_id, conn=None: 2
+    )
+    limit_with_rank = shipyard_queue_mod.get_shipyard_queue_limit(planet_id=123)
+    limit_without = shipyard_queue_mod.get_shipyard_queue_limit(planet_id=None)
+    assert limit_with_rank == limit_without + 1
+
+
 def test_production_infer_total_units_with_batch_capacity():
     from game.shipyard import production_infer_total_units
 

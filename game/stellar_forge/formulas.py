@@ -135,6 +135,20 @@ def queue_slot_bonus(rank: int) -> int:
     return 1 if int(rank or 0) >= 1 else 0
 
 
+# Each completed Forge rank adds +150% to the yard's production batch capacity
+# (ships built per production cycle), stacking additively on top of the base
+# level-50 capacity. Calibrated so Rank X (1 + 10*1.5 = 16x) plus a Level 50
+# yard clears the ~130k ships/cycle needed to build 300M ships in ~4-5h —
+# see docs/STELLAR_FORGE.md for the full derivation.
+FORGE_CAPACITY_BONUS_PER_RANK = 1.5
+
+
+def forge_capacity_multiplier(rank: int) -> float:
+    """Batch-capacity multiplier from completed Forge ranks (uncapped, repeatable)."""
+    n = max(0, int(rank or 0))
+    return 1.0 + n * FORGE_CAPACITY_BONUS_PER_RANK
+
+
 def nanite_assist_unlocked(rank: int) -> bool:
     return int(rank or 0) >= 2
 

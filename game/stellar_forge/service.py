@@ -15,6 +15,7 @@ from .formulas import (
     HULL_MASS_MIN_ROLES,
     OPERATIONAL_PROTOCOLS,
     OPERATIONAL_PROTOCOLS_REQUIRED,
+    forge_capacity_multiplier,
     forge_cores_required,
     hull_mass_target,
     manufacturing_trial_complete,
@@ -357,6 +358,7 @@ def panel_forge_fields(
             "stellar_forge_queue_slot_bonus": queue_slot_bonus(rank),
             "stellar_forge_nanite_assist_unlocked": nanite_assist_unlocked(rank),
             "stellar_forge_specialization_unlocked": specialization_unlocked(rank),
+            "stellar_forge_capacity_multiplier": forge_capacity_multiplier(rank),
         }
     finally:
         if own:

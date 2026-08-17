@@ -46,15 +46,35 @@ def shipyard_level_for_planet(planet_id: int, *, conn=None) -> int:
     return max(0, orbital, legacy)
 
 
-def orbital_production_batch_capacity(shipyard_level: int) -> int:
-    """Parallel units built per production cycle (late-game quadratic-ish curve)."""
+def forge_rank_for_planet(planet_id: int | None, *, conn=None) -> int:
+    """Completed Stellar Forge ascension rank for a planet (0 if none/unavailable)."""
+    if not planet_id:
+        return 0
+    try:
+        from .stellar_forge.service import get_raw_state
+
+        state = get_raw_state(int(planet_id), conn=conn)
+        return max(0, int(state.get("forge_rank") or 0))
+    except Exception:
+        return 0
+
+
+def orbital_production_batch_capacity(shipyard_level: int, forge_rank: int = 0) -> int:
+    """Parallel units built per production cycle (late-game quadratic-ish curve).
+
+    Stellar Forge ranks scale capacity further beyond the Level 50 yard cap —
+    see ``stellar_forge.formulas.forge_capacity_multiplier``.
+    """
+    from .stellar_forge.formulas import forge_capacity_multiplier
+
     lvl = max(1, int(shipyard_level or 1))
-    return max(1, int(math.floor(1 + lvl * 5 + lvl**2.3)))
+    base = 1 + lvl * 5 + lvl**2.3
+    return max(1, int(math.floor(base * forge_capacity_multiplier(forge_rank))))
 
 
-def shipyard_batch_capacity(shipyard_level: int) -> int:
+def shipyard_batch_capacity(shipyard_level: int, forge_rank: int = 0) -> int:
     """Alias for yard parallel slots per build cycle."""
-    return orbital_production_batch_capacity(shipyard_level)
+    return orbital_production_batch_capacity(shipyard_level, forge_rank)
 
 
 def base_unit_seconds_for_ship(ship_key: str) -> int:
@@ -63,10 +83,12 @@ def base_unit_seconds_for_ship(ship_key: str) -> int:
     return max(1, int(spec.get("build_seconds") or 1))
 
 
-def unit_batch_capacity(shipyard_level: int, base_unit_seconds: int | None = None) -> int:
+def unit_batch_capacity(
+    shipyard_level: int, base_unit_seconds: int | None = None, forge_rank: int = 0
+) -> int:
     """Parallel units per build cycle (same for all ship types at this yard level)."""
     _ = base_unit_seconds  # legacy callers pass ship base seconds; capacity is yard-only
-    return orbital_production_batch_capacity(shipyard_level)
+    return orbital_production_batch_capacity(shipyard_level, forge_rank)
 
 
 PRODUCTION_TECH_EXAMPLE_BASE_SECONDS: Dict[str, int] = {
@@ -91,12 +113,13 @@ def production_metrics_at_yard(
     base_unit_seconds: int,
     shipyard_level: int,
     effective_unit_seconds: int | None = None,
+    forge_rank: int = 0,
 ) -> Dict[str, Any]:
     """Authoritative production snapshot for detail cards and building technical sheets."""
     lvl = max(1, int(shipyard_level or 1))
     base = max(1, int(base_unit_seconds))
     unit = max(1, int(effective_unit_seconds if effective_unit_seconds is not None else base))
-    yard_cap = orbital_production_batch_capacity(lvl)
+    yard_cap = orbital_production_batch_capacity(lvl, forge_rank)
     reduction = (
         int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)) * 100)) if lvl > 1 else 0
     )
@@ -485,7 +508,9 @@ def _ship_catalog_entry(
         "cost_fuel_cells": cost["fuel_cells"],
         "build_seconds": _effective_build_seconds(ship_key, shipyard_level, conn=conn),
         "effective_batch_capacity": unit_batch_capacity(
-            shipyard_level, base_unit_seconds_for_ship(ship_key)
+            shipyard_level,
+            base_unit_seconds_for_ship(ship_key),
+            forge_rank_for_planet(planet_id, conn=conn),
         ),
         "max_build": max_qty,
         "can_build": False,
@@ -512,7 +537,9 @@ def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
 
     queue_full = False
     if shipyard_queue_table_ready(conn):
-        queue_full = queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn)
+        queue_full = queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(
+            conn=conn, planet_id=planet_id
+        )
     ships_inv = get_ship_inventory(player_id, planet_id, conn=conn)
     effect_ctx = None
     if player_id is not None and conn is not None:
@@ -759,7 +786,7 @@ def can_build_ship(
         from .shipyard_queue import get_shipyard_queue_limit, queue_count, shipyard_queue_table_ready
 
         if shipyard_queue_table_ready(conn) and queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(
-            conn=conn
+            conn=conn, planet_id=planet_id
         ):
             return False, "queue_full"
 
@@ -1085,9 +1112,10 @@ def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> 
 
         from .shipyard import orbital_production_batch_capacity
 
+        forge_rank = forge_rank_for_planet(planet_id, conn=conn)
         return {
             "orbital_shipyard_level": sy_level,
-            "production_batch_capacity": orbital_production_batch_capacity(sy_level),
+            "production_batch_capacity": orbital_production_batch_capacity(sy_level, forge_rank),
             "buildable_ships": buildable,
             "locked_ships": locked,
             "current_ships": ships,

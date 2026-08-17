@@ -14,17 +14,24 @@ MAX_SHIPYARD_QUEUE = 3  # fallback default; prefer get_shipyard_queue_limit()
 QUEUE_STATUS_QUEUED = "queued"
 
 
-def get_shipyard_queue_limit(*, conn=None) -> int:
-    """Max concurrent shipyard jobs per planet (Admin → Balance)."""
+def get_shipyard_queue_limit(*, conn=None, planet_id: int | None = None) -> int:
+    """Max concurrent shipyard jobs per planet (Admin → Balance + Stellar Forge rank bonus)."""
     try:
         from .models import get_game_settings
 
         settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
         raw = (settings or {}).get("shipyard_queue_limit", MAX_SHIPYARD_QUEUE)
         limit = int(float(raw))
-        return max(1, min(20, limit))
+        limit = max(1, min(20, limit))
     except (TypeError, ValueError):
-        return MAX_SHIPYARD_QUEUE
+        limit = MAX_SHIPYARD_QUEUE
+    if planet_id is not None:
+        from .shipyard import forge_rank_for_planet
+        from .stellar_forge.formulas import queue_slot_bonus
+
+        forge_rank = forge_rank_for_planet(planet_id, conn=conn)
+        limit += queue_slot_bonus(forge_rank)
+    return limit
 
 
 def shipyard_queue_table_ready(conn) -> bool:
@@ -55,11 +62,18 @@ def _unit_build_seconds(
     )
 
 
-def _batch_capacity_for_ship(ship_key: str, shipyard_level: int) -> int:
-    from .shipyard import orbital_production_batch_capacity
+def _batch_capacity_for_ship(
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    planet_id: int | None = None,
+    conn=None,
+) -> int:
+    from .shipyard import forge_rank_for_planet, orbital_production_batch_capacity
 
     _ = ship_key
-    return orbital_production_batch_capacity(shipyard_level)
+    forge_rank = forge_rank_for_planet(planet_id, conn=conn)
+    return orbital_production_batch_capacity(shipyard_level, forge_rank)
 
 
 def _job_duration_seconds(
@@ -73,7 +87,7 @@ def _job_duration_seconds(
     from .shipyard import production_job_duration_seconds
 
     unit = _unit_build_seconds(ship_key, shipyard_level, conn=conn, planet_id=planet_id)
-    cap = _batch_capacity_for_ship(ship_key, shipyard_level)
+    cap = _batch_capacity_for_ship(ship_key, shipyard_level, planet_id=planet_id, conn=conn)
     return production_job_duration_seconds(
         unit_seconds=unit, amount=int(amount), batch_capacity=cap
     )
@@ -101,10 +115,11 @@ def _job_total_units(
 
     sk = canonical_ship_key(str(row["ship_key"]))
     remaining = max(0, int(row.get("amount") or 0))
+    pid = _planet_id_from_row(row)
     unit_sec = _unit_build_seconds(
-        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+        sk, shipyard_level, conn=conn, planet_id=pid
     )
-    cap = _batch_capacity_for_ship(sk, shipyard_level)
+    cap = _batch_capacity_for_ship(sk, shipyard_level, planet_id=pid, conn=conn)
     return production_infer_total_units(
         remaining=remaining,
         scheduled_duration=_job_scheduled_duration_seconds(row),
@@ -129,10 +144,11 @@ def progressive_units_to_deliver(
         return 0
 
     sk = canonical_ship_key(str(row["ship_key"]))
+    pid = _planet_id_from_row(row)
     unit_sec = _unit_build_seconds(
-        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+        sk, shipyard_level, conn=conn, planet_id=pid
     )
-    cap = _batch_capacity_for_ship(sk, shipyard_level)
+    cap = _batch_capacity_for_ship(sk, shipyard_level, planet_id=pid, conn=conn)
     total = _job_total_units(row, shipyard_level, conn=conn)
     return production_progressive_units_to_deliver(
         remaining=remaining,
@@ -153,11 +169,12 @@ def _next_unit_finish_at(
     from .shipyard import production_next_batch_finish_at
 
     sk = canonical_ship_key(str(row["ship_key"]))
+    pid = _planet_id_from_row(row)
     started = float(row.get("started_at") or 0)
     unit_sec = _unit_build_seconds(
-        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+        sk, shipyard_level, conn=conn, planet_id=pid
     )
-    cap = _batch_capacity_for_ship(sk, shipyard_level)
+    cap = _batch_capacity_for_ship(sk, shipyard_level, planet_id=pid, conn=conn)
     total = _job_total_units(row, shipyard_level, conn=conn)
     remaining = max(0, int(row.get("amount") or 0))
     delivered = max(0, total - remaining)
@@ -181,16 +198,17 @@ def _job_row_for_client(
     from .shipyard import production_live_order_remaining_seconds
 
     sk = canonical_ship_key(str(row["ship_key"]))
+    pid = _planet_id_from_row(row)
     amount_remaining = max(0, int(row.get("amount") or 0))
     total_units = _job_total_units(row, shipyard_level, conn=conn)
     units_delivered = max(0, total_units - amount_remaining)
     unit_sec = _unit_build_seconds(
-        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+        sk, shipyard_level, conn=conn, planet_id=pid
     )
     started_at = float(row.get("started_at") or 0)
     finish_at = float(row.get("finish_at") or 0)
     is_active = idx == 0
-    cap = _batch_capacity_for_ship(sk, shipyard_level)
+    cap = _batch_capacity_for_ship(sk, shipyard_level, planet_id=pid, conn=conn)
 
     if is_active and amount_remaining > 0:
         order_remaining = production_live_order_remaining_seconds(
@@ -335,7 +353,7 @@ def sync_shipyard_queue_finish_times(
         unit = _unit_build_seconds(
             sk, shipyard_level, conn=conn, planet_id=int(planet_id)
         )
-        cap = _batch_capacity_for_ship(sk, shipyard_level)
+        cap = _batch_capacity_for_ship(sk, shipyard_level, planet_id=int(planet_id), conn=conn)
         scheduled = _job_scheduled_duration_seconds(head)
         # Prefer remaining as total when schedule no longer matches live yard params.
         total_guess = _job_total_units(head, shipyard_level, conn=conn)
@@ -501,7 +519,7 @@ def enqueue_ship_build(
         return False, vac_reason, None
     if not shipyard_queue_table_ready(conn):
         return False, "fleet_unavailable", None
-    if queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn):
+    if queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn, planet_id=planet_id):
         return False, "queue_full", None
 
     sk = canonical_ship_key(ship_key)
@@ -804,7 +822,7 @@ def shipyard_queue_for_client(
     first_remaining = jobs[0]["remaining"] if jobs else 0
     summary = {
         "count": len(jobs),
-        "limit": get_shipyard_queue_limit(conn=conn),
+        "limit": get_shipyard_queue_limit(conn=conn, planet_id=planet_id),
         "first_finish_in": first_remaining,
     }
     summary.update(refund_summary_percents())
