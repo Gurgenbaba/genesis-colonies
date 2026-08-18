@@ -10,6 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from game.i18n import SUPPORTED_LOCALES  # noqa: E402
 from scripts.check_locale_keys import (  # noqa: E402
     LOCALES_DIR,
@@ -66,6 +69,70 @@ def _find_german_strings(locale: str) -> list[tuple[str, str]]:
     return hits
 
 
+# Keys whose value is deliberately identical across locales — pure `%()s`/`{}`
+# format templates with no translatable words, or intentional proper nouns /
+# brand names (SKU titles, mission codenames, stylized kickers). Extend this
+# list when adding a new such key; anything else identical to de.json here
+# is a real translation gap.
+UNTRANSLATED_VALUE_EXCEPTIONS: frozenset[str] = frozenset(
+    {
+        "admin_events_effect_combo",
+        "admin_events_weekend_title",
+        "alliance_broadcast_subject",
+        "buildings_technical_nano_marginal_with_pct",
+        "buildings_technical_nano_vs_l0",
+        "buildings_technical_yard_compact_with_reduction",
+        "buildings_mine_evo_modal_tribute",
+        "codex_threat_net_title",
+        "fleet_expedition_report_lootbox_line",
+        "fleet_expedition_report_loss_line",
+        "fleet_expedition_report_salvaged_line",
+        "fleet_spy_report_activity_row",
+        "fleet_world_expedition_report_loot_line",
+        "gd_politics_chronicle_votes",
+        "inv_prestige_progress",
+        "messages_world_display",
+        "pe_reward_xp",
+        "shop_identity_surfaces",
+        "shop_sku_genesis_accelerator",
+        "shop_sku_identity_pack",
+        "side_expo_done_subj",
+        "side_fort_done_subj",
+        "story_carousel_position",
+        "unit_technical_rapid_fire_value",
+        "sl_kicker",
+    }
+)
+
+# Below this length, sharing a value with de.json is very likely a language-
+# neutral token (short abbreviations, symbols, numbers) rather than a missed
+# translation — only flag longer, clearly-prose strings.
+_UNTRANSLATED_MIN_LEN = 20
+
+
+def find_untranslated_strings(locale: str, de: dict[str, str]) -> list[tuple[str, str]]:
+    """Keys whose value is verbatim identical to de.json — i.e. never translated.
+
+    ``de`` is the authored source, so it's always excluded. ``en`` is also
+    excluded from the CI gate for now: it independently carries ~90 pre-existing
+    untranslated strings (mostly landing/admin copy) that predate this check and
+    are a separate, larger cleanup — call this function directly with locale="en"
+    to audit it, but it isn't enforced yet pending a dedicated pass.
+    """
+    if locale in ("de", "en"):
+        return []
+    data = _load_json(LOCALES_DIR / f"{locale}.json")
+    hits: list[tuple[str, str]] = []
+    for key, val in data.items():
+        if key in UNTRANSLATED_VALUE_EXCEPTIONS or key.startswith("language_name_"):
+            continue
+        if not isinstance(val, str) or len(val) <= _UNTRANSLATED_MIN_LEN:
+            continue
+        if key in de and val == de[key]:
+            hits.append((key, val))
+    return hits
+
+
 def _find_forbidden(locale: str) -> list[str]:
     data = _load_json(LOCALES_DIR / f"{locale}.json")
     hits: list[str] = []
@@ -108,6 +175,7 @@ def main() -> int:
         unused = find_unused(locale, used)
         german = _find_german_strings(locale)
         forbidden = _find_forbidden(locale)
+        untranslated = find_untranslated_strings(locale, de)
 
         print(f"\n== {locale}.json ==")
         print(f"entries: {len(data)} | missing used: {len(used_missing)} | missing vs de: {len(canon_missing)} | extra vs de: {len(extra)}")
@@ -137,6 +205,12 @@ def main() -> int:
             print(f"Forbidden terms ({len(forbidden)}):")
             for hit in forbidden[:5]:
                 print(f"- {hit}")
+
+        if untranslated:
+            failed = True
+            print(f"Untranslated (identical to de.json) ({len(untranslated)}):")
+            for key, val in untranslated[:10]:
+                print(f"- {key}: {val[:60]}")
 
         if unused:
             print(f"Possibly unused ({len(unused)}) — first 5:")

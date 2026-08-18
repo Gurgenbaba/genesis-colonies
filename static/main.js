@@ -3556,6 +3556,7 @@
       ),
       no_research_lab: t("research_msg_no_lab", "Forschungslabor erforderlich."),
       unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
+      unknown_building: t("msg_unknown_building", "Unbekanntes Gebäude."),
       not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
       max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
@@ -29080,17 +29081,21 @@
             if (fInp) fInp.value = "0";
             schedulePreview(page);
           } else {
+            const msg = reasonText(apiError(res));
             if (errorEl) {
-              errorEl.textContent = reasonText(apiError(res));
+              errorEl.textContent = msg;
               errorEl.hidden = false;
             }
+            showNotify(msg, "error");
             applyActionState(res, "fleet_send_error");
           }
         } catch (_) {
+          const msg = reasonText("generic");
           if (errorEl) {
-            errorEl.textContent = reasonText("generic");
+            errorEl.textContent = msg;
             errorEl.hidden = false;
           }
+          showNotify(msg, "error");
         } finally {
           rt.sending = false;
           setProgressionActionBusy(submitBtn, false);
@@ -30746,6 +30751,9 @@
       if (queueFull) {
         btn.textContent = fullLabel;
         btn.title = fullLabel;
+      } else if (!ship.can_build && ship.block_reason) {
+        btn.textContent = buildLabel;
+        btn.title = shipyardActionReasonText(ship.block_reason);
       } else {
         btn.textContent = buildLabel;
         btn.removeAttribute("title");
@@ -31138,6 +31146,13 @@
       if (queueFull) {
         btn.textContent = fullLabel;
         btn.title = fullLabel;
+      } else if (!unit.can_build && unit.block_reason) {
+        const reason = unit.block_reason;
+        btn.textContent = buildLabel;
+        btn.title = tt(
+          `defense_error_${reason}`,
+          tt(`troops_error_${reason}`, tt(`fleet_error_${reason}`, reason))
+        );
       } else {
         btn.textContent = buildLabel;
         btn.removeAttribute("title");
