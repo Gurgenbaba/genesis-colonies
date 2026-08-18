@@ -35,7 +35,7 @@ def test_no_untranslated_locale_values():
 
     de = json.loads((LOCALES_DIR / "de.json").read_text(encoding="utf-8"))
     problems: dict[str, list[str]] = {}
-    for locale in ("es", "fr", "pl", "pt", "ru", "tr"):
+    for locale in ("en", "es", "fr", "pl", "pt", "ru", "tr"):
         hits = find_untranslated_strings(locale, de)
         if hits:
             problems[locale] = [key for key, _ in hits]

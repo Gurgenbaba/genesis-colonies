@@ -78,29 +78,53 @@ UNTRANSLATED_VALUE_EXCEPTIONS: frozenset[str] = frozenset(
     {
         "admin_events_effect_combo",
         "admin_events_weekend_title",
+        "admin_legacy_settings_title",
         "alliance_broadcast_subject",
         "buildings_technical_nano_marginal_with_pct",
         "buildings_technical_nano_vs_l0",
         "buildings_technical_yard_compact_with_reduction",
         "buildings_mine_evo_modal_tribute",
+        "codex_imperial_directives_faq_0_q",
         "codex_threat_net_title",
+        "combat_report_vs",
+        "command_map_dev_preview_title",
+        "community_discord_aria",
+        "community_discord_title",
+        "desc_pe_science_t2",
+        "expansion_checklist_interstellar_tech",
+        "fleet_expedition_report_fleet_summary",
         "fleet_expedition_report_lootbox_line",
         "fleet_expedition_report_loss_line",
         "fleet_expedition_report_salvaged_line",
         "fleet_spy_report_activity_row",
         "fleet_world_expedition_report_loot_line",
         "gd_politics_chronicle_votes",
+        "initiation_bo_title",
+        "initiation_hud_bis_title",
+        "interstellar_expansion",
+        "inv_exchange_dna_common_to_rare",
+        "inv_exchange_dna_rare_to_epic",
         "inv_prestige_progress",
+        "landing_hero_endline",
         "messages_world_display",
+        "nav_badge_story_aria",
         "pe_reward_xp",
+        "pe_unlock_export_phase_crystal",
+        "referral_referred_starter_label",
+        "research_interstellar_expansion",
         "shop_identity_surfaces",
+        "shop_sku_commander_supply",
         "shop_sku_genesis_accelerator",
         "shop_sku_identity_pack",
         "side_expo_done_subj",
         "side_fort_done_subj",
-        "story_carousel_position",
-        "unit_technical_rapid_fire_value",
         "sl_kicker",
+        "stellar_forge_cores_progress",
+        "story_carousel_position",
+        "story_codex_codex_side_expo_title",
+        "story_codex_codex_side_fort_title",
+        "story_season_q1",
+        "unit_technical_rapid_fire_value",
     }
 )
 
@@ -113,13 +137,10 @@ _UNTRANSLATED_MIN_LEN = 20
 def find_untranslated_strings(locale: str, de: dict[str, str]) -> list[tuple[str, str]]:
     """Keys whose value is verbatim identical to de.json — i.e. never translated.
 
-    ``de`` is the authored source, so it's always excluded. ``en`` is also
-    excluded from the CI gate for now: it independently carries ~90 pre-existing
-    untranslated strings (mostly landing/admin copy) that predate this check and
-    are a separate, larger cleanup — call this function directly with locale="en"
-    to audit it, but it isn't enforced yet pending a dedicated pass.
+    ``de`` is the authored source, so it's always excluded. Every other locale
+    (English included — en.json is a fully independent translation) is scanned.
     """
-    if locale in ("de", "en"):
+    if locale == "de":
         return []
     data = _load_json(LOCALES_DIR / f"{locale}.json")
     hits: list[tuple[str, str]] = []

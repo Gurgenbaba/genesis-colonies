@@ -110,9 +110,12 @@ def test_gc900_no_ogame_terms_in_player_locales(locale_file):
 def test_gc900_research_mining_tech_canon():
     de = json.loads((LOCALES / "de.json").read_text(encoding="utf-8"))
     en = json.loads((LOCALES / "en.json").read_text(encoding="utf-8"))
+    from game.production_formula import MINING_TECH_PER_LEVEL
+
+    pct = str(int(round(MINING_TECH_PER_LEVEL * 100)))
     assert de["mining_tech"] == "Ferronit-Veredelung"
     assert en["mining_tech"] == "Ferronite Refinement"
-    assert "10%" in en["desc_mining_tech"] or "10 %" in en["desc_mining_tech"]
+    assert f"{pct}%" in en["desc_mining_tech"] or f"{pct} %" in en["desc_mining_tech"]
     assert "Ferronite" in en["desc_mining_tech"]
 
 
