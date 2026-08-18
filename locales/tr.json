@@ -1,4 +1,6 @@
 {
+  "stellar_forge_load_error": "Yükleme başarısız oldu.",
+  "retry": "Tekrar dene",
   "galaxy_asteroid_mega_badge": "Mega",
   "fleet_asteroid_report_remaining": "Mega-kuşakta hâlâ %(remaining)s var — bir dalga daha gönder.",
   "chat_popout": "Kendi penceresinde aç",

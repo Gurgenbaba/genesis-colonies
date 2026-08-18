@@ -1,4 +1,6 @@
 {
+  "stellar_forge_load_error": "Failed to load.",
+  "retry": "Retry",
   "msg_unknown_building": "Unknown building.",
   "academy": "Genesis Academy",
   "account": "Account",

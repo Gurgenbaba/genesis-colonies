@@ -1,4 +1,6 @@
 {
+  "stellar_forge_load_error": "Échec du chargement.",
+  "retry": "Réessayer",
   "galaxy_asteroid_mega_badge": "Méga",
   "fleet_asteroid_report_remaining": "La méga-ceinture contient encore %(remaining)s — envoie une nouvelle vague.",
   "chat_popout": "Ouvrir dans sa propre fenêtre",

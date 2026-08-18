@@ -11128,6 +11128,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-sf-pillars[hidden],
 .gc-sf-content[hidden],
 .gc-sf-loading[hidden],
+.gc-sf-error[hidden],
 .gc-sf-intro[hidden],
 .gc-sf-pillar-hint[hidden],
 .gc-sf-tribute-btn[hidden],
@@ -11199,6 +11200,14 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-sf-loading{
   font-size: 0.85rem;
   color: rgba(200, 210, 225, 0.75);
+}
+.gc-sf-error{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: rgba(255, 150, 150, 0.9);
 }
 .gc-sf-content{
   display: flex;
@@ -11329,6 +11338,13 @@ a.gc-bld-head-action-btn--go:focus-visible{
   width: 16px;
   height: 16px;
   object-fit: contain;
+}
+.gc-sf-cost-chip.is-unmet{
+  border-color: rgba(255, 75, 106, 0.38);
+  background: rgba(255, 75, 106, 0.1);
+}
+.gc-sf-cost-chip.is-unmet .gc-mono{
+  color: rgba(255, 140, 160, 0.96);
 }
 .gc-sf-cost-paid{
   font-size: 0.78rem;

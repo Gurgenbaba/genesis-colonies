@@ -32,8 +32,13 @@ def tribute_cost_for_rank(rank: int, production_per_hour: Mapping[str, float]) -
 
 # --- Pillar 2: Manufacturing Trial (Hull Mass) ------------------------------------
 
-HULL_MASS_BASE = 2_000_000
-HULL_MASS_STEP = 1_000_000
+# GC-endgame-shipyard-speed: raised ~50,000x from the original 2,000,000 base —
+# the Stellar Forge batch-capacity scaling (see shipyard.forge_capacity_multiplier)
+# lets endgame yards blow past a million-scale target within a single production
+# cycle, which made the Manufacturing Trial complete instantly instead of being a
+# real multi-hour challenge.
+HULL_MASS_BASE = 100_000_000_000
+HULL_MASS_STEP = 50_000_000_000
 HULL_MASS_MIN_ROLES = 3
 HULL_MASS_FUEL_CELL_WEIGHT = 3
 
@@ -99,11 +104,14 @@ OPERATIONAL_PROTOCOLS = ("exploration", "salvage", "warfare", "titan", "logistic
 OPERATIONAL_PROTOCOLS_REQUIRED = 3
 
 OPERATIONAL_TARGETS_BASE: Dict[str, int] = {
-    "exploration": 10,          # completed expedition missions
-    "salvage": 5_000_000,       # resource value harvested from debris fields
-    "warfare": 5_000_000,       # enemy fleet value destroyed in combat
-    "titan": 2_000_000,         # damage dealt to a World Boss
-    "logistics": 10_000_000,    # resources transported between own colonies
+    "exploration": 10,             # completed expedition missions
+    # salvage/warfare/logistics are resource-value protocols, raised x1000
+    # alongside Hull Mass (GC-endgame-shipyard-speed) so they stay a real
+    # challenge against endgame production/combat output.
+    "salvage": 5_000_000_000,      # resource value harvested from debris fields
+    "warfare": 5_000_000_000,      # enemy fleet value destroyed in combat
+    "titan": 2_000_000,            # damage dealt to a World Boss
+    "logistics": 10_000_000_000,   # resources transported between own colonies
 }
 
 
@@ -119,8 +127,8 @@ def operational_trial_complete(protocols_done: set) -> bool:
 
 # --- Pillar 4: Forge Cores ----------------------------------------------------------
 
-FORGE_CORES_BASE = 3
-FORGE_CORES_STEP = 4
+FORGE_CORES_BASE = 8
+FORGE_CORES_STEP = 6
 
 
 def forge_cores_required(rank: int) -> int:

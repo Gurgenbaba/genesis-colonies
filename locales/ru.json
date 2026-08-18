@@ -1,4 +1,6 @@
 {
+  "stellar_forge_load_error": "Не удалось загрузить.",
+  "retry": "Повторить",
   "galaxy_asteroid_mega_badge": "Мега",
   "fleet_asteroid_report_remaining": "В мега-поясе ещё есть %(remaining)s — отправь ещё одну волну.",
   "chat_popout": "Открыть в отдельном окне",

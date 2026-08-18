@@ -1,4 +1,6 @@
 {
+  "stellar_forge_load_error": "Ładowanie nie powiodło się.",
+  "retry": "Spróbuj ponownie",
   "galaxy_asteroid_mega_badge": "Mega",
   "fleet_asteroid_report_remaining": "Mega-pas wciąż zawiera %(remaining)s — wyślij kolejną falę.",
   "chat_popout": "Otwórz we własnym oknie",

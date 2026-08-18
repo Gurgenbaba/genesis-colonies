@@ -108,14 +108,17 @@ def _complete_manufacturing(pid: int, rank: int) -> None:
     required_roles = state["manufacturing_roles"]
     assert len(required_roles) == 3, required_roles
     target = hull_mass_target(rank)
-    # Generous per-role buffer — integer division across 3 roles must clear the
-    # exact target, not just approach it (floor(units) loses a bit each time).
+    # Ceiling-divide per role so contributed mass is always >= its share of the
+    # target regardless of the rolled ship's unit cost — floor division here
+    # used to lose up to (mass_per_unit - 1) per role, which was negligible
+    # against the old ~2-3M target but can undershoot a multi-billion target
+    # when a high-cost hull (e.g. planet_breaker) gets rolled.
     per_ship = target // 3 + 50_000
     for role in required_roles:
         ship_key = _SHIP_KEY_BY_ROLE[role]
         build_cost = get_ship(ship_key)["build_cost"]
         mass_per_unit = max(1, ship_hull_mass(build_cost))
-        units = max(1, per_ship // mass_per_unit)
+        units = max(1, -(-per_ship // mass_per_unit))  # ceil(per_ship / mass_per_unit)
         _add_hull_mass(pid, ship_key, units)
 
 
@@ -165,13 +168,13 @@ class TestStellarForgeFormulas:
         assert tribute_hours(3) == 48
 
     def test_hull_mass_target_scale(self):
-        assert hull_mass_target(1) == 2_000_000
-        assert hull_mass_target(2) == 3_000_000
+        assert hull_mass_target(1) == 100_000_000_000
+        assert hull_mass_target(2) == 150_000_000_000
 
     def test_forge_cores_required_scale(self):
-        assert forge_cores_required(1) == 3
-        assert forge_cores_required(2) == 7
-        assert forge_cores_required(3) == 11
+        assert forge_cores_required(1) == 8
+        assert forge_cores_required(2) == 14
+        assert forge_cores_required(3) == 20
 
     def test_ship_hull_mass_weights_fuel_cells(self):
         assert ship_hull_mass({"metal": 100, "crystal": 50, "fuel_cells": 10}) == 100 + 50 + 30

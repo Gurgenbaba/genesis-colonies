@@ -44317,9 +44317,9 @@
     if (pillar) pillar.classList.toggle("is-complete", !!done);
   }
 
-  function _sfCostChip(resKey, amount) {
+  function _sfCostChip(resKey, amount, unmet = false) {
     const chip = document.createElement("span");
-    chip.className = "gc-sf-cost-chip";
+    chip.className = "gc-sf-cost-chip" + (unmet ? " is-unmet" : "");
     const icon = _sfIcon(resKey);
     if (icon) {
       const img = document.createElement("img");
@@ -44379,9 +44379,19 @@
         tributeCost.appendChild(span);
       } else {
         const cost = forge.stellar_forge_tribute_cost || {};
-        if (cost.metal) tributeCost.appendChild(_sfCostChip("metal", cost.metal));
-        if (cost.crystal) tributeCost.appendChild(_sfCostChip("crystal", cost.crystal));
-        if (cost.fuel_cells) tributeCost.appendChild(_sfCostChip("fuel_cells", cost.fuel_cells));
+        const have = (typeof militaryPageResources === "function" ? militaryPageResources() : null) ||
+          (GC.lastState && GC.lastState.resources) || {};
+        if (cost.metal) {
+          tributeCost.appendChild(_sfCostChip("metal", cost.metal, Number(cost.metal) > Number(have.metal || 0)));
+        }
+        if (cost.crystal) {
+          tributeCost.appendChild(_sfCostChip("crystal", cost.crystal, Number(cost.crystal) > Number(have.crystal || 0)));
+        }
+        if (cost.fuel_cells) {
+          tributeCost.appendChild(
+            _sfCostChip("fuel_cells", cost.fuel_cells, Number(cost.fuel_cells) > Number(have.fuel_cells || 0))
+          );
+        }
       }
     }
 
@@ -44499,12 +44509,23 @@
     }
   }
 
+  function _sfShowLoadError() {
+    const loadingEl = document.getElementById("gc-sf-loading");
+    const contentEl = document.getElementById("gc-sf-content");
+    const errorEl = document.getElementById("gc-sf-error");
+    if (loadingEl) loadingEl.hidden = true;
+    if (contentEl) contentEl.hidden = true;
+    if (errorEl) errorEl.hidden = false;
+  }
+
   async function refreshStellarForgeModal() {
     // Guard against out-of-order responses (e.g. a slow first fetch resolving
     // after a newer one, or after the modal was closed/reopened) — only the
     // response matching the CURRENT token is allowed to touch the DOM.
     _sfRequestToken += 1;
     const myToken = _sfRequestToken;
+    const errorEl = document.getElementById("gc-sf-error");
+    if (errorEl) errorEl.hidden = true;
     try {
       const res = await fetch("/api/shipyard/forge-campaign", {
         headers: { Accept: "application/json" },
@@ -44512,9 +44533,11 @@
       const json = await res.json();
       if (myToken !== _sfRequestToken) return; // superseded — drop silently
       if (json.ok) renderStellarForgeModal(json.forge);
+      else _sfShowLoadError();
     } catch (err) {
       if (myToken !== _sfRequestToken) return;
       console.error("Stellar Forge state fetch failed:", err);
+      _sfShowLoadError();
     }
   }
 
@@ -44532,6 +44555,7 @@
     _sfBuildingType = triggerEl.getAttribute("data-stellar-forge-open") || "";
     const loadingEl = document.getElementById("gc-sf-loading");
     const contentEl = document.getElementById("gc-sf-content");
+    const errorEl = document.getElementById("gc-sf-error");
     const introEl = document.getElementById("gc-sf-intro");
     // Reset to a clean "loading" slate — otherwise the intro (or pillar list,
     // or start button) from a *previous* open/campaign-state briefly flashes
@@ -44539,6 +44563,7 @@
     if (introEl) introEl.hidden = true;
     if (loadingEl) loadingEl.hidden = false;
     if (contentEl) contentEl.hidden = true;
+    if (errorEl) errorEl.hidden = true;
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
     await refreshStellarForgeModal();
@@ -44628,6 +44653,17 @@
       if (e.target.closest("[data-sf-modal-cancel]")) {
         e.preventDefault();
         closeStellarForgeModal();
+        return;
+      }
+
+      const sfRetryBtn = e.target.closest("#gc-sf-retry-btn");
+      if (sfRetryBtn) {
+        e.preventDefault();
+        const errorEl = document.getElementById("gc-sf-error");
+        const loadingEl = document.getElementById("gc-sf-loading");
+        if (errorEl) errorEl.hidden = true;
+        if (loadingEl) loadingEl.hidden = false;
+        await refreshStellarForgeModal();
         return;
       }
 
