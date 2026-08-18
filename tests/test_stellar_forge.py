@@ -12,6 +12,8 @@ import pytest
 
 from game.stellar_forge import (
     OPERATIONAL_PROTOCOLS_REQUIRED,
+    SALVAGE_FORGE_CORE_CHANCE_MAX,
+    SALVAGE_FORGE_CORE_CHANCE_PER_BILLION,
     ascend,
     forge_cores_required,
     get_forge_cores,
@@ -175,6 +177,20 @@ class TestStellarForgeFormulas:
         assert forge_cores_required(1) == 8
         assert forge_cores_required(2) == 14
         assert forge_cores_required(3) == 20
+
+    def test_salvage_forge_core_chance_scales_and_caps(self):
+        # Matches game/fleet.py's recycle-hook formula (GC-3010).
+        def core_chance(salvage_value: int) -> float:
+            return min(
+                SALVAGE_FORGE_CORE_CHANCE_MAX,
+                (salvage_value / 1_000_000_000) * SALVAGE_FORGE_CORE_CHANCE_PER_BILLION,
+            )
+
+        assert core_chance(0) == 0
+        assert core_chance(1_000_000_000) == pytest.approx(0.03)
+        assert core_chance(5_000_000_000) == pytest.approx(0.15)
+        # Well past the cap-crossing haul size — must clamp, not keep scaling.
+        assert core_chance(50_000_000_000) == SALVAGE_FORGE_CORE_CHANCE_MAX
 
     def test_ship_hull_mass_weights_fuel_cells(self):
         assert ship_hull_mass({"metal": 100, "crystal": 50, "fuel_cells": 10}) == 100 + 50 + 30

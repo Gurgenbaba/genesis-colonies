@@ -5435,11 +5435,26 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         origin_name = str(orow["name"] if orow else "")
         if not (asteroid_harvested or asteroid_missed or asteroid_expired):
             try:
-                from .stellar_forge import record_operational_progress
+                from .stellar_forge import (
+                    SALVAGE_FORGE_CORE_CHANCE_MAX,
+                    SALVAGE_FORGE_CORE_CHANCE_PER_BILLION,
+                    grant_forge_cores,
+                    record_operational_progress,
+                )
 
                 salvage_value = int(collected.get("metal") or 0) + int(collected.get("crystal") or 0)
                 if salvage_value > 0:
                     record_operational_progress(origin_id, "salvage", salvage_value, conn=conn, now=now)
+                    # Forge Core alt-source (GC-3010) — scales with haul size instead
+                    # of a fixed threshold, so it doesn't go stale as the economy
+                    # inflates further. Capped so one huge recycle run isn't a
+                    # guaranteed farm.
+                    core_chance = min(
+                        SALVAGE_FORGE_CORE_CHANCE_MAX,
+                        (salvage_value / 1_000_000_000) * SALVAGE_FORGE_CORE_CHANCE_PER_BILLION,
+                    )
+                    if core_chance > 0 and random.random() < core_chance:
+                        grant_forge_cores(player_id, 1, conn=conn, now=now)
             except Exception:
                 logger.exception("stellar_forge salvage hook failed movement_id=%s", movement_id)
         if asteroid_harvested or asteroid_missed or asteroid_expired:

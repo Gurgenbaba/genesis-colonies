@@ -130,6 +130,14 @@ def operational_trial_complete(protocols_done: set) -> bool:
 FORGE_CORES_BASE = 8
 FORGE_CORES_STEP = 6
 
+# Alt-source (GC-3010): Recycler/wreckage salvage hauls, in addition to
+# Expedition legendary events and World Boss kills. Scales with haul SIZE
+# (fraction of a billion collected) rather than a fixed absolute threshold,
+# so it doesn't need re-tuning every time the economy inflates further.
+# Capped so one huge recycle run isn't a guaranteed farm.
+SALVAGE_FORGE_CORE_CHANCE_PER_BILLION = 0.03
+SALVAGE_FORGE_CORE_CHANCE_MAX = 0.35
+
 
 def forge_cores_required(rank: int) -> int:
     n = max(1, int(rank or 1))

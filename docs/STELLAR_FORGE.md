@@ -125,11 +125,20 @@ Pick-3-of-5 checklist per rank, backed entirely by existing systems — no new m
 
 ### Pillar 4 — Forge Cores (rare progression item)
 
-New collectible currency (`forge_core` inventory item), **not resource-purchasable**. Dropped by World Boss, high-tier Expedition events, Recycler rare finds, Season objectives — reuses existing drop-table infrastructure (`docs/LIVEOPS_RETENTION.md` / `docs/GENESIS_STORY_OPS.md` drop plumbing), not a new loot engine.
+New collectible currency (`forge_core` inventory item), **not resource-purchasable**. Dropped by World Boss, high-tier Expedition events, Recycler salvage hauls, Season objectives — reuses existing drop-table infrastructure (`docs/LIVEOPS_RETENTION.md` / `docs/GENESIS_STORY_OPS.md` drop plumbing), not a new loot engine.
 
 ```text
-forge_cores_required(rank) = 3 + (rank - 1) * 4   # I=3, II=7, III=11
+forge_cores_required(rank) = 8 + (rank - 1) * 6   # I=8, II=14, III=20
 ```
+
+Sources (GC-3005 + GC-3010):
+
+| Source | Chance | Notes |
+|---|---|---|
+| World Boss kill (instant-attack path) | 50% per defeat | `game/world_boss.py:execute_instant_attack` |
+| Expedition legendary event | ~4.17% baseline per expedition (boostable via commander/directive/familiarity), 15% roll on landing one | `game/expedition_events.py`, gated on `spatial_rift`/`time_anomaly`/`ancient_beacon`/`lost_colony`/`rogue_ai` |
+| Recycler / wreckage salvage haul | `min(35%, (salvage_value / 1e9) * 3%)` — scales with haul size, capped per haul | `game/fleet.py` debris recycle branch, `formulas.SALVAGE_FORGE_CORE_CHANCE_PER_BILLION` / `SALVAGE_FORGE_CORE_CHANCE_MAX` |
+| Season objectives | Not implemented — deferred, out of scope (separate large system) | — |
 
 ---
 
@@ -216,6 +225,7 @@ Shipyard planet view: Stellar Forge panel below the build queue once unlock cond
 | GC-3005 | Pillar 4 — `player_forge_cores` wallet + `grant_forge_cores`; sourced from legendary expedition events (15% chance) and World Boss kills (50% chance) — no new drop-table engine | ✅ (Phase 1 sources only) |
 | GC-3006 | `GET /api/shipyard/forge-campaign`, `POST /api/shipyard/forge-campaign/start`, `POST /api/shipyard/forge-tribute`, `POST /api/shipyard/forge-ascend` — atomic, idempotent (`request_id`) | ✅ |
 | GC-3007 | Shipyard building-card panel (`templates/buildings.html`), click handlers (`static/main.js`), CSS, locale keys (8 languages), `tests/test_stellar_forge.py` | ✅ (no dedicated confirm modal — direct-action buttons, unlike Mine Evolution's modal flow) |
+| GC-3010 | Pillar 4 alt-source — Recycler/wreckage salvage hauls also roll for a Forge Core, scaling with haul size (`min(35%, (salvage_value/1e9)*3%)`); closes the Phase 1 supply gap left by GC-3005 now that `forge_cores_required` was rebalanced to 8/14/20. Season objectives source remains deferred/out of scope. | ✅ |
 
 ### Known Phase 1 gaps (tracked, not blocking)
 
