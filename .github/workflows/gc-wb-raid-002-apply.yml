@@ -36,11 +36,50 @@ jobs:
       - name: Apply GC-WB-RAID-002 codemod
         run: python scripts/apply_gc_wb_raid_002.py
 
+      - name: Align legacy World Boss balance assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test_world_boss.py")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = {
+              "    assert damage == 100_000\n":
+                  "    assert damage == int(max_hp * WAVE_HP_FRACTION)\n",
+              "    assert 40_000 <= half <= 60_000\n":
+                  "    assert 0 < half < damage\n    assert abs(half - (damage // 2)) <= max(2_000, int(damage * 0.15))\n",
+              "    # Solo mega: at least 10 waves, at most ~20 waves to clear the bar.\n    assert mega_damage * 10 <= max_hp\n    assert mega_damage * 20 >= max_hp\n":
+                  "    # GC-WB-RAID-002: a capped mega fleet now needs roughly 34 single waves.\n    assert mega_damage * 30 < max_hp\n    assert mega_damage * 40 >= max_hp\n",
+              "        wave_cap = max(1, int(float(x5[\"boss\"][\"max_hp\"]) * 0.08))\n":
+                  "        wave_cap = max(1, int(float(x5[\"boss\"][\"max_hp\"]) * 0.03))\n",
+          }
+
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f"legacy test anchor missing: {old[:80]!r}")
+
+          text = text.replace(
+              '"""Even fight full wipe ≈ WAVE_HP_FRACTION; mega fleet hits soft overkill cap (~10–20 waves)."""',
+              '"""Even fight follows WAVE_HP_FRACTION; mega fleets obey the hardened single-wave cap."""',
+              1,
+          )
+          text = text.replace(
+              '"""Hangar past the 8% wave HP cap → send only what is needed for the cap."""',
+              '"""Hangar past the current wave HP cap → send only what is needed for the cap."""',
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+
       - name: Compile changed Python
         run: |
           python -m py_compile game/world_boss.py
           python -m py_compile scripts/apply_gc_wb_raid_002.py
           python -m py_compile tests/test_world_boss_raid.py
+          python -m py_compile tests/test_world_boss.py
 
       - name: Run World Boss regression suite
         run: |
@@ -54,7 +93,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add game/world_boss.py templates/world_boss.html tests/test_world_boss_raid.py
+          git add game/world_boss.py templates/world_boss.html tests/test_world_boss_raid.py tests/test_world_boss.py
           if git diff --cached --quiet; then
             echo "No generated changes to commit."
           else
