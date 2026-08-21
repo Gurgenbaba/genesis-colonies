@@ -1,4 +1,5 @@
 name: GC-WB-RAID-002 apply and test
+# Manual retrigger: apply generated raid implementation and align legacy tests.
 
 on:
   push:
