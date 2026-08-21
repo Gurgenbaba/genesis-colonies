@@ -43,11 +43,16 @@ jobs:
       - name: Apply deterministic raid codemod
         run: python scripts/apply_gc_wb_raid_002.py
 
+      - name: Verify codemod contract and idempotence
+        run: python scripts/apply_gc_wb_raid_002.py --verify
+
       - name: Compile raid code
         run: |
           python -m py_compile game/world_boss.py
           python -m py_compile scripts/apply_gc_wb_raid_002.py
+          python -m py_compile scripts/_apply_gc_wb_raid_002_impl.py
           python -m py_compile tests/test_world_boss_raid.py
+          python -m py_compile tests/test_world_boss.py
 
       - name: Run World Boss regression gate
         run: |
@@ -61,7 +66,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add game/world_boss.py templates/world_boss.html tests/test_world_boss_raid.py
+          git add game/world_boss.py templates/world_boss.html tests/test_world_boss_raid.py tests/test_world_boss.py
           if git diff --cached --quiet; then
             echo "Generated implementation already committed."
           else
