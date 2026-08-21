@@ -1,0 +1,63 @@
+name: GC-WB-RAID-002 apply and test
+
+on:
+  push:
+    branches:
+      - feature/world-boss-raid-rework
+    paths:
+      - .github/workflows/gc-wb-raid-002-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/world-boss-raid-rework
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Apply GC-WB-RAID-002 codemod
+        run: python scripts/apply_gc_wb_raid_002.py
+
+      - name: Compile changed Python
+        run: |
+          python -m py_compile game/world_boss.py
+          python -m py_compile scripts/apply_gc_wb_raid_002.py
+          python -m py_compile tests/test_world_boss_raid.py
+
+      - name: Run World Boss regression suite
+        run: |
+          python -m pytest -q \
+            tests/test_world_boss_raid.py \
+            tests/test_world_boss.py \
+            tests/test_world_boss_companions.py \
+            tests/test_static_live_updates.py
+
+      - name: Commit generated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/world_boss.py templates/world_boss.html tests/test_world_boss_raid.py
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
+            git commit -m "GC-WB-RAID-002 implement community raid loop"
+            git push origin HEAD:feature/world-boss-raid-rework
+          fi
