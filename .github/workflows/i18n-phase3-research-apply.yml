@@ -1,0 +1,43 @@
+name: I18N Phase3 Research Apply
+
+on:
+  push:
+    branches:
+      - fix/i18n-phase3-research-config
+    paths:
+      - scripts/_gc_i18n_phase3_research_cleanup.py
+      - .github/workflows/i18n-phase3-research-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/i18n-phase3-research-config
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply focused research I18N cleanup
+        run: python scripts/_gc_i18n_phase3_research_cleanup.py
+      - name: Verify syntax and diff
+        run: |
+          python -m py_compile game/research.py
+          git diff --check
+          git diff -- game/research.py
+      - name: Commit generated research cleanup
+        run: |
+          if git diff --quiet -- game/research.py; then
+            echo "No research changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/research.py
+          git commit -m "fix(i18n): remove research config display literals"
+          git push origin HEAD:fix/i18n-phase3-research-config
