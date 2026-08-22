@@ -1,0 +1,316 @@
+name: PE Core Locale Fix
+
+on:
+  push:
+    branches: [fix/pe-english-locale-cleanup]
+    paths:
+      - .github/workflows/pe-core-locale-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/pe-english-locale-cleanup
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Patch Planet Evolution core labels in all locales
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          PATCHES = {
+              "de": {
+                  "pe_title": "Planet-Entwicklung",
+                  "pe_homeworld": "Heimatwelt",
+                  "pe_development_stage": "Entwicklungsstufe",
+                  "pe_planet_type": "Planetentyp",
+                  "pe_planet_score": "Planetenwert",
+                  "pe_economy_short": "Produktion",
+                  "pe_hero_bonuses_title": "Planetenboni",
+                  "pe_status_stable": "Stabil",
+                  "pe_status_pressure": "Unter Druck",
+                  "pe_status_crisis": "In Krise",
+                  "pe_event_urgent": "Dringend",
+                  "pe_class_barren": "Kargwelt",
+                  "pe_class_gas_moon": "Gasriesen-Mond",
+                  "pe_class_ice": "Eiswelt",
+                  "pe_class_oceanic": "Ozeanwelt",
+                  "pe_class_ruin": "Ruinenwelt",
+                  "pe_class_terrestrial": "Felsplanet",
+                  "pe_class_volcanic": "Vulkanwelt",
+                  "pe_rarity_common": "Gewöhnlich",
+                  "pe_rarity_uncommon": "Ungewöhnlich",
+                  "pe_rarity_rare": "Selten",
+                  "pe_rarity_epic": "Episch",
+                  "pe_rarity_legendary": "Legendär",
+                  "pe_expansion_visual_hint": "Expansionsdetails",
+                  "pe_research_remaining": "Verbleibend",
+                  "pe_spec_best_match": "Beste DNA-Passung",
+                  "pe_view_details": "Details anzeigen",
+                  "pe_xp": "Entwicklungspunkte",
+                  "pe_xp_remaining": "Fehlende Punkte",
+              },
+              "en": {
+                  "pe_title": "Planet Evolution",
+                  "pe_homeworld": "Homeworld",
+                  "pe_development_stage": "Development stage",
+                  "pe_planet_type": "Planet type",
+                  "pe_planet_score": "Planet score",
+                  "pe_economy_short": "Production",
+                  "pe_hero_bonuses_title": "Planet bonuses",
+                  "pe_status_stable": "Stable",
+                  "pe_status_pressure": "Under pressure",
+                  "pe_status_crisis": "In crisis",
+                  "pe_event_urgent": "Urgent",
+                  "pe_class_barren": "Barren world",
+                  "pe_class_gas_moon": "Gas giant moon",
+                  "pe_class_ice": "Ice world",
+                  "pe_class_oceanic": "Ocean world",
+                  "pe_class_ruin": "Ruin world",
+                  "pe_class_terrestrial": "Rocky planet",
+                  "pe_class_volcanic": "Volcanic world",
+                  "pe_rarity_common": "Common",
+                  "pe_rarity_uncommon": "Uncommon",
+                  "pe_rarity_rare": "Rare",
+                  "pe_rarity_epic": "Epic",
+                  "pe_rarity_legendary": "Legendary",
+                  "pe_expansion_visual_hint": "Expansion details",
+                  "pe_research_remaining": "Remaining",
+                  "pe_spec_best_match": "Best DNA match",
+                  "pe_view_details": "View details",
+                  "pe_xp": "Development points",
+                  "pe_xp_remaining": "Points remaining",
+              },
+              "fr": {
+                  "pe_title": "Évolution planétaire",
+                  "pe_homeworld": "Monde natal",
+                  "pe_development_stage": "Stade de développement",
+                  "pe_planet_type": "Type de planète",
+                  "pe_planet_score": "Score planétaire",
+                  "pe_economy_short": "Production",
+                  "pe_hero_bonuses_title": "Bonus planétaires",
+                  "pe_status_stable": "Stable",
+                  "pe_status_pressure": "Sous pression",
+                  "pe_status_crisis": "En crise",
+                  "pe_event_urgent": "Urgent",
+                  "pe_class_barren": "Monde aride",
+                  "pe_class_gas_moon": "Lune de géante gazeuse",
+                  "pe_class_ice": "Monde glacé",
+                  "pe_class_oceanic": "Monde océanique",
+                  "pe_class_ruin": "Monde en ruine",
+                  "pe_class_terrestrial": "Planète rocheuse",
+                  "pe_class_volcanic": "Monde volcanique",
+                  "pe_rarity_common": "Commun",
+                  "pe_rarity_uncommon": "Peu commun",
+                  "pe_rarity_rare": "Rare",
+                  "pe_rarity_epic": "Épique",
+                  "pe_rarity_legendary": "Légendaire",
+                  "pe_expansion_visual_hint": "Détails de l’expansion",
+                  "pe_research_remaining": "Restant",
+                  "pe_spec_best_match": "Meilleure compatibilité ADN",
+                  "pe_view_details": "Voir les détails",
+                  "pe_xp": "Points d’évolution",
+                  "pe_xp_remaining": "Points restants",
+              },
+              "es": {
+                  "pe_title": "Evolución planetaria",
+                  "pe_homeworld": "Mundo natal",
+                  "pe_development_stage": "Etapa de desarrollo",
+                  "pe_planet_type": "Tipo de planeta",
+                  "pe_planet_score": "Puntuación del planeta",
+                  "pe_economy_short": "Producción",
+                  "pe_hero_bonuses_title": "Bonificaciones del planeta",
+                  "pe_status_stable": "Estable",
+                  "pe_status_pressure": "Bajo presión",
+                  "pe_status_crisis": "En crisis",
+                  "pe_event_urgent": "Urgente",
+                  "pe_class_barren": "Mundo árido",
+                  "pe_class_gas_moon": "Luna de gigante gaseoso",
+                  "pe_class_ice": "Mundo helado",
+                  "pe_class_oceanic": "Mundo oceánico",
+                  "pe_class_ruin": "Mundo en ruinas",
+                  "pe_class_terrestrial": "Planeta rocoso",
+                  "pe_class_volcanic": "Mundo volcánico",
+                  "pe_rarity_common": "Común",
+                  "pe_rarity_uncommon": "Poco común",
+                  "pe_rarity_rare": "Raro",
+                  "pe_rarity_epic": "Épico",
+                  "pe_rarity_legendary": "Legendario",
+                  "pe_expansion_visual_hint": "Detalles de expansión",
+                  "pe_research_remaining": "Restante",
+                  "pe_spec_best_match": "Mejor coincidencia de ADN",
+                  "pe_view_details": "Ver detalles",
+                  "pe_xp": "Puntos de evolución",
+                  "pe_xp_remaining": "Puntos restantes",
+              },
+              "pl": {
+                  "pe_title": "Ewolucja planety",
+                  "pe_homeworld": "Świat macierzysty",
+                  "pe_development_stage": "Etap rozwoju",
+                  "pe_planet_type": "Typ planety",
+                  "pe_planet_score": "Punkty planety",
+                  "pe_economy_short": "Produkcja",
+                  "pe_hero_bonuses_title": "Bonusy planety",
+                  "pe_status_stable": "Stabilny",
+                  "pe_status_pressure": "Pod presją",
+                  "pe_status_crisis": "W kryzysie",
+                  "pe_event_urgent": "Pilne",
+                  "pe_class_barren": "Jałowy świat",
+                  "pe_class_gas_moon": "Księżyc gazowego olbrzyma",
+                  "pe_class_ice": "Lodowy świat",
+                  "pe_class_oceanic": "Oceaniczny świat",
+                  "pe_class_ruin": "Świat ruin",
+                  "pe_class_terrestrial": "Skalista planeta",
+                  "pe_class_volcanic": "Wulkaniczny świat",
+                  "pe_rarity_common": "Pospolity",
+                  "pe_rarity_uncommon": "Niepospolity",
+                  "pe_rarity_rare": "Rzadki",
+                  "pe_rarity_epic": "Epicki",
+                  "pe_rarity_legendary": "Legendarny",
+                  "pe_expansion_visual_hint": "Szczegóły ekspansji",
+                  "pe_research_remaining": "Pozostało",
+                  "pe_spec_best_match": "Najlepsze dopasowanie DNA",
+                  "pe_view_details": "Zobacz szczegóły",
+                  "pe_xp": "Punkty ewolucji",
+                  "pe_xp_remaining": "Pozostałe punkty",
+              },
+              "tr": {
+                  "pe_title": "Gezegen Evrimi",
+                  "pe_homeworld": "Ana dünya",
+                  "pe_development_stage": "Gelişim aşaması",
+                  "pe_planet_type": "Gezegen türü",
+                  "pe_planet_score": "Gezegen puanı",
+                  "pe_economy_short": "Üretim",
+                  "pe_hero_bonuses_title": "Gezegen bonusları",
+                  "pe_status_stable": "Stabil",
+                  "pe_status_pressure": "Baskı altında",
+                  "pe_status_crisis": "Krizde",
+                  "pe_event_urgent": "Acil",
+                  "pe_class_barren": "Çorak dünya",
+                  "pe_class_gas_moon": "Gaz devi uydusu",
+                  "pe_class_ice": "Buz dünyası",
+                  "pe_class_oceanic": "Okyanus dünyası",
+                  "pe_class_ruin": "Harabe dünya",
+                  "pe_class_terrestrial": "Kayalık gezegen",
+                  "pe_class_volcanic": "Volkanik dünya",
+                  "pe_rarity_common": "Yaygın",
+                  "pe_rarity_uncommon": "Sıra dışı",
+                  "pe_rarity_rare": "Nadir",
+                  "pe_rarity_epic": "Destansı",
+                  "pe_rarity_legendary": "Efsanevi",
+                  "pe_expansion_visual_hint": "Genişleme ayrıntıları",
+                  "pe_research_remaining": "Kalan",
+                  "pe_spec_best_match": "En iyi DNA eşleşmesi",
+                  "pe_view_details": "Ayrıntıları görüntüle",
+                  "pe_xp": "Gelişim puanları",
+                  "pe_xp_remaining": "Kalan puan",
+              },
+              "ru": {
+                  "pe_title": "Эволюция планеты",
+                  "pe_homeworld": "Родной мир",
+                  "pe_development_stage": "Этап развития",
+                  "pe_planet_type": "Тип планеты",
+                  "pe_planet_score": "Рейтинг планеты",
+                  "pe_economy_short": "Производство",
+                  "pe_hero_bonuses_title": "Бонусы планеты",
+                  "pe_status_stable": "Стабильно",
+                  "pe_status_pressure": "Под давлением",
+                  "pe_status_crisis": "В кризисе",
+                  "pe_event_urgent": "Срочно",
+                  "pe_class_barren": "Безжизненный мир",
+                  "pe_class_gas_moon": "Спутник газового гиганта",
+                  "pe_class_ice": "Ледяной мир",
+                  "pe_class_oceanic": "Океанический мир",
+                  "pe_class_ruin": "Мир руин",
+                  "pe_class_terrestrial": "Каменистая планета",
+                  "pe_class_volcanic": "Вулканический мир",
+                  "pe_rarity_common": "Обычный",
+                  "pe_rarity_uncommon": "Необычный",
+                  "pe_rarity_rare": "Редкий",
+                  "pe_rarity_epic": "Эпический",
+                  "pe_rarity_legendary": "Легендарный",
+                  "pe_expansion_visual_hint": "Подробности экспансии",
+                  "pe_research_remaining": "Осталось",
+                  "pe_spec_best_match": "Лучшее соответствие ДНК",
+                  "pe_view_details": "Подробнее",
+                  "pe_xp": "Очки развития",
+                  "pe_xp_remaining": "Осталось очков",
+              },
+              "pt": {
+                  "pe_title": "Evolução planetária",
+                  "pe_homeworld": "Mundo natal",
+                  "pe_development_stage": "Estágio de desenvolvimento",
+                  "pe_planet_type": "Tipo de planeta",
+                  "pe_planet_score": "Pontuação do planeta",
+                  "pe_economy_short": "Produção",
+                  "pe_hero_bonuses_title": "Bônus do planeta",
+                  "pe_status_stable": "Estável",
+                  "pe_status_pressure": "Sob pressão",
+                  "pe_status_crisis": "Em crise",
+                  "pe_event_urgent": "Urgente",
+                  "pe_class_barren": "Mundo árido",
+                  "pe_class_gas_moon": "Lua de gigante gasoso",
+                  "pe_class_ice": "Mundo gelado",
+                  "pe_class_oceanic": "Mundo oceânico",
+                  "pe_class_ruin": "Mundo em ruínas",
+                  "pe_class_terrestrial": "Planeta rochoso",
+                  "pe_class_volcanic": "Mundo vulcânico",
+                  "pe_rarity_common": "Comum",
+                  "pe_rarity_uncommon": "Incomum",
+                  "pe_rarity_rare": "Raro",
+                  "pe_rarity_epic": "Épico",
+                  "pe_rarity_legendary": "Lendário",
+                  "pe_expansion_visual_hint": "Detalhes da expansão",
+                  "pe_research_remaining": "Restante",
+                  "pe_spec_best_match": "Melhor correspondência de DNA",
+                  "pe_view_details": "Ver detalhes",
+                  "pe_xp": "Pontos de evolução",
+                  "pe_xp_remaining": "Pontos restantes",
+              },
+          }
+
+          for locale, updates in PATCHES.items():
+              path = Path("locales") / f"{locale}.json"
+              data = json.loads(path.read_text(encoding="utf-8"))
+              missing = [key for key in updates if key not in data]
+              if missing:
+                  raise SystemExit(f"{locale}: missing keys: {missing}")
+              data.update(updates)
+              path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+          test_path = Path("tests/test_i18n_hardening.py")
+          marker = "# GC-PE-CORE-LOCALES-001"
+          if marker not in test_path.read_text(encoding="utf-8"):
+              expected = {loc: vals for loc, vals in PATCHES.items()}
+              block = f'''\n\n{marker}\ndef test_planet_evolution_core_labels_are_localized_across_supported_locales():\n    import json\n    from pathlib import Path\n\n    root = Path(__file__).resolve().parents[1]\n    expected = {expected!r}\n    for locale, labels in expected.items():\n        payload = json.loads((root / "locales" / f"{{locale}}.json").read_text(encoding="utf-8"))\n        for key, value in labels.items():\n            assert payload[key] == value, f"{{locale}}: {{key}} = {{payload[key]!r}}, expected {{value!r}}"\n'''
+              test_path.write_text(test_path.read_text(encoding="utf-8") + block, encoding="utf-8")
+          PY
+
+      - name: Run locale guards
+        run: |
+          python scripts/audit_locale_keys.py
+          python scripts/audit_visible_i18n.py --locales-only
+          python -m pytest -q --tb=line tests/test_i18n_hardening.py tests/test_gc900_multilanguage.py
+
+      - name: Commit targeted locale cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add locales/*.json tests/test_i18n_hardening.py
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(i18n): localize Planet Evolution core labels"
+          git push origin HEAD:fix/pe-english-locale-cleanup
