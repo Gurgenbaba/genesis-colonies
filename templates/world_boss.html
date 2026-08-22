@@ -81,6 +81,7 @@
         {% set rewards_preview = card.rewards_preview if card.rewards_preview is defined else [] %}
         {% set formation = player_info.formation if player_info and player_info.formation is defined else [] %}
         {% set cooldown_until = atk_meta.cooldown_until if atk_meta.cooldown_until is defined else (atk_meta.next_attack_at if atk_meta.next_attack_at is defined else none) %}
+        {% set raid = card.raid if card.raid is defined and card.raid else {} %}
         <article class="gc-world-boss-card {% if is_active %}gc-world-boss-card--active{% endif %}"
                  data-wb-event-id="{{ event.id }}"
                  data-wb-hp-phase="{{ hp_phase }}"
@@ -201,6 +202,53 @@
                       <span class="gc-world-boss-hp-pct">({{ hp_pct }}%)</span>
                     </p>
                   </div>
+
+                  {% if raid %}
+                  <div class="gc-world-boss-raid-strip" data-wb-raid-state
+                       style="display:grid;gap:.45rem;margin:.65rem 0;padding:.65rem .75rem;border:1px solid rgba(120,190,255,.22);background:rgba(4,14,28,.72);border-radius:.65rem;">
+                    <div style="display:flex;gap:.55rem;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+                      {% if raid.containment and raid.containment.active %}
+                      <span class="gc-world-boss-status-badge" data-wb-containment>
+                        🛡 {{ T("wb_raid_containment", "Containment") }} ·
+                        <span data-countdown-at="{{ raid.containment.ends_at|int }}" data-countdown-format="eta">—</span>
+                      </span>
+                      {% endif %}
+                      {% if raid.resonance and raid.resonance.active %}
+                      <span class="gc-world-boss-status-badge gc-world-boss-status-badge--active" data-wb-resonance-active>
+                        ⚡ {{ T("wb_raid_resonance", "Fleet Resonance") }} +50% ·
+                        <span data-countdown-at="{{ raid.resonance.ends_at|int }}" data-countdown-format="eta">—</span>
+                      </span>
+                      {% elif raid.resonance %}
+                      <span class="hint gc-mono" data-wb-resonance-label>
+                        ⚡ {{ T("wb_raid_resonance", "Fleet Resonance") }} {{ raid.resonance.points }} / {{ raid.resonance.threshold }}
+                      </span>
+                      {% endif %}
+                      {% if raid.last_stand and raid.last_stand.active %}
+                      <span class="gc-world-boss-status-badge gc-world-boss-status-badge--active" data-wb-last-stand>
+                        🚨 {{ T("wb_raid_last_stand", "Last Stand") }} +25%
+                      </span>
+                      {% endif %}
+                    </div>
+                    {% if raid.resonance %}
+                    <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
+                         aria-valuenow="{{ raid.resonance.progress_pct|int }}" data-wb-resonance-meter>
+                      <div class="gc-world-boss-hp-fill" data-wb-resonance-fill
+                           style="width: {{ raid.resonance.progress_pct }}%;"></div>
+                    </div>
+                    {% endif %}
+                    {% if raid.target_lock %}
+                    <div style="display:flex;gap:.55rem;align-items:center;">
+                      <span class="hint" style="white-space:nowrap;">🎯 {{ T("wb_raid_target_lock", "Target Lock") }}</span>
+                      <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
+                           aria-valuenow="{{ raid.target_lock.charge|int }}" data-wb-target-lock-meter style="flex:1;">
+                        <div class="gc-world-boss-hp-fill" data-wb-target-lock-fill
+                             style="width: {{ raid.target_lock.charge }}%;"></div>
+                      </div>
+                      <span class="gc-mono">{{ raid.target_lock.charge }}%</span>
+                    </div>
+                    {% endif %}
+                  </div>
+                  {% endif %}
 
                   <div class="gc-world-boss-formation" data-wb-formation {% if not formation %}aria-hidden="true"{% endif %}>
                     {% for slot in formation %}
