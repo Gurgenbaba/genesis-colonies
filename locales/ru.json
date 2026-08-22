@@ -8837,5 +8837,10 @@
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s урона по World Boss",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s перевезённых ресурсов",
   "unit_technical_build_time_total": "Всего",
-  "logistics_preview_select_hub": "Сначала выберите планету-хаб."
+  "logistics_preview_select_hub": "Сначала выберите планету-хаб.",
+  "wb_raid_status": "Статус рейда",
+  "wb_raid_containment": "Сдерживание",
+  "wb_raid_resonance": "Резонанс флота",
+  "wb_raid_target_lock": "Захват цели",
+  "wb_raid_last_stand": "Последний рубеж"
 }

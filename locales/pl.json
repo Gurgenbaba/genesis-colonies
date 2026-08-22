@@ -8837,5 +8837,10 @@
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s obrażeń zadanych World Bossowi",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s przetransportowanych zasobów",
   "unit_technical_build_time_total": "Razem",
-  "logistics_preview_select_hub": "Najpierw wybierz kolonię hub."
+  "logistics_preview_select_hub": "Najpierw wybierz kolonię hub.",
+  "wb_raid_status": "Status rajdu",
+  "wb_raid_containment": "Powstrzymanie",
+  "wb_raid_resonance": "Rezonans floty",
+  "wb_raid_target_lock": "Namierzanie celu",
+  "wb_raid_last_stand": "Ostatni bastion"
 }
