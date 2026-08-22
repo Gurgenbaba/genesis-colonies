@@ -1,0 +1,52 @@
+name: WB Help Modal Viewport Hotfix
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/world-boss-help-modal-viewport
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply viewport-safe modal include
+        run: python scripts/_apply_wb_help_modal_viewport_hotfix.py
+
+      - name: Static safety checks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('templates/world_boss.html').read_text(encoding='utf-8')
+          c = Path('static/css/world_boss_help_modal.css').read_text(encoding='utf-8')
+          assert t.count('css/world_boss_help_modal.css') == 1
+          assert 'wb_help_lead' in t and 'wb_help_catch' in t
+          assert 'overflow-y: auto' in c
+          assert '100dvh' in c
+          assert 'border-radius: 0 !important' in c
+          print('World Boss help modal static checks passed.')
+          PY
+
+      - name: Commit generated template change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add templates/world_boss.html
+          if git diff --cached --quiet; then
+            echo "No generated template change."
+            exit 0
+          fi
+          git commit -m "fix(world-boss): constrain help modal to viewport"
+          git push origin HEAD:hotfix/world-boss-help-modal-viewport
