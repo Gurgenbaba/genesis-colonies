@@ -6591,7 +6591,7 @@
   "pe_xp_formula_calc": "Berechnung:",
   "pe_xp_formula_result": "Ergebnis:",
   "pe_xp_formula_tier": "+%(bonus)s pro Tier",
-  "pe_xp_remaining": "Punkte fehlen",
+  "pe_xp_remaining": "Fehlende Punkte",
   "pe_xp_to_level": "Entwicklung bis Stufe",
   "pe_xp_tooltip": "Entwicklungspunkte durch Forschung, Events und Planet-Aktivität.",
   "pirate_ai_activity": "KI aktiv (kein menschlicher Login)",
