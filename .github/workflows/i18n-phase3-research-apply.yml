@@ -1,9 +1,9 @@
 name: I18N Phase3 Research Apply
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/i18n-phase3-research-config
+      - main
     paths:
       - scripts/_gc_i18n_phase3_research_cleanup.py
       - .github/workflows/i18n-phase3-research-apply.yml
