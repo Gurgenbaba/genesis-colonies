@@ -1,4 +1,9 @@
 {% extends "base.html" %}
+{% block extra_head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/world_boss_help_modal.css') }}?v={{ GC_ASSET_VERSION }}">
+{% endblock %}
+
 
 {% block content %}
 {% set wb = world_boss_payload if world_boss_payload is defined and world_boss_payload else {'ready': false, 'events': [], 'schedule': {}} %}
