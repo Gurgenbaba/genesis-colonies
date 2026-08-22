@@ -49,6 +49,10 @@ _RE_VISIBLE_ATTR = re.compile(
     r"\b(aria-label|aria-description|title|placeholder|alt)\s*=\s*([\"'])(.*?)\2",
     re.I,
 )
+_RE_TEMPLATE_ATTR_SHELL = re.compile(
+    r"^(?:aria-label|aria-description|title|placeholder|alt)\s*=\s*[\"']?\s*[\"']?$",
+    re.I,
+)
 _RE_HTML_TEXT = re.compile(r">([^<>]+)<")
 
 # Conservative JS/Python sinks: these are values that are normally visible to players.
@@ -167,6 +171,10 @@ def _looks_player_facing(text: str) -> bool:
     if any(marker in value for marker in _I18N_IGNORE_MARKERS):
         return False
     if "{{" in value or "{%" in value or "T(" in value or "tr(" in value:
+        return False
+    # Template syntax stripping can leave an empty attribute shell such as
+    # title=" " behind for a fully localized title="{{ T(...) }}" line.
+    if _RE_TEMPLATE_ATTR_SHELL.match(value):
         return False
     if _RE_URLISH.match(value):
         return False

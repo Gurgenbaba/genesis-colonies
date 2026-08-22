@@ -120,3 +120,24 @@ def test_gc900b2_i18n_research_title_en():
     en = get_locale_dict("en")
     assert en.get("research_title") == "Research"
     assert "Forschung" not in en.get("research_title", "")
+
+
+def test_gc900b2_research_template_is_locale_key_only():
+    template = (ROOT / "templates" / "research.html").read_text(encoding="utf-8")
+
+    raw_player_copy = (
+        "Anreihen",
+        "Forschung starten",
+        "Voraussetzungen nicht erfüllt",
+        "Forschungsliste voll",
+        "Maximal %(n)s Stufen anreihen",
+        "Technische Daten",
+        "Keine Technologien in dieser Kategorie.",
+        "Keine Forschungen aktiv",
+        "Keine Forschungen verfügbar (Konfiguration/DB prüfen).",
+    )
+    for literal in raw_player_copy:
+        assert literal not in template, f"raw research fallback remains: {literal}"
+
+    assert re.search(r"\btech\.label\b", template) is None
+    assert re.search(r"\btech\.description\b", template) is None

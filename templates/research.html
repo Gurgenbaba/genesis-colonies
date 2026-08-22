@@ -51,7 +51,7 @@
 {% macro render_research_head_action(tech, rq_summary, queue_full) %}
   {% set locked = not tech.requirements_met %}
   {% set can_afford = tech.can_afford if tech.can_afford is defined else true %}
-  {% set _action_label = T("research_btn_queue", "Anreihen") if rq_summary.count else T("research_btn_start", "Forschung starten") %}
+  {% set _action_label = T("research_btn_queue") if rq_summary.count else T("research_btn_start") %}
   {% if locked %}
     {% set _action_state = 'warn' %}
   {% elif queue_full %}
@@ -68,15 +68,15 @@
               data-action-state="warn"
               disabled
               {{ render_req_hover_attrs(tech.requirements_items) }}
-              aria-label="{{ T('research_requirements_not_met', 'Voraussetzungen nicht erfüllt') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
+              aria-label="{{ T('research_requirements_not_met') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% elif queue_full %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research"
               data-action-state="locked"
               disabled
               aria-disabled="true"
-              title="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"
-              aria-label="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"><span class="gc-bld-head-action-icon">🔒</span></button>
+              title="{{ T('research_btn_queue_full') }}"
+              aria-label="{{ T('research_btn_queue_full') }}"><span class="gc-bld-head-action-icon">🔒</span></button>
     {% elif not can_afford %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn gc-req-hover-trigger"
@@ -102,7 +102,7 @@
                 data-max-kind="research"
                 {{ render_max_queue_preview_attrs(_preview) }}
                 {% if _max_q < 1 %}disabled aria-disabled="true"{% endif %}
-                aria-label="{{ T('progression_btn_max_queue_aria', 'Maximal %(n)s Stufen anreihen', n=_max_q) }}">{{ T('progression_btn_max_queue_count', 'MAX +%(n)s', n=_max_q) if _max_q > 0 else T('progression_btn_max_queue', 'MAX') }}</button>
+                aria-label="{{ T('progression_btn_max_queue_aria', n=_max_q) }}">{{ T('progression_btn_max_queue_count', n=_max_q) if _max_q > 0 else T('progression_btn_max_queue') }}</button>
       </div>
     {% endif %}
   </div>
@@ -114,18 +114,10 @@
   {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + 1)) %}
   {% set can_afford = tech.can_afford if tech.can_afford is defined else true %}
 
-  {% set tech_label = T(tech.key) %}
-  {% if tech_label == tech.key %}
-    {% set tech_label = tech.label %}
-  {% endif %}
-
-  {% set tech_desc = T("desc_" ~ tech.key) %}
-  {% if tech_desc == "desc_" ~ tech.key and tech.description_key is defined and tech.description_key %}
-    {% set tech_desc = T(tech.description_key) %}
-  {% endif %}
-  {% if tech_desc == "desc_" ~ tech.key or (tech.description_key is defined and tech_desc == tech.description_key) %}
-    {% set tech_desc = tech.description %}
-  {% endif %}
+  {% set tech_label_key = tech.label_key if tech.label_key is defined and tech.label_key else tech.key %}
+  {% set tech_label = T(tech_label_key) %}
+  {% set tech_desc_key = tech.description_key if tech.description_key is defined and tech.description_key else ('desc_' ~ tech.key) %}
+  {% set tech_desc = T(tech_desc_key) %}
 
   {% set row_class = '' %}
   {% if locked %}
@@ -162,7 +154,7 @@
           <button type="button"
                   class="gc-ship-detail-trigger gc-bld-card-title-btn gc-bld-card-title"
                   data-research-tech-data="{{ tech.key }}"
-                  aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">{{ tech_label }}</button>
+                  aria-label="{{ T('buildings_technical_data') }}">{{ tech_label }}</button>
         </div>
         <div class="gc-bld-card-hero-action-slot">
           {{ render_research_head_action(tech, rq_summary, queue_full) }}
@@ -186,7 +178,7 @@
   {% set rows = rows if rows else [] %}
   {% if rows|length == 0 %}
     <div class="gc-empty-state gc-empty-state-compact">
-      <div class="gc-empty-title">{{ T("research_empty_category", "Keine Technologien in dieser Kategorie.") }}</div>
+      <div class="gc-empty-title">{{ T("research_empty_category") }}</div>
     </div>
   {% else %}
     <div class="gc-building-grid research-prog-list research-tech-grid" role="list">
@@ -244,7 +236,7 @@
       'research-mini-queue',
       'research',
       rq_mini,
-      T('research_queue_compact_idle', 'Keine Forschungen aktiv'),
+      T('research_queue_compact_idle'),
       rq_summary.count if rq_summary.count is defined else 0,
       rq_limit,
       'data-research-cancel-id',
@@ -258,7 +250,7 @@
     {% else %}
       <div class="gc-empty-state">
         <div class="gc-empty-title">
-          {{ T("research_empty_list") if T("research_empty_list") != "research_empty_list" else "Keine Forschungen verfügbar (Konfiguration/DB prüfen)." }}
+          {{ T("research_empty_list") }}
         </div>
       </div>
     {% endif %}
