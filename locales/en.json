@@ -8837,5 +8837,10 @@
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s damage dealt to a World Boss",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s resources transported",
   "unit_technical_build_time_total": "Total",
-  "logistics_preview_select_hub": "Select a hub colony first."
+  "logistics_preview_select_hub": "Select a hub colony first.",
+  "wb_raid_status": "Raid Status",
+  "wb_raid_containment": "Containment",
+  "wb_raid_resonance": "Fleet Resonance",
+  "wb_raid_target_lock": "Target Lock",
+  "wb_raid_last_stand": "Last Stand"
 }

@@ -8837,5 +8837,10 @@
   "stellar_forge_protocol_detail_titan": "%(progress)s / %(target)s World Boss'a verilen hasar",
   "stellar_forge_protocol_detail_logistics": "%(progress)s / %(target)s taşınan kaynak",
   "unit_technical_build_time_total": "Toplam",
-  "logistics_preview_select_hub": "Önce bir merkez koloni seçin."
+  "logistics_preview_select_hub": "Önce bir merkez koloni seçin.",
+  "wb_raid_status": "Baskın Durumu",
+  "wb_raid_containment": "Sınırlama",
+  "wb_raid_resonance": "Filo Rezonansı",
+  "wb_raid_target_lock": "Hedef Kilidi",
+  "wb_raid_last_stand": "Son Direniş"
 }
