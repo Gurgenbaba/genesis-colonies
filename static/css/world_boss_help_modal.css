@@ -1,0 +1,149 @@
+/* World Boss help modal — viewport-safe, language-safe layout.
+   Presentation only: no gameplay/state selectors are changed here. */
+
+.gc-world-boss-help-modal[hidden] {
+  display: none !important;
+}
+
+.gc-world-boss-help-modal:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  padding: 16px;
+  overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .gc-world-boss-help-modal:not([hidden]) {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}
+
+.gc-world-boss-help-modal .gc-player-card-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.gc-world-boss-help-dialog {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(960px, calc(100vw - 32px));
+  max-width: 960px;
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 0 !important;
+}
+
+@supports (height: 100dvh) {
+  .gc-world-boss-help-dialog {
+    max-height: calc(100dvh - 32px);
+  }
+}
+
+.gc-world-boss-help-dialog > .gc-player-card-head {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.gc-world-boss-help-dialog .gc-player-card-head-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gc-world-boss-help-dialog .gc-player-card-close {
+  flex: 0 0 auto;
+}
+
+.gc-world-boss-help-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gc-world-boss-help-lead,
+.gc-world-boss-help-list,
+.gc-world-boss-help-list li {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.gc-world-boss-help-lead {
+  margin-top: 0;
+  line-height: 1.5;
+}
+
+.gc-world-boss-help-list {
+  margin-bottom: 0;
+  padding-inline-start: 1.35rem;
+}
+
+.gc-world-boss-help-list li {
+  line-height: 1.5;
+}
+
+.gc-world-boss-help-list li + li {
+  margin-top: .55rem;
+}
+
+@media (max-width: 720px) {
+  .gc-world-boss-help-modal:not([hidden]) {
+    place-items: stretch;
+    padding:
+      max(6px, env(safe-area-inset-top))
+      max(6px, env(safe-area-inset-right))
+      max(6px, env(safe-area-inset-bottom))
+      max(6px, env(safe-area-inset-left));
+  }
+
+  .gc-world-boss-help-dialog {
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
+    max-height: calc(100vh - 12px);
+  }
+
+  @supports (height: 100dvh) {
+    .gc-world-boss-help-dialog {
+      max-height: calc(100dvh - 12px);
+    }
+  }
+
+  .gc-world-boss-help-body {
+    scrollbar-gutter: auto;
+  }
+}
+
+@media (max-height: 620px) and (min-width: 721px) {
+  .gc-world-boss-help-modal:not([hidden]) {
+    padding: 8px;
+  }
+
+  .gc-world-boss-help-dialog {
+    max-height: calc(100vh - 16px);
+  }
+
+  @supports (height: 100dvh) {
+    .gc-world-boss-help-dialog {
+      max-height: calc(100dvh - 16px);
+    }
+  }
+}
