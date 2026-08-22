@@ -7656,7 +7656,7 @@
   "story_ark_main_title": "Signal de l'arche",
   "story_ark_token_chapter_body": "+%(amount)s Ark-Token — Chapitre terminé.",
   "story_ark_token_chapter_subj": "Ark-Token",
-  "story_ark_token_toast": "+%(montant)s Ark-Token",
+  "story_ark_token_toast": "+%(amount)s Ark-Token",
   "story_beat_type_choice": "Décision",
   "story_beat_type_gate": "But",
   "story_beat_type_objective": "But",

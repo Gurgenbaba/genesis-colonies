@@ -7656,7 +7656,7 @@
   "story_ark_main_title": "Sinal da Arca",
   "story_ark_token_chapter_body": "+%(amount)s Ark-Token — Capítulo concluído.",
   "story_ark_token_chapter_subj": "Ark-Token",
-  "story_ark_token_toast": "+%(quantia)s Ark-Token",
+  "story_ark_token_toast": "+%(amount)s Ark-Token",
   "story_beat_type_choice": "decisão",
   "story_beat_type_gate": "Portão",
   "story_beat_type_objective": "Alvo",

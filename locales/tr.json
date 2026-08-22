@@ -7656,7 +7656,7 @@
   "story_ark_main_title": "Ark Sinyali",
   "story_ark_token_chapter_body": "+%(amount)s Ark-Token — Bölüm tamamlandı.",
   "story_ark_token_chapter_subj": "Ark-Token",
-  "story_ark_token_toast": "+%(miktar)s Ark-Token",
+  "story_ark_token_toast": "+%(amount)s Ark-Token",
   "story_beat_type_choice": "karar",
   "story_beat_type_gate": "Kapı",
   "story_beat_type_objective": "Hedef",
