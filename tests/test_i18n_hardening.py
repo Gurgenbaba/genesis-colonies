@@ -82,3 +82,27 @@ def test_planet_evolution_core_labels_are_localized_across_supported_locales():
         payload = json.loads((root / "locales" / f"{locale}.json").read_text(encoding="utf-8"))
         for key, value in labels.items():
             assert payload[key] == value, f"{locale}: {key} = {payload[key]!r}, expected {value!r}"
+
+# GC-I18N-VISIBLE-ROUND2-001
+def test_visible_i18n_round2_planet_evolution_labels_across_all_locales():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    expected = {'de': {'pe_ecology_t1': 'Biomasse-Extraktion', 'pe_event_choice_bribe': 'Bestechen', 'pe_event_choice_shutdown_ai': 'KI abschalten', 'pe_import_deficit': 'Importdefizit', 'pe_policy_archetype': 'Kultur-Archetyp:', 'pe_spec_synergy': 'Passt zu deiner DNA:', 'pe_stat_events': 'Abgeschlossene Events', 'pe_tab_events': 'Ereignisse', 'pe_trait_badge_positive': 'Vorteil', 'pe_warn_energy': 'Energieengpass', 'pe_warn_failure': 'Planet in der Krise'}, 'en': {'pe_ecology_t1': 'Biomass Extraction', 'pe_event_choice_bribe': 'Bribe', 'pe_event_choice_shutdown_ai': 'Shut down AI', 'pe_import_deficit': 'Import deficit', 'pe_policy_archetype': 'Culture archetype:', 'pe_spec_synergy': 'Matches your DNA:', 'pe_stat_events': 'Events completed', 'pe_tab_events': 'Events', 'pe_trait_badge_positive': 'Advantage', 'pe_warn_energy': 'Energy shortage', 'pe_warn_failure': 'Planet in crisis'}, 'fr': {'pe_ecology_t1': 'Extraction de biomasse', 'pe_event_choice_bribe': 'Corrompre', 'pe_event_choice_shutdown_ai': 'Désactiver l’IA', 'pe_import_deficit': 'Déficit d’importation', 'pe_policy_archetype': 'Archétype culturel :', 'pe_spec_synergy': 'Correspond à votre ADN :', 'pe_stat_events': 'Événements terminés', 'pe_tab_events': 'Événements', 'pe_trait_badge_positive': 'Avantage', 'pe_warn_energy': 'Pénurie d’énergie', 'pe_warn_failure': 'Planète en crise'}, 'es': {'pe_ecology_t1': 'Extracción de biomasa', 'pe_event_choice_bribe': 'Sobornar', 'pe_event_choice_shutdown_ai': 'Apagar IA', 'pe_import_deficit': 'Déficit de importación', 'pe_policy_archetype': 'Arquetipo cultural:', 'pe_spec_synergy': 'Coincide con tu ADN:', 'pe_stat_events': 'Eventos completados', 'pe_tab_events': 'Eventos', 'pe_trait_badge_positive': 'Ventaja', 'pe_warn_energy': 'Déficit de energía', 'pe_warn_failure': 'Planeta en crisis'}, 'pl': {'pe_ecology_t1': 'Ekstrakcja biomasy', 'pe_event_choice_bribe': 'Przekup', 'pe_event_choice_shutdown_ai': 'Wyłącz SI', 'pe_import_deficit': 'Deficyt importu', 'pe_policy_archetype': 'Archetyp kultury:', 'pe_spec_synergy': 'Pasuje do twojego DNA:', 'pe_stat_events': 'Ukończone wydarzenia', 'pe_tab_events': 'Wydarzenia', 'pe_trait_badge_positive': 'Zaleta', 'pe_warn_energy': 'Niedobór energii', 'pe_warn_failure': 'Planeta w kryzysie'}, 'tr': {'pe_ecology_t1': 'Biyokütle çıkarımı', 'pe_event_choice_bribe': 'Rüşvet ver', 'pe_event_choice_shutdown_ai': 'YZ’yi kapat', 'pe_import_deficit': 'İthalat açığı', 'pe_policy_archetype': 'Kültür arketipi:', 'pe_spec_synergy': 'DNA’nla uyumlu:', 'pe_stat_events': 'Tamamlanan etkinlikler', 'pe_tab_events': 'Etkinlikler', 'pe_trait_badge_positive': 'Avantaj', 'pe_warn_energy': 'Enerji sıkıntısı', 'pe_warn_failure': 'Gezegen krizde'}, 'ru': {'pe_ecology_t1': 'Добыча биомассы', 'pe_event_choice_bribe': 'Подкупить', 'pe_event_choice_shutdown_ai': 'Отключить ИИ', 'pe_import_deficit': 'Дефицит импорта', 'pe_policy_archetype': 'Культурный архетип:', 'pe_spec_synergy': 'Соответствует вашей ДНК:', 'pe_stat_events': 'События завершены', 'pe_tab_events': 'События', 'pe_trait_badge_positive': 'Преимущество', 'pe_warn_energy': 'Дефицит энергии', 'pe_warn_failure': 'Планета в кризисе'}, 'pt': {'pe_ecology_t1': 'Extração de biomassa', 'pe_event_choice_bribe': 'Subornar', 'pe_event_choice_shutdown_ai': 'Desligar IA', 'pe_import_deficit': 'Déficit de importação', 'pe_policy_archetype': 'Arquétipo cultural:', 'pe_spec_synergy': 'Combina com seu DNA:', 'pe_stat_events': 'Eventos concluídos', 'pe_tab_events': 'Eventos', 'pe_trait_badge_positive': 'Vantagem', 'pe_warn_energy': 'Falta de energia', 'pe_warn_failure': 'Planeta em crise'}}
+    for locale, labels in expected.items():
+        payload = json.loads((root / "locales" / f"{locale}.json").read_text(encoding="utf-8"))
+        for key, value in labels.items():
+            assert payload[key] == value, f"{locale}: {key} = {payload[key]!r}"
+
+
+def test_visible_i18n_round2_english_global_leaks_are_fixed():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads((root / "locales" / "en.json").read_text(encoding="utf-8"))
+    expected = {'action_upgrade': 'Start upgrade', 'landing_badge_nop2w': '🚫 No Pay2Win', 'landing_cta_command_center': '🛰 To Command Center', 'landing_cta_logout': 'Log out', 'landing_feature_nop2w_title': 'No Pay2Win', 'landing_label_galaxies': 'Galaxies', 'landing_label_production': 'Production', 'landing_label_start_resources': 'Starting resources', 'landing_label_universe': 'Universe', 'landing_roadmap_defense': 'Defense', 'landing_roadmap_galaxy': 'Galaxy Map', 'landing_section_what_title': 'What awaits you?', 'landing_status_online': 'Online'}
+    for key, value in expected.items():
+        assert payload[key] == value, f"en: {key} = {payload[key]!r}"
+
