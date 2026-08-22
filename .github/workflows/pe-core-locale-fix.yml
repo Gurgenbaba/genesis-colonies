@@ -1,16 +1,15 @@
 name: PE Core Locale Fix
 
 on:
-  push:
-    branches: [fix/pe-english-locale-cleanup]
-    paths:
-      - .github/workflows/pe-core-locale-fix.yml
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.head_ref == 'fix/pe-english-locale-cleanup'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
