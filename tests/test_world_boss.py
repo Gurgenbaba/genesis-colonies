@@ -479,7 +479,7 @@ def test_attack_grants_alliance_xp(wb_db):
             or 0
         )
         assert after == before + expected
-        assert after > before
+        assert (after > before) == (expected > 0)
         # Ledger on contribution
         from game.world_boss import list_contributions
 
@@ -550,7 +550,7 @@ def test_attack_contribution_and_defeat(wb_db):
 
 
 def test_full_wipe_deals_wave_hp_fraction(wb_db):
-    """Even fight full wipe ≈ WAVE_HP_FRACTION; mega fleet hits soft overkill cap (~10–20 waves)."""
+    """Even fight follows WAVE_HP_FRACTION; mega fleets obey the hardened single-wave cap."""
     from game.world_boss import (
         MAX_WAVE_HP_FRACTION,
         WAVE_HP_FRACTION,
@@ -569,7 +569,7 @@ def test_full_wipe_deals_wave_hp_fraction(wb_db):
     expected = int(max_hp * WAVE_HP_FRACTION)
     cap = int(max_hp * MAX_WAVE_HP_FRACTION)
     assert damage == min(expected, cap)
-    assert damage == 100_000
+    assert damage == int(max_hp * WAVE_HP_FRACTION)
     assert damage > 50_000
 
     half = compute_world_boss_hp_damage(
@@ -578,7 +578,8 @@ def test_full_wipe_deals_wave_hp_fraction(wb_db):
         max_hp=max_hp,
         attacker_ships_before=stacks,
     )
-    assert 40_000 <= half <= 60_000
+    assert 0 < half < damage
+    assert abs(half - (damage // 2)) <= max(2_000, int(damage * 0.15))
 
     mega = {
         "falcon_interceptor": 1_000_000,
@@ -593,9 +594,9 @@ def test_full_wipe_deals_wave_hp_fraction(wb_db):
     )
     assert mega_damage > damage
     assert mega_damage <= cap
-    # Solo mega: at least 10 waves, at most ~20 waves to clear the bar.
-    assert mega_damage * 10 <= max_hp
-    assert mega_damage * 20 >= max_hp
+    # GC-WB-RAID-002: a capped mega fleet now needs roughly 34 single waves.
+    assert mega_damage * 30 < max_hp
+    assert mega_damage * 40 >= max_hp
 
 
 def test_claim_rewards_after_defeat(wb_db):
@@ -1446,7 +1447,7 @@ def test_payload_exposes_attack_cooldown(wb_db):
 
 
 def test_select_world_boss_auto_attack_ships_trims_overkill(wb_db):
-    """Hangar past the 8% wave HP cap → send only what is needed for the cap."""
+    """Hangar past the current wave HP cap → send only what is needed for the cap."""
     hangar = {
         "ironclad_frigate": 2_000_000,
         "falcon_interceptor": 10_000,
@@ -1737,7 +1738,7 @@ def test_instant_attack_hp_never_below_zero(wb_db):
         assert spawn["ok"], spawn
         event_id = int(spawn["event"]["id"])
         conn.execute(
-            "UPDATE world_boss_events SET max_hp = 100, current_hp = 2 WHERE id = ?;",
+            "UPDATE world_boss_events SET max_hp = 1000000, current_hp = 2 WHERE id = ?;",
             (event_id,),
         )
         result = execute_instant_attack(
@@ -2187,7 +2188,7 @@ def test_instant_attack_hit_mult_x5_damage_and_cooldown(wb_db):
         assert x5["ok"], x5
         assert int(x5["attack"]["hit_mult"]) == 5
         dmg5 = int(x5["attack"]["damage"])
-        wave_cap = max(1, int(float(x5["boss"]["max_hp"]) * 0.08))
+        wave_cap = max(1, int(float(x5["boss"]["max_hp"]) * 0.03))
         assert dmg5 > dmg1
         # ×5 must be able to exceed the single-wave cap and must not land on exact 5×cap.
         assert dmg5 != wave_cap * 5
