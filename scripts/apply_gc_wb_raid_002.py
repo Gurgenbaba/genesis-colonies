@@ -2,7 +2,7 @@
 """Canonical GC-WB-RAID-002 codemod entrypoint.
 
 The implementation transform and its downstream World Boss regression contract
-are applied together.  Required legacy anchors fail loudly, and ``--verify``
+are applied together. Required legacy anchors fail loudly, and ``--verify``
 proves that a second application produces no additional working-tree diff.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ import _apply_gc_wb_raid_002_impl as impl
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY_TEST = ROOT / "tests" / "test_world_boss.py"
+LEGACY_ARRIVAL_MARKER = "# GC-WB-RAID-002 — legacy arrival raid parity"
 
 _TEST_REPLACEMENTS = (
     (
@@ -53,6 +54,17 @@ _TEST_REPLACEMENTS = (
         '    \"\"\"Hangar past the current wave HP cap → send only what is needed for the cap.\"\"\"\n',
         "auto-selection regression docstring",
     ),
+    (
+        "        assert after == before + expected\n        assert after > before\n",
+        "        assert after == before + expected\n"
+        "        assert (after > before) == (expected > 0)\n",
+        "alliance XP threshold assertion",
+    ),
+    (
+        '            "UPDATE world_boss_events SET max_hp = 100, current_hp = 2 WHERE id = ?;",\n',
+        '            "UPDATE world_boss_events SET max_hp = 1000000, current_hp = 2 WHERE id = ?;",\n',
+        "HP-floor regression fixture",
+    ),
 )
 
 
@@ -62,6 +74,113 @@ def _replace_required(text: str, old: str, new: str, label: str) -> str:
     if old not in text:
         raise SystemExit(f"GC-WB-RAID-002 legacy test anchor missing: {label}")
     return text.replace(old, new, 1)
+
+
+def patch_legacy_arrival_raid_contract() -> None:
+    """Route pre-deployment in-flight arrivals through the canonical raid rules."""
+    text = impl.WB.read_text(encoding="utf-8")
+    start = text.index("def resolve_attack_arrival(\n")
+    end = text.index("\ndef _player_name(\n", start)
+    block = text[start:end]
+    if LEGACY_ARRIVAL_MARKER in block:
+        return
+
+    old_damage = '''    damage = compute_world_boss_hp_damage(
+        defender_ships_before=defender_ships,
+        defender_losses=combat_result.defender_losses or {},
+        max_hp=int(event["max_hp"]),
+        attacker_ships_before=ships,
+    )
+
+    remaining_def = remaining_stock(defender_ships, combat_result.defender_losses or {})
+    new_hp = max(0, int(event["current_hp"]) - damage)
+    defeated = new_hp <= 0
+'''
+    new_damage = '''    damage = compute_world_boss_hp_damage(
+        defender_ships_before=defender_ships,
+        defender_losses=combat_result.defender_losses or {},
+        max_hp=int(event["max_hp"]),
+        attacker_ships_before=ships,
+    )
+
+    # GC-WB-RAID-002 — legacy arrival raid parity
+    # Flights dispatched before the instant-raid deployment may still arrive later.
+    # They must obey the same x1 cap, Containment, Resonance and Last Stand rules.
+    damage, raid_damage_meta, raid_before = _apply_raid_damage_rules(
+        damage,
+        hit_mult=1,
+        event=event,
+        player_id=int(player_id),
+        conn=conn,
+        now=ts,
+    )
+    target_lock_before = int((raid_before.get("target_lock") or {}).get("charge") or 0)
+
+    remaining_def = remaining_stock(defender_ships, combat_result.defender_losses or {})
+    before_hp = max(0, int(event["current_hp"]))
+    new_hp = max(0, before_hp - int(damage))
+    damage = max(0, before_hp - new_hp)
+    raid_damage_meta["applied_damage"] = int(damage)
+    defeated = new_hp <= 0
+'''
+    block = _replace_required(block, old_damage, new_damage, "legacy arrival damage parity")
+
+    old_contribution = '''    _upsert_contribution(
+        event_id=int(event["id"]),
+        player_id=int(player_id),
+        alliance_id=alliance_id,
+        damage=damage,
+        alliance_xp=wave_xp,
+        now=ts,
+        conn=conn,
+    )
+
+    if alliance_id is not None and wave_xp > 0:
+'''
+    new_contribution = '''    _upsert_contribution(
+        event_id=int(event["id"]),
+        player_id=int(player_id),
+        alliance_id=alliance_id,
+        damage=damage,
+        alliance_xp=wave_xp,
+        now=ts,
+        conn=conn,
+    )
+
+    raid_after = _advance_world_boss_raid_after_hit(
+        event=event,
+        player_id=int(player_id),
+        hit_mult=1,
+        target_lock_before=target_lock_before,
+        target_lock_consumed=False,
+        defeated=defeated,
+        conn=conn,
+        now=ts,
+        state_before=raid_before,
+    )
+
+    if alliance_id is not None and wave_xp > 0:
+'''
+    block = _replace_required(
+        block,
+        old_contribution,
+        new_contribution,
+        "legacy arrival raid state advancement",
+    )
+
+    old_return = '''        "defender_ships_before": defender_ships,
+        "alliance_id": int(alliance_id) if alliance_id is not None else None,
+        "alliance_xp_granted": int(alliance_xp_granted),
+'''
+    new_return = '''        "defender_ships_before": defender_ships,
+        "raid": raid_after,
+        "raid_modifiers": raid_damage_meta,
+        "alliance_id": int(alliance_id) if alliance_id is not None else None,
+        "alliance_xp_granted": int(alliance_xp_granted),
+'''
+    block = _replace_required(block, old_return, new_return, "legacy arrival raid response")
+
+    impl.WB.write_text(text[:start] + block + text[end:], encoding="utf-8")
 
 
 def patch_legacy_test_contract() -> None:
@@ -80,12 +199,16 @@ def verify_contract() -> None:
     for _old, new, label in _TEST_REPLACEMENTS:
         if new not in text:
             raise SystemExit(f"GC-WB-RAID-002 transformed test contract missing: {label}")
+    wb_text = impl.WB.read_text(encoding="utf-8")
+    if LEGACY_ARRIVAL_MARKER not in wb_text:
+        raise SystemExit("GC-WB-RAID-002 transformed legacy arrival contract missing")
     if not impl.TEST.is_file():
         raise SystemExit(f"GC-WB-RAID-002 generated regression file missing: {impl.TEST}")
 
 
 def apply_once() -> None:
     impl.patch_world_boss()
+    patch_legacy_arrival_raid_contract()
     impl.patch_template()
     patch_legacy_test_contract()
     impl.write_tests()
