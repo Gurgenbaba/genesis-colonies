@@ -203,53 +203,6 @@
                     </p>
                   </div>
 
-                  {% if raid %}
-                  <div class="gc-world-boss-raid-strip" data-wb-raid-state
-                       style="display:grid;gap:.45rem;margin:.65rem 0;padding:.65rem .75rem;border:1px solid rgba(120,190,255,.22);background:rgba(4,14,28,.72);border-radius:.65rem;">
-                    <div style="display:flex;gap:.55rem;flex-wrap:wrap;align-items:center;justify-content:space-between;">
-                      {% if raid.containment and raid.containment.active %}
-                      <span class="gc-world-boss-status-badge" data-wb-containment>
-                        🛡 {{ T("wb_raid_containment", "Containment") }} ·
-                        <span data-countdown-at="{{ raid.containment.ends_at|int }}" data-countdown-format="eta">—</span>
-                      </span>
-                      {% endif %}
-                      {% if raid.resonance and raid.resonance.active %}
-                      <span class="gc-world-boss-status-badge gc-world-boss-status-badge--active" data-wb-resonance-active>
-                        ⚡ {{ T("wb_raid_resonance", "Fleet Resonance") }} +50% ·
-                        <span data-countdown-at="{{ raid.resonance.ends_at|int }}" data-countdown-format="eta">—</span>
-                      </span>
-                      {% elif raid.resonance %}
-                      <span class="hint gc-mono" data-wb-resonance-label>
-                        ⚡ {{ T("wb_raid_resonance", "Fleet Resonance") }} {{ raid.resonance.points }} / {{ raid.resonance.threshold }}
-                      </span>
-                      {% endif %}
-                      {% if raid.last_stand and raid.last_stand.active %}
-                      <span class="gc-world-boss-status-badge gc-world-boss-status-badge--active" data-wb-last-stand>
-                        🚨 {{ T("wb_raid_last_stand", "Last Stand") }} +25%
-                      </span>
-                      {% endif %}
-                    </div>
-                    {% if raid.resonance %}
-                    <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
-                         aria-valuenow="{{ raid.resonance.progress_pct|int }}" data-wb-resonance-meter>
-                      <div class="gc-world-boss-hp-fill" data-wb-resonance-fill
-                           style="width: {{ raid.resonance.progress_pct }}%;"></div>
-                    </div>
-                    {% endif %}
-                    {% if raid.target_lock %}
-                    <div style="display:flex;gap:.55rem;align-items:center;">
-                      <span class="hint" style="white-space:nowrap;">🎯 {{ T("wb_raid_target_lock", "Target Lock") }}</span>
-                      <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
-                           aria-valuenow="{{ raid.target_lock.charge|int }}" data-wb-target-lock-meter style="flex:1;">
-                        <div class="gc-world-boss-hp-fill" data-wb-target-lock-fill
-                             style="width: {{ raid.target_lock.charge }}%;"></div>
-                      </div>
-                      <span class="gc-mono">{{ raid.target_lock.charge }}%</span>
-                    </div>
-                    {% endif %}
-                  </div>
-                  {% endif %}
-
                   <div class="gc-world-boss-formation" data-wb-formation {% if not formation %}aria-hidden="true"{% endif %}>
                     {% for slot in formation %}
                     {% set _sk = slot.ship_key %}
@@ -276,6 +229,66 @@
                   <div class="gc-world-boss-projectiles" data-wb-projectiles aria-hidden="true"></div>
                   <div class="gc-world-boss-damage-mount" data-wb-damage-mount aria-live="polite"></div>
                 </div>
+
+                {% if raid %}
+      <section class="gc-world-boss-raid-strip" data-wb-raid-state
+               aria-label="{{ T('wb_raid_status', 'Raid-Status') }}"
+               style="position:relative;z-index:4;display:grid;gap:.7rem;margin:.7rem 0 .8rem;padding:.8rem .9rem;border:1px solid rgba(89,221,255,.34);background:linear-gradient(180deg,rgba(6,24,39,.96),rgba(3,14,27,.96));border-radius:.7rem;box-shadow:0 0 22px rgba(32,191,255,.08),inset 0 1px rgba(255,255,255,.025);">
+        <div style="display:flex;gap:.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+          <strong class="gc-mono" style="font-size:.76rem;letter-spacing:.09em;color:#74e8ff;">{{ T("wb_raid_status", "RAID-STATUS") }}</strong>
+          <div style="display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;">
+            {% if raid.containment and raid.containment.active %}
+            <span class="gc-world-boss-status-badge" data-wb-containment>
+              🛡 {{ T("wb_raid_containment", "Containment") }} ·
+              <span data-countdown-at="{{ raid.containment.ends_at|int }}" data-countdown-format="eta">—</span>
+            </span>
+            {% endif %}
+            {% if raid.last_stand and raid.last_stand.active %}
+            <span class="gc-world-boss-status-badge gc-world-boss-status-badge--active" data-wb-last-stand>
+              🚨 {{ T("wb_raid_last_stand", "Last Stand") }} +25%
+            </span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if raid.resonance %}
+        <div style="display:grid;gap:.35rem;">
+          <div style="display:flex;gap:.6rem;align-items:center;justify-content:space-between;min-width:0;">
+            {% if raid.resonance.active %}
+            <span class="gc-world-boss-status-badge gc-world-boss-status-badge--active" data-wb-resonance-active>
+              ⚡ {{ T("wb_raid_resonance", "Fleet Resonance") }} +50% ·
+              <span data-countdown-at="{{ raid.resonance.ends_at|int }}" data-countdown-format="eta">—</span>
+            </span>
+            {% else %}
+            <span class="hint" style="font-weight:700;color:#a9deea;">⚡ {{ T("wb_raid_resonance", "Fleet Resonance") }}</span>
+            <span class="gc-mono" data-wb-resonance-label style="white-space:nowrap;">{{ raid.resonance.points }} / {{ raid.resonance.threshold }}</span>
+            {% endif %}
+          </div>
+          <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
+               aria-valuenow="{{ raid.resonance.progress_pct|int }}" data-wb-resonance-meter
+               style="height:.72rem;min-height:.72rem;">
+            <div class="gc-world-boss-hp-fill" data-wb-resonance-fill
+                 style="width:{{ raid.resonance.progress_pct }}%;"></div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if raid.target_lock %}
+        <div style="display:grid;gap:.35rem;">
+          <div style="display:flex;gap:.6rem;align-items:center;justify-content:space-between;">
+            <span class="hint" style="font-weight:700;color:#a9deea;">🎯 {{ T("wb_raid_target_lock", "Target Lock") }}</span>
+            <span class="gc-mono" style="white-space:nowrap;">{{ raid.target_lock.charge }}%</span>
+          </div>
+          <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
+               aria-valuenow="{{ raid.target_lock.charge|int }}" data-wb-target-lock-meter
+               style="height:.72rem;min-height:.72rem;">
+            <div class="gc-world-boss-hp-fill" data-wb-target-lock-fill
+                 style="width:{{ raid.target_lock.charge }}%;"></div>
+          </div>
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
 
                 {% if is_active %}
                 {% set catch = player_info.catch if player_info and player_info.catch is defined else none %}
