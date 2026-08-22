@@ -1,5 +1,12 @@
 /* World Boss help modal — viewport-safe, language-safe layout.
-   Presentation only: no gameplay/state selectors are changed here. */
+   UI only: no gameplay/state selectors are changed here. */
+
+:root {
+  --gc-wb-help-top-offset: clamp(178px, 18vh, 200px);
+  --gc-wb-help-side-gap: 18px;
+  --gc-wb-help-bottom-gap: 16px;
+  --gc-wb-help-max-width: 1220px;
+}
 
 .gc-world-boss-help-modal[hidden] {
   display: none !important;
@@ -10,12 +17,15 @@
   inset: 0;
   z-index: 5000;
   display: grid;
-  place-items: center;
+  place-items: start center;
   box-sizing: border-box;
   width: 100vw;
   height: 100vh;
   min-height: 100vh;
-  padding: 16px;
+  padding:
+    var(--gc-wb-help-top-offset)
+    var(--gc-wb-help-side-gap)
+    var(--gc-wb-help-bottom-gap);
   overflow: hidden;
 }
 
@@ -37,9 +47,9 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: min(960px, calc(100vw - 32px));
-  max-width: 960px;
-  max-height: calc(100vh - 32px);
+  width: min(var(--gc-wb-help-max-width), calc(100vw - (2 * var(--gc-wb-help-side-gap))));
+  max-width: var(--gc-wb-help-max-width);
+  max-height: calc(100vh - var(--gc-wb-help-top-offset) - var(--gc-wb-help-bottom-gap));
   min-height: 0;
   margin: 0;
   overflow: hidden;
@@ -48,7 +58,7 @@
 
 @supports (height: 100dvh) {
   .gc-world-boss-help-dialog {
-    max-height: calc(100dvh - 32px);
+    max-height: calc(100dvh - var(--gc-wb-help-top-offset) - var(--gc-wb-help-bottom-gap));
   }
 }
 
@@ -77,6 +87,7 @@
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
+  padding-right: 8px;
 }
 
 .gc-world-boss-help-lead,
@@ -84,14 +95,17 @@
 .gc-world-boss-help-list li {
   max-width: 100%;
   overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .gc-world-boss-help-lead {
   margin-top: 0;
+  margin-bottom: 1rem;
   line-height: 1.5;
 }
 
 .gc-world-boss-help-list {
+  margin-top: 0;
   margin-bottom: 0;
   padding-inline-start: 1.35rem;
 }
@@ -104,46 +118,80 @@
   margin-top: .55rem;
 }
 
-@media (max-width: 720px) {
+/* Wide desktop: use the available width so translated help copy stays compact. */
+@media (min-width: 1100px) {
+  .gc-world-boss-help-dialog {
+    width: min(1220px, calc(100vw - 40px));
+    max-width: 1220px;
+  }
+
+  .gc-world-boss-help-list {
+    columns: 2;
+    column-gap: 34px;
+    column-fill: balance;
+  }
+
+  .gc-world-boss-help-list li {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+    margin-top: 0;
+    margin-bottom: .7rem;
+  }
+}
+
+/* Medium desktop / laptop. */
+@media (min-width: 860px) and (max-width: 1099px) {
+  .gc-world-boss-help-dialog {
+    width: min(1040px, calc(100vw - 32px));
+    max-width: 1040px;
+  }
+}
+
+/* Mobile / narrow layouts: single column, safe-area aware. */
+@media (max-width: 859px) {
+  :root {
+    --gc-wb-help-top-offset: clamp(112px, 14vh, 142px);
+    --gc-wb-help-side-gap: 8px;
+    --gc-wb-help-bottom-gap: 8px;
+  }
+
   .gc-world-boss-help-modal:not([hidden]) {
-    place-items: stretch;
+    place-items: start stretch;
     padding:
-      max(6px, env(safe-area-inset-top))
-      max(6px, env(safe-area-inset-right))
-      max(6px, env(safe-area-inset-bottom))
-      max(6px, env(safe-area-inset-left));
+      max(var(--gc-wb-help-top-offset), env(safe-area-inset-top))
+      max(var(--gc-wb-help-side-gap), env(safe-area-inset-right))
+      max(var(--gc-wb-help-bottom-gap), env(safe-area-inset-bottom))
+      max(var(--gc-wb-help-side-gap), env(safe-area-inset-left));
   }
 
   .gc-world-boss-help-dialog {
     align-self: stretch;
     width: 100%;
     max-width: none;
-    max-height: calc(100vh - 12px);
+    max-height: calc(100vh - var(--gc-wb-help-top-offset) - var(--gc-wb-help-bottom-gap));
   }
 
   @supports (height: 100dvh) {
     .gc-world-boss-help-dialog {
-      max-height: calc(100dvh - 12px);
+      max-height: calc(100dvh - var(--gc-wb-help-top-offset) - var(--gc-wb-help-bottom-gap));
     }
   }
 
   .gc-world-boss-help-body {
     scrollbar-gutter: auto;
+    padding-right: 4px;
+  }
+
+  .gc-world-boss-help-list {
+    columns: 1;
   }
 }
 
-@media (max-height: 620px) and (min-width: 721px) {
-  .gc-world-boss-help-modal:not([hidden]) {
-    padding: 8px;
-  }
-
-  .gc-world-boss-help-dialog {
-    max-height: calc(100vh - 16px);
-  }
-
-  @supports (height: 100dvh) {
-    .gc-world-boss-help-dialog {
-      max-height: calc(100dvh - 16px);
-    }
+/* Short desktop screens: keep enough room below the fixed HUD. */
+@media (max-height: 760px) and (min-width: 860px) {
+  :root {
+    --gc-wb-help-top-offset: clamp(154px, 18vh, 178px);
+    --gc-wb-help-bottom-gap: 10px;
   }
 }
