@@ -106,3 +106,18 @@ def test_visible_i18n_round2_english_global_leaks_are_fixed():
     for key, value in expected.items():
         assert payload[key] == value, f"en: {key} = {payload[key]!r}"
 
+
+def test_i18n_research_config_has_no_display_literals():
+    source = (ROOT / "game" / "research.py").read_text(encoding="utf-8")
+    start = source.index("RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {")
+    end = source.index("# Account-wide parallel fleet movements", start)
+    config = source[start:end]
+
+    raw_fields = [
+        line.strip()
+        for line in config.splitlines()
+        if line.strip().startswith(('"label":', '"description":'))
+    ]
+    assert not raw_fields, raw_fields
+    assert source.count('tr(str(cfg.get("label_key") or tech))') == 2
+    assert source.count('tr(str(cfg.get("description_key") or f"desc_{tech}"))') == 2

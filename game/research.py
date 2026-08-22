@@ -32,6 +32,7 @@ from .models import (
     get_planet_buildings,
     try_spend_resources_conn,
 )
+from .i18n import tr
 from .db import begin_write_transaction, commit, rollback, lock_planet_for_update, lock_player_for_update
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
 
@@ -42,9 +43,7 @@ from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nac
 
 RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
     "energy_tech": {
-        "label": "Energieeffizienz",
         "label_key": "energy_tech",
-        "description": "Optimiert die Energieausbeute aller Anlagen.",
         "description_key": "desc_energy_tech",
         "category": "energy",
         "icon": "energieeffizienz.png",
@@ -55,9 +54,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 1}},
     },
     "mining_tech": {
-        "label": "Metallveredelung",
         "label_key": "mining_tech",
-        "description": "Steigert die Reinheit und damit die Produktion von Ferronit.",
         "description_key": "desc_mining_tech",
         "category": "metal",
         "icon": "metallveredelung.png",
@@ -68,9 +65,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 1}},
     },
     "crystal_tech": {
-        "label": "Crytite-Synthese",
         "label_key": "crystal_tech",
-        "description": "Steigert die Reinheit und damit die Produktion von Crytite.",
         "description_key": "desc_crystal_tech",
         "category": "crystal",
         "icon": "crytite-synthese.png",
@@ -81,9 +76,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 1}},
     },
     "buildtime_tech": {
-        "label": "Bauoptimierung",
         "label_key": "buildtime_tech",
-        "description": "Reduziert Bauzeiten aller Gebäude.",
         "description_key": "desc_buildtime_tech",
         "category": "construction",
         "icon": "bauoptimierung.png",
@@ -94,9 +87,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 2}},
     },
     "storage_tech": {
-        "label": "Lagertechnik",
         "label_key": "storage_tech",
-        "description": "Erhöht die maximale Kapazität aller Lagergebäude.",
         "description_key": "desc_storage_tech",
         "category": "storage",
         "icon": "lagertechnik.png",
@@ -107,9 +98,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 1}},
     },
     "drone_tech": {
-        "label": "Drohnenoptimierung",
         "label_key": "research_drones_tech",
-        "description": "Verbesserte Drohnen erhöhen die Ausbeute.",
         "description_key": "desc_research_drones_tech",
         "category": "drones",
         "icon": "drohnenoptimierung.png",
@@ -120,9 +109,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 2}},
     },
     "navigation_tech": {
-        "label": "Hyperraum-Navigation",
         "label_key": "research_navigation_tech",
-        "description": "Verkürzt Flugzeiten.",
         "description_key": "desc_research_navigation_tech",
         "category": "navigation",
         "icon": "hyperraum-navigation.png",
@@ -133,9 +120,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 3}, "research": {"drone_tech": 2}},
     },
     "engine_tech": {
-        "label": "Kryo-Antriebstechnik",
         "label_key": "research_engine_tech",
-        "description": "Erhöht Flottengeschwindigkeit.",
         "description_key": "desc_research_engine_tech",
         "category": "engine",
         "icon": "kryo-antriebstechnik.png",
@@ -146,9 +131,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 3}, "research": {"energy_tech": 2}},
     },
     "weapon_tech": {
-        "label": "Waffenentwicklung",
         "label_key": "research_weapon_tech",
-        "description": "Erhöht Feuerkraft.",
         "description_key": "desc_research_weapon_tech",
         "category": "weapon",
         "icon": "waffenentwicklung.png",
@@ -159,9 +142,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 2}},
     },
     "armor_tech": {
-        "label": "Panzerungstechnik",
         "label_key": "research_armor_tech",
-        "description": "Erhöht Hülle.",
         "description_key": "desc_research_armor_tech",
         "category": "armor",
         "icon": "panzerungstechnik.png",
@@ -172,9 +153,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 2}, "research": {"weapon_tech": 1}},
     },
     "shield_tech": {
-        "label": "Schildtechnologie",
         "label_key": "research_shield_tech",
-        "description": "Erhöht Schildstärke.",
         "description_key": "desc_research_shield_tech",
         "category": "shield",
         "icon": "schildtechnologie.png",
@@ -185,9 +164,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 3}, "research": {"armor_tech": 1}},
     },
     "fuel_efficiency": {
-        "label": "Brennzellen-Optimierung",
         "label_key": "research_fuel_efficiency",
-        "description": "Reduziert Flotten-Treibstoffverbrauch um 3 % pro Stufe (min. 50 %).",
         "description_key": "desc_fuel_efficiency",
         "category": "propulsion",
         "icon": "brennzellenoptimierung.png",
@@ -198,9 +175,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"research_lab": 2}, "research": {"energy_tech": 1}},
     },
     "interstellar_expansion": {
-        "label": "Interstellar Expansion",
         "label_key": "research_interstellar_expansion",
-        "description": "Erweitert die Reichweite deines Imperiums — neue Regionen und Welttypen.",
         "description_key": "desc_research_interstellar_expansion",
         "category": "expansion",
         "icon": "hyperraum-navigation.png",
@@ -494,7 +469,6 @@ def get_research_effect_preview(tech_key: str, current_level: int, next_level: i
 # ======================================================================
 # COSTS & TIME
 # ======================================================================
-
 def get_research_cost(tech_key: str, level: int) -> Tuple[int, int]:
     cfg = RESEARCH_TECHS.get(tech_key)
     if not cfg:
@@ -649,7 +623,6 @@ def recalculate_research_queue_finish_times(
 # ======================================================================
 # REQUIREMENTS
 # ======================================================================
-
 def get_player_research_lab_level(player_id: int, conn=None) -> int:
     """
     Research is account-scoped; unlock checks use the highest research_lab
@@ -764,7 +737,6 @@ def has_research_requirements(
 # ======================================================================
 # FINISH (ATOMAR, CONN-SAFE)
 # ======================================================================
-
 def complete_finished_research(user_id: int, conn=None) -> bool:
     """
     Conn-safe: delegiert an queue_engine.finish_due_work (nur dieser Spieler).
@@ -881,7 +853,6 @@ def _resolve_research_queue_limit(
 # ======================================================================
 # QUEUE START
 # ======================================================================
-
 def preview_max_queueable_research_jobs(
     tech_key: str,
     *,
@@ -1268,7 +1239,6 @@ def cancel_research_job(user_id: int, job_id: int):
 # ======================================================================
 # STATUS FOR UI
 # ======================================================================
-
 def player_has_active_research_queue(
     user_id: int,
     conn=None,
@@ -1434,9 +1404,9 @@ def get_research_status(
             "id": int(job["id"]),
             "tech_key": tech,
             "key": tech,
-            "label": cfg.get("label", tech),
+            "label": tr(str(cfg.get("label_key") or tech)),
             "label_key": cfg.get("label_key"),
-            "description": cfg.get("description", ""),
+            "description": tr(str(cfg.get("description_key") or f"desc_{tech}")),
             "description_key": cfg.get("description_key"),
             "current_level": curr,
             "target_level": int(targ),
@@ -1506,9 +1476,9 @@ def get_research_status(
 
             techs.append({
                 "key": tech,
-                "label": cfg.get("label", tech),
+                "label": tr(str(cfg.get("label_key") or tech)),
                 "label_key": cfg.get("label_key"),
-                "description": cfg.get("description", ""),
+                "description": tr(str(cfg.get("description_key") or f"desc_{tech}")),
                 "description_key": cfg.get("description_key"),
                 "category": cfg.get("category", ""),
                 "level": curr,
@@ -1744,7 +1714,6 @@ def _attach_queue_jobs_to_research_techs(
 # ======================================================================
 # VALIDATION
 # ======================================================================
-
 def _validate_research_config() -> None:
     for tech_key, cfg in RESEARCH_TECHS.items():
         req = cfg.get("requirements") or {}
