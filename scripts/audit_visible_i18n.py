@@ -56,7 +56,7 @@ _RE_JS_VISIBLE_ASSIGN = re.compile(
     r"(?:\.textContent|\.innerText|\.title|\.placeholder)\s*=\s*([\"'`])([^\n]*?)\1"
 )
 _RE_JS_VISIBLE_CALL = re.compile(
-    r"(?:setAttribute\(\s*[\"'](?:aria-label|aria-description|title|placeholder)[\"']\s*,"
+    r"(?:setAttribute\(\s*[\"'](?:aria-label|aria-description|title|placeholder)[\"']\s*,\s*"
     r"|(?:toast|showToast|notify|alert|confirm)\(\s*)([\"'`])([^\n]*?)\1"
 )
 _RE_PY_VISIBLE_FIELD = re.compile(
