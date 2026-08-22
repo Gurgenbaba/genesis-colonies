@@ -1,0 +1,43 @@
+name: GC I18N Scanner Patch
+
+on:
+  push:
+    branches: [feature/gc-i18n-hardening]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/gc-i18n-hardening
+          fetch-depth: 0
+
+      - name: Patch scanner and remove one-shot workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/audit_visible_i18n.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    r"(?:setAttribute\\(\\s*[\\\"\'](?:aria-label|aria-description|title|placeholder)[\\\"\']\\s*,"\n'
+          new = '    r"(?:setAttribute\\(\\s*[\\\"\'](?:aria-label|aria-description|title|placeholder)[\\\"\']\\s*,\\s*"\n'
+          if old not in text:
+              raise SystemExit('expected scanner regex not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git rm .github/workflows/gc-i18n-scanner-patch.yml
+          git diff --check
+
+      - name: Commit scanner fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/audit_visible_i18n.py .github/workflows/gc-i18n-scanner-patch.yml
+          git commit -m "fix(i18n): scan spaced visible JS attributes"
+          git push origin HEAD:feature/gc-i18n-hardening
