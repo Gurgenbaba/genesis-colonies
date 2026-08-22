@@ -667,16 +667,21 @@
                 aria-label="{{ T('close', 'Schließen') }}">×</button>
       </header>
       <div class="gc-player-card-body gc-world-boss-help-body">
-        <p class="gc-world-boss-help-lead">{{ T("wb_help_lead", "World Bosses sind serverweite PvE-Ziele. Alle Spieler kämpfen gemeinsam gegen Bosse mit geteilten Lebenspunkten.") }}</p>
+        <p class="gc-world-boss-help-lead">{{ T("wb_help_lead", "World Bosse sind serverweite Community-Raids. Alle Spieler greifen dieselben Lebenspunkte an, bauen gemeinsam Raid-Boni auf und kämpfen um persönliche sowie Allianz-Ränge.") }}</p>
         <ul class="gc-world-boss-help-list">
-          <li>{{ T("wb_help_hp", "Geteilte HP: Schaden skaliert mit Overkill; Mega-Flotten brauchen etwa 10–20 Wellen solo.") }}</li>
-          <li>{{ T("wb_help_attack", "Angriff: Direkter Treffer ohne Flugzeit — Cooldown 5 Minuten, keine Schiffsverluste.") }}</li>
-          <li>{{ T("wb_help_board", "Rangliste: Pro Boss-Card einklappbar; Schaden pro Spieler und Allianz.") }}</li>
-          <li>{{ T("wb_help_rewards", "Belohnungen: Pro Boss eigene Teilnahme-Container; Top 10 % Void + Boss-Loot; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Boss-Loot.") }}</li>
-          <li>{{ T("wb_help_alliance_xp", "Allianz-XP: Skaliert mit dem Schaden deiner Wellen — mehr Schaden, mehr Ally-XP (mit Cap pro Welle).") }}</li>
-          <li>{{ T("wb_help_limits", "Limits: Cooldown und Wellenlimit gelten pro Boss-Ereignis.") }}</li>
-          <li>{{ T("wb_help_schedule", "Zeitplan: Bis zu 3 parallele Bosse; Spawn alle paar Stunden oder selten per Expedition.") }}</li>
-          <li>{{ T("wb_help_catch", "Zähmen: In Phase 3 (≤25 % HP) 10 % Chance für 10h Timekeeper — einmal pro Boss. Gezähmte Companions stehen auf der Übersicht und holen Ark-Token.") }}</li>
+          <li>{{ T("wb_help_raid_goal", "Community-Raid: World Bosse sind absichtlich auf viele Teilnehmer ausgelegt. Sehr starke Einzelspieler können früh beitragen, sollen den Boss aber nicht allein wegräumen.") }}</li>
+          <li>{{ T("wb_help_containment", "Eindämmung: In den ersten 2 Stunden wird übermäßiger persönlicher Frühschaden gedrosselt. Ab 5 % persönlichem Boss-Beitrag sinkt die Wirksamkeit deutlich; ab 10 % noch stärker.") }}</li>
+          <li>{{ T("wb_help_damage_caps", "Schadensgrenzen: Ein ×1-Angriff kann höchstens 3 % der maximalen Boss-HP entfernen, ein ×5-Angriff höchstens 12,5 %.") }}</li>
+          <li>{{ T("wb_help_resonance", "Flottenresonanz: Erfolgreiche Angriffe laden den gemeinsamen Serverbalken (×1 = +1, ×5 = +5). Bei 100 startet für 10 Minuten +50 % Schaden und +10 Prozentpunkte Krit-Chance für alle.") }}</li>
+          <li>{{ T("wb_help_target_lock", "Zielerfassung: Dein persönlicher Balken lädt pro Welle um 20 %, während Flottenresonanz um 25 %. Bei 100 % ist dein nächster Angriff garantiert kritisch.") }}</li>
+          <li>{{ T("wb_help_last_stand", "Letztes Aufgebot: Nach 75 % der Event-Laufzeit erhalten alle +25 % Schaden, falls der Boss noch lebt.") }}</li>
+          <li>{{ T("wb_help_attack", "Angriffe: Direkter Treffer ohne Flugzeit und ohne Schiffsverluste. ×1 hat 5 Minuten Cooldown; ×5 zählt als 5 Wellen und hat 25 Minuten Cooldown.") }}</li>
+          <li>{{ T("wb_help_limits", "Limits: Maximal 40 Wellen pro Spieler und Boss-Ereignis. Cooldowns und Wellenlimit gelten jeweils separat pro Boss.") }}</li>
+          <li>{{ T("wb_help_board", "Rangliste: Schaden, Wellen und Allianzbeiträge werden pro Boss gewertet. Dein aktueller Rang und Allianzschaden stehen direkt auf der Boss-Card.") }}</li>
+          <li>{{ T("wb_help_rewards", "Belohnungen: Teilnahme gewährt Boss-Loot; Top 10 % erhalten zusätzlich Void + Boss-Loot, Platz 1 Mythic, die Top-Allianz ein Relic und der Expo-Entdecker bei Schaden zusätzlich Boss-Loot.") }}</li>
+          <li>{{ T("wb_help_alliance_xp", "Allianz-XP: Skaliert mit dem Schaden deiner Wellen — mehr Schaden bringt mehr Allianz-XP, mit einem Cap pro Welle.") }}</li>
+          <li>{{ T("wb_help_schedule", "Zeitplan: Bis zu 3 World Bosse können gleichzeitig aktiv sein. Neue Bosse erscheinen nach dem Spawn-Takt oder selten durch Expeditionen.") }}</li>
+          <li>{{ T("wb_help_catch", "Zähmen: In Phase 3 (≤25 % HP) besteht pro Versuch eine Chance von 10 % für 10h Timekeeper. Gezähmte Companions stehen auf der Übersicht und sammeln Ark-Token.") }}</li>
         </ul>
       </div>
     </div>
