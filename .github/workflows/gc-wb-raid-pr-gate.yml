@@ -56,11 +56,24 @@ jobs:
 
       - name: Run World Boss regression gate
         run: |
-          python -m pytest -q --tb=line \
+          mkdir -p artifacts
+          set -o pipefail
+          python -m pytest -q --tb=short \
+            --junitxml=artifacts/world-boss-pytest.xml \
             tests/test_world_boss_raid.py \
             tests/test_world_boss.py \
             tests/test_world_boss_companions.py \
-            tests/test_static_live_updates.py
+            tests/test_static_live_updates.py \
+            2>&1 | tee artifacts/world-boss-pytest.txt
+
+      - name: Upload World Boss pytest diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: world-boss-pytest-diagnostics
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Commit generated implementation when changed
         run: |
