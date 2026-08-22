@@ -45,13 +45,13 @@ _TEST_REPLACEMENTS = (
         "single-wave cap assertion",
     ),
     (
-        '    \"\"\"Even fight full wipe ≈ WAVE_HP_FRACTION; mega fleet hits soft overkill cap (~10–20 waves).\"\"\"\n',
-        '    \"\"\"Even fight follows WAVE_HP_FRACTION; mega fleets obey the hardened single-wave cap.\"\"\"\n',
+        '    """Even fight full wipe ≈ WAVE_HP_FRACTION; mega fleet hits soft overkill cap (~10–20 waves)."""\n',
+        '    """Even fight follows WAVE_HP_FRACTION; mega fleets obey the hardened single-wave cap."""\n',
         "full-wipe regression docstring",
     ),
     (
-        '    \"\"\"Hangar past the 8% wave HP cap → send only what is needed for the cap.\"\"\"\n',
-        '    \"\"\"Hangar past the current wave HP cap → send only what is needed for the cap.\"\"\"\n',
+        '    """Hangar past the 8% wave HP cap → send only what is needed for the cap."""\n',
+        '    """Hangar past the current wave HP cap → send only what is needed for the cap."""\n',
         "auto-selection regression docstring",
     ),
     (
@@ -80,7 +80,7 @@ def patch_legacy_arrival_raid_contract() -> None:
     """Route pre-deployment in-flight arrivals through the canonical raid rules."""
     text = impl.WB.read_text(encoding="utf-8")
     start = text.index("def resolve_attack_arrival(\n")
-    end = text.index("\ndef _player_name(\n", start)
+    end = text.index("\ndef _player_name(", start)
     block = text[start:end]
     if LEGACY_ARRIVAL_MARKER in block:
         return
