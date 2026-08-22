@@ -120,6 +120,7 @@ UNTRANSLATED_VALUE_EXCEPTIONS: frozenset[str] = frozenset(
         "side_fort_done_subj",
         "sl_kicker",
         "stellar_forge_cores_progress",
+        "story_ark_token_toast",
         "story_carousel_position",
         "story_codex_codex_side_expo_title",
         "story_codex_codex_side_fort_title",
