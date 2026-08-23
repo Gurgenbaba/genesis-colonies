@@ -8879,5 +8879,6 @@
   "support_unknown": "Bilinmiyor",
   "support_reply_placeholder": "Yanıt yaz...",
   "support_reply_send": "Yanıtı gönder",
-  "support_close_ticket": "Talebi kapat"
+  "support_close_ticket": "Talebi kapat",
+  "support_message_meta": "%(sender)s · %(time)s"
 }

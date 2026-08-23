@@ -151,6 +151,7 @@ def test_i18n_phase3_support_player_ui_uses_locale_ssot():
 
     for literal in ('"Antwort schreiben..."', '"Antwort senden"', '"Ticket schliessen"', "'Antwort schreiben...'", "'Antwort senden'", "'Ticket schliessen'"):
         assert literal not in main_js
+    assert 'tf("support_message_meta"' in main_js
     assert 't("support_reply_placeholder")' in main_js
     assert 't("support_reply_send")' in main_js
     assert 't("support_close_ticket")' in main_js

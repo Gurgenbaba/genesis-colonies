@@ -8879,5 +8879,6 @@
   "support_unknown": "Неизвестно",
   "support_reply_placeholder": "Написать ответ...",
   "support_reply_send": "Отправить ответ",
-  "support_close_ticket": "Закрыть обращение"
+  "support_close_ticket": "Закрыть обращение",
+  "support_message_meta": "%(sender)s · %(time)s"
 }

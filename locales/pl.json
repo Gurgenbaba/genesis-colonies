@@ -8879,5 +8879,6 @@
   "support_unknown": "Nieznane",
   "support_reply_placeholder": "Napisz odpowiedź...",
   "support_reply_send": "Wyślij odpowiedź",
-  "support_close_ticket": "Zamknij zgłoszenie"
+  "support_close_ticket": "Zamknij zgłoszenie",
+  "support_message_meta": "%(sender)s · %(time)s"
 }

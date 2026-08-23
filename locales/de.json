@@ -8879,5 +8879,6 @@
   "support_unknown": "Unbekannt",
   "support_reply_placeholder": "Antwort schreiben...",
   "support_reply_send": "Antwort senden",
-  "support_close_ticket": "Ticket schließen"
+  "support_close_ticket": "Ticket schließen",
+  "support_message_meta": "%(sender)s · %(time)s"
 }

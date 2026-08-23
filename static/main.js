@@ -46154,7 +46154,10 @@
       row.className = "gc-support-msg";
       const meta = document.createElement("div");
       meta.className = "gc-support-msg-meta";
-      meta.textContent = `${m.sender_name || t("support_unknown")} · ${formatTs(m.created_at)}`;
+      meta.textContent = tf("support_message_meta", {
+        sender: m.sender_name || t("support_unknown"),
+        time: formatTs(m.created_at),
+      });
       const body = document.createElement("div");
       body.className = "gc-support-msg-body";
       body.textContent = m.message || "";
