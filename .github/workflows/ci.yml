@@ -46,7 +46,12 @@ jobs:
             tests/test_fleet_worker.py \
             tests/test_gc_perf_tk_005.py \
             tests/test_gc_perf_fleet_write_001.py \
-            tests/test_gc_perf_resource_persist_001.py
+            tests/test_gc_perf_resource_persist_001.py \
+            tests/test_galactic_diplomacy.py::test_ensure_get_set_galaxy_personality \
+            tests/test_commander_classes.py::test_linear_gate_and_sp_unlock \
+            tests/test_commander_classes.py::test_effect_resolver_includes_class_mods \
+            tests/test_inventory_booster_visibility.py::test_use_duration_booster_creates_active_entry \
+            tests/test_inventory_booster_visibility.py::test_production_booster_tier_ladder_25_then_50
 
   i18n:
     name: i18n-hardening
