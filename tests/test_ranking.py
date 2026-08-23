@@ -1052,7 +1052,7 @@ def test_combat_destruction_increases_ranking_scores(temp_db):
         assert int(row["score_destroyed_raw"]) == raw
         assert int(row["score_destroyed"]) > 0
         normalized = _normalize_db_row(dict(row))
-        assert normalized["total_score"] == normalized["resource_score"]
+        assert normalized["total_score"] == (normalized["building_score"] + normalized["research_score"] + normalized["fleet_score"] + normalized["defense_score"] + normalized["evolution_score"])
         assert normalized["destroyed_score"] == raw
     finally:
         conn.close()
@@ -1262,3 +1262,78 @@ def test_big_score_exact_order_with_122_players(temp_db):
     ranked = [r for r in rows if r["player_id"] in set(created)]
     expected = sorted(created, key=lambda pid: -(base + created.index(pid) + (created.index(pid) % 3)))
     assert [r["player_id"] for r in ranked] == expected
+
+
+# GC-SCORE-BIGNUM live hardening coverage
+
+def test_big_score_rank_reads_never_seed_score_rows(temp_db):
+    from game.ranking import get_player_category_ranks, get_player_rank_from_snapshot
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    pid = _create_player("rank_read_only")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (pid,))
+    conn.commit()
+    conn.close()
+
+    with patch("game.ranking._ensure_score_rows") as ensure_rows:
+        rank, total = get_player_rank_from_snapshot(pid)
+        ranks = get_player_category_ranks(pid)
+        ensure_rows.assert_not_called()
+    assert rank is not None
+    assert total >= 1
+    assert ranks["total_players"] >= 1
+
+    conn = db()
+    persisted = conn.execute("SELECT 1 FROM player_scores WHERE player_id = ?", (pid,)).fetchone()
+    conn.close()
+    assert persisted is None
+
+
+def test_read_player_scores_preserves_combat_and_destroyed_fields(temp_db):
+    from game.ranking import read_player_scores
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    pid = _create_player("score_projection")
+    upsert_player_scores(pid, {
+        "building_score": 10,
+        "research_score": 20,
+        "fleet_score": 30,
+        "defense_score": 40,
+        "destroyed_raw": 123456789,
+        "destroyed_score": 123456789,
+    })
+    scores = read_player_scores(pid)
+    assert scores["total_score"] == 100
+    assert scores["combat_score"] == 70
+    assert scores["destroyed_score"] == 123456789
+    assert scores["destroyed_raw"] == 123456789
+
+
+def test_pirate_threat_accepts_scores_far_beyond_float(temp_db):
+    from game.pirates.threat import recompute_player_threat, threat_schema_ready
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    pid = _create_player("huge_threat")
+    conn = db()
+    if not threat_schema_ready(conn):
+        conn.close()
+        pytest.skip("pirate threat schema unavailable")
+    huge = 10**500
+    upsert_player_scores(pid, {
+        "building_score": huge,
+        "fleet_score": huge,
+        "defense_score": huge,
+        "destroyed_score": huge,
+        "destroyed_raw": huge,
+    }, conn=conn)
+    result = recompute_player_threat(pid, conn=conn)
+    conn.commit()
+    conn.close()
+    assert 0 <= result["threat"] <= 100

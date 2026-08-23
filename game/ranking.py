@@ -2120,11 +2120,14 @@ def read_player_scores(
         cur.execute(
             f"""
             SELECT
-                COALESCE(ps.score_total, 0) AS score_total,
-                COALESCE(ps.score_buildings, 0) AS score_buildings,
-                COALESCE(ps.score_research, 0) AS score_research,
+                COALESCE(ps.score_total, '0') AS score_total,
+                {_resources_score_select(conn)},
+                COALESCE(ps.score_buildings, '0') AS score_buildings,
+                COALESCE(ps.score_research, '0') AS score_research,
                 {_fleet_defense_select(conn)},
-                {_evolution_score_select(conn)}
+                {_evolution_score_select(conn)},
+                {_combat_ranking_select(conn)},
+                {("COALESCE(ps.score_destroyed_raw, 0) AS score_destroyed_raw" if column_exists(conn, "player_scores", "score_destroyed_raw") else "0 AS score_destroyed_raw")}
             FROM players p
             LEFT JOIN player_scores ps ON ps.player_id = p.id
             WHERE p.id = ?
@@ -2310,7 +2313,44 @@ def upsert_player_scores(player_id: int, scores: Dict[str, int], conn=None) -> N
 
 
 def _all_score_rows_exact(conn) -> List[Dict[str, Any]]:
-    return _fetch_all_score_rows(conn)
+    """Pure read of every score row; ranking GET paths must never seed/write rows."""
+    resources_sel = _resources_score_select(conn)
+    fleet_defense_sel = _fleet_defense_select(conn)
+    evolution_sel = _evolution_score_select(conn)
+    combat_sel = _combat_ranking_select(conn)
+    destroyed_raw_sel = (
+        "COALESCE(ps.score_destroyed_raw, 0) AS score_destroyed_raw"
+        if column_exists(conn, "player_scores", "score_destroyed_raw")
+        else "0 AS score_destroyed_raw"
+    )
+    rows = conn.execute(
+        f"""
+        SELECT
+            p.id AS player_id,
+            p.name AS commander_name,
+            COALESCE(ps.score_total, '0') AS score_total,
+            {resources_sel},
+            COALESCE(ps.score_buildings, '0') AS score_buildings,
+            COALESCE(ps.score_research, '0') AS score_research,
+            {fleet_defense_sel},
+            {evolution_sel},
+            {combat_sel},
+            {destroyed_raw_sel}
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
+        ORDER BY p.id ASC
+        """
+    ).fetchall()
+    out: List[Dict[str, Any]] = []
+    for raw in rows:
+        d = dict(raw)
+        normalized = _normalize_db_row(d)
+        out.append({
+            "player_id": int(d["player_id"]),
+            "commander_name": d.get("commander_name") or "—",
+            **normalized,
+        })
+    return out
 
 
 def get_sorted_ranking_entries(limit: int = 100, offset: int = 0, conn=None) -> List[Dict[str, Any]]:
