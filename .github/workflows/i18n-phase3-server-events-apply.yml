@@ -3,6 +3,8 @@ name: I18N Phase 3 Server Events Apply
 on:
   push:
     branches: [fix/i18n-phase3-server-events]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
