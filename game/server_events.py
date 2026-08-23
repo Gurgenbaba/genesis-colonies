@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .db import db, table_exists
+from .i18n import get_locale_dict, tr
 
 KIND_PRODUCTION_MULT = "production_mult"
 KIND_EXPEDITION_HOLD_MULT = "expedition_hold_mult"
@@ -72,7 +73,7 @@ DURATION_48H = "48h"
 EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     "weekend_prod_expo": {
         "id": "weekend_prod_expo",
-        "title": "Res-Prod / Expo Event",
+        "title_key": "server_event_preset_weekend_prod_expo",
         "slug_prefix": "weekend-prod-expo",
         "duration": DURATION_UNTIL_SUNDAY_2000,
         "effects": [
@@ -83,7 +84,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "double_production_24h": {
         "id": "double_production_24h",
-        "title": "Double Production",
+        "title_key": "server_event_preset_double_production_24h",
         "slug_prefix": "double-production",
         "duration": DURATION_24H,
         "effects": [{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}],
@@ -91,7 +92,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "expedition_rush_48h": {
         "id": "expedition_rush_48h",
-        "title": "Expedition Rush",
+        "title_key": "server_event_preset_expedition_rush_48h",
         "slug_prefix": "expedition-rush",
         "duration": DURATION_48H,
         "effects": [{"kind": KIND_EXPEDITION_HOLD_MULT, "mult": 0.5}],
@@ -99,7 +100,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "shop_sale_20_48h": {
         "id": "shop_sale_20_48h",
-        "title": "Shop Sale −20%",
+        "title_key": "server_event_preset_shop_sale_20_48h",
         "slug_prefix": "shop-sale-20",
         "duration": DURATION_48H,
         "effects": [{"kind": KIND_SHOP_DISCOUNT_BPS, "bps": 2000}],
@@ -107,7 +108,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "build_research_rush_24h": {
         "id": "build_research_rush_24h",
-        "title": "Build / Research Rush",
+        "title_key": "server_event_preset_build_research_rush_24h",
         "slug_prefix": "build-research-rush",
         "duration": DURATION_24H,
         "effects": [
@@ -118,7 +119,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "world_boss_leviathan": {
         "id": "world_boss_leviathan",
-        "title": "World Boss: Ancient Leviathan",
+        "title_key": "server_event_preset_world_boss_leviathan",
         "slug_prefix": "",
         "duration": None,
         "effects": [],
@@ -133,7 +134,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "mega_weekend": {
         "id": "mega_weekend",
-        "title": "Mega Weekend",
+        "title_key": "server_event_preset_mega_weekend",
         "slug_prefix": "mega-weekend",
         "duration": DURATION_UNTIL_SUNDAY_2000,
         "effects": [
@@ -152,7 +153,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "asteroid_storm_48h": {
         "id": "asteroid_storm_48h",
-        "title": "Asteroid Storm",
+        "title_key": "server_event_preset_asteroid_storm_48h",
         "slug_prefix": "asteroid-storm",
         "duration": DURATION_48H,
         "effects": [{"kind": KIND_ASTEROID_SPAWN_MULT, "mult": 2.0}],
@@ -160,7 +161,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "boss_hunt_24h": {
         "id": "boss_hunt_24h",
-        "title": "Boss Hunt",
+        "title_key": "server_event_preset_boss_hunt_24h",
         "slug_prefix": "boss-hunt",
         "duration": DURATION_24H,
         "effects": [{"kind": KIND_WORLD_BOSS_SPAWN_MULT, "mult": 2.0}],
@@ -168,7 +169,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "inactive_farm_weekend": {
         "id": "inactive_farm_weekend",
-        "title": "Inactive Farm Weekend",
+        "title_key": "server_event_preset_inactive_farm_weekend",
         "slug_prefix": "inactive-farm",
         "duration": DURATION_UNTIL_SUNDAY_2000,
         "effects": [{"kind": KIND_INACTIVE_FARM_MULT, "mult": 3.0}],
@@ -176,7 +177,7 @@ EVENT_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "chaos_weekend": {
         "id": "chaos_weekend",
-        "title": "Chaos Weekend",
+        "title_key": "server_event_preset_chaos_weekend",
         "slug_prefix": "chaos-weekend",
         "duration": DURATION_UNTIL_SUNDAY_2000,
         "effects": [
@@ -304,6 +305,38 @@ def _normalize_slug(raw: str) -> str:
     return str(raw or "").strip().lower().replace(" ", "-")
 
 
+def _preset_fallback_title(preset: Mapping[str, Any]) -> str:
+    """Stable English DB/admin fallback; player rendering uses title_key."""
+    title_key = str(preset.get("title_key") or "").strip()
+    if title_key:
+        text = get_locale_dict("en").get(title_key)
+        if text:
+            return str(text)
+    return str(preset.get("id") or "server_event")
+
+
+def _preset_title_key_for_slug(slug: str) -> str:
+    slug_n = _normalize_slug(slug)
+    if not slug_n:
+        return ""
+    for preset in EVENT_PRESETS.values():
+        prefix = _normalize_slug(str(preset.get("slug_prefix") or ""))
+        title_key = str(preset.get("title_key") or "").strip()
+        if not prefix or not title_key:
+            continue
+        if slug_n == prefix or slug_n.startswith(f"{prefix}-"):
+            return title_key
+    return ""
+
+
+def _localized_event_title(event: Mapping[str, Any], *, locale: Optional[str] = None) -> str:
+    title = str(event.get("title") or event.get("slug") or "")
+    title_key = str(event.get("title_key") or _preset_title_key_for_slug(str(event.get("slug") or "")))
+    if not title_key:
+        return title
+    return tr(title_key, title, locale=locale)
+
+
 def _serialize_row(row: Mapping[str, Any], *, now: Optional[float] = None) -> Dict[str, Any]:
     ts = float(now if now is not None else time.time())
     effects = _parse_effects(row.get("effects_json"))
@@ -322,6 +355,7 @@ def _serialize_row(row: Mapping[str, Any], *, now: Optional[float] = None) -> Di
         "id": int(row["id"]),
         "slug": str(row.get("slug") or ""),
         "title": str(row.get("title") or ""),
+        "title_key": _preset_title_key_for_slug(str(row.get("slug") or "")),
         "starts_at": starts,
         "ends_at": ends,
         "enabled": enabled,
@@ -568,7 +602,8 @@ def serialize_active_events(*, now: Optional[float] = None, conn=None) -> Dict[s
             {
                 "id": e["id"],
                 "slug": e["slug"],
-                "title": e["title"],
+                "title": _localized_event_title(e),
+                "title_key": str(e.get("title_key") or ""),
                 "starts_at": e["starts_at"],
                 "ends_at": e["ends_at"],
                 "effects": e["effects"],
@@ -586,8 +621,8 @@ def serialize_active_events(*, now: Optional[float] = None, conn=None) -> Dict[s
     }
 
 
-def effect_summary_short(effects: Any) -> List[str]:
-    """Compact labels for banners/calendar (+100% Prod, −25% Hold, Shop −20%)."""
+def effect_summary_short(effects: Any, *, locale: Optional[str] = None) -> List[str]:
+    """Compact player-facing labels resolved through locale SSOT."""
     out: List[str] = []
     if not isinstance(effects, list):
         return out
@@ -602,7 +637,7 @@ def effect_summary_short(effects: Any) -> List[str]:
                 continue
             if bps > 0:
                 pct = int(round(bps / 100.0))
-                out.append(f"Shop −{pct}%")
+                out.append(tr("server_event_effect_shop_discount", locale=locale, pct=pct))
             continue
         try:
             mult = float(eff.get("mult") or 1.0)
@@ -611,29 +646,33 @@ def effect_summary_short(effects: Any) -> List[str]:
         if kind == KIND_PRODUCTION_MULT and mult > 0:
             pct = int(round((mult - 1.0) * 100))
             if pct != 0:
-                out.append(f"+{pct}% Prod" if pct > 0 else f"{pct}% Prod")
+                value = f"+{pct}" if pct > 0 else str(pct)
+                out.append(tr("server_event_effect_production", locale=locale, value=value))
         elif kind == KIND_EXPEDITION_HOLD_MULT and mult > 0:
             pct = int(round((1.0 - mult) * 100))
             if pct != 0:
-                out.append(f"−{pct}% Hold" if pct > 0 else f"+{abs(pct)}% Hold")
+                value = f"−{pct}" if pct > 0 else f"+{abs(pct)}"
+                out.append(tr("server_event_effect_expedition_hold", locale=locale, value=value))
         elif kind == KIND_BUILD_TIME_SPEED and mult > 0:
             pct = int(round((mult - 1.0) * 100))
             if pct != 0:
-                out.append(f"+{pct}% Build" if pct > 0 else f"{pct}% Build")
+                value = f"+{pct}" if pct > 0 else str(pct)
+                out.append(tr("server_event_effect_build_speed", locale=locale, value=value))
         elif kind == KIND_RESEARCH_TIME_SPEED and mult > 0:
             pct = int(round((mult - 1.0) * 100))
             if pct != 0:
-                out.append(f"+{pct}% Research" if pct > 0 else f"{pct}% Research")
+                value = f"+{pct}" if pct > 0 else str(pct)
+                out.append(tr("server_event_effect_research_speed", locale=locale, value=value))
         elif kind == KIND_ASTEROID_SPAWN_MULT and mult > 0 and abs(mult - 1.0) > 1e-9:
-            out.append(f"Asteroid ×{mult:g}")
+            out.append(tr("server_event_effect_asteroid_spawn", locale=locale, mult=f"{mult:g}"))
         elif kind == KIND_WORLD_BOSS_SPAWN_MULT and mult > 0 and abs(mult - 1.0) > 1e-9:
-            out.append(f"Boss Hunt ×{mult:g}")
+            out.append(tr("server_event_effect_world_boss_spawn", locale=locale, mult=f"{mult:g}"))
         elif kind == KIND_INACTIVE_FARM_MULT and mult > 0 and abs(mult - 1.0) > 1e-9:
-            out.append(f"Inactive Farms ×{mult:g}")
+            out.append(tr("server_event_effect_inactive_farm", locale=locale, mult=f"{mult:g}"))
     return out
 
 
-def active_events_banner(*, now: Optional[float] = None, conn=None) -> List[Dict[str, Any]]:
+def active_events_banner(*, now: Optional[float] = None, conn=None, locale: Optional[str] = None) -> List[Dict[str, Any]]:
     """UI teaser rows for Overview / Login Rewards (active server events only)."""
     ts = float(now if now is not None else time.time())
     out: List[Dict[str, Any]] = []
@@ -651,9 +690,9 @@ def active_events_banner(*, now: Optional[float] = None, conn=None) -> List[Dict
                 "kind": "server_event",
                 "id": int(ev.get("id") or 0),
                 "slug": str(ev.get("slug") or ""),
-                "title": str(ev.get("title") or ""),
-                "title_key": "",
-                "effects_summary": effect_summary_short(effects),
+                "title": _localized_event_title(ev, locale=locale),
+                "title_key": str(ev.get("title_key") or ""),
+                "effects_summary": effect_summary_short(effects, locale=locale),
                 "ends_at": ends,
                 "remaining_sec": max(0, ends - int(ts)) if ends else 0,
                 "href": "login_rewards_view",
@@ -797,7 +836,7 @@ def production_hud_contribution(
     ends_at = None
     titles: List[str] = []
     for ev in prod_events:
-        titles.append(str(ev.get("title") or ev.get("slug") or ""))
+        titles.append(_localized_event_title(ev))
         end = int(ev.get("ends_at") or 0)
         if ends_at is None or (end > 0 and end < ends_at):
             ends_at = end
@@ -942,7 +981,8 @@ def list_presets() -> List[Dict[str, Any]]:
         out.append(
             {
                 "id": preset["id"],
-                "title": preset["title"],
+                "title": _preset_fallback_title(preset),
+                "title_key": str(preset.get("title_key") or ""),
                 "slug_prefix": preset.get("slug_prefix") or "",
                 "duration": preset.get("duration"),
                 "effects": list(preset.get("effects") or []),
@@ -1067,7 +1107,7 @@ def apply_preset(
             slug = _unique_slug(str(preset.get("slug_prefix") or preset["id"]), conn=conn)
             entry, err = create_event(
                 slug=slug,
-                title=str(preset.get("title") or preset["id"]),
+                title=_preset_fallback_title(preset),
                 starts_at=start,
                 ends_at=end,
                 effects=effects,
@@ -1381,13 +1421,13 @@ def materialize_schedule(
         preset = get_preset(str(rule.get("preset_id") or ""))
         effects = list(rule.get("effects") or [])
         actions: List[Dict[str, Any]] = []
-        title = str(rule.get("name") or "Scheduled Event")
+        title = str(rule.get("name") or get_locale_dict("en").get("server_event_scheduled_fallback") or "scheduled_event")
         slug_prefix = "scheduled"
         if preset:
             if not effects:
                 effects = list(preset.get("effects") or [])
             actions = list(preset.get("actions") or [])
-            title = str(preset.get("title") or title)
+            title = _preset_fallback_title(preset)
             slug_prefix = str(preset.get("slug_prefix") or preset["id"] or slug_prefix)
 
         if not effects and not actions:

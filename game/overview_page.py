@@ -491,7 +491,7 @@ def build_overview_live_events(
             from .server_events import active_events_banner, schema_ready as events_ready
 
             if events_ready(conn):
-                items.extend(active_events_banner(now=ts, conn=conn))
+                items.extend(active_events_banner(now=ts, conn=conn, locale=locale))
         except Exception:
             pass
         try:
