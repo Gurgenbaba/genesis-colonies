@@ -292,8 +292,8 @@ def test_login_calendar_marks_event_days(events_db):
     assert days[1]["event"] is True
     assert days[1]["day_bucket"] == today
     summaries = days[1]["events"][0]["effects_summary"]
-    assert any("Prod" in s for s in summaries)
-    assert any("Hold" in s for s in summaries)
+    assert "+100% Produktion" in summaries
+    assert "−25% Expeditions-Haltezeit" in summaries
     # Tomorrow's locked day still in the 2-day window
     assert days[2]["status"] == "locked"
     assert days[2]["event"] is True
@@ -326,7 +326,7 @@ def test_active_events_banner_and_overview_live_events(events_db):
     assert len(banner) >= 1
     assert banner[0]["slug"] == "ov-boost"
     assert banner[0]["href"] == "login_rewards_view"
-    assert effect_summary_short([{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}]) == ["+100% Prod"]
+    assert effect_summary_short([{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}], locale="en") == ["+100% Production"]
 
     live = build_overview_live_events(conn=conn, now=now)
     assert any(e.get("slug") == "ov-boost" and e.get("kind") == "server_event" for e in live)
@@ -577,6 +577,107 @@ def test_build_research_time_speed_in_effect_resolver(events_db):
     assert float(mods["build_time_speed"]) == pytest.approx(base_build * 1.25, rel=1e-6)
     assert float(mods["research_time_speed"]) == pytest.approx(base_research * 1.25, rel=1e-6)
     conn.close()
+
+
+def test_server_event_presets_are_locale_key_only():
+    import json
+    from pathlib import Path
+
+    from game.server_events import EVENT_PRESETS, list_presets
+
+    assert EVENT_PRESETS
+    assert all("title" not in preset for preset in EVENT_PRESETS.values())
+    title_keys = {str(preset.get("title_key") or "") for preset in EVENT_PRESETS.values()}
+    assert all(key.startswith("server_event_preset_") for key in title_keys)
+    assert len(title_keys) == len(EVENT_PRESETS)
+
+    root = Path(__file__).resolve().parents[1]
+    expected_effect_keys = {
+        "server_event_scheduled_fallback",
+        "server_event_effect_shop_discount",
+        "server_event_effect_production",
+        "server_event_effect_expedition_hold",
+        "server_event_effect_build_speed",
+        "server_event_effect_research_speed",
+        "server_event_effect_asteroid_spawn",
+        "server_event_effect_world_boss_spawn",
+        "server_event_effect_inactive_farm",
+    }
+    for locale in ("de", "en", "fr", "es", "pl", "tr", "ru", "pt"):
+        data = json.loads((root / "locales" / f"{locale}.json").read_text(encoding="utf-8"))
+        assert title_keys <= set(data)
+        assert expected_effect_keys <= set(data)
+        assert all(str(data[key]).strip() for key in title_keys | expected_effect_keys)
+
+    catalog = list_presets()
+    assert len(catalog) == len(EVENT_PRESETS)
+    assert all(p.get("title") and p.get("title_key") for p in catalog)
+
+
+def test_server_event_effect_summary_localizes_all_effect_kinds():
+    from game.server_events import (
+        KIND_ASTEROID_SPAWN_MULT,
+        KIND_BUILD_TIME_SPEED,
+        KIND_EXPEDITION_HOLD_MULT,
+        KIND_INACTIVE_FARM_MULT,
+        KIND_PRODUCTION_MULT,
+        KIND_RESEARCH_TIME_SPEED,
+        KIND_SHOP_DISCOUNT_BPS,
+        KIND_WORLD_BOSS_SPAWN_MULT,
+        effect_summary_short,
+    )
+
+    effects = [
+        {"kind": KIND_PRODUCTION_MULT, "mult": 2.0},
+        {"kind": KIND_EXPEDITION_HOLD_MULT, "mult": 0.75},
+        {"kind": KIND_SHOP_DISCOUNT_BPS, "bps": 2000},
+        {"kind": KIND_BUILD_TIME_SPEED, "mult": 1.25},
+        {"kind": KIND_RESEARCH_TIME_SPEED, "mult": 1.25},
+        {"kind": KIND_ASTEROID_SPAWN_MULT, "mult": 2.0},
+        {"kind": KIND_WORLD_BOSS_SPAWN_MULT, "mult": 2.0},
+        {"kind": KIND_INACTIVE_FARM_MULT, "mult": 3.0},
+    ]
+    en = effect_summary_short(effects, locale="en")
+    de = effect_summary_short(effects, locale="de")
+    assert "+100% Production" in en
+    assert "−25% Expedition Hold" in en
+    assert "+100% Produktion" in de
+    assert "−25% Expeditions-Haltezeit" in de
+    assert "Asteroiden-Spawns ×2" in de
+    assert en != de
+
+
+def test_server_event_preset_title_key_and_custom_title_compatibility(events_db):
+    from game.server_events import active_events_banner, apply_preset, create_event
+
+    now = int(time.time())
+    result, err = apply_preset(
+        "double_production_24h",
+        starts_at=now - 10,
+        ends_at=now + 3600,
+        now=float(now),
+    )
+    assert err is None, err
+    assert result and result["event"]
+    preset_slug = str(result["event"]["slug"])
+
+    custom, custom_err = create_event(
+        slug=f"custom-{uuid.uuid4().hex[:8]}",
+        title="Community Surprise",
+        starts_at=now - 10,
+        ends_at=now + 3600,
+        effects=[{"kind": KIND_PRODUCTION_MULT, "mult": 1.1}],
+    )
+    assert custom_err is None, custom_err
+    assert custom
+
+    banner_de = active_events_banner(now=float(now), locale="de")
+    preset_row = next(row for row in banner_de if row.get("slug") == preset_slug)
+    custom_row = next(row for row in banner_de if row.get("slug") == custom["slug"])
+    assert preset_row["title_key"] == "server_event_preset_double_production_24h"
+    assert preset_row["title"] == "Doppelte Produktion"
+    assert custom_row["title_key"] == ""
+    assert custom_row["title"] == "Community Surprise"
 
 
 def test_apply_preset_weekend_and_list(events_db):
