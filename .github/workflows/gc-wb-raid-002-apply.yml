@@ -1,23 +1,20 @@
 name: GC-WB-RAID-002 apply and test
-# Existing trusted apply runner; feature/big-score-ranking temporarily reuses this path.
+# Canonical codemod owns implementation + downstream World Boss test contract.
 
 on:
   push:
     branches:
       - feature/world-boss-raid-rework
-      - feature/big-score-ranking
     paths:
       - .github/workflows/gc-wb-raid-002-apply.yml
       - scripts/apply_gc_wb_raid_002.py
       - scripts/_apply_gc_wb_raid_002_impl.py
-      - scripts/apply_big_score_ranking.py
 
 permissions:
   contents: write
 
 jobs:
-  world-boss:
-    if: github.ref_name == 'feature/world-boss-raid-rework'
+  apply-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -26,77 +23,53 @@ jobs:
         with:
           ref: feature/world-boss-raid-rework
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
+
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-      - name: Apply canonical codemod
+
+      - name: Apply GC-WB-RAID-002 canonical codemod
         run: python scripts/apply_gc_wb_raid_002.py
+
       - name: Verify codemod contract and idempotence
         run: python scripts/apply_gc_wb_raid_002.py --verify
+
       - name: Compile changed Python
         run: |
           python -m py_compile game/world_boss.py
           python -m py_compile scripts/apply_gc_wb_raid_002.py
           python -m py_compile scripts/_apply_gc_wb_raid_002_impl.py
-          python -m py_compile tests/test_world_boss_raid.py tests/test_world_boss.py
+          python -m py_compile tests/test_world_boss_raid.py
+          python -m py_compile tests/test_world_boss.py
+
       - name: Run World Boss regression suite
         env:
           APP_ENV: development
           GC_SKIP_MIGRATION_CHECK: "1"
           SECRET_KEY: ci-world-boss-raid-apply-secret-key-32chars
         run: |
-          python -m pytest -q --tb=line tests/test_world_boss_raid.py tests/test_world_boss.py tests/test_world_boss_companions.py tests/test_static_live_updates.py
+          python -m pytest -q --tb=line \
+            tests/test_world_boss_raid.py \
+            tests/test_world_boss.py \
+            tests/test_world_boss_companions.py \
+            tests/test_static_live_updates.py
+
       - name: Commit generated implementation
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add game/world_boss.py templates/world_boss.html tests/test_world_boss_raid.py tests/test_world_boss.py
-          if ! git diff --cached --quiet; then
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
             git commit -m "GC-WB-RAID-002 implement community raid loop"
             git push origin HEAD:feature/world-boss-raid-rework
           fi
-
-  big-score:
-    if: github.ref_name == 'feature/big-score-ranking'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout big-score branch
-        uses: actions/checkout@v4
-        with:
-          ref: feature/big-score-ranking
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; else pip install pytest; fi
-      - name: Apply GC-SCORE-BIGNUM codemod
-        run: python scripts/apply_big_score_ranking.py
-      - name: Compile changed Python
-        run: python -m py_compile game/ranking.py game/scoring.py game/number_format.py
-      - name: Run focused ranking regression suite
-        env:
-          APP_ENV: development
-          GC_SKIP_MIGRATION_CHECK: "1"
-          SECRET_KEY: ci-big-score-ranking-secret-key-32chars
-        run: python -m pytest -q --tb=line tests/test_ranking.py tests/test_gc622_integer_overflow.py tests/test_number_format.py
-      - name: Commit generated implementation and restore trusted workflow
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout origin/main -- .github/workflows/gc-wb-raid-002-apply.yml
-          rm -f .github/workflows/gc_big_score_apply.yml scripts/apply_big_score_ranking.py
-          git add -A
-          git commit -m "feat(score): remove ranking ceiling with arbitrary precision"
-          git push origin HEAD:feature/big-score-ranking
