@@ -130,91 +130,73 @@
     if (!raw) return 0;
     if (/^-?\d+$/.test(raw)) return parseInt(raw, 10);
     let cleaned = raw.replace(/\s/g, "");
-    // de-DE grouped integers: 999.999 / 1.000 / 10.000.000
-    if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) {
-      return parseInt(cleaned.replace(/\./g, ""), 10);
-    }
-    // en-US grouped integers: 1,000,000
-    if (/^-?\d{1,3}(,\d{3})+$/.test(cleaned)) {
-      return parseInt(cleaned.replace(/,/g, ""), 10);
-    }
-    // In-progress grouped typing (e.g. 1.0000 before formatter settles): digits only
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) return parseInt(cleaned.replace(/\./g, ""), 10);
+    if (/^-?\d{1,3}(,\d{3})+$/.test(cleaned)) return parseInt(cleaned.replace(/,/g, ""), 10);
     if (/[.,\s]/.test(raw)) {
       const digitsOnly = cleaned.replace(/[^\d-]/g, "");
       if (/^-?\d+$/.test(digitsOnly)) return parseInt(digitsOnly, 10);
     }
-    if (cleaned.includes(",") && cleaned.includes(".")) {
-      cleaned = cleaned.replace(/\./g, "").replace(",", ".");
-    } else if ((cleaned.match(/\./g) || []).length > 1) {
-      cleaned = cleaned.replace(/\./g, "");
-    } else if (cleaned.includes(",")) {
-      cleaned = cleaned.replace(",", ".");
-    }
+    if (cleaned.includes(",") && cleaned.includes(".")) cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+    else if ((cleaned.match(/\./g) || []).length > 1) cleaned = cleaned.replace(/\./g, "");
+    else if (cleaned.includes(",")) cleaned = cleaned.replace(",", ".");
     const num = Number(cleaned);
     return Number.isFinite(num) ? Math.trunc(num) : 0;
   }
 
+  // Display-only exact integer parser. Gameplay arithmetic intentionally remains Number-based.
+  function parseDisplayBigInt(value) {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number") return Number.isSafeInteger(value) ? BigInt(value) : null;
+    if (typeof value !== "string") return null;
+    const raw = value.trim().replace(/\s+/g, "");
+    if (/^-?\d+$/.test(raw)) return BigInt(raw);
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(raw)) return BigInt(raw.replace(/\./g, ""));
+    if (/^-?\d{1,3}(,\d{3})+$/.test(raw)) return BigInt(raw.replace(/,/g, ""));
+    return null;
+  }
+
   function formatNumber(n) {
+    const exact = parseDisplayBigInt(n);
+    if (exact !== null) return _deIntFormatter.format(exact);
     return _deIntFormatter.format(parseIntNumber(n));
   }
 
-  const COMPACT_THRESHOLD = 10_000_000;
-  const COMPACT_INFINITY = 1e18;
+  const COMPACT_THRESHOLD = 10_000_000n;
 
-  function formatCompactMantissa(val) {
-    const absVal = Math.abs(val);
-    let body;
-    if (absVal >= 1000) body = Math.round(val).toString();
-    else if (absVal >= 10) body = val.toFixed(1);
-    else if (absVal >= 1) body = val.toFixed(1);
-    else body = val.toFixed(2);
-    if (body.includes(".")) {
-      body = body.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-    }
-    return body.replace(".", ",");
+  function _compactBigIntBody(abs, div) {
+    const whole = abs / div;
+    const tenth = ((abs % div) * 10n) / div;
+    return tenth === 0n ? String(whole) : `${whole},${tenth}`;
   }
 
-  /** Compact German display for large scores: 12,3 Mio. / 149,5 Mrd. */
+  function _scientificBigInt(abs, negative) {
+    const digits = abs.toString();
+    let fraction = digits.slice(1, 3).replace(/0+$/, "");
+    const mantissa = fraction ? `${digits[0]},${fraction}` : digits[0];
+    return `${negative ? "-" : ""}${mantissa}e${digits.length - 1}`;
+  }
+
   function formatNumberCompact(n) {
-    const num = parseIntNumber(n);
-    const abs = Math.abs(num);
-    if (abs < COMPACT_THRESHOLD) return formatNumber(num);
-    if (abs >= COMPACT_INFINITY) return "∞";
-
-    const sign = num < 0 ? "-" : "";
-    let suffix;
-    let div;
-    if (abs >= 1e12) {
-      suffix = "Bio.";
-      div = 1e12;
-    } else if (abs >= 1e9) {
-      suffix = "Mrd.";
-      div = 1e9;
-    } else if (abs >= 1e6) {
-      suffix = "Mio.";
-      div = 1e6;
-    } else {
-      suffix = "Tsd.";
-      div = 1e3;
+    const exact = parseDisplayBigInt(n);
+    if (exact === null) {
+      const num = parseIntNumber(n);
+      if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);
+      return formatNumberCompact(String(Math.trunc(num)));
     }
-
-    const val = abs / div;
-    const body = formatCompactMantissa(val);
-    return `${sign}${body} ${suffix}`;
+    const negative = exact < 0n;
+    const abs = negative ? -exact : exact;
+    if (abs < COMPACT_THRESHOLD) return _deIntFormatter.format(exact);
+    if (abs >= 1_000_000_000_000_000n) return _scientificBigInt(abs, negative);
+    const sign = negative ? "-" : "";
+    if (abs >= 1_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000n)} Bio.`;
+    if (abs >= 1_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000n)} Mrd.`;
+    if (abs >= 1_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000n)} Mio.`;
+    return `${sign}${_compactBigIntBody(abs, 1_000n)} Tsd.`;
   }
 
-  function formatScore(n) {
-    return formatNumberCompact(n);
-  }
-
-  function fmtNumber(n) {
-    return formatNumber(n);
-  }
-
-  function fmtIntFull(n) {
-    return formatNumber(n);
-  }
-
+  function formatScore(n) { return formatNumberCompact(n); }
+  function fmtNumber(n) { return formatNumber(n); }
+  function fmtIntFull(n) { return formatNumber(n); }
   function fmtIntParts(n) {
     const full = formatNumber(n);
     const display = formatNumberCompact(n);
