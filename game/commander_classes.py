@@ -83,8 +83,8 @@ def _record_event(player_id: int, event_type: str, detail: Dict[str, Any], *, co
     )
 
 
-def get_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
-    _ensure_row(int(player_id), conn=conn)
+def _read_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
+    """Pure read for EffectResolver paths; missing row means neutral commander."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -104,6 +104,11 @@ def get_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
         "skill_points_earned": 0,
         "updated_at": 0,
     }
+
+
+def get_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
+    _ensure_row(int(player_id), conn=conn)
+    return _read_commander_row(int(player_id), conn=conn)
 
 
 def get_skill_ranks(player_id: int, *, conn) -> Dict[str, int]:
@@ -425,7 +430,7 @@ def get_commander_effect_modifiers(player_id: int, *, conn) -> Dict[str, float]:
     """Merged additive/multiplicative mods for EffectResolver (no meta keys)."""
     if not schema_ready(conn):
         return {}
-    row = get_commander_row(int(player_id), conn=conn)
+    row = _read_commander_row(int(player_id), conn=conn)
     class_key = str(row.get("class_key") or "")
     if not class_key:
         return {}
@@ -455,7 +460,7 @@ def iter_commander_effect_sources(player_id: int, *, conn) -> List[Tuple[str, st
     """Yield (mod_key, source_label, delta_or_mult) for admin/ER source entries."""
     if not schema_ready(conn):
         return []
-    row = get_commander_row(int(player_id), conn=conn)
+    row = _read_commander_row(int(player_id), conn=conn)
     class_key = str(row.get("class_key") or "")
     if not class_key:
         return []

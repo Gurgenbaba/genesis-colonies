@@ -289,7 +289,8 @@ def list_active_boosters(user_id: int, *, conn, now: Optional[float] = None) -> 
     if not boosters_schema_ready(conn):
         return []
     ts = float(now if now is not None else time.time())
-    _purge_expired(int(user_id), conn=conn, now=ts)
+    # GC-PERF-RESOURCE-PERSIST-001: reads already filter `expires_at > now`.
+    # Cleanup stays on booster activation/explicit maintenance, never on a poll read.
     cur = conn.cursor()
     cur.execute(
         """
