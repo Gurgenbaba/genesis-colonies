@@ -328,7 +328,7 @@ def production_context_from_resolver(
     try:
         from .server_events import active_production_mult
 
-        event_mod = float(active_production_mult() or 1.0)
+        event_mod = float(active_production_mult(conn=getattr(resolver, "_conn", None)) or 1.0)
     except Exception:
         event_mod = 1.0
 
@@ -350,7 +350,26 @@ def production_context_from_resolver(
             if mine_key in cache:
                 building_mod = float(cache[mine_key])
             else:
-                building_mod = float(building_modifier_for(int(pid), mine_key))
+                probe = getattr(resolver, "_run_optional_conn_probe", None)
+                if callable(probe):
+                    building_mod = float(
+                        probe(
+                            f"mine_evolution:{mine_key}",
+                            lambda: building_modifier_for(
+                                int(pid),
+                                mine_key,
+                                conn=getattr(resolver, "_conn", None),
+                            ),
+                        )
+                    )
+                else:
+                    building_mod = float(
+                        building_modifier_for(
+                            int(pid),
+                            mine_key,
+                            conn=getattr(resolver, "_conn", None),
+                        )
+                    )
                 cache[mine_key] = building_mod
 
     return ProductionContext(
