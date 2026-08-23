@@ -44,9 +44,11 @@ def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
     rows_before = [{"id": 11, "start_time": 100.0, "finish_time": 200.0}]
     rows_after = [{"id": 11, "start_time": 70.0, "finish_time": 170.0}]
 
-    with patch("game.timekeeper.schema_ready", return_value=True), patch(
-        "game.timekeeper.get_balance", return_value=120
-    ), patch("game.timekeeper._finish_before_apply"), patch(
+    with patch("game.timekeeper.time.time", return_value=150.0), patch(
+        "game.timekeeper.schema_ready", return_value=True
+    ), patch("game.timekeeper.get_balance", return_value=120), patch(
+        "game.timekeeper._finish_before_apply"
+    ), patch(
         "game.timekeeper._load_domain_rows",
         side_effect=[(rows_before, "finish_time"), (rows_after, "finish_time")],
     ) as load_rows, patch(
