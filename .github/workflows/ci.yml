@@ -47,6 +47,7 @@ jobs:
             tests/test_gc_perf_tk_005.py \
             tests/test_gc_perf_fleet_write_001.py \
             tests/test_gc_perf_resource_persist_001.py \
+            tests/test_gc_perf_buildings_002.py \
             tests/test_galactic_diplomacy.py::test_ensure_get_set_galaxy_personality \
             tests/test_commander_classes.py::test_linear_gate_and_sp_unlock \
             tests/test_commander_classes.py::test_effect_resolver_includes_class_mods \
@@ -67,8 +68,6 @@ jobs:
       GC_DB_BACKEND: sqlite
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
