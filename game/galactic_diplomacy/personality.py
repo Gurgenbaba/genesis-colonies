@@ -197,8 +197,35 @@ def get_galaxy_personality(
     *,
     conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, Any]:
-    """Read galaxy personality state (bootstraps default row when missing)."""
-    return ensure_galaxy_personality_state(galaxy, conn=conn)
+    """Read galaxy personality state without bootstrapping a missing neutral row."""
+    galaxy_id = normalize_galaxy(galaxy, conn=conn)
+    if galaxy_id is None:
+        raise ValueError("invalid_galaxy")
+
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    try:
+        if not schema_ready(conn=conn):
+            return _build_personality_payload(
+                galaxy_id,
+                _default_state_row(galaxy_id),
+                conn=conn,
+                source="fallback",
+            )
+
+        row = _fetch_state_row(galaxy_id, conn)
+        if row is None:
+            return _build_personality_payload(
+                galaxy_id,
+                _default_state_row(galaxy_id),
+                conn=conn,
+                source="fallback",
+            )
+        return _build_personality_payload(galaxy_id, row, conn=conn, source="state")
+    finally:
+        if own_conn:
+            conn.close()
 
 
 def set_galaxy_personality(
