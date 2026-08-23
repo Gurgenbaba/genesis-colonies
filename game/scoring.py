@@ -65,7 +65,7 @@ def get_destroyed_raw(player_id: int, *, conn) -> int:
 
 
 def increment_destroyed_raw(player_id: int, delta: int, *, conn) -> None:
-    """Add combat destruction credit (idempotent per battle via caller)."""
+    """Add combat destruction credit with arbitrary-precision Python arithmetic."""
     from .db import column_exists
     from .ranking import backfill_player_score_rows
 
@@ -74,15 +74,19 @@ def increment_destroyed_raw(player_id: int, delta: int, *, conn) -> None:
         return
     if not column_exists(conn, "player_scores", "score_destroyed_raw"):
         return
+
     backfill_player_score_rows(conn=conn)
+    row = conn.execute(
+        "SELECT score_destroyed_raw FROM player_scores WHERE player_id = ? LIMIT 1;",
+        (int(player_id),),
+    ).fetchone()
+    current = max(0, int(row["score_destroyed_raw"] or 0)) if row else 0
+    new_value = str(current + add)
+
     cur = conn.cursor()
     cur.execute(
-        """
-        UPDATE player_scores
-        SET score_destroyed_raw = COALESCE(score_destroyed_raw, 0) + ?
-        WHERE player_id = ?;
-        """,
-        (add, int(player_id)),
+        "UPDATE player_scores SET score_destroyed_raw = ? WHERE player_id = ?;",
+        (new_value, int(player_id)),
     )
     if cur.rowcount <= 0:
         cur.execute(
@@ -91,9 +95,9 @@ def increment_destroyed_raw(player_id: int, delta: int, *, conn) -> None:
                 player_id, score_total, score_buildings, score_research,
                 score_destroyed_raw, updated_at
             )
-            VALUES (?, 0, 0, 0, ?, strftime('%s','now'));
+            VALUES (?, '0', '0', '0', ?, strftime('%s','now'));
             """,
-            (int(player_id), add),
+            (int(player_id), new_value),
         )
 
 
