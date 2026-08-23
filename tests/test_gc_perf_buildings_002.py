@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from unittest.mock import patch
 
+import pytest
+
 from game.buildings import BuildingsPanelContext, get_buildings_panel_rows
 from game.db import db
 from game.effects import EffectResolver
