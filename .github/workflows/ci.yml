@@ -68,6 +68,8 @@ jobs:
       GC_DB_BACKEND: sqlite
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
