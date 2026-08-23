@@ -43,7 +43,18 @@ jobs:
           pip install -r requirements-prod.txt pytest
 
       - name: Apply deterministic Server Events I18N patch
-        run: python scripts/_gc_i18n_phase3_server_events.py
+        run: |
+          python scripts/_gc_i18n_phase3_server_events.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/test_server_events.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''    assert any("Prod" in s for s in summaries)\n    assert any("Hold" in s for s in summaries)\n'''
+          new = '''    assert "+100% Production" in summaries\n    assert "−25% Expedition Hold" in summaries\n'''
+          if text.count(old) != 1:
+              raise SystemExit("localized calendar summary assertion anchor mismatch")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
 
       - name: Locale parity and placeholders
         run: |
