@@ -2573,7 +2573,8 @@ def get_noob_protection_status(
 
     atk_score = _player_score_total(atk_id, conn=conn)
     def_score = _player_score_total(def_id, conn=conn)
-    min_def = int(math.ceil(atk_score / fac)) if atk_score > 0 else 0
+    # Integer ceil division keeps arbitrary-precision scores out of IEEE-754.
+    min_def = ((atk_score + fac - 1) // fac) if atk_score > 0 else 0
     max_def = int(atk_score * fac)
     defender_inactive = is_player_id_inactive(def_id, conn=conn)
     allowed = defender_inactive or (min_def <= def_score <= max_def)

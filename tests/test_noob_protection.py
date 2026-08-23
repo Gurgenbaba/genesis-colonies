@@ -75,7 +75,7 @@ def _set_score(player_id: int, score_total: int, *, conn) -> None:
             score_research = excluded.score_research,
             updated_at = excluded.updated_at;
         """,
-        (int(player_id), int(score_total), int(score_total), 0),
+        (int(player_id), str(int(score_total)), str(int(score_total)), '0'),
     )
 
 
@@ -346,4 +346,22 @@ def test_spy_not_blocked_by_noob_protection(noob_db):
     )
     assert ok is True
     assert reason == ""
+    conn.close()
+
+
+def test_noob_protection_arbitrary_precision_score_math(noob_db):
+    atk = _player()
+    def_id, _, _ = _foreign_player()
+    conn = db()
+    _set_active(atk, conn=conn)
+    _set_active(def_id, conn=conn)
+    huge = 10**500 + 3
+    _set_score(atk, huge, conn=conn)
+    _set_score(def_id, (huge + NOOB_PROTECTION_FACTOR - 1) // NOOB_PROTECTION_FACTOR, conn=conn)
+    conn.commit()
+    info = get_noob_protection_status(atk, def_id, conn=conn)
+    assert info["attacker_score"] == huge
+    assert info["min_defender_score"] == (huge + NOOB_PROTECTION_FACTOR - 1) // NOOB_PROTECTION_FACTOR
+    assert info["max_defender_score"] == huge * NOOB_PROTECTION_FACTOR
+    assert info["allowed"] is True
     conn.close()
