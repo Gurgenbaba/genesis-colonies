@@ -366,6 +366,7 @@ class EffectResolver:
         cache_key = (
             str(label),
             self.player_id,
+            self.planet_id,
             self.galaxy_id,
             bool(self._skip_inventory_boosters),
         )
