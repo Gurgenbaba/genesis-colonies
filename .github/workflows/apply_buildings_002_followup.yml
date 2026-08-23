@@ -1,0 +1,36 @@
+name: Apply buildings 002 follow-up
+
+on:
+  push:
+    branches: [perf/buildings-002-resolver-snapshot]
+    paths:
+      - scripts/gc_perf_buildings_002_followup.py
+      - .github/workflows/apply_buildings_002_followup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/buildings-002-resolver-snapshot
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply exact follow-up
+        run: python scripts/gc_perf_buildings_002_followup.py
+      - name: Commit source patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/effects/effect_resolver.py game/production_formula.py
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "perf(buildings): reuse production external probes"
+          git push origin HEAD:perf/buildings-002-resolver-snapshot
