@@ -43,7 +43,8 @@ jobs:
             tests/test_deployment.py \
             tests/test_internal_cron.py \
             tests/test_embedded_cron.py \
-            tests/test_fleet_worker.py
+            tests/test_fleet_worker.py \
+            tests/test_gc_perf_tk_005.py
 
   i18n:
     name: i18n-hardening
