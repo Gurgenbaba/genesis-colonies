@@ -140,6 +140,7 @@ class BuildingsPanelContext:
             planet_position=base.planet_position,
             galaxy_id=base.galaxy_id,
             conn=base._conn,
+            external_probe_cache=base.shared_external_probe_cache(),
         )
         self._bumped_resolvers[key] = resolver
         return resolver
@@ -1701,7 +1702,8 @@ def _make_panel_row(
         if evo_ranks is None:
             from .mine_evolution import get_evolution_ranks_for_planet
 
-            evo_ranks = get_evolution_ranks_for_planet(pid)
+            evo_conn = getattr(panel_ctx.resolver, "_conn", None)
+            evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
             try:
                 panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]
             except Exception:

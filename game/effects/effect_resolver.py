@@ -234,12 +234,18 @@ class EffectResolver:
         galaxy_id: Optional[int] = None,
         conn=None,
         skip_inventory_boosters: bool = False,
+        external_probe_cache: Optional[Dict[tuple, Any]] = None,
     ) -> None:
         self.buildings = {k: _bld(buildings, k) for k in buildings}
         self.research = dict(research or {})
         self.player_id = int(player_id) if player_id is not None else None
         self.planet_id = int(planet_id) if planet_id is not None else None
         self._skip_inventory_boosters = bool(skip_inventory_boosters)
+        # GC-PERF-BUILDINGS-002: raw DB-backed modifier inputs may be shared
+        # by synthetic target-level resolvers. Finished modifiers are never shared.
+        self._external_probe_cache: Dict[tuple, Any] = (
+            external_probe_cache if external_probe_cache is not None else {}
+        )
         if planet_position is not None:
             try:
                 pos = int(planet_position)
@@ -298,6 +304,10 @@ class EffectResolver:
         self._settings = get_game_settings(conn=self._conn)
         return self._settings
 
+    def shared_external_probe_cache(self) -> Dict[tuple, Any]:
+        """Panel-local cache of raw external modifier probes, never computed mods."""
+        return self._external_probe_cache
+
     @staticmethod
     def _source_entry(
         key: str,
@@ -353,10 +363,21 @@ class EffectResolver:
         On Postgres, wrap in SAVEPOINT so a failure cannot abort an outer write TX
         (queue finish, spend, etc.). Never full-rollback the shared connection here.
         """
+        cache_key = (
+            str(label),
+            self.player_id,
+            self.galaxy_id,
+            bool(self._skip_inventory_boosters),
+        )
+        if cache_key in self._external_probe_cache:
+            return self._external_probe_cache[cache_key]
+
         global _ER_SAVEPOINT_SEQ
         conn = self._conn
         if conn is None:
-            return fn()
+            out = fn()
+            self._external_probe_cache[cache_key] = out
+            return out
         from ..db import get_db_backend
 
         use_sp = get_db_backend() == "postgres"
@@ -388,6 +409,7 @@ class EffectResolver:
                 except Exception:
                     logger.exception("effect_resolver savepoint release failed (%s)", label)
                 raise
+        self._external_probe_cache[cache_key] = out
         return out
 
     def _apply_gd_er_mods(
@@ -1036,8 +1058,13 @@ class EffectResolver:
         try:
             from ..server_events import active_build_time_speed, active_research_time_speed
 
-            sev_build = float(active_build_time_speed(conn=self._conn) or 1.0)
-            sev_research = float(active_research_time_speed(conn=self._conn) or 1.0)
+            sev_build, sev_research = self._run_optional_conn_probe(
+                "server_event_time_speed",
+                lambda: (
+                    float(active_build_time_speed(conn=self._conn) or 1.0),
+                    float(active_research_time_speed(conn=self._conn) or 1.0),
+                ),
+            )
             if sev_build > 0 and abs(sev_build - 1.0) > 1e-12:
                 build_time_speed *= sev_build
                 sources.append(
