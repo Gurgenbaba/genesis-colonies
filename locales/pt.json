@@ -8880,5 +8880,5 @@
   "support_reply_placeholder": "Escrever uma resposta...",
   "support_reply_send": "Enviar resposta",
   "support_close_ticket": "Fechar ticket",
-  "support_message_meta": "%(sender)s · %(time)s"
+  "support_message_meta": "%(sender)s — %(time)s"
 }
