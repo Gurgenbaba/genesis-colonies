@@ -121,3 +121,50 @@ def test_i18n_research_config_has_no_display_literals():
     assert not raw_fields, raw_fields
     assert source.count('tr(str(cfg.get("label_key") or tech))') == 2
     assert source.count('tr(str(cfg.get("description_key") or f"desc_{tech}"))') == 2
+
+
+def test_i18n_phase3_support_player_ui_uses_locale_ssot():
+    support_py = (ROOT / "game" / "support.py").read_text(encoding="utf-8")
+    support_tpl = (ROOT / "templates" / "partials" / "special_panel.html").read_text(encoding="utf-8")
+    main_js = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+
+    for literal in ("Offen", "In Bearbeitung", "Geschlossen", "Niedrig", "Allgemein"):
+        assert literal not in support_py
+    assert 'from .i18n import tr' in support_py
+    assert 'tr("support_sender_you")' in support_py
+    assert 'tr("support_sender_player")' in support_py
+
+    for literal in (
+        "Neues Support-Ticket erstellen.",
+        ">Betreff<",
+        ">Kategorie<",
+        ">Prioritaet<",
+        ">Ticket senden<",
+        ">Meine Tickets<",
+        ">Ticketliste<",
+        ">Aktualisieren<",
+        "Noch keine Tickets vorhanden.",
+    ):
+        assert literal not in support_tpl
+    assert "T('support_my_tickets')" in support_tpl
+    assert "T('support_message_placeholder')" in support_tpl
+
+    for literal in ('"Antwort schreiben..."', '"Antwort senden"', '"Ticket schliessen"', "'Antwort schreiben...'", "'Antwort senden'", "'Ticket schliessen'"):
+        assert literal not in main_js
+    assert 'tf("support_message_meta"' in main_js
+    assert 't("support_reply_placeholder")' in main_js
+    assert 't("support_reply_send")' in main_js
+    assert 't("support_close_ticket")' in main_js
+
+
+def test_world_boss_help_uses_true_document_top_layer():
+    template = (ROOT / "templates" / "world_boss.html").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "world_boss_help_modal.css").read_text(encoding="utf-8")
+    portal = (ROOT / "static" / "js" / "pages" / "world_boss_help.js").read_text(encoding="utf-8")
+
+    assert "GC_ASSET_VERSION }}-wbhelp3" in template
+    assert "world_boss_help.js" in template
+    assert "z-index: 20000" in css
+    assert "document.body.appendChild(modal)" in portal
+    assert "restoreModal(modal)" in portal
+

@@ -46154,7 +46154,10 @@
       row.className = "gc-support-msg";
       const meta = document.createElement("div");
       meta.className = "gc-support-msg-meta";
-      meta.textContent = `${m.sender_name || "Unbekannt"} · ${formatTs(m.created_at)}`;
+      meta.textContent = tf("support_message_meta", {
+        sender: m.sender_name || t("support_unknown"),
+        time: formatTs(m.created_at),
+      });
       const body = document.createElement("div");
       body.className = "gc-support-msg-body";
       body.textContent = m.message || "";
@@ -46188,7 +46191,7 @@
       reply.className = "gc-support-reply";
       reply.rows = 2;
       reply.maxLength = 1200;
-      reply.placeholder = "Antwort schreiben...";
+      reply.placeholder = t("support_reply_placeholder");
       controls.appendChild(reply);
 
       const actions = document.createElement("div");
@@ -46196,7 +46199,7 @@
       const sendBtn = document.createElement("button");
       sendBtn.type = "button";
       sendBtn.className = "gc-btn gc-btn-primary gc-btn-xs";
-      sendBtn.textContent = "Antwort senden";
+      sendBtn.textContent = t("support_reply_send");
       sendBtn.addEventListener("click", async () => {
         const msg = (reply.value || "").trim();
         if (!msg) {
@@ -46230,7 +46233,7 @@
         const closeBtn = document.createElement("button");
         closeBtn.type = "button";
         closeBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
-        closeBtn.textContent = "Ticket schliessen";
+        closeBtn.textContent = t("support_close_ticket");
         closeBtn.addEventListener("click", async () => {
           closeBtn.disabled = true;
           try {

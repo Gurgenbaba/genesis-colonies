@@ -15,7 +15,8 @@
 .gc-world-boss-help-modal:not([hidden]) {
   position: fixed;
   inset: 0;
-  z-index: 5000;
+  z-index: 20000;
+  isolation: isolate;
   display: grid;
   place-items: start center;
   box-sizing: border-box;
