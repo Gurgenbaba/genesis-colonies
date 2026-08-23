@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/big-score-ranking]
   pull_request:
 
 concurrency:
@@ -12,6 +12,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  apply-big-score-hardening:
+    name: apply-big-score-hardening
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/big-score-ranking'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-big-score-hardening-secret
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/big-score-ranking
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Apply deterministic live hardening
+        run: |
+          python scripts/apply_big_score_hardening.py
+          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py
+          node --check static/main.js
+          git diff --check
+      - name: Focused hardening tests
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_ranking.py tests/test_number_format.py \
+            tests/test_gc622_integer_overflow.py::TestGC622SchemaTypes::test_player_scores_use_decimal_text \
+            tests/test_gc622_integer_overflow.py::TestGC622Ranking
+      - name: Commit generated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/ranking.py game/pirates/threat.py tests/test_ranking.py tests/test_gc622_integer_overflow.py
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
+            git commit -m "fix(score): harden bigint live read paths"
+            git push origin HEAD:feature/big-score-ranking
+          fi
+
   smoke:
     name: smoke
     runs-on: ubuntu-latest
@@ -70,12 +122,15 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile and browser syntax
         run: |
-          python -m py_compile game/ranking.py game/scoring.py game/number_format.py
+          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py
           node --check static/main.js
           git diff --check
       - name: Big-score regression suite
         run: |
-          python -m pytest -q --tb=line tests/test_ranking.py tests/test_number_format.py
+          python -m pytest -q --tb=line \
+            tests/test_ranking.py tests/test_number_format.py \
+            tests/test_gc622_integer_overflow.py::TestGC622SchemaTypes::test_player_scores_use_decimal_text \
+            tests/test_gc622_integer_overflow.py::TestGC622Ranking
 
   i18n:
     name: i18n-hardening
