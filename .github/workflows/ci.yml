@@ -1,10 +1,10 @@
 # Smoke CI for Railway "Wait for CI" — keep this job fast and green on push to main.
-# Full suite remains local / optional; this gate blocks broken deploy config + cron owners.
+# Full suite remains local / optional; focused feature gates run on pull requests.
 name: CI
 
 on:
   push:
-    branches: [main, feature/big-score-ranking]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -12,41 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  apply-big-score:
-    name: apply-big-score
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/big-score-ranking'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feature/big-score-ranking
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Apply deterministic single-owner bigint migration
-        run: |
-          python scripts/apply_big_score_flatten.py
-          python -m py_compile game/ranking.py game/scoring.py game/number_format.py
-          git diff --check
-
-      - name: Commit generated implementation
-        run: |
-          if git diff --quiet && git diff --cached --quiet; then
-            echo "No generated changes"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add game/ranking.py game/_ranking_core.py static/main.js tests/test_ranking.py tests/test_number_format.py
-          git commit -m "feat(score): flatten arbitrary precision ranking owner"
-          git push origin HEAD:feature/big-score-ranking
-
   smoke:
     name: smoke
     runs-on: ubuntu-latest
@@ -61,33 +26,56 @@ jobs:
       GC_DB_BACKEND: sqlite
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-
       - name: Smoke tests (deploy + cron)
         run: |
           python -m pytest -q --tb=line \
-            tests/test_deployment.py \
-            tests/test_internal_cron.py \
-            tests/test_embedded_cron.py \
-            tests/test_fleet_worker.py \
-            tests/test_gc_perf_tk_005.py \
-            tests/test_gc_perf_fleet_write_001.py \
-            tests/test_gc_perf_resource_persist_001.py \
-            tests/test_gc_perf_buildings_002.py \
+            tests/test_deployment.py tests/test_internal_cron.py tests/test_embedded_cron.py \
+            tests/test_fleet_worker.py tests/test_gc_perf_tk_005.py tests/test_gc_perf_fleet_write_001.py \
+            tests/test_gc_perf_resource_persist_001.py tests/test_gc_perf_buildings_002.py \
             tests/test_galactic_diplomacy.py::test_ensure_get_set_galaxy_personality \
             tests/test_commander_classes.py::test_linear_gate_and_sp_unlock \
             tests/test_commander_classes.py::test_effect_resolver_includes_class_mods \
             tests/test_inventory_booster_visibility.py::test_use_duration_booster_creates_active_entry \
             tests/test_inventory_booster_visibility.py::test_production_booster_tier_ladder_25_then_50
+
+  big-score:
+    name: big-score-ranking
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-big-score-secret-key-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Compile and browser syntax
+        run: |
+          python -m py_compile game/ranking.py game/scoring.py game/number_format.py
+          node --check static/main.js
+          git diff --check
+      - name: Big-score regression suite
+        run: |
+          python -m pytest -q --tb=line tests/test_ranking.py tests/test_number_format.py
 
   i18n:
     name: i18n-hardening
@@ -105,38 +93,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-
       - name: Locale key and translation audit (all 8 languages)
         run: |
           python scripts/audit_locale_keys.py
           python scripts/audit_visible_i18n.py --locales-only
-
       - name: I18N regression tests
         run: |
-          python -m pytest -q --tb=line \
-            tests/test_gc900_multilanguage.py \
-            tests/test_i18n_hardening.py
-
+          python -m pytest -q --tb=line tests/test_gc900_multilanguage.py tests/test_i18n_hardening.py
       - name: Full visible raw-string inventory (advisory)
-        run: |
-          python scripts/audit_visible_i18n.py --raw-only --report-only --max-findings 120
-
+        run: python scripts/audit_visible_i18n.py --raw-only --report-only --max-findings 120
       - name: Block newly introduced player-facing raw strings
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-          else
-            BASE="${{ github.event.before }}"
-          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then BASE="${{ github.event.pull_request.base.sha }}"; else BASE="${{ github.event.before }}"; fi
           python scripts/audit_visible_i18n.py --raw-only --diff-base "$BASE" --max-findings 200
