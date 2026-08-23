@@ -79,7 +79,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9h3a6 6 0 1 1 6 6v3a9 9 0 0 0 0-18zm-1 6h2v6h-2V9zm0 8h2v2h-2v-2z"/></svg>
       <span>SUPPORT</span>
     </button>
-    <button type="button" class="gc-special-bar-btn" data-special-open-window="my-tickets" aria-label="Meine Tickets" title="Meine Tickets">
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="my-tickets" aria-label="{{ T('support_my_tickets') }}" title="{{ T('support_my_tickets') }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6zm0 5h10v2H4v-2zm0 5h16v2H4v-2z"/></svg>
       <span>TICKETS</span>
     </button>
@@ -97,41 +97,41 @@
       <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="support" aria-label="{{ T('close', 'Schließen') }}">✕</button>
     </header>
     <div class="gc-special-window-content">
-      <p class="gc-special-intro">Neues Support-Ticket erstellen. Deine bestehenden Tickets findest du unter <strong>TICKETS</strong> in der Leiste.</p>
+      <p class="gc-special-intro">{{ T('support_create_intro') }}</p>
 
       <form class="gc-support-form" data-support-form>
         <div class="gc-support-grid">
           <label class="gc-support-field">
-            <span>Betreff</span>
-            <input type="text" maxlength="120" required data-support-subject placeholder="Kurzbeschreibung deines Anliegens">
+            <span>{{ T('support_subject_label') }}</span>
+            <input type="text" maxlength="120" required data-support-subject placeholder="{{ T('support_subject_placeholder') }}">
           </label>
           <label class="gc-support-field">
-            <span>Kategorie</span>
+            <span>{{ T('support_category_label') }}</span>
             <select data-support-category>
-              <option value="general">Allgemein</option>
-              <option value="bug">Bug</option>
-              <option value="account">Account</option>
-              <option value="balance">Balance</option>
-              <option value="billing">Zahlung / Billing</option>
-              <option value="report">Meldung</option>
+              <option value="general">{{ T('support_category_general') }}</option>
+              <option value="bug">{{ T('support_category_bug') }}</option>
+              <option value="account">{{ T('support_category_account') }}</option>
+              <option value="balance">{{ T('support_category_balance') }}</option>
+              <option value="billing">{{ T('support_category_billing') }}</option>
+              <option value="report">{{ T('support_category_report') }}</option>
             </select>
           </label>
           <label class="gc-support-field">
-            <span>Prioritaet</span>
+            <span>{{ T('support_priority_label') }}</span>
             <select data-support-priority>
-              <option value="low">Niedrig</option>
-              <option value="normal" selected>Normal</option>
-              <option value="high">Hoch</option>
+              <option value="low">{{ T('support_priority_low') }}</option>
+              <option value="normal" selected>{{ T('support_priority_normal') }}</option>
+              <option value="high">{{ T('support_priority_high') }}</option>
             </select>
           </label>
         </div>
         <label class="gc-support-field">
-          <span>Nachricht</span>
-          <textarea rows="4" maxlength="1200" required data-support-message placeholder="Beschreibe dein Problem moeglichst konkret..."></textarea>
+          <span>{{ T('support_message_label') }}</span>
+          <textarea rows="4" maxlength="1200" required data-support-message placeholder="{{ T('support_message_placeholder') }}"></textarea>
         </label>
         <div class="gc-support-actions">
-          <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">Ticket senden</button>
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-support-open-tickets>Meine Tickets</button>
+          <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">{{ T('support_submit') }}</button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-support-open-tickets>{{ T('support_my_tickets') }}</button>
           <span class="gc-support-feedback" data-support-feedback aria-live="polite"></span>
         </div>
       </form>
@@ -140,17 +140,17 @@
 
   <aside class="gc-special-window" data-special-window="my-tickets" hidden>
     <header class="gc-special-head">
-      <span class="gc-special-title">Meine Tickets</span>
+      <span class="gc-special-title">{{ T('support_my_tickets') }}</span>
       <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="my-tickets" aria-label="{{ T('close', 'Schließen') }}">✕</button>
     </header>
     <div class="gc-special-window-content">
-      <p class="gc-special-intro">Nur deine eigenen Tickets – Antworten vom Support und deine Nachrichten.</p>
+      <p class="gc-special-intro">{{ T('support_tickets_intro') }}</p>
       <div class="gc-support-list-head">
-        <strong>Ticketliste</strong>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-support-refresh>Aktualisieren</button>
+        <strong>{{ T('support_ticket_list') }}</strong>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-support-refresh>{{ T('support_refresh') }}</button>
       </div>
       <div class="gc-support-list" data-support-list>
-        <div class="gc-support-empty">Noch keine Tickets vorhanden.</div>
+        <div class="gc-support-empty">{{ T('support_empty_tickets') }}</div>
       </div>
       <p class="gc-support-feedback" data-support-tickets-feedback aria-live="polite"></p>
     </div>

@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from .db import begin_write_transaction, commit, db, rollback, table_exists
+from .i18n import tr
 
 
 def _now() -> int:
@@ -27,32 +28,32 @@ def _norm_text(raw: Any, max_len: int) -> str:
 
 def _ticket_status_label(status: str) -> str:
     mapping = {
-        "open": "Offen",
-        "in_progress": "In Bearbeitung",
-        "closed": "Geschlossen",
+        "open": "support_status_open",
+        "in_progress": "support_status_progress",
+        "closed": "support_status_closed",
     }
-    return mapping.get(str(status or "open"), "Offen")
+    return tr(mapping.get(str(status or "open"), "support_status_open"))
 
 
 def _priority_label(priority: str) -> str:
     mapping = {
-        "low": "Niedrig",
-        "normal": "Normal",
-        "high": "Hoch",
+        "low": "support_priority_low",
+        "normal": "support_priority_normal",
+        "high": "support_priority_high",
     }
-    return mapping.get(str(priority or "normal"), "Normal")
+    return tr(mapping.get(str(priority or "normal"), "support_priority_normal"))
 
 
 def _category_label(category: str) -> str:
     mapping = {
-        "general": "Allgemein",
-        "bug": "Bug",
-        "account": "Account",
-        "balance": "Balance",
-        "billing": "Zahlung / Billing",
-        "report": "Meldung",
+        "general": "support_category_general",
+        "bug": "support_category_bug",
+        "account": "support_category_account",
+        "balance": "support_category_balance",
+        "billing": "support_category_billing",
+        "report": "support_category_report",
     }
-    return mapping.get(str(category or "general"), "Allgemein")
+    return tr(mapping.get(str(category or "general"), "support_category_general"))
 
 
 def _is_admin(player_id: int, conn) -> bool:
@@ -203,8 +204,8 @@ def _message_sender_name(m: Any, viewer_player_id: int | None) -> str:
         return "Support"
     sender_id = int(m["sender_id"]) if m["sender_id"] is not None else None
     if viewer_player_id is not None and sender_id == int(viewer_player_id):
-        return "Du"
-    return str(m["sender_name"] or "Spieler")
+        return tr("support_sender_you")
+    return str(m["sender_name"] or tr("support_sender_player"))
 
 
 def _fetch_ticket_messages(cur: Any, ticket_id: int, viewer_player_id: int | None) -> list[dict[str, Any]]:

@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block extra_head %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/world_boss_help_modal.css') }}?v={{ GC_ASSET_VERSION }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/world_boss_help_modal.css') }}?v={{ GC_ASSET_VERSION }}-wbhelp3">
+{% endblock %}
+
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/pages/world_boss_help.js') }}?v={{ GC_ASSET_VERSION }}-wbhelp3"></script>
 {% endblock %}
 
 
