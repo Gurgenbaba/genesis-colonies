@@ -77,6 +77,7 @@ jobs:
         run: |
           python -m pytest -q --tb=line \
             tests/test_ranking.py tests/test_number_format.py tests/test_noob_protection.py \
+            tests/test_big_score_migration.py \
             tests/test_gc622_integer_overflow.py::TestGC622SchemaTypes::test_player_scores_use_decimal_text \
             tests/test_gc622_integer_overflow.py::TestGC622Ranking
 
