@@ -1,0 +1,42 @@
+name: Apply resource read-path patch
+
+on:
+  push:
+    branches: [perf/resource-persist-write-guard]
+    paths:
+      - scripts/gc_perf_resource_readpath_patch.py
+      - .github/workflows/apply_resource_readpath_patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/resource-persist-write-guard
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Apply exact read-path transformations
+        run: python scripts/gc_perf_resource_readpath_patch.py
+
+      - name: Commit source patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/galactic_diplomacy/personality.py game/inventory_boosters.py game/commander_classes.py
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git commit -m "perf(read-path): remove EffectResolver write side-effects"
+          git push origin HEAD:perf/resource-persist-write-guard
