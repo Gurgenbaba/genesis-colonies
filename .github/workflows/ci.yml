@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/big-score-ranking]
   pull_request:
 
 concurrency:
@@ -12,6 +12,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  apply-big-score:
+    name: apply-big-score
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/big-score-ranking'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/big-score-ranking
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Apply deterministic single-owner bigint migration
+        run: |
+          python scripts/apply_big_score_flatten.py
+          python -m py_compile game/ranking.py game/scoring.py game/number_format.py
+          git diff --check
+
+      - name: Commit generated implementation
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/ranking.py game/_ranking_core.py static/main.js tests/test_ranking.py tests/test_number_format.py
+          git commit -m "feat(score): flatten arbitrary precision ranking owner"
+          git push origin HEAD:feature/big-score-ranking
+
   smoke:
     name: smoke
     runs-on: ubuntu-latest
