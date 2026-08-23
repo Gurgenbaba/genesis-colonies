@@ -1,0 +1,72 @@
+name: I18N Phase 3 Server Events Apply
+
+on:
+  push:
+    branches: [fix/i18n-phase3-server-events]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: i18n-phase3-server-events-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-i18n-server-events-secret-key-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/i18n-phase3-server-events
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+
+      - name: Apply deterministic Server Events I18N patch
+        run: python scripts/_gc_i18n_phase3_server_events.py
+
+      - name: Locale parity and placeholders
+        run: |
+          python scripts/audit_locale_keys.py
+          python scripts/audit_visible_i18n.py --locales-only
+
+      - name: Focused Server Events regressions
+        run: |
+          python -m pytest -q --tb=line tests/test_server_events.py tests/test_i18n_hardening.py
+
+      - name: Changed-line player-facing raw gate
+        run: python scripts/audit_visible_i18n.py --raw-only --diff-base origin/main --max-findings 200
+
+      - name: Diff sanity
+        run: git diff --check
+
+      - name: Commit generated product changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/server_events.py game/overview_page.py tests/test_server_events.py locales/de.json locales/en.json locales/fr.json locales/es.json locales/pl.json locales/tr.json locales/ru.json locales/pt.json
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(i18n): localize server events"
+          git push origin HEAD:fix/i18n-phase3-server-events
