@@ -50,7 +50,7 @@ jobs:
           path = Path("tests/test_server_events.py")
           text = path.read_text(encoding="utf-8")
           old = '''    assert any("Prod" in s for s in summaries)\n    assert any("Hold" in s for s in summaries)\n'''
-          new = '''    assert "+100% Production" in summaries\n    assert "−25% Expedition Hold" in summaries\n'''
+          new = '''    assert "+100% Produktion" in summaries\n    assert "−25% Expeditions-Haltezeit" in summaries\n'''
           if text.count(old) != 1:
               raise SystemExit("localized calendar summary assertion anchor mismatch")
           path.write_text(text.replace(old, new), encoding="utf-8")
