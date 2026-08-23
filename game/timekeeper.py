@@ -338,6 +338,8 @@ def _apply_domain_shift(
     *,
     conn,
     now: float,
+    rows: Optional[List[Mapping[str, Any]]] = None,
+    finish_col_override: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     from .inventory_use import (
         apply_active_head_queue_time_boost,
@@ -380,13 +382,21 @@ def _apply_domain_shift(
 
         if not troop_queue_table_ready(conn):
             return None
-    if dom in ("planet_research", "ascension"):
-        _finish_inventory_due_work(conn, uid, planet_id=pid, source="timekeeper_apply")
 
-    rows, loaded_finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
+    # GC-PERF-TK-005: apply_timekeeper already finished due work and loaded/synced
+    # the canonical queue. Reuse that exact snapshot instead of repeating the
+    # domain loader (and shipyard/defense/troops queue sync) inside the shift.
+    if rows is None:
+        if dom in ("planet_research", "ascension"):
+            _finish_inventory_due_work(conn, uid, planet_id=pid, source="timekeeper_apply")
+        loaded_rows, loaded_finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
+        rows = loaded_rows
+        finish_col = finish_col_override or loaded_finish_col or finish_col
+    else:
+        finish_col = finish_col_override or finish_col
+
     if not rows:
         return None
-    finish_col = loaded_finish_col or finish_col
 
     return apply_active_head_queue_time_boost(
         conn,
@@ -399,8 +409,6 @@ def _apply_domain_shift(
         finish_col=finish_col,
         target=target,
     )
-
-    return None
 
 
 def _load_domain_rows(domain: str, user_id: int, planet_id: int, *, conn, now: float) -> Tuple[List[Mapping[str, Any]], str]:
@@ -509,10 +517,16 @@ def apply_timekeeper(
     if boost_seconds <= 0:
         return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
-    if dom == "research":
-        effect = _apply_domain_shift(dom, uid, pid, boost_seconds, conn=conn, now=now)
-    else:
-        effect = _apply_domain_shift(dom, uid, pid, boost_seconds, conn=conn, now=now)
+    effect = _apply_domain_shift(
+        dom,
+        uid,
+        pid,
+        boost_seconds,
+        conn=conn,
+        now=now,
+        rows=rows,
+        finish_col_override=finish_col,
+    )
 
     if not effect:
         return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
