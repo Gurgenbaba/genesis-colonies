@@ -2,6 +2,7 @@
 Canonical integer display formatting (full + compact German locale).
 
 Used by Jinja filters, PlayerCard, ranking API consumers, and mirrored in static/main.js.
+Player-facing integer formatting must never emit scientific notation.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import re
 from typing import Dict
 
 COMPACT_THRESHOLD = 10_000_000
+FULL_FALLBACK_THRESHOLD = 10**33
 
 # de-DE grouped integers: 999.999 / 1.000 / 10.000.000
 _DE_GROUPED_INT_RE = re.compile(r"^-?\d{1,3}(\.\d{3})+$")
@@ -64,52 +66,47 @@ def fmt_int(value: object) -> str:
     return f"{n:,}".replace(",", ".")
 
 
-def _format_compact_mantissa(val: float) -> str:
-    abs_val = abs(val)
-    if abs_val >= 1000:
-        body = f"{val:.0f}"
-    elif abs_val >= 1:
-        body = f"{val:.1f}"
-    else:
-        body = f"{val:.2f}"
-    if "." in body:
-        body = body.rstrip("0").rstrip(".")
-    return body.replace(".", ",")
+def _format_compact_body(abs_value: int, div: int) -> str:
+    """One-decimal compact mantissa using integer arithmetic only."""
+    abs_n = abs(int(abs_value))
+    divisor = max(1, int(div))
+    tenths = (abs_n * 10 + divisor // 2) // divisor
+    whole, tenth = divmod(tenths, 10)
+    return str(whole) if tenth == 0 else f"{whole},{tenth}"
 
 
-def _format_scientific_int(value: int, *, significant_digits: int = 3) -> str:
-    """Scientific notation without float conversion (e.g. 1,23e50)."""
-    sign = "-" if value < 0 else ""
-    digits = str(abs(int(value)))
-    take = max(1, int(significant_digits))
-    head = digits[:take].ljust(take, "0")
-    fraction = head[1:].rstrip("0")
-    mantissa = head[0] + (("," + fraction) if fraction else "")
-    return f"{sign}{mantissa}e{len(digits) - 1}"
+_COMPACT_TIERS = (
+    (10**30, "Q"),
+    (10**27, "R"),
+    (10**24, "Y"),
+    (10**21, "Z"),
+    (10**18, "E"),
+    (10**15, "P"),
+    (10**12, "Bio."),
+    (10**9, "Mrd."),
+    (10**6, "Mio."),
+    (10**3, "Tsd."),
+)
 
 
 def fmt_int_compact(value: object) -> str:
-    """Compact arbitrary-precision display; huge values never become fake infinity."""
+    """Compact arbitrary-precision display that never emits scientific notation."""
     n = parse_int_number(value)
     abs_n = abs(n)
     if abs_n < COMPACT_THRESHOLD:
         return fmt_int(n)
-    if abs_n >= 10**15:
-        return _format_scientific_int(n)
+
+    # Quetta is the highest compact tier we expose. Beyond it, prefer the
+    # exact grouped integer over debug-looking scientific notation.
+    if abs_n >= FULL_FALLBACK_THRESHOLD:
+        return fmt_int(n)
 
     sign = "-" if n < 0 else ""
-    if abs_n >= 10**12:
-        suffix, div = "Bio.", 10**12
-    elif abs_n >= 10**9:
-        suffix, div = "Mrd.", 10**9
-    elif abs_n >= 10**6:
-        suffix, div = "Mio.", 10**6
-    else:
-        suffix, div = "Tsd.", 10**3
+    for div, suffix in _COMPACT_TIERS:
+        if abs_n >= div:
+            return f"{sign}{_format_compact_body(abs_n, div)} {suffix}"
 
-    val = abs_n / div
-    body = _format_compact_mantissa(val)
-    return f"{sign}{body} {suffix}"
+    return fmt_int(n)
 
 
 def fmt_int_parts(value: object) -> Dict[str, str]:
