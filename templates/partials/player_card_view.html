@@ -3,6 +3,46 @@
 {% set is_private = card.get('is_private') if card is mapping else false %}
 {% set _badge_img_fallback = url_for('static', filename='img/badges/default.png') %}
 
+<style data-gc-playercard-exact-score-style>
+  .gc-player-card-view .gc-player-card-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .gc-player-card-view .gc-player-card-stat {
+    min-width: 0;
+  }
+
+  .gc-player-card-view .gc-player-card-stat--score {
+    min-height: 74px;
+  }
+
+  .gc-player-card-view .gc-player-card-stat-value--exact {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    font-size: clamp(0.82rem, 1.3vw, 1rem);
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
+
+  @media (max-width: 720px) {
+    .gc-player-card-view .gc-player-card-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .gc-player-card-view .gc-player-card-stat-value--exact {
+      font-size: 0.9rem;
+    }
+  }
+</style>
+
 <div class="gc-player-card-shell gc-player-card-view"
      data-player-id="{{ card.get('player_id', '') }}"
      data-theme="{{ card.get('theme', 'cyan') }}"
@@ -141,25 +181,25 @@
         {% endif %}
       </span>
     </div>
-    <div class="gc-player-card-stat">
+    <div class="gc-player-card-stat gc-player-card-stat--score">
       <span class="gc-player-card-stat-label">{{ T("playercard_total_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_total') or 0)|fmt_int }}">{{ (card.get('score_total') or 0)|fmt_int_compact }}</span>
+      <span class="gc-player-card-stat-value gc-player-card-stat-value--exact gc-mono">{{ (card.get('score_total') or 0)|fmt_int }}</span>
     </div>
-    <div class="gc-player-card-stat">
+    <div class="gc-player-card-stat gc-player-card-stat--score">
       <span class="gc-player-card-stat-label">{{ T("playercard_building_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_buildings') or 0)|fmt_int }}">{{ (card.get('score_buildings') or 0)|fmt_int_compact }}</span>
+      <span class="gc-player-card-stat-value gc-player-card-stat-value--exact gc-mono">{{ (card.get('score_buildings') or 0)|fmt_int }}</span>
     </div>
-    <div class="gc-player-card-stat">
+    <div class="gc-player-card-stat gc-player-card-stat--score">
       <span class="gc-player-card-stat-label">{{ T("playercard_research_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_research') or 0)|fmt_int }}">{{ (card.get('score_research') or 0)|fmt_int_compact }}</span>
+      <span class="gc-player-card-stat-value gc-player-card-stat-value--exact gc-mono">{{ (card.get('score_research') or 0)|fmt_int }}</span>
     </div>
-    <div class="gc-player-card-stat">
+    <div class="gc-player-card-stat gc-player-card-stat--score">
       <span class="gc-player-card-stat-label">{{ T("playercard_fleet_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_fleet') or 0)|fmt_int }}">{{ (card.get('score_fleet') or 0)|fmt_int_compact }}</span>
+      <span class="gc-player-card-stat-value gc-player-card-stat-value--exact gc-mono">{{ (card.get('score_fleet') or 0)|fmt_int }}</span>
     </div>
-    <div class="gc-player-card-stat">
+    <div class="gc-player-card-stat gc-player-card-stat--score">
       <span class="gc-player-card-stat-label">{{ T("playercard_defense_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_defense') or 0)|fmt_int }}">{{ (card.get('score_defense') or 0)|fmt_int_compact }}</span>
+      <span class="gc-player-card-stat-value gc-player-card-stat-value--exact gc-mono">{{ (card.get('score_defense') or 0)|fmt_int }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_home_planet") }}</span>
