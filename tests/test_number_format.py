@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+import re
+
 from game.number_format import fmt_int, fmt_int_compact, fmt_int_parts, parse_int_number
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_fmt_int_full_grouping():
@@ -50,23 +56,46 @@ def test_million_and_trillion_tiers():
     assert fmt_int_compact(2_500_000_000_000) == "2,5 Bio."
 
 
-def test_huge_integer_never_becomes_fake_infinity():
+def test_compact_high_tiers_are_human_readable_never_scientific():
+    cases = (
+        (2_658_735_763_000_000, "P"),
+        (2_500_000_000_000_000_000, "E"),
+        (2_500_000_000_000_000_000_000, "Z"),
+        (2_500_000_000_000_000_000_000_000, "Y"),
+        (2_500_000_000_000_000_000_000_000_000, "R"),
+        (2_500_000_000_000_000_000_000_000_000_000, "Q"),
+    )
+    scientific = re.compile(r"\d[,.]?\d*e[+-]?\d+", re.IGNORECASE)
+    for value, suffix in cases:
+        rendered = fmt_int_compact(value)
+        assert rendered.endswith(f" {suffix}"), (value, rendered)
+        assert not scientific.search(rendered), (value, rendered)
+        assert "∞" not in rendered
+
+
+def test_huge_integer_falls_back_to_full_grouped_digits_not_scientific():
     huge = 10**50 + 123456789
-    assert fmt_int(huge).replace(".", "") == str(huge)
+    full = fmt_int(huge)
     compact = fmt_int_compact(huge)
-    assert compact != "∞"
-    assert "e50" in compact
+    assert full.replace(".", "") == str(huge)
+    assert compact == full
+    assert "∞" not in compact
+    assert not re.search(r"\d[,.]?\d*e[+-]?\d+", compact, re.IGNORECASE)
 
 
-def test_frontend_big_score_suffixes_before_scientific_notation():
-    """Huge score display uses readable BigInt suffixes through 10^30."""
-    from pathlib import Path
+def test_frontend_compact_formatter_never_uses_scientific_notation():
+    """The JS mirror must keep suffix tiers and fall back to grouped full digits."""
+    source = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
 
-    source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
-    old_scientific = "if (abs >= 1_000_000_000_000_000n) return _scientificBigInt(abs, negative);"
-    new_scientific = "if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _scientificBigInt(abs, negative);"
-    assert old_scientific not in source
-    assert new_scientific in source
+    assert "_scientificBigInt" not in source
+    assert "toExponential(" not in source
+    assert "toPrecision(" not in source
+
+    full_fallback = (
+        "if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) "
+        "return _deIntFormatter.format(exact);"
+    )
+    assert full_fallback in source
 
     suffixes = (
         ("1_000_000_000_000_000_000_000_000_000_000n", "Q"),
@@ -76,7 +105,7 @@ def test_frontend_big_score_suffixes_before_scientific_notation():
         ("1_000_000_000_000_000_000n", "E"),
         ("1_000_000_000_000_000n", "P"),
     )
-    previous = source.index(new_scientific)
+    previous = source.index(full_fallback)
     for value, suffix in suffixes:
         branch = f"if (abs >= {value})"
         pos = source.index(branch)
@@ -87,15 +116,29 @@ def test_frontend_big_score_suffixes_before_scientific_notation():
         previous = pos
 
 
+def test_player_facing_js_has_no_explicit_scientific_formatters():
+    """Prevent future UI modules from reintroducing browser scientific notation helpers."""
+    banned = ("toExponential(", "toPrecision(", "_scientificBigInt")
+    offenders = []
+    for path in sorted((ROOT / "static").rglob("*.js")):
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        for token in banned:
+            if token in source:
+                offenders.append(f"{path.relative_to(ROOT)}: {token}")
+    assert not offenders, "Scientific UI formatters are forbidden:\n" + "\n".join(offenders)
+
+
+def test_backend_canonical_formatter_has_no_scientific_helper():
+    source = (ROOT / "game" / "number_format.py").read_text(encoding="utf-8")
+    assert "_format_scientific_int" not in source
+
+
 def test_ranking_uses_fullwidth_exact_score_layer():
     """Ranking focus assets must survive PJAX shell navigation and expand exact scores."""
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[1]
-    template = (root / "templates" / "ranking.html").read_text(encoding="utf-8")
-    shell = (root / "templates" / "partials" / "bottom_utility_bar.html").read_text(encoding="utf-8")
-    script = (root / "static" / "js" / "ranking_page.js").read_text(encoding="utf-8")
-    css = (root / "static" / "ranking.css").read_text(encoding="utf-8")
+    template = (ROOT / "templates" / "ranking.html").read_text(encoding="utf-8")
+    shell = (ROOT / "templates" / "partials" / "bottom_utility_bar.html").read_text(encoding="utf-8")
+    script = (ROOT / "static" / "js" / "ranking_page.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "ranking.css").read_text(encoding="utf-8")
 
     assert "filename='ranking.css'" in template
     assert "filename='ranking.css'" in shell
@@ -121,9 +164,7 @@ def test_ranking_uses_fullwidth_exact_score_layer():
 
 def test_ranking_client_score_path_uses_bigint_exactly():
     """Ranking must preserve exact decimal score strings and sort them descending."""
-    from pathlib import Path
-
-    source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+    source = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
 
     assert "return parseDisplayBigInt(row[tab.scoreKey]);" in source
     assert "return parseDisplayBigInt(cur[tab.scoreKey]);" in source
