@@ -1,14 +1,15 @@
 name: Hotfix Big Score Display
 
 on:
-  push:
-    branches: [hotfix/big-score-display]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.head_ref == 'hotfix/big-score-display'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
