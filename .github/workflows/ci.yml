@@ -48,8 +48,6 @@ jobs:
 
   big-score:
     name: big-score-ranking
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

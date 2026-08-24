@@ -186,8 +186,14 @@
     const negative = exact < 0n;
     const abs = negative ? -exact : exact;
     if (abs < COMPACT_THRESHOLD) return _deIntFormatter.format(exact);
-    if (abs >= 1_000_000_000_000_000n) return _scientificBigInt(abs, negative);
+    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _scientificBigInt(abs, negative);
     const sign = negative ? "-" : "";
+    if (abs >= 1_000_000_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000_000_000n)} Q`;
+    if (abs >= 1_000_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000_000n)} R`;
+    if (abs >= 1_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000n)} Y`;
+    if (abs >= 1_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000n)} Z`;
+    if (abs >= 1_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000n)} E`;
+    if (abs >= 1_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000n)} P`;
     if (abs >= 1_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000n)} Bio.`;
     if (abs >= 1_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000n)} Mrd.`;
     if (abs >= 1_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000n)} Mio.`;
