@@ -39577,7 +39577,7 @@
 
   function rankingScoreValue(row, tabId) {
     const tab = rankingTabMeta(tabId);
-    return parseIntNumber(row[tab.scoreKey]);
+    return parseDisplayBigInt(row[tab.scoreKey]);
   }
 
   function rankingVisibleTabs(payload) {
@@ -39612,8 +39612,9 @@
         return true;
       });
       top.sort((a, b) => {
-        const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);
-        if (diff !== 0) return diff;
+        const scoreB = rankingScoreValue(b, tabId);
+        const scoreA = rankingScoreValue(a, tabId);
+        if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;
         return (Number(a.alliance_id) || 0) - (Number(b.alliance_id) || 0);
       });
       return top.map((row, idx) => ({
@@ -39675,7 +39676,7 @@
   function rankingCurrentScore(payload, tabId) {
     const cur = payload?.current_player || {};
     const tab = rankingTabMeta(tabId);
-    return parseIntNumber(cur[tab.scoreKey]);
+    return parseDisplayBigInt(cur[tab.scoreKey]);
   }
 
   function rankingAvatarFallbackHtml(initial, theme) {

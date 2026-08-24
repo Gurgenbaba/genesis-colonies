@@ -106,3 +106,18 @@ def test_ranking_uses_fullwidth_exact_score_layer():
     assert ".ranking-page .ranking-table-wrapper" in css
     assert "min-width: 300px" in css
     assert "overflow-x: auto" in css
+
+
+
+def test_ranking_client_score_path_uses_bigint_exactly():
+    """Ranking must never coerce exact decimal score strings through JS Number."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+
+    assert "return parseDisplayBigInt(row[tab.scoreKey]);" in source
+    assert "return parseDisplayBigInt(cur[tab.scoreKey]);" in source
+    assert "return parseIntNumber(row[tab.scoreKey]);" not in source
+    assert "return parseIntNumber(cur[tab.scoreKey]);" not in source
+    assert "rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId)" not in source
+    assert "if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;" in source
