@@ -13,17 +13,20 @@
 
   function expandExactRankingScores(scope) {
     if (!scope?.querySelectorAll) return;
+
     scope
       .querySelectorAll(
-        ".gc-ranking-score .gc-num-compact, " +
-          ".gc-ranking-mobile-score-inline .gc-num-compact, " +
-          ".gc-ranking-my-strip .gc-num-compact"
+        ".gc-ranking-score [title], " +
+          ".gc-ranking-mobile-score-inline [title], " +
+          ".gc-ranking-my-strip [title]"
       )
       .forEach((node) => {
         const full = String(node.getAttribute("title") || "").trim();
-        if (full) node.textContent = full;
+        if (!full || !/\d/.test(full)) return;
+
+        node.textContent = full;
         node.removeAttribute("title");
-        node.classList.remove("gc-num-compact");
+        node.classList.remove("gc-num-compact", "num-compact");
         node.classList.add("gc-ranking-num-full");
       });
   }
