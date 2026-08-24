@@ -120,3 +120,81 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then BASE="${{ github.event.pull_request.base.sha }}"; else BASE="${{ github.event.before }}"; fi
           python scripts/audit_visible_i18n.py --raw-only --diff-base "$BASE" --max-findings 200
+
+  # PR29_BIGINT_ONE_SHOT_START
+  pr29-bigint-one-shot:
+    name: pr29-bigint-one-shot
+    if: github.event_name == 'pull_request' && github.head_ref == 'feature/fullwidth-ranking-exact-scores'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/fullwidth-ranking-exact-scores
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Harden ranking score adapters
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          main_path = Path("static/main.js")
+          source = main_path.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  "return parseIntNumber(row[tab.scoreKey]);",
+                  "return parseDisplayBigInt(row[tab.scoreKey]);",
+                  "rankingScoreValue adapter",
+              ),
+              (
+                  "return parseIntNumber(cur[tab.scoreKey]);",
+                  "return parseDisplayBigInt(cur[tab.scoreKey]);",
+                  "rankingCurrentScore adapter",
+              ),
+              (
+                  """const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);\n        if (diff !== 0) return diff;""",
+                  """const scoreB = rankingScoreValue(b, tabId);\n        const scoreA = rankingScoreValue(a, tabId);\n        if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;""",
+                  "ranking BigInt comparator",
+              ),
+          ]
+          for old, new, label in replacements:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly 1 match, found {count}")
+              source = source.replace(old, new, 1)
+          main_path.write_text(source, encoding="utf-8")
+
+          test_path = Path("tests/test_number_format.py")
+          tests = test_path.read_text(encoding="utf-8")
+          marker = "def test_ranking_client_score_path_uses_bigint_exactly():"
+          if marker not in tests:
+              tests += '''\n\n\ndef test_ranking_client_score_path_uses_bigint_exactly():\n    \"\"\"Ranking must never coerce exact decimal score strings through JS Number.\"\"\"\n    from pathlib import Path\n\n    source = (Path(__file__).resolve().parents[1] / \"static\" / \"main.js\").read_text(encoding=\"utf-8\")\n\n    assert \"return parseDisplayBigInt(row[tab.scoreKey]);\" in source\n    assert \"return parseDisplayBigInt(cur[tab.scoreKey]);\" in source\n    assert \"return parseIntNumber(row[tab.scoreKey]);\" not in source\n    assert \"return parseIntNumber(cur[tab.scoreKey]);\" not in source\n    assert \"rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId)\" not in source\n    assert \"if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;\" in source\n'''
+              test_path.write_text(tests, encoding="utf-8")
+
+          ci_path = Path(".github/workflows/ci.yml")
+          ci = ci_path.read_text(encoding="utf-8")
+          start_marker = "\n  # PR29_BIGINT_ONE_SHOT_START\n"
+          end_marker = "\n  # PR29_BIGINT_ONE_SHOT_END\n"
+          start = ci.index(start_marker)
+          end = ci.index(end_marker, start) + len(end_marker)
+          ci_path.write_text(ci[:start] + ci[end:], encoding="utf-8")
+          PY
+      - name: Focused verification
+        run: |
+          node --check static/main.js
+          python -m pytest tests/test_number_format.py -q
+          git diff --check
+      - name: Commit exact BigInt ranking path
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/main.js tests/test_number_format.py .github/workflows/ci.yml
+          git commit -m "fix: keep ranking scores exact with BigInt"
+          git push origin HEAD:feature/fullwidth-ranking-exact-scores
+  # PR29_BIGINT_ONE_SHOT_END
