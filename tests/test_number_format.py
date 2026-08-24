@@ -88,16 +88,19 @@ def test_frontend_big_score_suffixes_before_scientific_notation():
 
 
 def test_ranking_uses_fullwidth_exact_score_layer():
-    """Ranking expands exact score tooltips inline and owns a wide page layout."""
+    """Ranking focus assets must survive PJAX shell navigation and expand exact scores."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     template = (root / "templates" / "ranking.html").read_text(encoding="utf-8")
+    shell = (root / "templates" / "partials" / "bottom_utility_bar.html").read_text(encoding="utf-8")
     script = (root / "static" / "js" / "ranking_page.js").read_text(encoding="utf-8")
     css = (root / "static" / "ranking.css").read_text(encoding="utf-8")
 
     assert "filename='ranking.css'" in template
-    assert "filename='js/ranking_page.js'" in template
+    assert "filename='ranking.css'" in shell
+    assert "filename='js/ranking_page.js'" in shell
+    assert "filename='js/ranking_page.js'" not in template
     assert '.gc-ranking-score [title]' in script
     assert '.gc-ranking-mobile-score-inline [title]' in script
     assert '.gc-ranking-my-strip [title]' in script
@@ -106,6 +109,10 @@ def test_ranking_uses_fullwidth_exact_score_layer():
     assert 'node.classList.remove("gc-num-compact", "num-compact")' in script
     assert 'node.classList.add("gc-ranking-num-full")' in script
     assert 'focusClass = "gc-ranking-focus"' in script
+    assert 'function syncRankingPage()' in script
+    assert 'const shellObserver = new MutationObserver(queueSync);' in script
+    assert 'shellObserver.observe(shellHost, { childList: true, subtree: true });' in script
+    assert 'if (!root) return;' not in script
     assert 'body[data-endpoint="ranking_view"] .gc-layout--dual' in css
     assert ".ranking-page .ranking-table-wrapper" in css
     assert "min-width: 300px" in css

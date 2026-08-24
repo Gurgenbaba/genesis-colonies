@@ -3,6 +3,11 @@
 {% else %}
   {% set _release = {'label': 'Genesis', 'href': url_for('news_view')} %}
 {% endif %}
+
+{# Ranking is PJAX-reachable, so its focus assets must live in the persistent shell. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='ranking.css') }}?v={{ GC_ASSET_VERSION }}-pjax2">
+<script src="{{ url_for('static', filename='js/ranking_page.js') }}?v={{ GC_ASSET_VERSION }}-pjax2" defer></script>
+
 <footer class="gc-bottom-utility-bar" aria-label="{{ T('special_nav', 'Special Navigation') }}">
   <div class="gc-bottom-util-inner">
     <nav class="gc-bottom-util-nav" aria-label="{{ T('special_nav', 'Special Navigation') }}">
