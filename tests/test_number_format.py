@@ -48,3 +48,12 @@ def test_ranking_score_example_not_fifteen_billion():
 def test_million_and_trillion_tiers():
     assert fmt_int_compact(12_345_678) == "12,3 Mio."
     assert fmt_int_compact(2_500_000_000_000) == "2,5 Bio."
+
+
+
+def test_huge_integer_never_becomes_fake_infinity():
+    huge = 10**50 + 123456789
+    assert fmt_int(huge).replace(".", "") == str(huge)
+    compact = fmt_int_compact(huge)
+    assert compact != "∞"
+    assert "e50" in compact

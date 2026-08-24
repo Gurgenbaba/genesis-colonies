@@ -4,8 +4,8 @@ Galactic ranking service – single source of truth for scores and ranks.
 Score persistence is refreshed live after gameplay mutations (``score_events``) and
 periodically by ``ranking_worker`` (10-minute safety net). Gameplay reads ``player_scores`` snapshots only.
 
-Wealth score (``total_score``) = resources + buildings + research + fleet + defense + evolution
-(computed via ``game.resource_score`` — canonical 1500/1000/500 divisors).
+Progression score (``total_score``) = buildings + research + fleet + defense + evolution.
+Liquid resources remain a separate ``resource_score`` wealth dimension and never increase progression rank.
 
 ``destroyed_score`` = lifetime combat prestige — **excluded** from ``total_score``.
 ``combat_score`` = fleet_score + defense_score (active military).
@@ -33,8 +33,6 @@ CACHE_TTL_SECONDS: float = 2.0
 # Serialize full rank snapshots (SQLite write safety under parallel requests).
 _RANKING_LOCK = threading.RLock()
 
-# Max stored score (JSON / int64-safe for clients).
-MAX_SCORE = 9_000_000_000_000_000
 
 
 def _safe_int(value: Any, *, default: int = 0) -> int:
@@ -1481,7 +1479,7 @@ def get_player_alliance_ranking_snapshot(
             conn.close()
 
 
-def get_sorted_ranking_entries(
+def _get_sorted_ranking_entries_enriched_sql(
     limit: int = 100,
     offset: int = 0,
     conn=None,
@@ -2019,7 +2017,7 @@ def _log_ranking_top_debug(top: List[Dict[str, Any]], *, limit: int = 20) -> Non
         )
 
 
-def build_ranking_api_payload(
+def _build_ranking_api_payload_raw(
     current_player_id: int,
     *,
     limit: int = 100,
@@ -2122,11 +2120,14 @@ def read_player_scores(
         cur.execute(
             f"""
             SELECT
-                COALESCE(ps.score_total, 0) AS score_total,
-                COALESCE(ps.score_buildings, 0) AS score_buildings,
-                COALESCE(ps.score_research, 0) AS score_research,
+                COALESCE(ps.score_total, '0') AS score_total,
+                {_resources_score_select(conn)},
+                COALESCE(ps.score_buildings, '0') AS score_buildings,
+                COALESCE(ps.score_research, '0') AS score_research,
                 {_fleet_defense_select(conn)},
-                {_evolution_score_select(conn)}
+                {_evolution_score_select(conn)},
+                {_combat_ranking_select(conn)},
+                {("COALESCE(ps.score_destroyed_raw, 0) AS score_destroyed_raw" if column_exists(conn, "player_scores", "score_destroyed_raw") else "0 AS score_destroyed_raw")}
             FROM players p
             LEFT JOIN player_scores ps ON ps.player_id = p.id
             WHERE p.id = ?
@@ -2169,3 +2170,347 @@ def recompute_and_upsert_score(
         "score_defense": scores["defense_score"],
         "score_military": scores["military_score"],
     }
+# ============================================================================
+# GC-SCORE-BIGNUM — canonical arbitrary-precision score semantics
+# Keep this in the single ranking owner so every legacy call resolves these
+# globals dynamically; do not split score semantics into a parallel module.
+# ============================================================================
+JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
+_SQL_ALL_ROWS_LIMIT = 2_147_483_647
+
+
+def _safe_int(value: Any, *, default: int = 0) -> int:
+    """Parse a non-negative score with no gameplay ceiling."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(0, n)
+
+
+def _sanitize_scores(scores: Dict[str, Any]) -> Dict[str, int]:
+    """Normalize components and derive progression-only total score."""
+    resources = _safe_int(scores.get("resource_score", scores.get("score_resources", 0)))
+    building = _safe_int(scores.get("building_score", scores.get("score_buildings", 0)))
+    research = _safe_int(scores.get("research_score", scores.get("score_research", 0)))
+    fleet = _safe_int(scores.get("fleet_score", scores.get("score_fleet", 0)))
+    defense = _safe_int(scores.get("defense_score", scores.get("score_defense", 0)))
+    destroyed = _safe_int(scores.get("destroyed_score", scores.get("score_destroyed", 0)))
+    evolution = _safe_int(scores.get("evolution_score", scores.get("score_planet_evolution", 0)))
+    from .scoring import compute_combat_score, compute_military_score
+
+    combat = _safe_int(
+        scores.get("combat_score", scores.get("score_combat", compute_combat_score(fleet, defense)))
+    )
+    destroyed_raw = _safe_int(scores.get("destroyed_raw", scores.get("score_destroyed_raw", 0)))
+    total = building + research + fleet + defense + evolution
+    return {
+        "total_score": total,
+        "resource_score": resources,
+        "building_score": building,
+        "research_score": research,
+        "fleet_score": fleet,
+        "defense_score": defense,
+        "combat_score": combat,
+        "destroyed_score": destroyed,
+        "destroyed_raw": destroyed_raw,
+        "military_score": compute_military_score(fleet, defense, destroyed),
+        "evolution_score": evolution,
+    }
+
+
+def _score_db_value(value: Any) -> str:
+    return str(_safe_int(value))
+
+
+def _score_json_value(value: Any) -> int | str:
+    n = _safe_int(value)
+    return n if n <= JS_MAX_SAFE_INTEGER else str(n)
+
+
+def _json_safe_bigints(value: Any) -> Any:
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, int):
+        return value if -JS_MAX_SAFE_INTEGER <= value <= JS_MAX_SAFE_INTEGER else str(value)
+    if isinstance(value, list):
+        return [_json_safe_bigints(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_json_safe_bigints(v) for v in value)
+    if isinstance(value, dict):
+        return {k: _json_safe_bigints(v) for k, v in value.items()}
+    return value
+
+
+def format_scores_for_playercard(normalized: Dict[str, int]) -> Dict[str, Any]:
+    values = {
+        "score_total": normalized.get("total_score", 0),
+        "score_resources": normalized.get("resource_score", 0),
+        "score_buildings": normalized.get("building_score", 0),
+        "score_research": normalized.get("research_score", 0),
+        "score_fleet": normalized.get("fleet_score", 0),
+        "score_defense": normalized.get("defense_score", 0),
+        "score_combat": normalized.get("combat_score", 0),
+        "score_destroyed": normalized.get("destroyed_score", 0),
+        "score_military": normalized.get("military_score", 0),
+        "score_planet_evolution": normalized.get("evolution_score", 0),
+        "total_score": normalized.get("total_score", 0),
+        "resource_score": normalized.get("resource_score", 0),
+        "building_score": normalized.get("building_score", 0),
+        "research_score": normalized.get("research_score", 0),
+        "fleet_score": normalized.get("fleet_score", 0),
+        "defense_score": normalized.get("defense_score", 0),
+        "combat_score": normalized.get("combat_score", 0),
+        "destroyed_score": normalized.get("destroyed_score", 0),
+        "military_score": normalized.get("military_score", 0),
+        "evolution_score": normalized.get("evolution_score", 0),
+    }
+    return {key: _score_json_value(value) for key, value in values.items()}
+
+
+def _total_score_sql(conn) -> str:
+    """Select persisted total only; never coerce decimal score TEXT in SQL."""
+    return "COALESCE(ps.score_total, '0')"
+
+
+def upsert_player_scores(player_id: int, scores: Dict[str, int], conn=None) -> None:
+    """Persist score fields as decimal TEXT without sqlite3 int64 bindings."""
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        clean = _sanitize_scores(scores)
+        stored = {key: _score_db_value(value) for key, value in clean.items()}
+        field_map = [
+            ("score_total", "total_score"),
+            ("score_resources", "resource_score"),
+            ("score_buildings", "building_score"),
+            ("score_research", "research_score"),
+            ("score_fleet", "fleet_score"),
+            ("score_defense", "defense_score"),
+            ("score_planet_evolution", "evolution_score"),
+            ("score_destroyed_raw", "destroyed_raw"),
+            ("score_combat", "combat_score"),
+            ("score_destroyed", "destroyed_score"),
+        ]
+        active = [(column, key) for column, key in field_map if column_exists(conn, "player_scores", column)]
+        columns = [column for column, _ in active]
+        params = [int(player_id)] + [stored[key] for _, key in active]
+        insert_columns = ", ".join(["player_id", *columns, "updated_at"])
+        placeholders = ", ".join(["?"] * (1 + len(columns)) + ["strftime('%s','now')"])
+        updates = ", ".join([f"{column}=excluded.{column}" for column in columns] + ["updated_at=excluded.updated_at"])
+        conn.execute(
+            f"INSERT INTO player_scores ({insert_columns}) VALUES ({placeholders}) "
+            f"ON CONFLICT(player_id) DO UPDATE SET {updates}",
+            tuple(params),
+        )
+        if owns_conn:
+            conn.commit()
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def _all_score_rows_exact(conn) -> List[Dict[str, Any]]:
+    """Pure read of every score row; ranking GET paths must never seed/write rows."""
+    resources_sel = _resources_score_select(conn)
+    fleet_defense_sel = _fleet_defense_select(conn)
+    evolution_sel = _evolution_score_select(conn)
+    combat_sel = _combat_ranking_select(conn)
+    destroyed_raw_sel = (
+        "COALESCE(ps.score_destroyed_raw, 0) AS score_destroyed_raw"
+        if column_exists(conn, "player_scores", "score_destroyed_raw")
+        else "0 AS score_destroyed_raw"
+    )
+    rows = conn.execute(
+        f"""
+        SELECT
+            p.id AS player_id,
+            p.name AS commander_name,
+            COALESCE(ps.score_total, '0') AS score_total,
+            {resources_sel},
+            COALESCE(ps.score_buildings, '0') AS score_buildings,
+            COALESCE(ps.score_research, '0') AS score_research,
+            {fleet_defense_sel},
+            {evolution_sel},
+            {combat_sel},
+            {destroyed_raw_sel}
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
+        ORDER BY p.id ASC
+        """
+    ).fetchall()
+    out: List[Dict[str, Any]] = []
+    for raw in rows:
+        d = dict(raw)
+        normalized = _normalize_db_row(d)
+        out.append({
+            "player_id": int(d["player_id"]),
+            "commander_name": d.get("commander_name") or "—",
+            **normalized,
+        })
+    return out
+
+
+def get_sorted_ranking_entries(limit: int = 100, offset: int = 0, conn=None) -> List[Dict[str, Any]]:
+    """Reuse mature enrichment, then sort the complete set with Python ints."""
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        rows = _get_sorted_ranking_entries_enriched_sql(limit=_SQL_ALL_ROWS_LIMIT, offset=0, conn=conn)
+        rows.sort(key=lambda r: (
+            -_safe_int(r.get("total_score")),
+            -_safe_int(r.get("building_score")),
+            -_safe_int(r.get("research_score")),
+            int(r.get("player_id") or 0),
+        ))
+        for idx, row in enumerate(rows, start=1):
+            row["rank"] = idx
+        start = max(0, int(offset))
+        return rows[start:start + max(0, int(limit))]
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[int], int]:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        rows = _all_score_rows_exact(conn)
+        rows.sort(key=lambda r: (-r["total_score"], -r["building_score"], -r["research_score"], r["player_id"]))
+        pid = int(player_id)
+        for idx, row in enumerate(rows, start=1):
+            if row["player_id"] == pid:
+                return idx, len(rows)
+        return None, len(rows)
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_player_category_ranks(player_id: int, conn=None, *, skip_live_total: bool = False) -> Dict[str, Any]:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        rows = _all_score_rows_exact(conn)
+        pid = int(player_id)
+        ranks: Dict[str, Any] = {"total_players": len(rows)}
+        if not any(row["player_id"] == pid for row in rows):
+            return ranks
+
+        def assign(name: str, key) -> None:
+            for idx, row in enumerate(sorted(rows, key=key), start=1):
+                if row["player_id"] == pid:
+                    ranks[name] = idx
+                    return
+
+        assign("building", lambda r: (-r["building_score"], -r["research_score"], r["player_id"]))
+        assign("research", lambda r: (-r["research_score"], -r["building_score"], r["player_id"]))
+        assign("fleet", lambda r: (-r["fleet_score"], -r["building_score"], r["player_id"]))
+        assign("defense", lambda r: (-r["defense_score"], r["player_id"]))
+        assign("combat", lambda r: (-r.get("combat_score", 0), -r["fleet_score"], r["player_id"]))
+        assign("destroyed", lambda r: (-r.get("destroyed_score", 0), -r["fleet_score"], r["player_id"]))
+        assign("military", lambda r: (-r.get("military_score", 0), -r["fleet_score"], r["player_id"]))
+        assign("evolution", lambda r: (-r.get("evolution_score", 0), r["player_id"]))
+        if not skip_live_total:
+            assign("total", lambda r: (-r["total_score"], -r["building_score"], -r["research_score"], r["player_id"]))
+        return ranks
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_sorted_alliance_ranking_entries(limit: int = 100, offset: int = 0, conn=None) -> List[Dict[str, Any]]:
+    """Aggregate member score TEXT in Python; SQLite never SUMs huge scores."""
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        if not (table_exists(conn, "alliances") and table_exists(conn, "alliance_members") and table_exists(conn, "player_scores")):
+            return []
+        rows = conn.execute(
+            """
+            SELECT a.id AS alliance_id, a.tag AS alliance_tag, a.name AS alliance_name,
+                   am.player_id AS player_id, COALESCE(ps.score_total, '0') AS score_total
+            FROM alliances a
+            INNER JOIN alliance_members am ON am.alliance_id = a.id
+            LEFT JOIN player_scores ps ON ps.player_id = am.player_id
+            ORDER BY a.id ASC, am.player_id ASC
+            """
+        ).fetchall()
+        grouped: Dict[int, Dict[str, Any]] = {}
+        for raw in rows:
+            d = dict(raw)
+            aid = int(d["alliance_id"])
+            item = grouped.setdefault(aid, {
+                "alliance_id": aid,
+                "alliance_tag": str(d.get("alliance_tag") or "").strip(),
+                "alliance_name": str(d.get("alliance_name") or "").strip(),
+                "member_count": 0,
+                "alliance_score": 0,
+                "is_current_alliance": False,
+            })
+            item["member_count"] += 1
+            item["alliance_score"] += _safe_int(d.get("score_total"))
+        ordered = sorted(grouped.values(), key=lambda r: (-r["alliance_score"], r["alliance_id"]))
+        for idx, row in enumerate(ordered, start=1):
+            row["rank"] = idx
+        start = max(0, int(offset))
+        return ordered[start:start + max(0, int(limit))]
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_player_alliance_ranking_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        empty = {"alliance_id": None, "alliance_tag": "", "alliance_name": "", "alliance_score": 0,
+                 "alliance_rank": None, "total_alliances": 0, "member_count": 0}
+        if not (table_exists(conn, "alliances") and table_exists(conn, "alliance_members")):
+            return empty
+        mine = conn.execute(
+            """SELECT a.id AS alliance_id, a.tag AS alliance_tag, a.name AS alliance_name
+               FROM alliance_members am INNER JOIN alliances a ON a.id = am.alliance_id
+               WHERE am.player_id = ? LIMIT 1""",
+            (int(player_id),),
+        ).fetchone()
+        all_rows = get_sorted_alliance_ranking_entries(limit=_SQL_ALL_ROWS_LIMIT, offset=0, conn=conn)
+        if not mine:
+            return {**empty, "total_alliances": len(all_rows)}
+        aid = int(mine["alliance_id"])
+        row = next((r for r in all_rows if int(r["alliance_id"]) == aid), None)
+        if row is None:
+            return {**empty, "alliance_id": aid, "alliance_tag": str(mine["alliance_tag"] or ""),
+                    "alliance_name": str(mine["alliance_name"] or ""), "total_alliances": len(all_rows)}
+        return {
+            "alliance_id": aid,
+            "alliance_tag": row["alliance_tag"],
+            "alliance_name": row["alliance_name"],
+            "alliance_score": row["alliance_score"],
+            "alliance_rank": row["rank"],
+            "total_alliances": len(all_rows),
+            "member_count": row["member_count"],
+        }
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def build_ranking_api_payload(current_player_id: int, *, limit: int = 100, refresh: bool = False) -> Dict[str, Any]:
+    """Lossless JSON transport: JS-unsafe Python ints become decimal strings."""
+    return _json_safe_bigints(
+        _build_ranking_api_payload_raw(int(current_player_id), limit=limit, refresh=refresh)
+    )

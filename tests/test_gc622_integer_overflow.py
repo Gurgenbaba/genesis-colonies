@@ -111,15 +111,20 @@ class TestGC622SchemaTypes:
         assert _column_type("planets", "energy_total") == "INTEGER"
         assert _column_type("planets", "energy_used") == "INTEGER"
 
-    def test_player_scores_use_integer(self, gc622_db):
+    def test_player_scores_use_decimal_text(self, gc622_db):
         for col in (
             "score_total",
+            "score_resources",
             "score_buildings",
             "score_research",
             "score_fleet",
             "score_defense",
+            "score_planet_evolution",
+            "score_destroyed_raw",
+            "score_combat",
+            "score_destroyed",
         ):
-            assert _column_type("player_scores", col) == "INTEGER"
+            assert _column_type("player_scores", col) == "TEXT"
 
     def test_exchange_log_amounts_use_real(self, gc622_db):
         assert _column_type("exchange_log", "give_amount") == "REAL"
@@ -215,6 +220,14 @@ class TestGC622Ranking:
         )
         row = get_player_score_row(uid)
         assert int(row["score_buildings"]) == target
+
+    def test_ranking_above_int64_roundtrips_as_decimal_text(self, gc622_db):
+        uid = _player()
+        target = 10**50 + 987654321
+        upsert_player_scores(uid, {"building_score": target, "research_score": 7})
+        row = get_player_score_row(uid)
+        assert row["score_buildings"] == str(target)
+        assert row["score_total"] == str(target + 7)
 
 
 class TestGC622Exchange:

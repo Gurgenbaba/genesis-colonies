@@ -368,7 +368,7 @@ def test_compute_player_scores_returns_zero_for_new_player(temp_db):
         int(DEFAULT_GAME_SETTINGS["start_fuel_cells"]),
     )
     assert scores["resource_score"] == expected_resources
-    assert scores["total_score"] == expected_resources
+    assert scores["total_score"] == 0
 
 
 def test_compute_player_scores_includes_fleet(temp_db):
@@ -1052,7 +1052,7 @@ def test_combat_destruction_increases_ranking_scores(temp_db):
         assert int(row["score_destroyed_raw"]) == raw
         assert int(row["score_destroyed"]) > 0
         normalized = _normalize_db_row(dict(row))
-        assert normalized["total_score"] == normalized["resource_score"]
+        assert normalized["total_score"] == (normalized["building_score"] + normalized["research_score"] + normalized["fleet_score"] + normalized["defense_score"] + normalized["evolution_score"])
         assert normalized["destroyed_score"] == raw
     finally:
         conn.close()
@@ -1191,3 +1191,149 @@ def test_ranking_inactive_flag_after_three_days(temp_db):
     row = next(r for r in entries if int(r["player_id"]) == pid)
     assert row["inactive"] is True
     assert row["vacation_active"] is False
+
+
+# GC-SCORE-BIGNUM regression coverage
+
+def test_big_score_has_no_ceiling_and_excludes_liquid_wealth():
+    from game.ranking import _sanitize_scores
+
+    huge = 10**50 + 123456789
+    clean = _sanitize_scores({
+        "resource_score": huge * 9,
+        "building_score": huge,
+        "research_score": 7,
+        "fleet_score": 11,
+        "defense_score": 13,
+        "evolution_score": 17,
+    })
+    assert clean["resource_score"] == huge * 9
+    assert clean["total_score"] == huge + 48
+
+
+def test_big_score_text_roundtrip_exact_order_and_js_transport(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    low = _create_player("big_low")
+    high = _create_player("big_high")
+    base = 10**40
+    _seed_scores(low, base, 1)
+    _seed_scores(high, base + 1, 1)
+
+    conn = db()
+    row = conn.execute("SELECT score_total, typeof(score_total) AS kind FROM player_scores WHERE player_id = ?", (high,)).fetchone()
+    conn.close()
+    assert row["kind"] == "text"
+    assert row["score_total"] == str(base + 2)
+
+    payload = build_ranking_api_payload(high, limit=10, refresh=False)
+    rows = [r for r in payload["top_players"] if r["player_id"] in (low, high)]
+    assert [r["player_id"] for r in rows] == [high, low]
+    assert rows[0]["total_score"] == str(base + 2)
+    assert rows[1]["total_score"] == str(base + 1)
+    assert payload["current_player"]["total_score"] == str(base + 2)
+
+
+def test_big_score_schema_is_decimal_text(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    conn = db()
+    types = {row["name"]: str(row["type"]).upper() for row in conn.execute("PRAGMA table_info(player_scores)").fetchall()}
+    conn.close()
+    for column in (
+        "score_total", "score_resources", "score_buildings", "score_research", "score_fleet",
+        "score_defense", "score_planet_evolution", "score_destroyed_raw", "score_combat", "score_destroyed",
+    ):
+        assert types[column] == "TEXT"
+
+
+def test_big_score_exact_order_with_122_players(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    base = 10**35
+    created = []
+    for idx in range(122):
+        pid = _create_player(f"live_scale_{idx}")
+        created.append(pid)
+        _seed_scores(pid, base + idx, idx % 3)
+    rows = get_sorted_ranking_entries(limit=122, offset=0)
+    ranked = [r for r in rows if r["player_id"] in set(created)]
+    expected = sorted(created, key=lambda pid: -(base + created.index(pid) + (created.index(pid) % 3)))
+    assert [r["player_id"] for r in ranked] == expected
+
+
+# GC-SCORE-BIGNUM live hardening coverage
+
+def test_big_score_rank_reads_never_seed_score_rows(temp_db):
+    from game.ranking import get_player_category_ranks, get_player_rank_from_snapshot
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    pid = _create_player("rank_read_only")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (pid,))
+    conn.commit()
+    conn.close()
+
+    with patch("game.ranking._ensure_score_rows") as ensure_rows:
+        rank, total = get_player_rank_from_snapshot(pid)
+        ranks = get_player_category_ranks(pid)
+        ensure_rows.assert_not_called()
+    assert rank is not None
+    assert total >= 1
+    assert ranks["total_players"] >= 1
+
+    conn = db()
+    persisted = conn.execute("SELECT 1 FROM player_scores WHERE player_id = ?", (pid,)).fetchone()
+    conn.close()
+    assert persisted is None
+
+
+def test_read_player_scores_preserves_combat_and_destroyed_fields(temp_db):
+    from game.ranking import read_player_scores
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    pid = _create_player("score_projection")
+    upsert_player_scores(pid, {
+        "building_score": 10,
+        "research_score": 20,
+        "fleet_score": 30,
+        "defense_score": 40,
+        "destroyed_raw": 123456789,
+        "destroyed_score": 123456789,
+    })
+    scores = read_player_scores(pid)
+    assert scores["total_score"] == 100
+    assert scores["combat_score"] == 70
+    assert scores["destroyed_score"] == 123456789
+    assert scores["destroyed_raw"] == 123456789
+
+
+def test_pirate_threat_accepts_scores_far_beyond_float(temp_db):
+    from game.pirates.threat import recompute_player_threat, threat_schema_ready
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+    pid = _create_player("huge_threat")
+    conn = db()
+    if not threat_schema_ready(conn):
+        conn.close()
+        pytest.skip("pirate threat schema unavailable")
+    huge = 10**500
+    upsert_player_scores(pid, {
+        "building_score": huge,
+        "fleet_score": huge,
+        "defense_score": huge,
+        "destroyed_score": huge,
+        "destroyed_raw": huge,
+    }, conn=conn)
+    result = recompute_player_threat(pid, conn=conn)
+    conn.commit()
+    conn.close()
+    assert 0 <= result["threat"] <= 100

@@ -65,17 +65,19 @@ def recompute_player_threat(player_id: int, *, conn) -> Dict[str, Any]:
     )
     row = cur.fetchone()
     if row:
-        total = float(row["score_total"] or 0)
-        fleet = float(row["score_fleet"] or 0)
-        defense = float(row["score_defense"] or 0)
-        destroyed = float(row["score_destroyed"] or 0)
-        # Soft log scales so midgame players climb without instantly hitting 100.
+        # Ranking values are decimal TEXT and may be far beyond IEEE-754.
+        # Keep them as Python ints; math.log10 accepts arbitrary-size ints and the
+        # resulting threat components are immediately capped to small floats.
+        total = max(0, int(row["score_total"] or 0))
+        fleet = max(0, int(row["score_fleet"] or 0))
+        defense = max(0, int(row["score_defense"] or 0))
+        destroyed = max(0, int(row["score_destroyed"] or 0))
         import math
 
-        components["empire"] = min(35.0, math.log10(max(1.0, total)) * 8.0)
-        components["fleet"] = min(25.0, math.log10(max(1.0, fleet)) * 6.0)
-        components["defense"] = min(15.0, math.log10(max(1.0, defense)) * 4.0)
-        components["combat"] = min(25.0, math.log10(max(1.0, destroyed)) * 5.0)
+        components["empire"] = min(35.0, math.log10(max(1, total)) * 8.0)
+        components["fleet"] = min(25.0, math.log10(max(1, fleet)) * 6.0)
+        components["defense"] = min(15.0, math.log10(max(1, defense)) * 4.0)
+        components["combat"] = min(25.0, math.log10(max(1, destroyed)) * 5.0)
 
     # Boss damage participation
     if table_exists(conn, "world_boss_contributions"):
