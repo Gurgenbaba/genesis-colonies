@@ -1,0 +1,53 @@
+name: Ranking Hotfix Apply
+
+on:
+  push:
+    branches: [hotfix/ranking-order-exact-live]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'hotfix/ranking-order-exact-live' || github.ref_name == 'hotfix/ranking-order-exact-live'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/ranking-order-exact-live
+          fetch-depth: 0
+      - name: Fix both BigInt ranking comparators
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('static/main.js')
+          source = path.read_text(encoding='utf-8')
+          old = 'if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;'
+          new = 'if (scoreA !== scoreB) return scoreA > scoreB ? -1 : 1;'
+          old_count = source.count(old)
+          new_count = source.count(new)
+          if old_count == 2 and new_count == 0:
+              source = source.replace(old, new)
+          elif old_count == 0 and new_count == 2:
+              print('Ranking comparators already fixed.')
+          else:
+              raise SystemExit(f'unexpected comparator matches old={old_count} new={new_count}')
+          path.write_text(source, encoding='utf-8')
+          PY
+          node --check static/main.js
+          git diff --check
+      - name: Commit comparator fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/main.js
+          if git diff --cached --quiet; then
+            echo "No comparator change to commit."
+            exit 0
+          fi
+          git commit -m "fix: sort ranking scores descending with BigInt"
+          git push origin HEAD:hotfix/ranking-order-exact-live
