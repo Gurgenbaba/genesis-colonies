@@ -3,9 +3,11 @@ name: Ranking Hotfix Inspect
 on:
   push:
     branches: [hotfix/ranking-order-exact-live]
+  pull_request:
 
 jobs:
   inspect:
+    if: github.head_ref == 'hotfix/ranking-order-exact-live' || github.ref_name == 'hotfix/ranking-order-exact-live'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
