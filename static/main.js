@@ -39631,8 +39631,9 @@
       return true;
     });
     top.sort((a, b) => {
-      const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);
-      if (diff !== 0) return diff;
+      const scoreB = rankingScoreValue(b, tabId);
+      const scoreA = rankingScoreValue(a, tabId);
+      if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;
       return (Number(a.player_id) || 0) - (Number(b.player_id) || 0);
     });
     return top.map((row, idx) => ({
