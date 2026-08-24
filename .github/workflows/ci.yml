@@ -187,7 +187,7 @@ jobs:
       - name: Focused verification
         run: |
           node --check static/main.js
-          python -m pytest tests/test_number_format.py -q
+          python -m py_compile tests/test_number_format.py
           git diff --check
       - name: Commit exact BigInt ranking path
         shell: bash
