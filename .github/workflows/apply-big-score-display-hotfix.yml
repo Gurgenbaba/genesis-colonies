@@ -1,0 +1,134 @@
+name: Apply Big Score Display Hotfix
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-hotfix:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'hotfix/big-score-display-v2'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply fail-closed formatter patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          js_path = Path('static/main.js')
+          src = js_path.read_text(encoding='utf-8')
+
+          old_threshold = '1' + '_000' * 5   # 10^15
+          new_threshold = '1' + '_000' * 11  # 10^33
+          threshold_re = re.compile(rf"if\s*\(\s*abs\s*>=\s*{re.escape(old_threshold)}n\s*\)")
+          matches = list(threshold_re.finditer(src))
+          if len(matches) != 1:
+              raise SystemExit(f'Expected exactly one 10^15 scientific threshold, found {len(matches)}')
+          src = threshold_re.sub(lambda m: m.group(0).replace(old_threshold + 'n', new_threshold + 'n'), src, count=1)
+
+          lines = src.splitlines(keepends=True)
+          t_hits = [
+              i for i, line in enumerate(lines)
+              if ('1' + '_000' * 4 + 'n') in line and re.search(r"['\"]T['\"]", line)
+          ]
+          if len(t_hits) != 1:
+              raise SystemExit(f'Expected exactly one trillion suffix-table line, found {len(t_hits)}')
+
+          idx = t_hits[0]
+          following = ''.join(lines[idx + 1: idx + 8])
+          if ('1' + '_000' * 3 + 'n') not in following or not re.search(r"['\"]B['\"]", following):
+              raise SystemExit('Suffix table is not in the expected descending T -> B order; refusing to patch')
+
+          t_line = lines[idx]
+          if "'T'" in t_line:
+              quoted_t = "'T'"
+              quote = "'"
+          elif '"T"' in t_line:
+              quoted_t = '"T"'
+              quote = '"'
+          else:
+              raise SystemExit('Could not determine suffix quote style')
+
+          trillion = '1' + '_000' * 4 + 'n'
+          new_entries = []
+          for suffix, exponent in [('Q', 30), ('R', 27), ('Y', 24), ('Z', 21), ('E', 18), ('P', 15)]:
+              value = '1' + '_000' * (exponent // 3) + 'n'
+              cloned = t_line.replace(trillion, value).replace(quoted_t, f'{quote}{suffix}{quote}')
+              if cloned == t_line:
+                  raise SystemExit(f'Failed to build suffix entry for {suffix}')
+              new_entries.append(cloned)
+
+          lines[idx:idx] = new_entries
+          patched = ''.join(lines)
+
+          for suffix, exponent in [('P', 15), ('E', 18), ('Z', 21), ('Y', 24), ('R', 27), ('Q', 30)]:
+              value = '1' + '_000' * (exponent // 3) + 'n'
+              pair_re = re.compile(rf"(?m)^.*(?:{re.escape(value)}.*['\"]{suffix}['\"]|['\"]{suffix}['\"].*{re.escape(value)}).*$")
+              if not pair_re.search(patched):
+                  raise SystemExit(f'Missing generated {suffix} suffix entry')
+
+          js_path.write_text(patched, encoding='utf-8')
+
+          test_path = Path('tests/test_number_format.py')
+          tests = test_path.read_text(encoding='utf-8')
+          marker = 'def test_frontend_big_score_suffixes_before_scientific_notation():'
+          if marker in tests:
+              raise SystemExit('Regression test already exists unexpectedly; refusing duplicate patch')
+
+          tests += r'''
+
+
+def test_frontend_big_score_suffixes_before_scientific_notation():
+    """Ranking display keeps readable SI-style suffixes through 10^30."""
+    from pathlib import Path
+    import re
+
+    source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+
+    early_threshold = "1" + "_000" * 5 + "n"
+    scientific_threshold = "1" + "_000" * 11 + "n"
+    assert not re.search(rf"if\s*\(\s*abs\s*>=\s*{re.escape(early_threshold)}\s*\)", source)
+    assert re.search(rf"if\s*\(\s*abs\s*>=\s*{re.escape(scientific_threshold)}\s*\)", source)
+
+    for suffix, exponent in (("P", 15), ("E", 18), ("Z", 21), ("Y", 24), ("R", 27), ("Q", 30)):
+        value = "1" + "_000" * (exponent // 3) + "n"
+        paired = re.compile(
+            rf"(?m)^.*(?:{re.escape(value)}.*['\"]{suffix}['\"]|['\"]{suffix}['\"].*{re.escape(value)}).*$"
+        )
+        assert paired.search(source), f"missing {suffix} suffix at 10^{exponent}"
+'''
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+
+      - name: Syntax and regression checks
+        shell: bash
+        run: |
+          node --check static/main.js
+          python -m pip install --quiet pytest
+          python -m pytest tests/test_number_format.py -q
+          git diff --check
+
+      - name: Commit only final two-file hotfix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/apply-big-score-display-hotfix.yml
+          git add static/main.js tests/test_number_format.py
+          git commit -m 'fix(ui): keep huge scores readable with bigint suffixes'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
