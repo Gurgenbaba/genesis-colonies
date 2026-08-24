@@ -2,7 +2,8 @@ name: Apply No Scientific UI Hotfix
 
 on:
   push:
-    branches: [hotfix/no-scientific-ui]
+    branches:
+      - "hotfix/no-scientific-ui"
 
 permissions:
   contents: write
@@ -22,55 +23,36 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          path = Path('static/main.js')
-          source = path.read_text(encoding='utf-8')
+          path = Path("static/main.js")
+          source = path.read_text(encoding="utf-8")
 
-          old_helper = '''  function _scientificBigInt(abs, negative) {
-    const digits = abs.toString();
-    let fraction = digits.slice(1, 3).replace(/0+$/, "");
-    const mantissa = fraction ? `${digits[0]},${fraction}` : digits[0];
-    return `${negative ? "-" : ""}${mantissa}e${digits.length - 1}`;
-  }
+          helper_pattern = re.compile(r"  function _scientificBigInt\(abs, negative\) \{.*?\n  \}\n\n", re.S)
+          source, helper_count = helper_pattern.subn("", source, count=1)
+          if helper_count == 0 and "_scientificBigInt" in source:
+              raise SystemExit("unexpected _scientificBigInt helper shape")
 
-'''
-          if old_helper in source:
-              source = source.replace(old_helper, '', 1)
-          elif '_scientificBigInt' in source:
-              raise SystemExit('unexpected _scientificBigInt helper shape')
-
-          old_fallback = '''    if (exact === null) {
-      const num = parseIntNumber(n);
-      if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);
-      return formatNumberCompact(String(Math.trunc(num)));
-    }
-'''
-          new_fallback = '''    if (exact === null) {
-      const num = parseIntNumber(n);
-      if (!Number.isFinite(num)) return "0";
-      if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);
-      return formatNumberCompact(BigInt(Math.trunc(num)));
-    }
-'''
-          if old_fallback not in source:
-              if new_fallback not in source:
-                  raise SystemExit('formatNumberCompact fallback shape changed')
-          else:
+          old_fallback = "    if (exact === null) {\n      const num = parseIntNumber(n);\n      if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);\n      return formatNumberCompact(String(Math.trunc(num)));\n    }\n"
+          new_fallback = "    if (exact === null) {\n      const num = parseIntNumber(n);\n      if (!Number.isFinite(num)) return \"0\";\n      if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);\n      return formatNumberCompact(BigInt(Math.trunc(num)));\n    }\n"
+          if old_fallback in source:
               source = source.replace(old_fallback, new_fallback, 1)
+          elif new_fallback not in source:
+              raise SystemExit("formatNumberCompact fallback shape changed")
 
-          old_high = '    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _scientificBigInt(abs, negative);'
-          new_high = '    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _deIntFormatter.format(exact);'
+          old_high = "    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _scientificBigInt(abs, negative);"
+          new_high = "    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _deIntFormatter.format(exact);"
           if old_high in source:
               source = source.replace(old_high, new_high, 1)
           elif new_high not in source:
-              raise SystemExit('high-value compact fallback shape changed')
+              raise SystemExit("high-value compact fallback shape changed")
 
-          if '_scientificBigInt' in source:
-              raise SystemExit('scientific BigInt formatter still present')
-          if 'toExponential(' in source or 'toPrecision(' in source:
-              raise SystemExit('explicit scientific formatter present in main.js')
+          if "_scientificBigInt" in source:
+              raise SystemExit("scientific BigInt formatter still present")
+          if "toExponential(" in source or "toPrecision(" in source:
+              raise SystemExit("explicit scientific formatter present in main.js")
 
-          path.write_text(source, encoding='utf-8')
+          path.write_text(source, encoding="utf-8")
           PY
 
           node --check static/main.js
