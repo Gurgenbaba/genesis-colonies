@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='ranking.css') }}?v={{ GC_ASSET_VERSION }}">
+{% endblock %}
+
 {% block content %}
 
 <div class="gc-page gc-ranking ranking-page" id="ranking-page" data-player-id="{{ CURRENT_PLAYER_ID or '' }}">
@@ -32,4 +36,8 @@
 <script id="ranking-initial-data" type="application/json">{{ ranking_payload | tojson }}</script>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/ranking_page.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}

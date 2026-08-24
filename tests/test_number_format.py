@@ -50,7 +50,6 @@ def test_million_and_trillion_tiers():
     assert fmt_int_compact(2_500_000_000_000) == "2,5 Bio."
 
 
-
 def test_huge_integer_never_becomes_fake_infinity():
     huge = 10**50 + 123456789
     assert fmt_int(huge).replace(".", "") == str(huge)
@@ -86,3 +85,39 @@ def test_frontend_big_score_suffixes_before_scientific_notation():
         assert f"_compactBigIntBody(abs, {value})" in fragment
         assert f"}} {suffix}`;" in fragment
         previous = pos
+
+
+def test_ranking_uses_fullwidth_exact_score_layer():
+    """Ranking expands compact score tooltips inline and owns a wide page layout."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "ranking.html").read_text(encoding="utf-8")
+    script = (root / "static" / "js" / "ranking_page.js").read_text(encoding="utf-8")
+    css = (root / "static" / "ranking.css").read_text(encoding="utf-8")
+
+    assert "filename='ranking.css'" in template
+    assert "filename='js/ranking_page.js'" in template
+    assert 'node.getAttribute("title")' in script
+    assert "node.textContent = full" in script
+    assert 'node.classList.add("gc-ranking-num-full")' in script
+    assert 'focusClass = "gc-ranking-focus"' in script
+    assert 'body[data-endpoint="ranking_view"] .gc-layout--dual' in css
+    assert ".ranking-page .ranking-table-wrapper" in css
+    assert "min-width: 300px" in css
+    assert "overflow-x: auto" in css
+
+
+
+def test_ranking_client_score_path_uses_bigint_exactly():
+    """Ranking must never coerce exact decimal score strings through JS Number."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+
+    assert "return parseDisplayBigInt(row[tab.scoreKey]);" in source
+    assert "return parseDisplayBigInt(cur[tab.scoreKey]);" in source
+    assert "return parseIntNumber(row[tab.scoreKey]);" not in source
+    assert "return parseIntNumber(cur[tab.scoreKey]);" not in source
+    assert "rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId)" not in source
+    assert "if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;" in source

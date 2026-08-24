@@ -72,6 +72,7 @@ jobs:
         run: |
           python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py
           node --check static/main.js
+          node --check static/js/ranking_page.js
           git diff --check
       - name: Big-score regression suite
         run: |
