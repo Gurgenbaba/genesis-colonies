@@ -19,38 +19,39 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path("static/main.js")
           src = path.read_text(encoding="utf-8")
 
-          old_threshold = '''  if (abs >= 1_000_000_000_000_000n) {
-            return formatHugeBigIntScientific(value);
-          }
-          '''
-          new_threshold = '''  if (abs >= 10n ** 33n) {
-            return formatHugeBigIntScientific(value);
-          }
-          '''
-          if src.count(old_threshold) != 1:
-              raise SystemExit(f"expected exactly one legacy scientific threshold, got {src.count(old_threshold)}")
-          src = src.replace(old_threshold, new_threshold, 1)
+          threshold_pattern = re.compile(
+              r'if\s*\(abs\s*>=\s*1_000_000_000_000_000n\)\s*\{\s*'
+              r'return\s+formatHugeBigIntScientific\(value\);\s*\}'
+          )
+          src, threshold_count = threshold_pattern.subn(
+              'if (abs >= 10n ** 33n) {\n    return formatHugeBigIntScientific(value);\n  }',
+              src,
+              count=1,
+          )
+          if threshold_count != 1:
+              raise SystemExit(f"expected exactly one legacy scientific threshold, got {threshold_count}")
 
-          old_suffix_head = '''  const suffixes = [
-            [1_000_000_000_000n, "T"],
-          '''
-          new_suffix_head = '''  const suffixes = [
-            [10n ** 30n, "Q"],
-            [10n ** 27n, "R"],
-            [10n ** 24n, "Y"],
-            [10n ** 21n, "Z"],
-            [10n ** 18n, "E"],
-            [10n ** 15n, "P"],
-            [1_000_000_000_000n, "T"],
-          '''
-          if src.count(old_suffix_head) != 1:
-              raise SystemExit(f"expected exactly one suffix table head, got {src.count(old_suffix_head)}")
-          src = src.replace(old_suffix_head, new_suffix_head, 1)
+          suffix_pattern = re.compile(
+              r'const\s+suffixes\s*=\s*\[\s*\[1_000_000_000_000n,\s*"T"\],'
+          )
+          suffix_head = '''const suffixes = [
+    [10n ** 30n, "Q"],
+    [10n ** 27n, "R"],
+    [10n ** 24n, "Y"],
+    [10n ** 21n, "Z"],
+    [10n ** 18n, "E"],
+    [10n ** 15n, "P"],
+    [1_000_000_000_000n, "T"],'''
+          src, suffix_count = suffix_pattern.subn(suffix_head, src, count=1)
+          if suffix_count != 1:
+              raise SystemExit(f"expected exactly one suffix table head, got {suffix_count}")
+
           path.write_text(src, encoding="utf-8")
           PY
 
@@ -62,6 +63,7 @@ jobs:
           from pathlib import Path
           src = Path("static/main.js").read_text(encoding="utf-8")
           assert 'if (abs >= 10n ** 33n)' in src
+          assert '[10n ** 30n, "Q"]' in src
           assert '[10n ** 15n, "P"]' in src
           assert 'if (abs >= 1_000_000_000_000_000n)' not in src
           PY
