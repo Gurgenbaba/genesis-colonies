@@ -57,3 +57,32 @@ def test_huge_integer_never_becomes_fake_infinity():
     compact = fmt_int_compact(huge)
     assert compact != "∞"
     assert "e50" in compact
+
+
+def test_frontend_big_score_suffixes_before_scientific_notation():
+    """Huge score display uses readable BigInt suffixes through 10^30."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+    old_scientific = "if (abs >= 1_000_000_000_000_000n) return _scientificBigInt(abs, negative);"
+    new_scientific = "if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _scientificBigInt(abs, negative);"
+    assert old_scientific not in source
+    assert new_scientific in source
+
+    suffixes = (
+        ("1_000_000_000_000_000_000_000_000_000_000n", "Q"),
+        ("1_000_000_000_000_000_000_000_000_000n", "R"),
+        ("1_000_000_000_000_000_000_000_000n", "Y"),
+        ("1_000_000_000_000_000_000_000n", "Z"),
+        ("1_000_000_000_000_000_000n", "E"),
+        ("1_000_000_000_000_000n", "P"),
+    )
+    previous = source.index(new_scientific)
+    for value, suffix in suffixes:
+        branch = f"if (abs >= {value})"
+        pos = source.index(branch)
+        assert pos > previous
+        fragment = source[pos : pos + 220]
+        assert f"_compactBigIntBody(abs, {value})" in fragment
+        assert f"}} {suffix}`;" in fragment
+        previous = pos
