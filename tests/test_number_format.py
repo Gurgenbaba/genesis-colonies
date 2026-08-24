@@ -88,7 +88,7 @@ def test_frontend_big_score_suffixes_before_scientific_notation():
 
 
 def test_ranking_uses_fullwidth_exact_score_layer():
-    """Ranking expands compact score tooltips inline and owns a wide page layout."""
+    """Ranking expands exact score tooltips inline and owns a wide page layout."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
@@ -98,8 +98,12 @@ def test_ranking_uses_fullwidth_exact_score_layer():
 
     assert "filename='ranking.css'" in template
     assert "filename='js/ranking_page.js'" in template
+    assert '.gc-ranking-score [title]' in script
+    assert '.gc-ranking-mobile-score-inline [title]' in script
+    assert '.gc-ranking-my-strip [title]' in script
     assert 'node.getAttribute("title")' in script
     assert "node.textContent = full" in script
+    assert 'node.classList.remove("gc-num-compact", "num-compact")' in script
     assert 'node.classList.add("gc-ranking-num-full")' in script
     assert 'focusClass = "gc-ranking-focus"' in script
     assert 'body[data-endpoint="ranking_view"] .gc-layout--dual' in css
@@ -108,9 +112,8 @@ def test_ranking_uses_fullwidth_exact_score_layer():
     assert "overflow-x: auto" in css
 
 
-
 def test_ranking_client_score_path_uses_bigint_exactly():
-    """Ranking must never coerce exact decimal score strings through JS Number."""
+    """Ranking must preserve exact decimal score strings and sort them descending."""
     from pathlib import Path
 
     source = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
@@ -120,4 +123,7 @@ def test_ranking_client_score_path_uses_bigint_exactly():
     assert "return parseIntNumber(row[tab.scoreKey]);" not in source
     assert "return parseIntNumber(cur[tab.scoreKey]);" not in source
     assert "rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId)" not in source
-    assert "if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;" in source
+    wrong = "if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;"
+    correct = "if (scoreA !== scoreB) return scoreA > scoreB ? -1 : 1;"
+    assert wrong not in source
+    assert source.count(correct) == 2
