@@ -1,0 +1,105 @@
+/* Ranking focus layout — full-width command view with exact score values. */
+
+body[data-endpoint="ranking_view"] .gc-layout--dual > .gc-sidebar--left,
+body[data-endpoint="ranking_view"] .gc-sidebar--right,
+body[data-endpoint="ranking_view"] .gc-planet-registry,
+body.gc-ranking-focus .gc-layout--dual > .gc-sidebar--left,
+body.gc-ranking-focus .gc-sidebar--right,
+body.gc-ranking-focus .gc-planet-registry,
+html.gc-ranking-focus .gc-layout--dual > .gc-sidebar--left,
+html.gc-ranking-focus .gc-sidebar--right,
+html.gc-ranking-focus .gc-planet-registry {
+  transform: translateX(calc(-100% - 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 1280px) {
+  body[data-endpoint="ranking_view"] .gc-layout--dual,
+  body.gc-ranking-focus .gc-layout--dual,
+  html.gc-ranking-focus .gc-layout--dual {
+    grid-template-columns: 0 minmax(0, 1fr) 0 0;
+    gap: 0;
+  }
+
+  body[data-endpoint="ranking_view"] .gc-layout--dual > .gc-sidebar--left,
+  body[data-endpoint="ranking_view"] .gc-sidebar--right,
+  body[data-endpoint="ranking_view"] .gc-planet-registry,
+  body.gc-ranking-focus .gc-layout--dual > .gc-sidebar--left,
+  body.gc-ranking-focus .gc-sidebar--right,
+  body.gc-ranking-focus .gc-planet-registry,
+  html.gc-ranking-focus .gc-layout--dual > .gc-sidebar--left,
+  html.gc-ranking-focus .gc-sidebar--right,
+  html.gc-ranking-focus .gc-planet-registry {
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    overflow: hidden;
+  }
+}
+
+@media (min-width: 992px) and (max-width: 1279px) {
+  body[data-endpoint="ranking_view"] .gc-layout--dual,
+  body.gc-ranking-focus .gc-layout--dual,
+  html.gc-ranking-focus .gc-layout--dual {
+    grid-template-columns: 0 minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+.ranking-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.ranking-page .ranking-panel-full,
+.ranking-page .gc-ranking-body,
+.ranking-page .gc-ranking-list,
+.ranking-page .gc-ranking,
+.ranking-page .ranking-table-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
+.ranking-page .ranking-table-wrapper {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.ranking-page .gc-ranking-table {
+  min-width: 960px;
+  table-layout: auto;
+}
+
+.ranking-page .gc-ranking-table thead th.gc-ranking-score,
+.ranking-page .gc-ranking-table tbody td.gc-ranking-score {
+  width: 300px;
+  min-width: 300px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.ranking-page .gc-ranking-score .gc-ranking-num-full,
+.ranking-page .gc-ranking-mobile-score-inline .gc-ranking-num-full,
+.ranking-page .gc-ranking-my-strip .gc-ranking-num-full {
+  display: inline-block;
+  max-width: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+}
+
+@media (max-width: 760px) {
+  .ranking-page .gc-ranking-mobile-score-inline {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+  }
+
+  .ranking-page .gc-ranking-mobile-score-inline .gc-ranking-num-full {
+    font-size: 0.92rem;
+  }
+}
