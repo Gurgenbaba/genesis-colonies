@@ -1,15 +1,10 @@
 (() => {
   "use strict";
 
-  const root = document.getElementById("ranking-page");
-  if (!root) return;
-
   const focusClass = "gc-ranking-focus";
-  const tableRoot = document.getElementById("ranking-table-content");
-  const myStrip = document.getElementById("ranking-my-strip");
-
-  document.body.classList.add(focusClass);
-  document.documentElement.classList.add(focusClass);
+  let activeRoot = null;
+  let scoreObserver = null;
+  let syncQueued = false;
 
   function expandExactRankingScores(scope) {
     if (!scope?.querySelectorAll) return;
@@ -31,21 +26,58 @@
       });
   }
 
-  expandExactRankingScores(root);
-
-  const observer = new MutationObserver(() => expandExactRankingScores(root));
-  if (tableRoot) observer.observe(tableRoot, { childList: true, subtree: true });
-  if (myStrip) observer.observe(myStrip, { childList: true, subtree: true });
-
-  const cleanup = () => {
-    observer.disconnect();
+  function deactivateRankingPage() {
+    if (scoreObserver) {
+      scoreObserver.disconnect();
+      scoreObserver = null;
+    }
+    activeRoot = null;
     document.body.classList.remove(focusClass);
     document.documentElement.classList.remove(focusClass);
-  };
-
-  if (window.GC && typeof window.GC.registerCleanup === "function") {
-    window.GC.registerCleanup(cleanup);
-  } else {
-    window.addEventListener("pagehide", cleanup, { once: true });
   }
+
+  function activateRankingPage(root) {
+    if (activeRoot === root) {
+      expandExactRankingScores(root);
+      return;
+    }
+
+    deactivateRankingPage();
+    activeRoot = root;
+    document.body.classList.add(focusClass);
+    document.documentElement.classList.add(focusClass);
+
+    expandExactRankingScores(root);
+    scoreObserver = new MutationObserver(() => expandExactRankingScores(root));
+    scoreObserver.observe(root, { childList: true, subtree: true });
+  }
+
+  function syncRankingPage() {
+    syncQueued = false;
+    const root = document.getElementById("ranking-page");
+    if (root) activateRankingPage(root);
+    else if (activeRoot) deactivateRankingPage();
+  }
+
+  function queueSync() {
+    if (syncQueued) return;
+    syncQueued = true;
+    queueMicrotask(syncRankingPage);
+  }
+
+  const mainContent = document.getElementById("main-content");
+  const shellHost = mainContent?.parentElement || document.body;
+  const shellObserver = new MutationObserver(queueSync);
+  shellObserver.observe(shellHost, { childList: true, subtree: true });
+
+  syncRankingPage();
+
+  window.addEventListener(
+    "pagehide",
+    () => {
+      deactivateRankingPage();
+      shellObserver.disconnect();
+    },
+    { once: true }
+  );
 })();
