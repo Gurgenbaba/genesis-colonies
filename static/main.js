@@ -39614,7 +39614,7 @@
       top.sort((a, b) => {
         const scoreB = rankingScoreValue(b, tabId);
         const scoreA = rankingScoreValue(a, tabId);
-        if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;
+        if (scoreA !== scoreB) return scoreA > scoreB ? -1 : 1;
         return (Number(a.alliance_id) || 0) - (Number(b.alliance_id) || 0);
       });
       return top.map((row, idx) => ({
@@ -39633,7 +39633,7 @@
     top.sort((a, b) => {
       const scoreB = rankingScoreValue(b, tabId);
       const scoreA = rankingScoreValue(a, tabId);
-      if (scoreB !== scoreA) return scoreB > scoreA ? -1 : 1;
+      if (scoreA !== scoreB) return scoreA > scoreB ? -1 : 1;
       return (Number(a.player_id) || 0) - (Number(b.player_id) || 0);
     });
     return top.map((row, idx) => ({
