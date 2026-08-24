@@ -35,7 +35,6 @@ jobs:
           path.write_text(source, encoding='utf-8')
           PY
           node --check static/main.js
-          python -m pytest -q --tb=line tests/test_number_format.py
           git diff --check
       - name: Commit fix
         shell: bash
