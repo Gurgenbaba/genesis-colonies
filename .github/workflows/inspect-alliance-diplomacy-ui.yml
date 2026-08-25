@@ -1,0 +1,48 @@
+name: Inspect alliance diplomacy UI
+
+on:
+  push:
+    branches:
+      - hotfix/alliance-diplomacy-live-ui
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect alliance JS paths
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('static/main.js')
+          s = p.read_text(encoding='utf-8')
+          needles = [
+              'function allianceReloadHub',
+              'allianceReloadHub =',
+              '/api/alliance/diplomacy/send',
+              '/api/alliance/diplomacy/respond',
+              'data-dip-accept',
+              'data-alliance-submit',
+          ]
+          for needle in needles:
+              print('\n' + '=' * 80)
+              print('NEEDLE:', needle)
+              start = 0
+              found = 0
+              while True:
+                  idx = s.find(needle, start)
+                  if idx < 0:
+                      break
+                  found += 1
+                  lo = max(0, idx - 1800)
+                  hi = min(len(s), idx + 2600)
+                  print(f'--- MATCH {found} at {idx} ---')
+                  print(s[lo:hi])
+                  start = idx + len(needle)
+              print('MATCHES:', found)
+          PY
