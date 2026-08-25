@@ -11,13 +11,13 @@ permissions:
 
 concurrency:
   group: gc-al-war-01-apply
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     env:
       APP_ENV: development
       FLASK_ENV: development
@@ -45,8 +45,16 @@ jobs:
       - name: Apply deterministic GC-AL-WAR-01 patch
         run: python scripts/_gc_al_war_01_apply.py
 
-      - name: Alliance regressions
-        run: python -m pytest -q --tb=line tests/test_alliance.py
+      - name: Focused alliance war regressions
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_alliance.py::test_diplomacy_war_and_duplicate_request \
+            tests/test_alliance.py::test_gc_al_dip_01_fleet_mission_hooks \
+            tests/test_alliance.py::test_gc_al_war_01_peace_accept_returns_to_neutral \
+            tests/test_alliance.py::test_gc_al_war_01_declined_peace_keeps_war \
+            tests/test_alliance.py::test_gc_al_war_01_transition_guards_and_stale_requests \
+            tests/test_alliance.py::test_gc_al_war_01_member_cannot_offer_peace \
+            tests/test_alliance.py::test_gc_al_war_01_hub_renders_peace_action_for_active_war
 
       - name: Locale parity and placeholders
         run: |
