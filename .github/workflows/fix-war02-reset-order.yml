@@ -51,8 +51,10 @@ jobs:
               raise SystemExit(f"reset assertion marker mismatch: {s.count(old)}")
           p.write_text(s.replace(old, new, 1), encoding="utf-8")
           PY
-      - name: Install test dependency
-        run: pip install pytest
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
       - name: Reset contract gate
         run: |
           python -m py_compile game/admin_universe_reset.py
