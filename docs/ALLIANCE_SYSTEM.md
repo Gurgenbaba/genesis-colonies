@@ -65,7 +65,8 @@ Mitglieder-Roster (Hub + Visitor) zeigt **Homeworld-Koordinaten** via `get_allia
 
 - Modul: `static/main.js` → `GC.modules.alliance` / `initAlliance()`
 - Alle Mutations-Actions: `allianceAction()` → `GC.fetchGameAction` + `applyActionState(res, reason)`
-- Hub-Refresh nach strukturellen Änderungen: `allianceReloadHub()` → `GC.navigateTo("/alliance", { push: false, force: true })` oder `GC.reloadCurrentPage({ force: true })`
+- Hub-Refresh nach strukturellen Änderungen: `allianceReloadHub()` → `GC.navigateTo("/alliance", { push: false, force: true })` oder `GC.reloadCurrentPage({ force: true })`; der aktive Hub-Tab wird über den PJAX-Refresh hinweg wiederhergestellt.
+- **GC-AL-UX-04:** Diplomatie ist strukturelles SSR-Markup (Relationen, Requests, WAR-Score/Actions) und daher **nicht** `ALLIANCE_PATCH_ONLY`; erfolgreiche Diplomatie-Mutationen refreshen den Hub sofort ohne Browser-Reload. Der Diplomatie-Tab verwendet eckige Evo/Genesis-Geometrie (`border-radius: 0`).
 - **Verboten:** `location.reload()`, `location.href =`, `location.assign()` im Alliance-Modul
 - Logo-Upload: multipart `fetch` (Ausnahme — kein JSON-Body); Response weiterhin `{ ok, state, alliance }`
 - Native Form-Submit blockiert (`allianceBlockNativeSubmit`); Buttons `type="button"` + `data-alliance-submit`
