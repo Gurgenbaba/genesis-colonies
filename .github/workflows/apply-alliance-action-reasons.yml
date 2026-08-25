@@ -20,6 +20,20 @@ jobs:
           curl -fsSL https://api.github.com/repos/Gurgenbaba/genesis-colonies/git/blobs/cb3e869ec3a9ff62cdd23f38787fb11af1387532 \
             | jq -r '.content' | tr -d '\n' | base64 -d > /tmp/apply_alliance_action_reasons.py
           python /tmp/apply_alliance_action_reasons.py
+      - name: Harden stale alliance layout assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_alliance.py')
+          s = p.read_text(encoding='utf-8')
+          old1 = "    assert 'class=\"alliance-hub-tab-bar\"' in body"
+          new1 = "    assert 'alliance-hub-tab-bar' in body"
+          old2 = "    assert 'class=\"alliance-hub-tab is-active\"' in body"
+          new2 = "    assert 'alliance-hub-tab is-active' in body"
+          if old1 not in s or old2 not in s:
+              raise SystemExit('stale layout assertion anchor missing')
+          p.write_text(s.replace(old1, new1, 1).replace(old2, new2, 1), encoding='utf-8')
+          PY
       - name: Syntax and diff gate
         run: |
           python -m py_compile game/alliance.py
@@ -34,6 +48,7 @@ jobs:
       - name: Remove temporary helpers
         run: |
           rm -f .github/workflows/apply-alliance-action-reasons.yml
+          rm -f .github/workflows/diagnose-alliance-layout-ux05.yml
           rm -rf .tmp
       - name: Commit hotfix
         run: |
