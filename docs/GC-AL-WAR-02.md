@@ -1,6 +1,6 @@
 # GC-AL-WAR-02 — Alliance War Meta
 
-**Status:** ✅ Implemented on feature branch · Owner: `game/alliance.py` (lifecycle) + `game/alliance_war.py` (derived combat meta)
+**Status:** ✅ Implemented + production-hardened on feature branch · Owner: `game/alliance.py` (lifecycle) + `game/alliance_war.py` (derived combat meta)
 
 WAR-02 extends the WAR-01 peace lifecycle with a real campaign scoreboard. It does **not** introduce a second diplomacy or combat engine.
 
@@ -11,8 +11,8 @@ WAR-02 extends the WAR-01 peace lifecycle with a real campaign scoreboard. It do
 - Only battles where both players belong to different alliances whose current relation is `war` count.
 - War Score reuses `scoring.compute_destroyed_raw_from_losses()` exactly; there is no second score formula.
 - `fleet_id` is the combat-event idempotency key. A retried fleet tick can never add the same battle twice.
-- Peace immediately stops new war statistics because the relation is no longer `war`.
-- A later declaration between the same alliances gets a new `updated_at`, therefore a fresh 0:0 campaign.
+- Peace immediately stops new war statistics because the relation becomes `neutral`.
+- Peace preserves the neutral transition row; a later declaration uses a monotonic transition timestamp, so even peace + re-war within the same second starts a fresh 0:0 campaign.
 - Score and destroyed-unit totals are persisted as decimal `TEXT`, so values above SQLite signed 64-bit remain exact.
 
 ## Schema — migration 155
@@ -35,10 +35,13 @@ Combat report UI shows:
 
 The Alliance diplomacy tab exposes the same server scoreboard next to each active war.
 
+## Production hardening
+
+- PostgreSQL aggregate updates atomically seed the pair row and serialize concurrent fleet workers with `SELECT ... FOR UPDATE`, while Python keeps arbitrary-precision score arithmetic.
+- Same-second peace/re-war transitions cannot reuse a campaign identity.
+- Universe reset maps `alliance_war_events` + `alliance_war_stats` to the `combat` domain and clears both FK-safe before `alliances`.
+- The legacy diplomacy regression now matches WAR-01: active wars reject NAP/alliance requests with `war_active`.
+
 ## Tests
 
-```bash
-python -m pytest tests/test_alliance_war_meta.py tests/test_alliance.py tests/test_combat.py -q
-```
-
-Critical regressions: canonical score parity, fleet-id idempotency, peace stop, re-war reset, >64-bit scores, report renderer integration.
+Focused WAR-02 deployment gates cover canonical score parity, fleet-id idempotency, peace stop, same-second re-war reset, >64-bit scores, report renderer integration, PostgreSQL serialization contract and universe-reset ownership/order. Normal PR CI additionally gates Smoke, Big-Score, locale parity, I18N regression and newly introduced visible raw strings.
