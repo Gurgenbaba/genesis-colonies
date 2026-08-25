@@ -1,0 +1,33 @@
+name: Diagnose UX-05 alliance layout
+on:
+  push:
+    branches: [hotfix/alliance-action-reasons]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements-prod.txt pytest
+      - name: Apply exact UX-05 patch
+        run: |
+          curl -fsSL https://api.github.com/repos/Gurgenbaba/genesis-colonies/git/blobs/cb3e869ec3a9ff62cdd23f38787fb11af1387532 \
+            | jq -r '.content' | tr -d '\n' | base64 -d > /tmp/apply_ux05.py
+          python /tmp/apply_ux05.py
+      - name: Show relevant patch
+        run: |
+          git diff -- game/alliance.py templates/alliance.html | sed -n '1,320p'
+      - name: Run failing layout test isolated
+        run: python -m pytest -q -s --tb=long tests/test_alliance.py::test_alliance_layout_uses_card_grids_not_lists
+      - name: Run nearby layout tests together
+        run: |
+          python -m pytest -q -s --tb=line \
+            tests/test_alliance.py::test_alliance_layout_uses_card_grids_not_lists \
+            tests/test_alliance.py::test_alliance_no_internal_keys_visible \
+            tests/test_alliance.py::test_alliance_hero_actions_single_group \
+            tests/test_alliance.py::test_alliance_member_roster_uses_cards_not_table
