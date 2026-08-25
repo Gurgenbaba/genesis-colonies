@@ -53637,3 +53637,25 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .gc-world-boss-raid-strip .gc-world-boss-hp,
 .gc-world-boss-raid-strip .gc-world-boss-hp-fill { border-radius:0 !important; }
 
+
+
+/* GC-EXACT-NUMBERS-001 */
+.gc-num-compact,
+.gc-cost-val {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.empire-prod-card-body { min-width: 0; }
+.empire-prod-card-value {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
