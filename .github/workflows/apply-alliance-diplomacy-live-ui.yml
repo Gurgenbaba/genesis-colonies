@@ -1,0 +1,61 @@
+name: Apply alliance diplomacy live UI
+
+on:
+  push:
+    branches:
+      - hotfix/alliance-diplomacy-live-ui
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-alliance-diplomacy-live-ui-secret-key-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/alliance-diplomacy-live-ui
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-prod.txt pytest
+      - name: Apply hotfix
+        run: python scripts/apply_alliance_diplomacy_live_ui.py
+      - name: Syntax and diff gate
+        run: |
+          node --check static/main.js
+          python -m py_compile tests/test_alliance_diplomacy_live_ui.py
+          git diff --check
+      - name: Focused diplomacy regression
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_alliance_diplomacy_live_ui.py \
+            tests/test_alliance_war_meta.py \
+            tests/test_alliance.py::test_diplomacy_war_and_duplicate_request \
+            tests/test_alliance.py::test_diplomacy_rewar_same_second_gets_fresh_campaign \
+            tests/test_alliance.py::test_gc_al_war_01_lifecycle_bundle
+      - name: Remove temporary helpers
+        run: |
+          rm -f .github/workflows/inspect-alliance-diplomacy-ui.yml
+          rm -f .github/workflows/apply-alliance-diplomacy-live-ui.yml
+          rm -f scripts/apply_alliance_diplomacy_live_ui.py
+      - name: Commit hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(alliance): live-refresh diplomacy and square UI"
+          git push origin HEAD:hotfix/alliance-diplomacy-live-ui
