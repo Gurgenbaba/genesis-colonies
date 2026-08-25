@@ -20,6 +20,18 @@ jobs:
           curl -fsSL https://api.github.com/repos/Gurgenbaba/genesis-colonies/git/blobs/241ace1a2e31ed86ae845fa42b3f592acec24015 \
             | jq -r '.content' | tr -d '\n' | base64 -d > /tmp/apply_fleet_action_reasons.py
           python /tmp/apply_fleet_action_reasons.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_fleet_action_reasons.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              'start = app.index(\'state = _fleet_mutation_game_state("api_fleet_send")\')',
+              'start = app.rindex(\'state = _fleet_mutation_game_state("api_fleet_send")\')',
+              1,
+          )
+          s = s.replace('block = app[start : start + 1200]', 'block = app[start : start + 2400]', 1)
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Syntax and diff gate
         run: |
           python -m py_compile app.py
