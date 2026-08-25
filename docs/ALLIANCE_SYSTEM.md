@@ -1,6 +1,6 @@
 # Alliance System — Genesis Colonies (EPIC-09)
 
-**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03) + **GC-AL-DIP-01** (Fleet Mission Hooks) + **GC-AL-WAR-01** (Peace Workflow) + **GC-AL-WAR-02** (War Score / Combat Meta).
+**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…05) + **GC-AL-DIP-01** (Fleet Mission Hooks) + **GC-AL-WAR-01** (Peace Workflow) + **GC-AL-WAR-02** (War Score / Combat Meta).
 
 **Owner:** `game/alliance.py` · Catalog: `game/alliance_catalog.py`  
 **UI:** `/alliance` (Hub) · `/alliance/<id>` (öffentliche Besucherseite) · `GC.modules.alliance` · `templates/alliance.html`  
@@ -67,6 +67,7 @@ Mitglieder-Roster (Hub + Visitor) zeigt **Homeworld-Koordinaten** via `get_allia
 - Alle Mutations-Actions: `allianceAction()` → `GC.fetchGameAction` + `applyActionState(res, reason)`
 - Hub-Refresh nach strukturellen Änderungen: `allianceReloadHub()` → `GC.navigateTo("/alliance", { push: false, force: true })` oder `GC.reloadCurrentPage({ force: true })`; der aktive Hub-Tab wird über den PJAX-Refresh hinweg wiederhergestellt.
 - **GC-AL-UX-04:** Diplomatie ist strukturelles SSR-Markup (Relationen, Requests, WAR-Score/Actions) und daher **nicht** `ALLIANCE_PATCH_ONLY`; erfolgreiche Diplomatie-Mutationen refreshen den Hub sofort ohne Browser-Reload. Der Diplomatie-Tab verwendet eckige Evo/Genesis-Geometrie (`border-radius: 0`).
+- **GC-AL-UX-05:** Gesperrte Diplomatie-Aktionen erklären den Grund sichtbar aus Server-State; bekannte Alliance-Reason-Codes werden zentral lokalisiert und interne Codes nie roh an Spieler ausgegeben. Pending Peace/Outgoing Requests sind direkt erkennbar.
 - **Verboten:** `location.reload()`, `location.href =`, `location.assign()` im Alliance-Modul
 - Logo-Upload: multipart `fetch` (Ausnahme — kein JSON-Body); Response weiterhin `{ ok, state, alliance }`
 - Native Form-Submit blockiert (`allianceBlockNativeSubmit`); Buttons `type="button"` + `data-alliance-submit`

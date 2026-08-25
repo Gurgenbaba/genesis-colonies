@@ -725,6 +725,7 @@
       <section class="alliance-hub-tab-panel" data-alliance-panel="diplomacy" hidden>
         {% if st.diplomacy_unlocked %}
         <p class="alliance-hub-dip-intro">{{ T("alliance_diplomacy_intro", "Verwalte Bündnisse, Waffenstillstände und Kriegserklärungen.") }}</p>
+        {% if st.can_manage %}
         <form class="alliance-hub-diplomacy-form"
               data-alliance-diplomacy-form
               data-alliance-action="diplomacy"
@@ -739,6 +740,12 @@
           </select>
           <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-alliance-submit="diplomacy">{{ T("alliance_diplomacy_send", "Senden") }}</button>
         </form>
+        {% else %}
+        <div class="alliance-hub-action-blocked" role="note" data-alliance-blocked-reason="diplomacy_role">
+          <strong>{{ T("alliance_action_unavailable", "Aktion derzeit nicht verfügbar") }}</strong>
+          <span>{{ T("alliance_diplomacy_manage_required", "Nur Leader und Offiziere dürfen Diplomatie verwalten. Dein Allianzrang erlaubt hier nur das Ansehen.") }}</span>
+        </div>
+        {% endif %}
         <ul class="alliance-hub-diplomacy-list">
           {% for d in st.diplomacy %}
           <li class="alliance-hub-diplomacy-row">
@@ -763,17 +770,36 @@
             </div>
             {% endif %}
             {% if d.relation == 'war' and st.can_manage %}
-            <form class="alliance-hub-dip-peace-form" data-alliance-action="diplomacy" method="post" action="#" novalidate>
-              <input type="hidden" name="tag" value="{{ d.other_tag }}">
-              <input type="hidden" name="request_type" value="peace">
-              <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" data-alliance-submit="diplomacy">{{ T("alliance_dip_offer_peace", "Frieden anbieten") }}</button>
-            </form>
+              {% if d.peace_request_pending %}
+              <div class="alliance-hub-dip-action-state">
+                <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" disabled aria-disabled="true">{{ T("alliance_dip_offer_peace", "Frieden anbieten") }}</button>
+                <span class="alliance-hub-action-reason">{{ T("alliance_dip_peace_pending", "Ein Friedensangebot ist bereits offen. Wartet auf Annahme oder Ablehnung.") }}</span>
+              </div>
+              {% else %}
+              <form class="alliance-hub-dip-peace-form" data-alliance-action="diplomacy" method="post" action="#" novalidate>
+                <input type="hidden" name="tag" value="{{ d.other_tag }}">
+                <input type="hidden" name="request_type" value="peace">
+                <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" data-alliance-submit="diplomacy">{{ T("alliance_dip_offer_peace", "Frieden anbieten") }}</button>
+              </form>
+              {% endif %}
             {% endif %}
           </li>
           {% else %}
           <li class="alliance-hub-empty">{{ T("alliance_no_diplomacy", "Keine Beziehungen.") }}</li>
           {% endfor %}
         </ul>
+        {% if st.diplomacy_requests.outgoing %}
+        <div class="alliance-hub-dip-outgoing">
+          <h4 class="alliance-hub-subhead">{{ T("alliance_dip_outgoing", "Ausgehende Anfragen") }}</h4>
+          {% for r in st.diplomacy_requests.outgoing %}
+          <div class="alliance-hub-dip-row" data-dip-outgoing="{{ r.id }}">
+            <span class="alliance-hub-tag">[{{ r.other_tag }}]</span>
+            {{ alliance_dip_relation(r.request_type) }}
+            <span class="alliance-hub-action-reason">{{ T("alliance_dip_waiting_response", "Wartet auf Antwort der anderen Allianz.") }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
         {% if st.diplomacy_requests.incoming %}
         <div class="alliance-hub-dip-incoming">
           <h4 class="alliance-hub-subhead">{{ T("alliance_dip_incoming", "Eingehende Anfragen") }}</h4>
@@ -781,8 +807,12 @@
           <div class="alliance-hub-dip-row" data-dip-request="{{ r.id }}">
             <span class="alliance-hub-tag">[{{ r.other_tag }}]</span>
             {{ alliance_dip_relation(r.request_type) }}
+            {% if st.can_manage %}
             <button type="button" class="gc-btn gc-btn-sm" data-dip-accept="{{ r.id }}">{{ T("alliance_dip_accept", "Annehmen") }}</button>
             <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" data-dip-decline="{{ r.id }}">{{ T("alliance_dip_decline", "Ablehnen") }}</button>
+            {% else %}
+            <span class="alliance-hub-action-reason">{{ T("alliance_diplomacy_manage_required", "Nur Leader und Offiziere dürfen Diplomatie verwalten. Dein Allianzrang erlaubt hier nur das Ansehen.") }}</span>
+            {% endif %}
           </div>
           {% endfor %}
         </div>

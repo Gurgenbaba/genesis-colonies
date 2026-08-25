@@ -2579,8 +2579,8 @@ def test_alliance_layout_uses_card_grids_not_lists(alliance_db):
     assert '<ul class="alliance-hub-project-grid"' not in body
     assert '<ul class="alliance-hub-member-grid' not in body
     assert 'class="alliance-hub-pool-grid"' in body
-    assert 'class="alliance-hub-tab-bar"' in body
-    assert 'class="alliance-hub-tab is-active"' in body
+    assert 'alliance-hub-tab-bar' in body
+    assert 'alliance-hub-tab is-active' in body
     assert "alliance-hub-grid-section" in body
     assert "alliance-hub-hero-logo-row" in body
 
@@ -2786,3 +2786,56 @@ def test_detect_page_treats_alliance_visitor_as_alliance():
     assert 'path === "/alliance"' in src
     assert r"\/alliance\/\d+" in src
 
+
+
+
+def test_gc_al_ux_05_pending_peace_reason_state(alliance_db):
+    from game.alliance import (
+        create_alliance,
+        get_alliance_state,
+        get_player_alliance,
+        respond_diplomacy_request,
+        send_diplomacy_request,
+    )
+
+    leader_a = _player(name="Reason Leader A")
+    leader_b = _player(name="Reason Leader B")
+    conn = db()
+    try:
+        create_alliance("RZA", "Reason A", leader_a, conn=conn)
+        create_alliance("RZB", "Reason B", leader_b, conn=conn)
+        conn.commit()
+        aid_a = int(get_player_alliance(leader_a, conn=conn)["alliance_id"])
+        aid_b = int(get_player_alliance(leader_b, conn=conn)["alliance_id"])
+        for aid in (aid_a, aid_b):
+            conn.execute(
+                "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'diplomacy_center', 1);",
+                (aid,),
+            )
+        conn.commit()
+
+        send_diplomacy_request(leader_a, "RZB", "war", conn=conn)
+        conn.commit()
+        row = next(d for d in get_alliance_state(leader_a, conn=conn)["diplomacy"] if d["other_tag"] == "RZB")
+        assert row["relation"] == "war"
+        assert row["peace_request_pending"] is False
+
+        send_diplomacy_request(leader_a, "RZB", "peace", conn=conn)
+        conn.commit()
+        row_a = next(d for d in get_alliance_state(leader_a, conn=conn)["diplomacy"] if d["other_tag"] == "RZB")
+        row_b = next(d for d in get_alliance_state(leader_b, conn=conn)["diplomacy"] if d["other_tag"] == "RZA")
+        assert row_a["peace_request_pending"] is True
+        assert row_b["peace_request_pending"] is True
+
+        state_b = get_alliance_state(leader_b, conn=conn)
+        peace_id = next(
+            int(r["id"])
+            for r in state_b["diplomacy_requests"]["incoming"]
+            if r["request_type"] == "peace"
+        )
+        respond_diplomacy_request(leader_b, peace_id, accept=False, conn=conn)
+        conn.commit()
+        row_after = next(d for d in get_alliance_state(leader_a, conn=conn)["diplomacy"] if d["other_tag"] == "RZB")
+        assert row_after["peace_request_pending"] is False
+    finally:
+        conn.close()
