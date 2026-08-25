@@ -1,0 +1,44 @@
+name: Apply alliance action reasons
+on:
+  push:
+    branches: [hotfix/alliance-action-reasons]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -r requirements-prod.txt pytest
+      - name: Load and apply UX-05 patch
+        run: |
+          curl -fsSL https://api.github.com/repos/Gurgenbaba/genesis-colonies/git/blobs/cb3e869ec3a9ff62cdd23f38787fb11af1387532 \
+            | jq -r '.content' | tr -d '\n' | base64 -d > /tmp/apply_alliance_action_reasons.py
+          python /tmp/apply_alliance_action_reasons.py
+      - name: Syntax and diff gate
+        run: |
+          python -m py_compile game/alliance.py
+          node --check static/main.js
+          git diff --check
+      - name: Focused Alliance regression
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_alliance_action_reasons.py \
+            tests/test_alliance.py \
+            tests/test_alliance_war_meta.py
+      - name: Remove temporary helpers
+        run: |
+          rm -f .github/workflows/apply-alliance-action-reasons.yml
+          rm -rf .tmp
+      - name: Commit hotfix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(alliance): explain blocked actions clearly'
+          git push
