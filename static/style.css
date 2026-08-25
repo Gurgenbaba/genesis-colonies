@@ -53700,3 +53700,17 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   .gc-combat-war-vs { text-align: center; }
   .gc-combat-war-side:last-child { text-align: left; }
 }
+
+
+/* GC-AL-UX-04: diplomacy uses square Evo/Genesis geometry. */
+#alliance-page [data-alliance-panel="diplomacy"] input,
+#alliance-page [data-alliance-panel="diplomacy"] select,
+#alliance-page [data-alliance-panel="diplomacy"] button,
+#alliance-page [data-alliance-panel="diplomacy"] .gc-input,
+#alliance-page [data-alliance-panel="diplomacy"] .gc-btn,
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-dip-badge,
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-war-meta,
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-diplomacy-row,
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-dip-row {
+  border-radius: 0 !important;
+}

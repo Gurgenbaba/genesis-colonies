@@ -23174,6 +23174,9 @@
   let _allianceActionInFlight = false;
 
   async function allianceReloadHub(reason) {
+    const currentPage = document.getElementById("alliance-page");
+    const activeTab =
+      currentPage?.querySelector("[data-alliance-tab].is-active")?.dataset.allianceTab || "";
     const cleanUrl = "/alliance";
     if (typeof GC.navigateTo === "function") {
       await GC.navigateTo(cleanUrl, { push: false, force: true });
@@ -23183,6 +23186,8 @@
     if (window.history?.replaceState) {
       window.history.replaceState(null, "", cleanUrl);
     }
+    const refreshedPage = document.getElementById("alliance-page");
+    if (activeTab && refreshedPage) switchAllianceTab(refreshedPage, activeTab);
     void reason;
   }
 
@@ -23190,7 +23195,6 @@
   const ALLIANCE_PATCH_ONLY = new Set([
     "alliance_profile",
     "alliance_recruitment",
-    "alliance_diplomacy",
     "alliance_donate",
   ]);
 
