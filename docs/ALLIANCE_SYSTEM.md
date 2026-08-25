@@ -1,6 +1,6 @@
 # Alliance System — Genesis Colonies (EPIC-09)
 
-**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03) + **GC-AL-DIP-01** (Fleet Mission Hooks) + **GC-AL-WAR-01** (Peace Workflow). Kriegs-Score / Report-Meta folgt separat.
+**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03) + **GC-AL-DIP-01** (Fleet Mission Hooks) + **GC-AL-WAR-01** (Peace Workflow) + **GC-AL-WAR-02** (War Score / Combat Meta).
 
 **Owner:** `game/alliance.py` · Catalog: `game/alliance_catalog.py`  
 **UI:** `/alliance` (Hub) · `/alliance/<id>` (öffentliche Besucherseite) · `GC.modules.alliance` · `templates/alliance.html`  
@@ -162,19 +162,20 @@ Officer erhalten System-Nachricht bei Spende.
   - `nap` → `foreign_planet` ohne `attack` (`mission_blocked_nap`)
   - `war` → Attack erlaubt + `diplomacy_relation: "war"` am Target-Payload
 - **GC-AL-WAR-01:** aktiver Krieg → gegenseitig bestätigtes Friedensangebot → `neutral`; Krieg invalidiert ältere Pact-Requests, damit keine stale Anfrage den neueren Kriegszustand überschreibt.
-- **Follow-up:** Combat Kriegs-Meta (Reports/Score/Badges) als GC-AL-WAR-02.
+- **GC-AL-WAR-02:** aktive Kriege führen eine serverseitige Kampagnenstatistik (War Score aus kanonischem Destroyed-Raw, zerstörte Einheiten, Siege/Gefechte/Unentschieden). `fleet_id` dedupliziert Combat-Retries; Frieden stoppt sofort, Re-War startet bei 0. Combat Reports tragen sichtbare WAR-Meta/Badges.
 
-## Schema (Migration 088–092)
+## Schema (Migration 088–092, 155)
 
 - `alliances` — description, level, xp, pool_*, member_limit, recruitment_mode (089)
 - `alliance_donations`, `alliance_buildings`, `alliance_technologies`, `alliance_projects`
 - `alliance_applications`, `alliance_diplomacy`, `alliance_diplomacy_requests`
 - **092:** Partial unique indexes (active project, pending diplomacy, pending application per player)
+- **155:** `alliance_war_stats` + `alliance_war_events` (Big-Score-safe TEXT aggregates, `fleet_id` idempotency)
 
 ## Tests
 
 ```bash
-python -m pytest tests/test_alliance.py -q
+python -m pytest tests/test_alliance.py tests/test_alliance_war_meta.py -q
 ```
 
 Abdeckung: Schema, CRUD, Spenden/Pool, Projekte, Boni/EffectResolver, Expedition-Hook, Hold-Permission, Rollen, Rekrutierung, Diplomatie, API-Envelopes, PJAX-JS-Contract, SSR-Projekt-Timing.

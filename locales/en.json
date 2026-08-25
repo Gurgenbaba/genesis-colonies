@@ -8905,5 +8905,11 @@
   "alliance_dip_offer_peace": "Offer peace",
   "peace_requires_war": "A peace offer is only possible during an active war.",
   "war_active": "The war is active. End it through a peace offer first.",
-  "already_at_war": "These alliances are already at war."
+  "already_at_war": "These alliances are already at war.",
+  "alliance_war_score": "War Score",
+  "alliance_war_battles": "Battles",
+  "alliance_war_destroyed_units": "Destroyed units",
+  "alliance_war_wins": "Victories",
+  "alliance_war_draws": "Draws",
+  "alliance_war_since": "War since"
 }

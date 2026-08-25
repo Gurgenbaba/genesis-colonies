@@ -412,3 +412,13 @@ def test_universe_reset_recalculates_rankings(mock_backup, app_client, tmp_path)
         assert rank_totals == list(range(1, len(rows) + 1))
     finally:
         conn.close()
+
+
+def test_alliance_war_meta_belongs_to_combat_reset_domain() -> None:
+    from game.admin_universe_reset import CLEAR_TABLES_ORDER, RESET_DOMAINS
+
+    combat = RESET_DOMAINS["combat"]
+    assert "alliance_war_events" in combat
+    assert "alliance_war_stats" in combat
+    assert CLEAR_TABLES_ORDER.index("alliance_war_events") < CLEAR_TABLES_ORDER.index("alliance_war_stats")
+    assert CLEAR_TABLES_ORDER.index("alliance_war_stats") < CLEAR_TABLES_ORDER.index("alliances")

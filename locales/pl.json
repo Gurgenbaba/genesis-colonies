@@ -8905,5 +8905,11 @@
   "alliance_dip_offer_peace": "Zaproponuj pokój",
   "peace_requires_war": "Ofertę pokoju można złożyć tylko podczas aktywnej wojny.",
   "war_active": "Wojna trwa. Najpierw zakończ ją poprzez ofertę pokoju.",
-  "already_at_war": "Te sojusze są już w stanie wojny."
+  "already_at_war": "Te sojusze są już w stanie wojny.",
+  "alliance_war_score": "Wynik wojenny",
+  "alliance_war_battles": "Bitwy",
+  "alliance_war_destroyed_units": "Zniszczone jednostki",
+  "alliance_war_wins": "Zwycięstwa",
+  "alliance_war_draws": "Remisy",
+  "alliance_war_since": "Wojna od"
 }

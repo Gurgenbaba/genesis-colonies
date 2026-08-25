@@ -1145,14 +1145,64 @@ def test_diplomacy_war_and_duplicate_request(alliance_db):
         send_diplomacy_request(leader_a, "PEA", "war", conn=conn)
         conn.commit()
         assert get_alliance_relation(aid_a, aid_b, conn=conn) == "war"
-        send_diplomacy_request(leader_a, "PEA", "nap", conn=conn)
-        conn.commit()
-        with pytest.raises(ValueError, match="duplicate_diplomacy_request"):
+        with pytest.raises(ValueError, match="war_active"):
             send_diplomacy_request(leader_a, "PEA", "nap", conn=conn)
     finally:
         conn.close()
 
 
+def test_diplomacy_rewar_same_second_gets_fresh_campaign(alliance_db, monkeypatch):
+    from game import alliance as alliance_module
+    from game.alliance import get_alliance_relation
+
+    leader_a = _player(name="SameSecond A")
+    leader_b = _player(name="SameSecond B")
+    conn = db()
+    try:
+        create_alliance("SSA", "Same Second A", leader_a, conn=conn)
+        create_alliance("SSB", "Same Second B", leader_b, conn=conn)
+        conn.commit()
+        aid_a = int(get_player_alliance(leader_a, conn=conn)["alliance_id"])
+        aid_b = int(get_player_alliance(leader_b, conn=conn)["alliance_id"])
+        for aid in (aid_a, aid_b):
+            conn.execute(
+                "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'diplomacy_center', 1);",
+                (aid,),
+            )
+        conn.commit()
+
+        monkeypatch.setattr(alliance_module, "_now", lambda: 1_000)
+        send_diplomacy_request(leader_a, "SSB", "war", conn=conn)
+        conn.commit()
+        first_started = int(
+            conn.execute(
+                "SELECT updated_at FROM alliance_diplomacy WHERE alliance_id_low = ? AND alliance_id_high = ?;",
+                (min(aid_a, aid_b), max(aid_a, aid_b)),
+            ).fetchone()["updated_at"]
+        )
+
+        send_diplomacy_request(leader_a, "SSB", "peace", conn=conn)
+        conn.commit()
+        req_id = int(
+            conn.execute(
+                "SELECT id FROM alliance_diplomacy_requests WHERE request_type = 'peace' AND status = 'pending' ORDER BY id DESC LIMIT 1;"
+            ).fetchone()["id"]
+        )
+        respond_diplomacy_request(leader_b, req_id, accept=True, conn=conn)
+        conn.commit()
+        assert get_alliance_relation(aid_a, aid_b, conn=conn) == "neutral"
+
+        send_diplomacy_request(leader_a, "SSB", "war", conn=conn)
+        conn.commit()
+        second_started = int(
+            conn.execute(
+                "SELECT updated_at FROM alliance_diplomacy WHERE alliance_id_low = ? AND alliance_id_high = ?;",
+                (min(aid_a, aid_b), max(aid_a, aid_b)),
+            ).fetchone()["updated_at"]
+        )
+        assert second_started > first_started
+    finally:
+        conn.close()
 
 
 def test_gc_al_war_01_lifecycle_bundle(alliance_db):
