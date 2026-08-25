@@ -1,0 +1,35 @@
+name: Extract alliance state reason contracts
+on:
+  push:
+    branches: [hotfix/alliance-action-reasons]
+permissions:
+  contents: write
+jobs:
+  extract:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract state contracts
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path('game/alliance.py').read_text(encoding='utf-8')
+          out=[]
+          for needle in ['def _diplomacy_rows', 'def get_alliance_state', 'def alliance_state', '"diplomacy_requests"']:
+            start=0
+            while True:
+              i=s.find(needle,start)
+              if i<0: break
+              out.append(f'\n--- {needle} @ {i} ---\n{s[max(0,i-2500):min(len(s),i+12000)]}')
+              start=i+len(needle)
+          codes=sorted(set(re.findall(r'raise ValueError\(["\']([^"\']+)["\']\)',s)))
+          out.insert(0,'ALL_VALUE_ERROR_CODES\n'+'\n'.join(codes))
+          Path('.tmp/alliance-state-reasons.txt').write_text('\n'.join(out),encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .tmp/alliance-state-reasons.txt
+          git commit -m 'chore: capture alliance state reason contracts'
+          git push
