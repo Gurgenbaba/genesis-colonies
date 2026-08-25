@@ -1,0 +1,71 @@
+name: Fix WAR-02 reset order
+
+on:
+  push:
+    branches:
+      - feature/alliance-war-meta
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-war02-reset-secret-key-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/alliance-war-meta
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Fix FK-safe reset order
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("game/admin_universe_reset.py")
+          s = p.read_text(encoding="utf-8")
+          old = '''    "chat_rooms",\n    "alliance_members",\n    "alliances",\n    "alliance_war_events",\n    "alliance_war_stats",\n    "combat_hall_of_fame",\n'''
+          new = '''    "chat_rooms",\n    "alliance_war_events",\n    "alliance_war_stats",\n    "alliance_members",\n    "alliances",\n    "combat_hall_of_fame",\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f"reset order marker mismatch: {s.count(old)}")
+          p.write_text(s.replace(old, new, 1), encoding="utf-8")
+
+          p = Path("tests/test_admin_universe_reset.py")
+          s = p.read_text(encoding="utf-8")
+          old = '    assert CLEAR_TABLES_ORDER.index("alliance_war_events") < CLEAR_TABLES_ORDER.index("alliance_war_stats")\n'
+          new = old + '    assert CLEAR_TABLES_ORDER.index("alliance_war_stats") < CLEAR_TABLES_ORDER.index("alliances")\n'
+          if s.count(old) != 1:
+              raise SystemExit(f"reset assertion marker mismatch: {s.count(old)}")
+          p.write_text(s.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Install test dependency
+        run: pip install pytest
+      - name: Reset contract gate
+        run: |
+          python -m py_compile game/admin_universe_reset.py
+          git diff --check
+          python -m pytest -q --tb=line \
+            tests/test_admin_universe_reset.py::test_reset_domain_coverage_complete \
+            tests/test_admin_universe_reset.py::test_alliance_war_meta_belongs_to_combat_reset_domain
+      - name: Remove temporary workflow
+        run: rm -f .github/workflows/fix-war02-reset-order.yml
+      - name: Commit reset-order fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(reset): clear alliance war meta before alliances"
+          git push origin HEAD:feature/alliance-war-meta
