@@ -147,7 +147,7 @@ ALLIANCE_TECHNOLOGIES: Dict[str, Dict[str, Any]] = {
 }
 
 DIPLOMACY_RELATIONS = frozenset({"neutral", "nap", "alliance", "war"})
-DIPLOMACY_REQUEST_TYPES = frozenset({"nap", "alliance", "war"})
+DIPLOMACY_REQUEST_TYPES = frozenset({"nap", "alliance", "war", "peace"})
 
 AFFECTS_BY_EFFECT_KEY: Dict[str, List[str]] = {
     "research_time_speed": ["alliance_affects_research"],

@@ -92,7 +92,8 @@ Priorisiert nach Spielerwert und Beta-Reife. Kein zweites Combat-/Queue-/Fleet-S
 
 4. **Alliance Kriegs-/Diplomatie-Hooks**
    - ✅ **GC-AL-DIP-01** — NAP-Attack-Lock, Bündnis-Transport, war-Flag in `resolve_fleet_target`
-   - 📋 Kriegs-Meta (Reports/Score), End-War UI
+   - ✅ **GC-AL-WAR-01** — Peace Workflow / sichere Diplomatie-Transitions
+   - 📋 **GC-AL-WAR-02** — Kriegs-Meta (Reports/Score/Badges)
 5. **Imperium Presence-Stack** (GC-566B Dynamic Influence, später GC-568 Territorial Warfare; GC-571 bereits shipped)
 6. **Player Marketplace**
 
