@@ -1,0 +1,32 @@
+name: Apply Ranking Test Name Hotfix
+
+on:
+  push:
+    branches:
+      - "hotfix/ranking-test-name-policy"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/ranking-test-name-policy
+          fetch-depth: 0
+      - name: Patch flaky test username suffix
+        shell: bash
+        run: |
+          python -c "from pathlib import Path; p=Path('tests/test_ranking.py'); s=p.read_text(); old='uname = f\"{username}_{uuid.uuid4().hex[:8]}\"'; new='uname = f\"{username}_{uuid.uuid4().int % 100_000_000:08d}\"'; assert old in s; p.write_text(s.replace(old,new,1))"
+          git diff --check
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_ranking.py
+          git commit -m "test: make ranking usernames name-policy safe"
+          git push origin HEAD:hotfix/ranking-test-name-policy
