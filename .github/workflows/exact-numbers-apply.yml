@@ -1,0 +1,133 @@
+name: Apply Exact Number UI Policy
+
+on:
+  push:
+    branches:
+      - "hotfix/exact-numbers-everywhere"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/exact-numbers-everywhere
+          fetch-depth: 0
+
+      - name: Apply exact grouped-number policy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          # Backend: keep fmt_int_compact as a compatibility name only.
+          p = Path('game/number_format.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              'Canonical integer display formatting (full + compact German locale).',
+              'Canonical player-facing integer display formatting (exact grouped German locale).',
+          )
+          pattern = re.compile(
+              r'\ndef _format_compact_body\(.*?\n\ndef fmt_int_parts',
+              re.S,
+          )
+          replacement = '''\ndef fmt_int_compact(value: object) -> str:\n    """Compatibility alias: player-facing integers are always exact grouped digits."""\n    return fmt_int(value)\n\n\ndef fmt_int_parts'''
+          s, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('backend compact formatter block shape changed')
+          s = s.replace('COMPACT_THRESHOLD = 10_000_000\nFULL_FALLBACK_THRESHOLD = 10**33\n\n', '')
+          p.write_text(s, encoding='utf-8')
+
+          # Frontend mirror: no abbreviation tiers, always exact grouped digits.
+          p = Path('static/main.js')
+          s = p.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r'  const COMPACT_THRESHOLD = 10_000_000n;\n\n  function _compactBigIntBody\(.*?\n  function formatScore',
+              re.S,
+          )
+          replacement = '''  function formatNumberCompact(n) {\n    return formatNumber(n);\n  }\n\n  function formatScore'''
+          s, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('frontend compact formatter block shape changed')
+
+          old_render = '''  function renderMonoCompact(n, prefix = "", suffix = "") {\n    const p = fmtIntParts(n);\n    const text = `${prefix}${p.display}${suffix}`;\n    if (p.display === p.full && !prefix && !suffix) {\n      return `<span class="gc-mono gc-num-compact">${text}</span>`;\n    }\n    const title = `${prefix}${p.full}${suffix}`.replace(/"/g, "&quot;");\n    return `<span class="gc-mono gc-num-compact" title="${title}">${text}</span>`;\n  }\n'''
+          new_render = '''  function renderMonoCompact(n, prefix = "", suffix = "") {\n    const p = fmtIntParts(n);\n    const text = `${prefix}${p.full}${suffix}`;\n    const title = text.replace(/"/g, "&quot;");\n    return `<span class="gc-mono gc-num-compact" title="${title}">${text}</span>`;\n  }\n'''
+          if old_render not in s:
+              raise SystemExit('renderMonoCompact shape changed')
+          s = s.replace(old_render, new_render, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Cost chips: exact value is the DOM text and tooltip; CSS may clip only visually.
+          p = Path('templates/partials/progression_cards.html')
+          s = p.read_text(encoding='utf-8')
+          old = '''{% macro render_resource_cost_chip(res_key, amount, unmet=false) %}\n  {% set full_val = amount|fmt_int %}\n  {% set compact_val = amount|fmt_int_compact %}\n  <span class="gc-cost-chip gc-cost-{{ res_key }}{% if unmet %} is-unmet{% endif %}">\n    <span class="gc-cost-chip-leading">{{ render_resource_icon(res_key) }}</span>\n    <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>\n  </span>\n{% endmacro %}'''
+          new = '''{% macro render_resource_cost_chip(res_key, amount, unmet=false) %}\n  {% set full_val = amount|fmt_int %}\n  <span class="gc-cost-chip gc-cost-{{ res_key }}{% if unmet %} is-unmet{% endif %}">\n    <span class="gc-cost-chip-leading">{{ render_resource_icon(res_key) }}</span>\n    <span class="gc-cost-val gc-num-compact" title="{{ full_val }}">{{ full_val }}</span>\n  </span>\n{% endmacro %}'''
+          if old not in s:
+              raise SystemExit('resource cost chip shape changed')
+          s = s.replace(old, new, 1)
+
+          old = '''{% macro render_energy_draw_cost_chip(draw) %}\n  {% set full_val = draw|fmt_int %}\n  {% set compact_val = draw|fmt_int_compact %}\n  <span class="gc-cost-chip gc-cost-energy" data-building-energy-draw>\n    <span class="gc-cost-chip-leading">{{ render_resource_icon('energy', 'sm') }}</span>\n    <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="-{{ full_val }}"{% endif %}>-{{ compact_val }}</span>\n  </span>\n{% endmacro %}'''
+          new = '''{% macro render_energy_draw_cost_chip(draw) %}\n  {% set full_val = draw|fmt_int %}\n  <span class="gc-cost-chip gc-cost-energy" data-building-energy-draw>\n    <span class="gc-cost-chip-leading">{{ render_resource_icon('energy', 'sm') }}</span>\n    <span class="gc-cost-val gc-num-compact" title="-{{ full_val }}">-{{ full_val }}</span>\n  </span>\n{% endmacro %}'''
+          if old not in s:
+              raise SystemExit('energy cost chip shape changed')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Empire: exact values for production and matrix; production cards clip visually with full tooltip.
+          p = Path('templates/empire.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('|fmt_int_compact', '|fmt_int')
+          for key in ('metal', 'crystal', 'fuel_cells'):
+              old = f'<span class="empire-prod-card-value gc-mono">+{{{{ (prod.{key} or 0)|fmt_int }}}}<span class="empire-prod-card-unit">/h</span></span>'
+              new = f'<span class="empire-prod-card-value gc-mono gc-num-compact" title="+{{{{ (prod.{key} or 0)|fmt_int }}}}/h">+{{{{ (prod.{key} or 0)|fmt_int }}}}<span class="empire-prod-card-unit">/h</span></span>'
+              if old not in s:
+                  raise SystemExit(f'empire production markup changed: {key}')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Layout safety: never change the numeric value, only clip visually in constrained slots.
+          p = Path('static/style.css')
+          s = p.read_text(encoding='utf-8')
+          marker = '/* GC-EXACT-NUMBERS-001 */'
+          if marker not in s:
+              s += '''\n\n/* GC-EXACT-NUMBERS-001 */\n.gc-num-compact,\n.gc-cost-val {\n  display: inline-block;\n  min-width: 0;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  vertical-align: bottom;\n}\n.empire-prod-card-body { min-width: 0; }\n.empire-prod-card-value {\n  display: block;\n  min-width: 0;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n'''
+          p.write_text(s, encoding='utf-8')
+
+          # Regression suite: replace compact-tier expectations with exact-number contract.
+          p = Path('tests/test_number_format.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.index('def test_fmt_int_compact_billions_one_decimal():')
+          end = s.index('def test_player_facing_js_has_no_explicit_scientific_formatters():')
+          replacement = '''def test_fmt_int_compact_is_exact_compatibility_alias():\n    values = (\n        9_999_999,\n        12_345_678,\n        149_539_413_840,\n        2_500_000_000_000,\n        2_658_735_763_000_000,\n        4_322_745_658_911_545_655,\n        10**50 + 123456789,\n        -4_322_745_658_911_545_655,\n    )\n    for value in values:\n        assert fmt_int_compact(value) == fmt_int(value)\n\n\ndef test_fmt_int_parts_never_abbreviates_player_values():\n    value = 4_322_745_658_911_545_655\n    parts = fmt_int_parts(value)\n    assert parts["full"] == "4.322.745.658.911.545.655"\n    assert parts["display"] == parts["full"]\n\n\ndef test_frontend_compat_formatter_returns_full_grouped_number():\n    source = (ROOT / "static" / "main.js").read_text(encoding="utf-8")\n    assert "function formatNumberCompact(n) {\\n    return formatNumber(n);\\n  }" in source\n    assert "_compactBigIntBody" not in source\n    assert "COMPACT_THRESHOLD" not in source\n    assert "_scientificBigInt" not in source\n    assert "toExponential(" not in source\n    assert "toPrecision(" not in source\n\n\ndef test_exact_number_layout_contract_for_costs_and_empire():\n    progression = (ROOT / "templates" / "partials" / "progression_cards.html").read_text(encoding="utf-8")\n    empire = (ROOT / "templates" / "empire.html").read_text(encoding="utf-8")\n    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")\n\n    assert "compact_val =" not in progression\n    assert 'title="{{ full_val }}">{{ full_val }}</span>' in progression\n    assert 'title="-{{ full_val }}">-{{ full_val }}</span>' in progression\n    assert "fmt_int_compact" not in empire\n    assert empire.count("empire-prod-card-value gc-mono gc-num-compact") == 3\n    assert "GC-EXACT-NUMBERS-001" in css\n    assert "text-overflow: ellipsis" in css\n\n\ndef test_backend_has_no_abbreviation_tiers():\n    source = (ROOT / "game" / "number_format.py").read_text(encoding="utf-8")\n    assert "_COMPACT_TIERS" not in source\n    assert "_format_compact_body" not in source\n    assert 'return fmt_int(value)' in source\n\n\n'''
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          python -m py_compile game/number_format.py
+          node --check static/main.js
+          git diff --check
+
+      - name: Focused exact-number regressions
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+          python -m pytest -q --tb=line tests/test_number_format.py tests/test_empire_page.py
+
+      - name: Commit exact-number policy
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/number_format.py static/main.js static/style.css templates/partials/progression_cards.html templates/empire.html tests/test_number_format.py
+          if git diff --cached --quiet; then
+            echo "No production changes to commit."
+            exit 0
+          fi
+          git commit -m "fix: show exact grouped numbers everywhere"
+          git push origin HEAD:hotfix/exact-numbers-everywhere
