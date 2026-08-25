@@ -53714,3 +53714,34 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 #alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-dip-row {
   border-radius: 0 !important;
 }
+
+
+/* GC-AL-UX-05: actionable blocked-action reasons. */
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-action-blocked {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 196, 96, 0.34);
+  border-radius: 0;
+  background: rgba(255, 196, 96, 0.06);
+}
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-action-blocked strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-action-reason {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 0.82;
+}
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-dip-action-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-dip-outgoing {
+  margin-top: 14px;
+}

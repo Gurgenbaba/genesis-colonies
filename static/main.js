@@ -22890,12 +22890,14 @@
   }
 
   function allianceErrorMessage(res, fallback) {
-    const key = String(res?.error || res?.reason || "").trim();
+    const key = String(res?.reason || res?.error || "").trim();
     if (key === "already_in_alliance") {
       return t("alliance_err_already_member", "Du bist bereits in einer Allianz.");
     }
     if (key === "alliance_full") return t("alliance_err_full", "Allianz ist voll.");
-    if (key === "alliance_not_found") return t("alliance_err_not_found", "Allianz nicht gefunden.");
+    if (key === "alliance_not_found") {
+      return t("alliance_err_not_found_hint", "Keine Allianz mit diesem Tag gefunden. Prüfe die Schreibweise.");
+    }
     if (key === "invalid_alliance") return t("alliance_err_invalid", "Tag oder Name ungültig.");
     if (key === "recruitment_application_only") {
       return t("alliance_err_application_only", "Diese Allianz nimmt nur Bewerbungen an.");
@@ -22928,7 +22930,7 @@
       return t("alliance_err_leader_must_transfer", "Als Leader musst du zuerst die Führung übertragen.");
     }
     if (key === "forbidden") {
-      return t("alliance_err_forbidden", "Keine Berechtigung.");
+      return t("alliance_err_forbidden_action", "Dir fehlt die Berechtigung für diese Aktion. Prüfe deinen Allianzrang.");
     }
     if (key === "member_not_found") {
       return t("alliance_err_member_not_found", "Mitglied nicht gefunden.");
@@ -22948,8 +22950,53 @@
     if (key === "invalid_role") {
       return t("alliance_err_invalid_role", "Rolle ungültig.");
     }
+    if (key === "diplomacy_locked") {
+      return t("alliance_err_diplomacy_locked", "Diplomatie ist noch gesperrt. Baut zuerst das Diplomatiezentrum als Allianzprojekt.");
+    }
+    if (key === "invalid_request") {
+      return t("alliance_err_invalid_request_hint", "Diese Diplomatie-Aktion ist ungültig. Wähle die gewünschte Aktion erneut aus.");
+    }
+    if (key === "invalid_target") {
+      return t("alliance_err_invalid_target_hint", "Die eigene Allianz kann kein Diplomatie-Ziel sein. Gib den Tag einer anderen Allianz ein.");
+    }
+    if (key === "peace_requires_war") {
+      return t("alliance_err_peace_requires_war", "Frieden ist nur während eines aktiven Kriegs möglich. Prüfe zuerst die aktuelle Beziehung.");
+    }
+    if (key === "war_active") {
+      return t("alliance_err_war_active", "Mit dieser Allianz läuft ein Krieg. NAP und Bündnis sind gesperrt – schließt zuerst Frieden.");
+    }
+    if (key === "already_at_war") {
+      return t("alliance_err_already_at_war", "Mit dieser Allianz läuft bereits ein Krieg. Nutzt „Frieden anbieten“, wenn ihr ihn beenden wollt.");
+    }
     if (key === "duplicate_diplomacy_request") {
-      return t("alliance_err_duplicate_diplomacy", "Anfrage bereits offen.");
+      return t("alliance_err_duplicate_diplomacy_hint", "Für diese Aktion gibt es bereits eine offene Anfrage. Wartet auf die Antwort, bevor ihr sie erneut sendet.");
+    }
+    if (key === "request_not_found") {
+      return t("alliance_err_request_not_found_hint", "Diese Anfrage ist nicht mehr offen. Die andere Seite hat möglicherweise bereits reagiert.");
+    }
+    if (key === "not_in_alliance") {
+      return t("alliance_err_not_in_alliance", "Du bist aktuell in keiner Allianz. Tritt zuerst einer Allianz bei oder gründe eine.");
+    }
+    if (key === "alliance_unavailable") {
+      return t("alliance_err_alliance_unavailable", "Die Allianz-Funktion ist gerade nicht verfügbar. Lade die Seite neu und versuche es erneut.");
+    }
+    if (key === "player_already_allied") {
+      return t("alliance_err_player_already_allied", "Dieser Spieler ist bereits Mitglied einer Allianz und kann daher nicht hinzugefügt werden.");
+    }
+    if (key === "invalid_project") {
+      return t("alliance_err_project_invalid", "Dieses Allianzprojekt ist nicht verfügbar. Öffne die Projektübersicht erneut.");
+    }
+    if (key === "max_level") {
+      return t("alliance_err_project_max_level", "Dieses Allianzprojekt hat bereits seine maximale Stufe erreicht.");
+    }
+    if (key === "requirements_not_met") {
+      return t("alliance_err_requirements_not_met", "Die Voraussetzungen für dieses Projekt sind noch nicht erfüllt. Prüfe die markierten Anforderungen.");
+    }
+    if (key === "invalid_recruitment_mode") {
+      return t("alliance_err_invalid_recruitment_mode", "Dieser Rekrutierungsmodus ist nicht verfügbar. Wähle Offen, Bewerbung oder Geschlossen.");
+    }
+    if (key === "application_already_pending") {
+      return t("alliance_err_pending_exists", "Du hast bereits eine offene Bewerbung.");
     }
     if (key === "pool_cap_exceeded") {
       return t("alliance_err_pool_cap_exceeded", "Allianzkasse ist voll.");
@@ -22972,7 +23019,7 @@
     if (key === "insufficient_pool") {
       return t("alliance_err_insufficient_pool", "Allianzkasse reicht nicht aus.");
     }
-    return key || fallback || t("alliance_action_failed", "Aktion fehlgeschlagen.");
+    return t("alliance_action_failed", fallback || "Aktion fehlgeschlagen.");
   }
 
   function patchAllianceDom(state) {
@@ -23476,10 +23523,15 @@
         }
         if (action === "diplomacy") {
           const fd = new FormData(form);
+          const tag = String(fd.get("tag") || "").trim();
+          if (!tag) {
+            showNotify(t("alliance_diplomacy_target_required", "Gib zuerst den Allianz-Tag des Ziels ein."), "warning");
+            return;
+          }
           const out = await allianceAction(
             "/api/alliance/diplomacy/send",
             {
-              tag: String(fd.get("tag") || "").trim(),
+              tag,
               request_type: String(fd.get("request_type") || ""),
             },
             "alliance_diplomacy"

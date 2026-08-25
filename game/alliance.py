@@ -893,10 +893,30 @@ def _diplomacy_rows(alliance_id: int, conn) -> List[Dict[str, Any]]:
         """,
         (int(alliance_id), int(alliance_id), int(alliance_id), int(alliance_id)),
     )
+    relation_rows = [dict(r) for r in cur.fetchall()]
+    pending_peace_pairs = set()
+    if table_exists(conn, "alliance_diplomacy_requests"):
+        cur.execute(
+            """
+            SELECT from_alliance_id, to_alliance_id
+            FROM alliance_diplomacy_requests
+            WHERE request_type = 'peace' AND status = 'pending'
+              AND (from_alliance_id = ? OR to_alliance_id = ?);
+            """,
+            (int(alliance_id), int(alliance_id)),
+        )
+        pending_peace_pairs = {
+            _diplomacy_pair(int(r["from_alliance_id"]), int(r["to_alliance_id"]))
+            for r in cur.fetchall()
+        }
+
     rows: List[Dict[str, Any]] = []
-    for raw in cur.fetchall():
-        item = dict(raw)
+    for item in relation_rows:
+        item["peace_request_pending"] = False
         if str(item.get("relation") or "") == "war":
+            item["peace_request_pending"] = (
+                _diplomacy_pair(int(alliance_id), int(item["other_id"])) in pending_peace_pairs
+            )
             try:
                 from .alliance_war import get_active_war_stats_for_alliance_pair
 
