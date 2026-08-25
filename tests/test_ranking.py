@@ -92,7 +92,7 @@ def _close_db() -> None:
 
 
 def _create_player(username: str) -> int:
-    uname = f"{username}_{uuid.uuid4().hex[:8]}"
+    uname = f"{username}_{uuid.uuid4().int % 100_000_000:08d}"
     ok, err, user = create_user(uname, "test-pass-123")
     assert ok and user, err
     _close_db()
