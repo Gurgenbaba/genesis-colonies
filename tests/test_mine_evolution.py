@@ -320,6 +320,130 @@ class TestMineEvolutionAction:
         assert payload["level"] == 225
 
 
+    def test_build_queue_max_stops_at_next_ascension_gate(self, mevo_db, monkeypatch):
+        import game.buildings as bmod
+        from game.db import db
+        from game.models import get_homeworld, get_planet_buildings, save_planet_buildings
+
+        uid = mevo_db
+        planet = get_homeworld(player_id=uid)
+        pid = int(planet["id"])
+        buildings = get_planet_buildings(pid)
+        buildings["metal_mine"] = 245
+        save_planet_buildings(pid, buildings)
+
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO planet_mine_evolution (planet_id, building_type, evolution_rank, updated_at)
+                VALUES (?, ?, ?, 0)
+                ON CONFLICT(planet_id, building_type) DO UPDATE SET evolution_rank = excluded.evolution_rank;
+                """,
+                (pid, "metal_mine", 2),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        _fund_planet(pid, metal=1000, crystal=1000)
+        monkeypatch.setattr(
+            bmod, "_resolve_build_queue_limit", lambda settings=None, *, conn=None: 10
+        )
+        monkeypatch.setattr(bmod, "get_upgrade_cost", lambda *_args, **_kwargs: (1, 1))
+        monkeypatch.setattr(
+            bmod.BuildingsPanelContext,
+            "build_time_seconds",
+            lambda self, building_type, target_level: 3600,
+        )
+
+        buildings = get_planet_buildings(pid)
+        ok, reason, payload = bmod.queue_build_for_planet(
+            dict(planet), buildings, "metal_mine", user_id=uid, queue_mode="max"
+        )
+        assert ok and reason == "ok"
+        assert int(payload["jobs_queued"]) == 5
+        mine_rows = [
+            r for r in bmod.get_build_queue_rows(pid) if str(r["building_type"]) == "metal_mine"
+        ]
+        assert len(mine_rows) == 5
+
+        ok, reason, blocked = bmod.queue_build_for_planet(
+            dict(planet), buildings, "metal_mine", user_id=uid, queue_mode="max"
+        )
+        assert not ok
+        assert reason == "ascension_required"
+        assert int(blocked["max_level"]) == 250
+        assert int(blocked["evolution_rank"]) == 2
+        assert int(blocked["next_evolution_rank"]) == 3
+
+    def test_build_queue_max_uses_smaller_of_free_slots_and_ascension_headroom(self, mevo_db, monkeypatch):
+        import time
+        import game.buildings as bmod
+        from game.db import db
+        from game.models import add_build_job, get_homeworld, get_planet_buildings, save_planet_buildings
+
+        uid = mevo_db
+        planet = get_homeworld(player_id=uid)
+        pid = int(planet["id"])
+        buildings = get_planet_buildings(pid)
+        buildings["metal_mine"] = 245
+        save_planet_buildings(pid, buildings)
+
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO planet_mine_evolution (planet_id, building_type, evolution_rank, updated_at)
+                VALUES (?, ?, ?, 0)
+                ON CONFLICT(planet_id, building_type) DO UPDATE SET evolution_rank = excluded.evolution_rank;
+                """,
+                (pid, "metal_mine", 2),
+            )
+            now = time.time()
+            add_build_job(pid, "solar_plant", now + 10, now + 3610, conn=conn)
+            add_build_job(pid, "crystal_storage", now + 3620, now + 7220, conn=conn)
+            add_build_job(pid, "metal_storage", now + 7230, now + 10830, conn=conn)
+            add_build_job(pid, "fuel_storage", now + 10840, now + 14440, conn=conn)
+            add_build_job(pid, "research_lab", now + 14450, now + 18050, conn=conn)
+            add_build_job(pid, "academy", now + 18060, now + 21660, conn=conn)
+            conn.commit()
+        finally:
+            conn.close()
+
+        _fund_planet(pid, metal=1000, crystal=1000)
+        monkeypatch.setattr(
+            bmod, "_resolve_build_queue_limit", lambda settings=None, *, conn=None: 10
+        )
+        monkeypatch.setattr(bmod, "get_upgrade_cost", lambda *_args, **_kwargs: (1, 1))
+        monkeypatch.setattr(
+            bmod.BuildingsPanelContext,
+            "build_time_seconds",
+            lambda self, building_type, target_level: 3600,
+        )
+
+        buildings = get_planet_buildings(pid)
+        ok, reason, payload = bmod.queue_build_for_planet(
+            dict(planet), buildings, "metal_mine", user_id=uid, queue_mode="max"
+        )
+        assert ok and reason == "ok"
+        assert int(payload["jobs_queued"]) == 4
+        assert len(bmod.get_build_queue_rows(pid)) == 10
+
+    def test_queue_cap_helper_preserves_legacy_overlevel_catchup(self):
+        import game.buildings as bmod
+
+        assert bmod._effective_building_queue_cap(
+            "metal_mine", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=0
+        ) == 200
+        assert bmod._effective_building_queue_cap(
+            "metal_mine", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=2
+        ) == 250
+        assert bmod._effective_building_queue_cap(
+            "metal_mine", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=4
+        ) == 300
+
+
 class TestMineEvolutionProduction:
     def test_building_modifier_wired_and_isolated(self, mevo_db):
         from game.effects.effect_resolver import EffectResolver

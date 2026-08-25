@@ -17,7 +17,7 @@
 
 {% macro render_building_head_action(b, tab_name, bq_summary, bq_queue_full, btn_id=none, action_extra_class='') %}
   {% set _uncapped_action = b.uncapped if b.uncapped is defined else false %}
-  {% set is_max = (not _uncapped_action) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
+  {% set is_max = ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
   {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
   {% set _action_queue = bq_summary.count if bq_summary.count is defined else 0 %}
   {% set _action_label = T("research_btn_queue", "Anreihen") if _action_queue else T("buildings_btn_upgrade", "Ausbau starten") %}
@@ -103,7 +103,7 @@
       {% for b in rows %}
         {% set building_type = b.key %}
         {% set _uncapped = b.uncapped if b.uncapped is defined else false %}
-        {% set is_max = (not _uncapped) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
+        {% set is_max = ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}
         {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
         {% set row_class = '' %}
         {% if is_max %}
