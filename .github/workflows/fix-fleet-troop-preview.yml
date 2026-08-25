@@ -29,11 +29,17 @@ jobs:
               p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
           # Client preview must send the same troop selection as final send.
-          replace_once(
-              'static/main.js',
-              '''            body: JSON.stringify({\n              origin_planet_id: originId,\n              ships,\n              resources: getResourcesSelection(page),''',
-              '''            body: JSON.stringify({\n              origin_planet_id: originId,\n              ships,\n              troops: getTroopsSelection(page),\n              resources: getResourcesSelection(page),''',
-          )
+          main_path = Path('static/main.js')
+          main = main_path.read_text(encoding='utf-8')
+          p0 = main.index('    const runPreview = async (page) => {')
+          p1 = main.index('\n    const schedulePreview = (page) => {', p0)
+          preview_js = main[p0:p1]
+          old_js = '              ships,\n              resources: getResourcesSelection(page),'
+          new_js = '              ships,\n              troops: getTroopsSelection(page),\n              resources: getResourcesSelection(page),'
+          if preview_js.count(old_js) != 1:
+              raise SystemExit(f'static/main.js: preview troop anchor count={preview_js.count(old_js)}')
+          preview_js = preview_js.replace(old_js, new_js, 1)
+          main_path.write_text(main[:p0] + preview_js + main[p1:], encoding='utf-8')
 
           # Preview endpoint forwards troops into the canonical server preview.
           replace_once(
@@ -88,7 +94,6 @@ jobs:
           s = s.replace(old_payload, new_payload, 1)
           fleet.write_text(s, encoding='utf-8')
 
-          # Extend the dedicated contract test with the P2 regression contract.
           test_path = Path('tests/test_fleet_action_reasons.py')
           test = test_path.read_text(encoding='utf-8')
           addition = '''\n\ndef test_fleet_preview_validates_selected_troops_before_enabling_launch():\n    main_js = Path(\"static/main.js\").read_text(encoding=\"utf-8\")\n    app_src = Path(\"app.py\").read_text(encoding=\"utf-8\")\n    fleet_src = Path(\"game/fleet.py\").read_text(encoding=\"utf-8\")\n\n    assert \"troops: getTroopsSelection(page)\" in main_js\n    preview_api = app_src[app_src.index('def api_fleet_preview():'):app_src.index('@app.route(\"/api/fleet/resolve-target\"') ]\n    assert 'troops=data.get(\"troops\") or {}' in preview_api\n    preview_src = fleet_src[fleet_src.index('def build_fleet_send_preview('):fleet_src.index('def list_admin_fleet_movements(')]\n    assert \"troops=troops\" in preview_src\n    assert \"_fleet_preview_has_troop_stock\" in preview_src\n    assert 'reason = \"not_enough_troops\"' in preview_src\n    assert 'payload[\"troop_slots_needed\"]' in preview_src\n    assert 'payload[\"troop_berths\"]' in preview_src\n'''
