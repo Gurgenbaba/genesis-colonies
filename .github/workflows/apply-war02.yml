@@ -1,0 +1,37 @@
+name: Apply WAR-02 patch
+
+on:
+  push:
+    branches:
+      - feature/alliance-war-meta
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/alliance-war-meta
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply WAR-02
+        run: python scripts/apply_war02.py
+      - name: Remove temporary helper
+        run: rm -f scripts/apply_war02.py .github/workflows/apply-war02.yml
+      - name: Commit feature patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "feat(alliance): add war score and combat meta"
+          git push origin HEAD:feature/alliance-war-meta
