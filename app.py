@@ -12260,8 +12260,15 @@ def api_fleet_send():
 
     state = _fleet_mutation_game_state("api_fleet_send")
     err_data: Dict[str, Any] = {"state": state}
-    if isinstance(result, dict) and result.get("attack_limit"):
-        err_data["attack_limit"] = result["attack_limit"]
+    if isinstance(result, dict):
+        for context_key in (
+            "attack_limit",
+            "noob_protection",
+            "troop_slots_needed",
+            "troop_berths",
+        ):
+            if result.get(context_key) is not None:
+                err_data[context_key] = result[context_key]
     return jsonify(fleet_err(reason or "generic", data=err_data)), 400
 
 
