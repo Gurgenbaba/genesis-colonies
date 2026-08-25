@@ -421,3 +421,4 @@ def test_alliance_war_meta_belongs_to_combat_reset_domain() -> None:
     assert "alliance_war_events" in combat
     assert "alliance_war_stats" in combat
     assert CLEAR_TABLES_ORDER.index("alliance_war_events") < CLEAR_TABLES_ORDER.index("alliance_war_stats")
+    assert CLEAR_TABLES_ORDER.index("alliance_war_stats") < CLEAR_TABLES_ORDER.index("alliances")
