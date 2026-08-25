@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any, Mapping
 
-from .db import table_exists
+from .db import get_db_backend, table_exists
 from .scoring import compute_destroyed_raw_from_losses
 
 
@@ -109,30 +109,47 @@ def _load_campaign_stats(low: int, high: int, war_started_at: int, conn) -> dict
     return dict(row)
 
 
-def _ensure_campaign_stats(low: int, high: int, war_started_at: int, conn) -> dict[str, Any]:
-    row = conn.execute(
-        """
+def _select_campaign_stats_for_update(
+    low: int,
+    high: int,
+    conn,
+):
+    """Lock one aggregate row while Python performs arbitrary-precision math."""
+    lock = " FOR UPDATE" if get_db_backend() == "postgres" else ""
+    return conn.execute(
+        f"""
         SELECT * FROM alliance_war_stats
         WHERE alliance_id_low = ? AND alliance_id_high = ?
-        LIMIT 1;
+        LIMIT 1{lock};
         """,
         (int(low), int(high)),
     ).fetchone()
+
+
+def _ensure_campaign_stats(low: int, high: int, war_started_at: int, conn) -> dict[str, Any]:
+    """Atomically seed + lock the pair before reading/updating its aggregate.
+
+    SQLite already serializes writers through the GC write transaction. PostgreSQL
+    additionally takes a row lock so concurrent fleet workers cannot overwrite
+    each other's arbitrary-precision TEXT totals.
+    """
     now = _now()
+    conn.execute(
+        """
+        INSERT INTO alliance_war_stats (
+            alliance_id_low, alliance_id_high, war_started_at,
+            low_score_raw, high_score_raw,
+            low_units_destroyed, high_units_destroyed,
+            low_wins, high_wins, draws, battle_count,
+            last_battle_at, updated_at
+        ) VALUES (?, ?, ?, '0', '0', '0', '0', 0, 0, 0, 0, NULL, ?)
+        ON CONFLICT(alliance_id_low, alliance_id_high) DO NOTHING;
+        """,
+        (int(low), int(high), int(war_started_at), now),
+    )
+    row = _select_campaign_stats_for_update(low, high, conn)
     if not row:
-        conn.execute(
-            """
-            INSERT INTO alliance_war_stats (
-                alliance_id_low, alliance_id_high, war_started_at,
-                low_score_raw, high_score_raw,
-                low_units_destroyed, high_units_destroyed,
-                low_wins, high_wins, draws, battle_count,
-                last_battle_at, updated_at
-            ) VALUES (?, ?, ?, '0', '0', '0', '0', 0, 0, 0, 0, NULL, ?);
-            """,
-            (int(low), int(high), int(war_started_at), now),
-        )
-        return _zero_stats(low, high, war_started_at)
+        raise RuntimeError("alliance_war_stats_seed_failed")
     current = dict(row)
     if int(current.get("war_started_at") or 0) != int(war_started_at):
         conn.execute(

@@ -2542,8 +2542,20 @@ def send_diplomacy_request(
         if own:
             begin_write_transaction(conn)
         if rtype == "war":
-            _invalidate_pending_diplomacy_requests_between(from_aid, to_aid, conn=conn, now=now)
             lo, hi = _diplomacy_pair(from_aid, to_aid)
+            previous = conn.execute(
+                """
+                SELECT updated_at FROM alliance_diplomacy
+                WHERE alliance_id_low = ? AND alliance_id_high = ?
+                LIMIT 1;
+                """,
+                (lo, hi),
+            ).fetchone()
+            previous_transition = int(previous["updated_at"] or 0) if previous else 0
+            war_started_at = max(int(now), previous_transition + 1)
+            _invalidate_pending_diplomacy_requests_between(
+                from_aid, to_aid, conn=conn, now=war_started_at
+            )
             conn.execute(
                 """
                 INSERT INTO alliance_diplomacy (alliance_id_low, alliance_id_high, relation, updated_at)
@@ -2551,7 +2563,7 @@ def send_diplomacy_request(
                 ON CONFLICT(alliance_id_low, alliance_id_high) DO UPDATE SET
                     relation = 'war', updated_at = excluded.updated_at;
                 """,
-                (lo, hi, now),
+                (lo, hi, war_started_at),
             )
         else:
             if rtype == "peace":
@@ -2635,8 +2647,13 @@ def respond_diplomacy_request(
                 if get_alliance_relation(from_aid, to_aid, conn=conn) != "war":
                     raise ValueError("peace_requires_war")
                 conn.execute(
-                    "DELETE FROM alliance_diplomacy WHERE alliance_id_low = ? AND alliance_id_high = ?;",
-                    (lo, hi),
+                    """
+                    INSERT INTO alliance_diplomacy (alliance_id_low, alliance_id_high, relation, updated_at)
+                    VALUES (?, ?, 'neutral', ?)
+                    ON CONFLICT(alliance_id_low, alliance_id_high) DO UPDATE SET
+                        relation = 'neutral', updated_at = excluded.updated_at;
+                    """,
+                    (lo, hi, now),
                 )
                 _invalidate_pending_diplomacy_requests_between(
                     from_aid,

@@ -107,6 +107,8 @@ CLEAR_TABLES_ORDER: tuple[str, ...] = (
     "chat_rooms",
     "alliance_members",
     "alliances",
+    "alliance_war_events",
+    "alliance_war_stats",
     "combat_hall_of_fame",
     "gd_votes",
     "gd_cycles",
@@ -249,6 +251,8 @@ RESET_DOMAINS: Dict[str, tuple[str, ...]] = {
         "alliances",
     ),
     "combat": (
+        "alliance_war_events",
+        "alliance_war_stats",
         "combat_hall_of_fame",
         "chronicle_entries",
         "combat_reports",

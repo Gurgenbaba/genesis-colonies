@@ -171,3 +171,10 @@ def test_combat_report_dispatch_and_renderer_are_war_aware() -> None:
     assert 'raw_meta["alliance_war"] = war_meta' in messages_py
     assert "renderAllianceWarPanel" in messages_js
     assert 't("alliance_relation_war", "War")' in messages_js
+
+
+def test_postgres_path_serializes_war_aggregate_updates() -> None:
+    source = Path("game/alliance_war.py").read_text(encoding="utf-8")
+    assert 'get_db_backend() == "postgres"' in source
+    assert 'FOR UPDATE' in source
+    assert 'ON CONFLICT(alliance_id_low, alliance_id_high) DO NOTHING' in source
