@@ -43,18 +43,14 @@ jobs:
           pip install -r requirements-prod.txt pytest
 
       - name: Apply deterministic GC-AL-WAR-01 patch
-        run: python scripts/_gc_al_war_01_apply.py
+        run: |
+          python scripts/_gc_al_war_01_apply.py
+          python scripts/_gc_al_war_01_compact_tests.py
 
-      - name: Focused alliance war regressions
+      - name: Focused alliance war regression bundle
         run: |
           python -m pytest -q --tb=line \
-            tests/test_alliance.py::test_diplomacy_war_and_duplicate_request \
-            tests/test_alliance.py::test_gc_al_dip_01_fleet_mission_hooks \
-            tests/test_alliance.py::test_gc_al_war_01_peace_accept_returns_to_neutral \
-            tests/test_alliance.py::test_gc_al_war_01_declined_peace_keeps_war \
-            tests/test_alliance.py::test_gc_al_war_01_transition_guards_and_stale_requests \
-            tests/test_alliance.py::test_gc_al_war_01_member_cannot_offer_peace \
-            tests/test_alliance.py::test_gc_al_war_01_hub_renders_peace_action_for_active_war
+            tests/test_alliance.py::test_gc_al_war_01_lifecycle_bundle
 
       - name: Locale parity and placeholders
         run: |
