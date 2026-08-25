@@ -22,12 +22,12 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 
 | Gebäude | Cap-Formel |
 |---------|------------|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **Uncapped** — Progression über Kosten/Zeit + [Mine Evolution](MINE_EVOLUTION.md); Soft-Sentinel `UNCAPPED_BUILDING_LEVEL` |
+| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver soft-uncapped; **Build-Enqueue nur bis zum nächsten Ascension-Milestone `required_level(rank+1)`** |
 | `solar_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` |
 | `metal_storage`, `crystal_storage`, `fuel_storage` | `50 + 2×geothermal_nexus` (ohne Core) |
 | alle übrigen | `50` |
 
-Nexus hebt **kein** Mine-Hardcap mehr (Minen uncapped — Ascension-Milestones L200+ müssen erreichbar bleiben); Solar-/Storage-Caps bleiben. Mine Ascension (Tribute, kein Level-Reset): [MINE_EVOLUTION.md](MINE_EVOLUTION.md).
+Nexus hebt **kein** permanentes Mine-Hardcap mehr. Minen bleiben resolver-seitig uncapped, aber neue Queue-Jobs werden am nächsten Ascension-Milestone gestoppt, bis der Rank gekauft wurde. Legacy-Overlevel bleibt erhalten; Solar-/Storage-Caps bleiben. Mine Ascension: [MINE_EVOLUTION.md](MINE_EVOLUTION.md).
 
 `terraformer`: +5 % Lagerkapazität/Stufe — **kein** Gebäude-Level-Cap. Owner: `EffectResolver.get_max_building_level()`.
 

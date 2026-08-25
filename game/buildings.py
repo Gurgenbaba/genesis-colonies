@@ -1605,6 +1605,31 @@ def _mine_bulk_upgrade_meta(
     )
 
 
+def _effective_building_queue_cap(
+    building_type: str,
+    base_max_level: int,
+    *,
+    planet_id: Optional[int] = None,
+    conn=None,
+    evolution_rank: Optional[int] = None,
+) -> int:
+    """Authoritative enqueue cap: normal hard cap or next Mine Ascension milestone."""
+    max_level = max(0, int(base_max_level))
+    from .mine_evolution import get_evolution_rank, is_evolvable_mine, required_level_for_evolution
+
+    if not is_evolvable_mine(building_type) or planet_id is None:
+        return max_level
+    rank = (
+        max(0, int(evolution_rank))
+        if evolution_rank is not None
+        else get_evolution_rank(int(planet_id), building_type, conn=conn)
+    )
+    gate = int(required_level_for_evolution(rank + 1) or 0)
+    if gate <= 0:
+        return max_level
+    return min(max_level, gate)
+
+
 def _make_panel_row(
     planet: dict,
     buildings: Dict[str, int],
@@ -1623,13 +1648,47 @@ def _make_panel_row(
     tech_t0 = time.perf_counter() if ssr is not None else 0.0
 
     level = int(buildings.get(building_type, 0) or 0)
+    planet_id = planet.get("id")
+    try:
+        pid = int(planet_id) if planet_id is not None else None
+    except (TypeError, ValueError):
+        pid = None
+
+    from .mine_evolution import get_evolution_ranks_for_planet, is_evolvable_mine, panel_evolution_fields
+
+    uncapped = is_evolvable_mine(building_type)
+    evo_ranks = None
+    evolution_rank = None
+    if pid is not None and uncapped:
+        if panel_ctx is not None:
+            evo_ranks = getattr(panel_ctx, "_mine_evo_ranks", None)
+            if evo_ranks is None:
+                evo_conn = getattr(panel_ctx.resolver, "_conn", None)
+                evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
+                try:
+                    panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+        else:
+            evo_ranks = get_evolution_ranks_for_planet(pid)
+        evolution_rank = int((evo_ranks or {}).get(building_type, 0) or 0)
+
     if panel_ctx is not None:
-        max_level = panel_ctx.max_level(building_type)
+        base_max_level = panel_ctx.max_level(building_type)
+        evo_conn = getattr(panel_ctx.resolver, "_conn", None)
     else:
-        max_level = get_max_level_for_building(building_type, buildings)
+        base_max_level = get_max_level_for_building(building_type, buildings)
+        evo_conn = None
+    max_level = _effective_building_queue_cap(
+        building_type,
+        base_max_level,
+        planet_id=pid,
+        conn=evo_conn,
+        evolution_rank=evolution_rank,
+    )
     queued_same = int(queue_count or 0)
     at_queue_max = (level + queued_same) >= max_level
-    target_level = min(level + queued_same + 1, max_level)
+    target_level = max(level, min(level + queued_same + 1, max_level))
 
     cost_metal, cost_crystal = get_upgrade_cost(building_type, level + queued_same)
     if panel_ctx is not None:
@@ -1663,11 +1722,8 @@ def _make_panel_row(
             panel_ctx=panel_ctx,
         )
 
-    from .mine_evolution import UNCAPPED_BUILDING_LEVEL, is_evolvable_mine, panel_evolution_fields
-
-    uncapped = is_evolvable_mine(building_type)
-    # Uncapped mines never show "MAX" from the soft sentinel alone.
-    at_hard_max = (not uncapped) and bool(at_queue_max)
+    # For evolvable mines, at_queue_max means the next Ascension gate was reached.
+    at_hard_max = bool(at_queue_max)
 
     row: Dict[str, Any] = {
         "key": building_type,
@@ -1691,23 +1747,6 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
-    planet_id = planet.get("id")
-    try:
-        pid = int(planet_id) if planet_id is not None else None
-    except (TypeError, ValueError):
-        pid = None
-    evo_ranks = None
-    if panel_ctx is not None and pid is not None and uncapped:
-        evo_ranks = getattr(panel_ctx, "_mine_evo_ranks", None)
-        if evo_ranks is None:
-            from .mine_evolution import get_evolution_ranks_for_planet
-
-            evo_conn = getattr(panel_ctx.resolver, "_conn", None)
-            evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
-            try:
-                panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]
-            except Exception:
-                pass
     row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
     if pid is not None and building_type == "orbital_shipyard":
         try:
@@ -1722,9 +1761,6 @@ def _make_panel_row(
             import logging
 
             logging.getLogger(__name__).exception("stellar_forge panel fields failed planet=%s", pid)
-    if uncapped:
-        # Keep enqueue math working with sentinel; UI uses uncapped / at_queue_max=False.
-        row["max_level"] = int(UNCAPPED_BUILDING_LEVEL)
     stage = None
     if stage_layout and building_type in stage_layout:
         stage = stage_layout.get(building_type)
@@ -2443,7 +2479,7 @@ def queue_build_for_planet(
         last_payload: Dict[str, Any] = {}
         last_reason = "invalid"
         last_fail: Dict[str, Any] = {}
-        max_attempts = 64 if want_max else 1
+        max_attempts = 1
 
         buildings = get_planet_buildings(planet_id, conn=conn)
         research_levels = get_research_levels(user_id=user_id, conn=conn)
@@ -2451,6 +2487,60 @@ def queue_build_for_planet(
             user_id, buildings, research_levels, conn=conn
         )
         rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))
+
+        from .mine_evolution import get_evolution_rank, is_evolvable_mine
+
+        is_evolution_mine = is_evolvable_mine(building_type)
+        evolution_rank = (
+            get_evolution_rank(planet_id, building_type, conn=conn)
+            if is_evolution_mine
+            else None
+        )
+        base_max_level = hotpath.max_level(building_type)
+        max_level = _effective_building_queue_cap(
+            building_type,
+            base_max_level,
+            planet_id=planet_id,
+            conn=conn,
+            evolution_rank=evolution_rank,
+        )
+        current_level_initial = int(buildings.get(building_type, 0) or 0)
+        queued_same_initial = sum(
+            1 for r in rows_db if str(r["building_type"]) == building_type
+        )
+        queue_free_slots = max(0, int(queue_limit) - len(rows_db))
+        level_headroom = max(
+            0, int(max_level) - (current_level_initial + queued_same_initial)
+        )
+
+        def _cap_failure_payload(target_level: Optional[int] = None) -> Dict[str, Any]:
+            payload: Dict[str, Any] = {
+                "msg": "Ascension required" if is_evolution_mine else "Max level reached",
+                "max_level": int(max_level),
+            }
+            if target_level is not None:
+                payload["target_level"] = int(target_level)
+            if is_evolution_mine:
+                rank = max(0, int(evolution_rank or 0))
+                payload.update({
+                    "evolution_rank": rank,
+                    "next_evolution_rank": rank + 1,
+                    "required_level": int(max_level),
+                })
+            return payload
+
+        if want_max:
+            max_attempts = min(64, queue_free_slots, level_headroom)
+            if max_attempts <= 0:
+                if queue_free_slots <= 0:
+                    last_reason = "queue_full"
+                    last_fail = {
+                        "queue_count": len(rows_db),
+                        "queue_limit": int(queue_limit),
+                    }
+                elif level_headroom <= 0:
+                    last_reason = "ascension_required" if is_evolution_mine else "invalid"
+                    last_fail = _cap_failure_payload()
 
         def _record_mutate_perf() -> None:
             if perf is not None:
@@ -2471,23 +2561,18 @@ def queue_build_for_planet(
 
         for _ in range(max_attempts):
             current_level = int(buildings.get(building_type, 0) or 0)
-            max_level = hotpath.max_level(building_type)
 
             if current_level >= max_level:
-                last_reason = "invalid"
-                last_fail = {"msg": "Max level reached", "max_level": max_level}
+                last_reason = "ascension_required" if is_evolution_mine else "invalid"
+                last_fail = _cap_failure_payload()
                 break
 
             queued_same = sum(1 for r in rows_db if str(r["building_type"]) == building_type)
             target_level = current_level + queued_same + 1
 
             if target_level > max_level:
-                last_reason = "invalid"
-                last_fail = {
-                    "msg": "Max level reached",
-                    "max_level": max_level,
-                    "target_level": target_level,
-                }
+                last_reason = "ascension_required" if is_evolution_mine else "invalid"
+                last_fail = _cap_failure_payload(target_level)
                 break
 
             if not has_building_requirements(buildings, research_levels, building_type):

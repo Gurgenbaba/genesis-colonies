@@ -39,7 +39,7 @@ No second production engine. Bonus registers on the existing Ferdi formula via `
 | Planet-scoped rank per mine | Account-wide evolution |
 | Tribute at rank milestone (no level reset) | Industrial Core / PE unlocks |
 | Linear thresholds + catch-up | Other buildings (solar, shipyard, …) |
-| Uncapped levels for the three mines | Hard max on mines |
+| Soft-uncapped resolver + **enqueue gate at the next Ascension milestone** | Permanent hard max on mines |
 
 Future (docs only until separate tickets):
 
@@ -53,11 +53,11 @@ Future (docs only until separate tickets):
 
 | Building | Cap (Phase 1) |
 |----------|----------------|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **Uncapped** (soft sentinel `UNCAPPED_BUILDING_LEVEL`) so milestones L200 / L225 / L300+ are reachable |
+| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver remains soft-uncapped (`UNCAPPED_BUILDING_LEVEL`), but **new build jobs stop at `required_level(rank+1)` until that Ascension is completed** |
 | `solar_plant` | unchanged: `50 + core + 2×geo` |
 | Storages / other | unchanged |
 
-Nexus no longer raises the **mine** hardcap. Ascension must not reintroduce a mine hardcap.
+Nexus no longer raises the **mine** hardcap. The resolver stays uncapped, while the build queue uses the next Ascension milestone as a progression gate. Existing overlevel/catch-up levels are never reduced.
 
 ---
 
