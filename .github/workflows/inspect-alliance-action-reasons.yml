@@ -1,0 +1,42 @@
+name: Inspect alliance action reasons
+on:
+  push:
+    branches: [hotfix/alliance-action-reasons]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect reason plumbing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          files = {
+              'js': Path('static/main.js').read_text(encoding='utf-8'),
+              'tpl': Path('templates/alliance.html').read_text(encoding='utf-8'),
+              'py': Path('game/alliance.py').read_text(encoding='utf-8'),
+              'de': Path('locales/de.json').read_text(encoding='utf-8'),
+          }
+          needles = {
+              'js': ['function allianceErrorMessage', 'allianceErrorMessage =', 'alliance_diplomacy', 'data-dip-accept'],
+              'tpl': ['data-alliance-panel="diplomacy"', 'alliance-hub-dip', 'alliance-hub-war-meta', 'disabled'],
+              'py': ['raise ValueError', 'send_diplomacy_request', 'respond_diplomacy_request'],
+              'de': ['alliance_error_', 'mission_blocked_nap', 'war_active', 'already_at_war'],
+          }
+          for key, ns in needles.items():
+              s=files[key]
+              print('\n### FILE', key)
+              for needle in ns:
+                  print('\n--- NEEDLE', needle, '---')
+                  start=0; count=0
+                  while True:
+                      i=s.find(needle,start)
+                      if i<0: break
+                      count+=1
+                      lo=max(0,i-1800); hi=min(len(s),i+3200)
+                      print(f'## MATCH {count} AT {i}')
+                      print(s[lo:hi])
+                      start=i+len(needle)
+                      if count>=12: break
+                  print('MATCHES',count)
+          PY
