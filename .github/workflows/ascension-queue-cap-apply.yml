@@ -1,0 +1,162 @@
+name: Apply Ascension Queue Cap Hotfix
+
+on:
+  push:
+    branches:
+      - "hotfix/ascension-queue-cap"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/ascension-queue-cap
+          fetch-depth: 0
+
+      - name: Apply queue cap policy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('game/buildings.py')
+          s = p.read_text(encoding='utf-8')
+
+          marker = '\ndef _make_panel_row(\n'
+          helper = '''\ndef _effective_building_queue_cap(\n    building_type: str,\n    base_max_level: int,\n    *,\n    planet_id: Optional[int] = None,\n    conn=None,\n    evolution_rank: Optional[int] = None,\n) -> int:\n    \"\"\"Authoritative enqueue cap: normal hard cap or next Mine Ascension milestone.\"\"\"\n    max_level = max(0, int(base_max_level))\n    from .mine_evolution import get_evolution_rank, is_evolvable_mine, required_level_for_evolution\n\n    if not is_evolvable_mine(building_type) or planet_id is None:\n        return max_level\n    rank = (\n        max(0, int(evolution_rank))\n        if evolution_rank is not None\n        else get_evolution_rank(int(planet_id), building_type, conn=conn)\n    )\n    gate = int(required_level_for_evolution(rank + 1) or 0)\n    if gate <= 0:\n        return max_level\n    return min(max_level, gate)\n\n\n'''
+          if helper.strip() not in s:
+              if marker not in s:
+                  raise SystemExit('make_panel_row marker missing')
+              s = s.replace(marker, helper + 'def _make_panel_row(\n', 1)
+
+          old = '''    level = int(buildings.get(building_type, 0) or 0)\n    if panel_ctx is not None:\n        max_level = panel_ctx.max_level(building_type)\n    else:\n        max_level = get_max_level_for_building(building_type, buildings)\n    queued_same = int(queue_count or 0)\n    at_queue_max = (level + queued_same) >= max_level\n    target_level = min(level + queued_same + 1, max_level)\n'''
+          new = '''    level = int(buildings.get(building_type, 0) or 0)\n    planet_id = planet.get(\"id\")\n    try:\n        pid = int(planet_id) if planet_id is not None else None\n    except (TypeError, ValueError):\n        pid = None\n\n    from .mine_evolution import get_evolution_ranks_for_planet, is_evolvable_mine, panel_evolution_fields\n\n    uncapped = is_evolvable_mine(building_type)\n    evo_ranks = None\n    evolution_rank = None\n    if pid is not None and uncapped:\n        if panel_ctx is not None:\n            evo_ranks = getattr(panel_ctx, \"_mine_evo_ranks\", None)\n            if evo_ranks is None:\n                evo_conn = getattr(panel_ctx.resolver, \"_conn\", None)\n                evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)\n                try:\n                    panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]\n                except Exception:\n                    pass\n        else:\n            evo_ranks = get_evolution_ranks_for_planet(pid)\n        evolution_rank = int((evo_ranks or {}).get(building_type, 0) or 0)\n\n    if panel_ctx is not None:\n        base_max_level = panel_ctx.max_level(building_type)\n        evo_conn = getattr(panel_ctx.resolver, \"_conn\", None)\n    else:\n        base_max_level = get_max_level_for_building(building_type, buildings)\n        evo_conn = None\n    max_level = _effective_building_queue_cap(\n        building_type,\n        base_max_level,\n        planet_id=pid,\n        conn=evo_conn,\n        evolution_rank=evolution_rank,\n    )\n    queued_same = int(queue_count or 0)\n    at_queue_max = (level + queued_same) >= max_level\n    target_level = max(level, min(level + queued_same + 1, max_level))\n'''
+          if old not in s:
+              raise SystemExit('panel max-level block changed')
+          s = s.replace(old, new, 1)
+
+          old = '''    from .mine_evolution import UNCAPPED_BUILDING_LEVEL, is_evolvable_mine, panel_evolution_fields\n\n    uncapped = is_evolvable_mine(building_type)\n    # Uncapped mines never show \"MAX\" from the soft sentinel alone.\n    at_hard_max = (not uncapped) and bool(at_queue_max)\n'''
+          new = '''    # For evolvable mines, at_queue_max means the next Ascension gate was reached.\n    at_hard_max = bool(at_queue_max)\n'''
+          if old not in s:
+              raise SystemExit('old uncapped UI block changed')
+          s = s.replace(old, new, 1)
+
+          old = '''    planet_id = planet.get(\"id\")\n    try:\n        pid = int(planet_id) if planet_id is not None else None\n    except (TypeError, ValueError):\n        pid = None\n    evo_ranks = None\n    if panel_ctx is not None and pid is not None and uncapped:\n        evo_ranks = getattr(panel_ctx, \"_mine_evo_ranks\", None)\n        if evo_ranks is None:\n            from .mine_evolution import get_evolution_ranks_for_planet\n\n            evo_conn = getattr(panel_ctx.resolver, \"_conn\", None)\n            evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)\n            try:\n                panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]\n            except Exception:\n                pass\n    row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))\n'''
+          new = '''    row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))\n'''
+          if old not in s:
+              raise SystemExit('duplicate evolution panel block changed')
+          s = s.replace(old, new, 1)
+
+          old = '''    if uncapped:\n        # Keep enqueue math working with sentinel; UI uses uncapped / at_queue_max=False.\n        row[\"max_level\"] = int(UNCAPPED_BUILDING_LEVEL)\n'''
+          if old not in s:
+              raise SystemExit('sentinel row override changed')
+          s = s.replace(old, '', 1)
+
+          s = s.replace('        max_attempts = 64 if want_max else 1\n', '        max_attempts = 1\n', 1)
+
+          needle = '''        rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))\n\n        def _record_mutate_perf() -> None:\n'''
+          insert = '''        rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))\n\n        from .mine_evolution import get_evolution_rank, is_evolvable_mine\n\n        is_evolution_mine = is_evolvable_mine(building_type)\n        evolution_rank = (\n            get_evolution_rank(planet_id, building_type, conn=conn)\n            if is_evolution_mine\n            else None\n        )\n        base_max_level = hotpath.max_level(building_type)\n        max_level = _effective_building_queue_cap(\n            building_type,\n            base_max_level,\n            planet_id=planet_id,\n            conn=conn,\n            evolution_rank=evolution_rank,\n        )\n        current_level_initial = int(buildings.get(building_type, 0) or 0)\n        queued_same_initial = sum(\n            1 for r in rows_db if str(r[\"building_type\"]) == building_type\n        )\n        queue_free_slots = max(0, int(queue_limit) - len(rows_db))\n        level_headroom = max(\n            0, int(max_level) - (current_level_initial + queued_same_initial)\n        )\n\n        def _cap_failure_payload(target_level: Optional[int] = None) -> Dict[str, Any]:\n            payload: Dict[str, Any] = {\n                \"msg\": \"Ascension required\" if is_evolution_mine else \"Max level reached\",\n                \"max_level\": int(max_level),\n            }\n            if target_level is not None:\n                payload[\"target_level\"] = int(target_level)\n            if is_evolution_mine:\n                rank = max(0, int(evolution_rank or 0))\n                payload.update({\n                    \"evolution_rank\": rank,\n                    \"next_evolution_rank\": rank + 1,\n                    \"required_level\": int(max_level),\n                })\n            return payload\n\n        if want_max:\n            max_attempts = min(64, queue_free_slots, level_headroom)\n            if max_attempts <= 0:\n                if queue_free_slots <= 0:\n                    last_reason = \"queue_full\"\n                    last_fail = {\n                        \"queue_count\": len(rows_db),\n                        \"queue_limit\": int(queue_limit),\n                    }\n                elif level_headroom <= 0:\n                    last_reason = \"ascension_required\" if is_evolution_mine else \"invalid\"\n                    last_fail = _cap_failure_payload()\n\n        def _record_mutate_perf() -> None:\n'''
+          if needle not in s:
+              raise SystemExit('queue rows insertion marker changed')
+          s = s.replace(needle, insert, 1)
+
+          old = '''        for _ in range(max_attempts):\n            current_level = int(buildings.get(building_type, 0) or 0)\n            max_level = hotpath.max_level(building_type)\n\n            if current_level >= max_level:\n                last_reason = \"invalid\"\n                last_fail = {\"msg\": \"Max level reached\", \"max_level\": max_level}\n                break\n'''
+          new = '''        for _ in range(max_attempts):\n            current_level = int(buildings.get(building_type, 0) or 0)\n\n            if current_level >= max_level:\n                last_reason = \"ascension_required\" if is_evolution_mine else \"invalid\"\n                last_fail = _cap_failure_payload()\n                break\n'''
+          if old not in s:
+              raise SystemExit('queue loop max block changed')
+          s = s.replace(old, new, 1)
+
+          old = '''            if target_level > max_level:\n                last_reason = \"invalid\"\n                last_fail = {\n                    \"msg\": \"Max level reached\",\n                    \"max_level\": max_level,\n                    \"target_level\": target_level,\n                }\n                break\n'''
+          new = '''            if target_level > max_level:\n                last_reason = \"ascension_required\" if is_evolution_mine else \"invalid\"\n                last_fail = _cap_failure_payload(target_level)\n                break\n'''
+          if old not in s:
+              raise SystemExit('target cap block changed')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('templates/buildings.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              '{% set is_max = (not _uncapped_action) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}',
+              '{% set is_max = ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}',
+              1,
+          )
+          s = s.replace(
+              '{% set is_max = (not _uncapped) and ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}',
+              '{% set is_max = ((b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false)) %}',
+              1,
+          )
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('tests/test_mine_evolution.py')
+          s = p.read_text(encoding='utf-8')
+          marker = '\n\nclass TestMineEvolutionProduction:\n'
+          tests = '''\n\n    def test_build_queue_max_stops_at_next_ascension_gate(self, mevo_db, monkeypatch):\n        import game.buildings as bmod\n        from game.db import db\n        from game.models import get_homeworld, get_planet_buildings, save_planet_buildings\n\n        uid = mevo_db\n        planet = get_homeworld(player_id=uid)\n        pid = int(planet[\"id\"])\n        buildings = get_planet_buildings(pid)\n        buildings[\"metal_mine\"] = 245\n        save_planet_buildings(pid, buildings)\n\n        conn = db()\n        try:\n            conn.execute(\n                \"\"\"\n                INSERT INTO planet_mine_evolution (planet_id, building_type, evolution_rank, updated_at)\n                VALUES (?, ?, ?, 0)\n                ON CONFLICT(planet_id, building_type) DO UPDATE SET evolution_rank = excluded.evolution_rank;\n                \"\"\",\n                (pid, \"metal_mine\", 2),\n            )\n            conn.commit()\n        finally:\n            conn.close()\n\n        _fund_planet(pid, metal=1000, crystal=1000)\n        monkeypatch.setattr(\n            bmod, \"_resolve_build_queue_limit\", lambda settings=None, *, conn=None: 10\n        )\n        monkeypatch.setattr(bmod, \"get_upgrade_cost\", lambda *_args, **_kwargs: (1, 1))\n        monkeypatch.setattr(\n            bmod.BuildingsPanelContext,\n            \"build_time_seconds\",\n            lambda self, building_type, target_level: 3600,\n        )\n\n        buildings = get_planet_buildings(pid)\n        ok, reason, payload = bmod.queue_build_for_planet(\n            dict(planet), buildings, \"metal_mine\", user_id=uid, queue_mode=\"max\"\n        )\n        assert ok and reason == \"ok\"\n        assert int(payload[\"jobs_queued\"]) == 5\n        mine_rows = [\n            r for r in bmod.get_build_queue_rows(pid) if str(r[\"building_type\"]) == \"metal_mine\"\n        ]\n        assert len(mine_rows) == 5\n\n        ok, reason, blocked = bmod.queue_build_for_planet(\n            dict(planet), buildings, \"metal_mine\", user_id=uid, queue_mode=\"max\"\n        )\n        assert not ok\n        assert reason == \"ascension_required\"\n        assert int(blocked[\"max_level\"]) == 250\n        assert int(blocked[\"evolution_rank\"]) == 2\n        assert int(blocked[\"next_evolution_rank\"]) == 3\n\n    def test_queue_cap_helper_preserves_legacy_overlevel_catchup(self):\n        import game.buildings as bmod\n\n        assert bmod._effective_building_queue_cap(\n            \"metal_mine\", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=0\n        ) == 200\n        assert bmod._effective_building_queue_cap(\n            \"metal_mine\", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=2\n        ) == 250\n        assert bmod._effective_building_queue_cap(\n            \"metal_mine\", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=4\n        ) == 300\n'''
+          if 'test_build_queue_max_stops_at_next_ascension_gate' not in s:
+              if marker not in s:
+                  raise SystemExit('mine evolution production marker missing')
+              s = s.replace(marker, tests + marker, 1)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('tests/test_gc862_buildings_hotpath_optimization.py')
+          s = p.read_text(encoding='utf-8')
+          extra = '''\n\ndef test_gc862_max_queue_never_exceeds_remaining_global_slots(isolated_db, monkeypatch):\n    user_id, planet = isolated_db\n    planet_id = int(planet[\"id\"])\n    now = time.time()\n\n    add_build_job(planet_id, \"crystal_mine\", now + 10, now + 3610)\n    add_build_job(planet_id, \"solar_plant\", now + 3620, now + 7220)\n\n    import game.buildings as bmod\n    conn = db()\n    try:\n        conn.execute(\n            \"UPDATE planets SET metal = ?, crystal = ? WHERE id = ?\",\n            (1000, 1000, planet_id),\n        )\n        conn.commit()\n    finally:\n        conn.close()\n\n    monkeypatch.setattr(\n        bmod, \"_resolve_build_queue_limit\", lambda settings=None, *, conn=None: 4\n    )\n    monkeypatch.setattr(bmod, \"get_upgrade_cost\", lambda *_args, **_kwargs: (1, 1))\n    monkeypatch.setattr(\n        bmod.BuildingsPanelContext,\n        \"build_time_seconds\",\n        lambda self, building_type, target_level: 3600,\n    )\n\n    buildings = get_planet_buildings(planet_id)\n    ok, reason, payload = queue_build_for_planet(\n        planet, buildings, \"metal_mine\", user_id=user_id, queue_mode=\"max\"\n    )\n    assert ok and reason == \"ok\"\n    assert int(payload[\"jobs_queued\"]) == 2\n    assert len(get_build_queue_rows(planet_id)) == 4\n'''
+          if 'test_gc862_max_queue_never_exceeds_remaining_global_slots' not in s:
+              s += extra
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('docs/MINE_EVOLUTION.md')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              '| Uncapped levels for the three mines | Hard max on mines |',
+              '| Soft-uncapped resolver + **enqueue gate at the next Ascension milestone** | Permanent hard max on mines |',
+          )
+          s = s.replace(
+              '| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **Uncapped** (soft sentinel `UNCAPPED_BUILDING_LEVEL`) so milestones L200 / L225 / L300+ are reachable |',
+              '| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver remains soft-uncapped (`UNCAPPED_BUILDING_LEVEL`), but **new build jobs stop at `required_level(rank+1)` until that Ascension is completed** |',
+          )
+          s = s.replace(
+              'Nexus no longer raises the **mine** hardcap. Ascension must not reintroduce a mine hardcap.',
+              'Nexus no longer raises the **mine** hardcap. The resolver stays uncapped, while the build queue uses the next Ascension milestone as a progression gate. Existing overlevel/catch-up levels are never reduced.',
+          )
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('docs/BUILDINGS_SYSTEM.md')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              '| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **Uncapped** — Progression über Kosten/Zeit + [Mine Evolution](MINE_EVOLUTION.md); Soft-Sentinel `UNCAPPED_BUILDING_LEVEL` |',
+              '| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver soft-uncapped; **Build-Enqueue nur bis zum nächsten Ascension-Milestone `required_level(rank+1)`** |',
+          )
+          s = s.replace(
+              'Nexus hebt **kein** Mine-Hardcap mehr (Minen uncapped — Ascension-Milestones L200+ müssen erreichbar bleiben); Solar-/Storage-Caps bleiben. Mine Ascension (Tribute, kein Level-Reset): [MINE_EVOLUTION.md](MINE_EVOLUTION.md).',
+              'Nexus hebt **kein** permanentes Mine-Hardcap mehr. Minen bleiben resolver-seitig uncapped, aber neue Queue-Jobs werden am nächsten Ascension-Milestone gestoppt, bis der Rank gekauft wurde. Legacy-Overlevel bleibt erhalten; Solar-/Storage-Caps bleiben. Mine Ascension: [MINE_EVOLUTION.md](MINE_EVOLUTION.md).',
+          )
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          python -m py_compile game/buildings.py
+          git diff --check
+
+      - name: Focused queue regressions
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+          python -m pytest -q --tb=short \
+            tests/test_mine_evolution.py \
+            tests/test_gc830_max_queue_buttons.py \
+            tests/test_gc862_buildings_hotpath_optimization.py \
+            tests/test_race_conditions.py
+
+      - name: Commit hotfix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/buildings.py templates/buildings.html tests/test_mine_evolution.py tests/test_gc862_buildings_hotpath_optimization.py docs/MINE_EVOLUTION.md docs/BUILDINGS_SYSTEM.md
+          git commit -m "fix: gate max build queue at ascension caps"
+          git push origin HEAD:hotfix/ascension-queue-cap
