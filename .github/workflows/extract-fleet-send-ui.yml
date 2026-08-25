@@ -3,35 +3,23 @@ on:
   push:
     branches: [feature/fleet-action-reasons]
 permissions:
-  contents: write
+  contents: read
 jobs:
   extract:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract focused snippets
+      - name: Print exact fleet reason mapper
         run: |
           python - <<'PY'
           from pathlib import Path
-          out=[]
-          specs=[
-            ('static/main.js','const res = await GC.fetchGameAction("/api/fleet/send"',9000,14000),
-            ('app.py','@app.route("/api/fleet/send", methods=["POST"])',3000,13000),
-            ('game/fleet.py','def validate_fleet_send(',2000,26000),
-            ('game/fleet.py','def evaluate_fleet_mission_target(',2500,18000),
-            ('static/js/galaxy-quick-action.js','async sendFleet(',4000,14000),
-          ]
-          for path,needle,before,after in specs:
-            s=Path(path).read_text(encoding='utf-8')
-            i=s.find(needle)
-            out.append(f'===== {path} :: {needle} @ {i} =====')
-            if i>=0:
-              out.append(s[max(0,i-before):min(len(s),i+after)])
-          Path('.tmp/fleet-send-ui.txt').write_text('\n\n'.join(out),encoding='utf-8')
+          s=Path('static/main.js').read_text(encoding='utf-8')
+          start=s.index('    const reasonText = (reason, preview) => {')
+          end=s.index('\n    };', start) + len('\n    };')
+          print(s[start:end])
+          print('\n===== RUN PREVIEW BLOCK =====')
+          p=s.index('    const runPreview = async (page) => {')
+          q=s.index('\n    const schedulePreview = (page) => {', p)
+          print(s[p:q])
           PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .tmp/fleet-send-ui.txt
-          git commit -m 'chore: capture focused fleet send UX snippets'
-          git push
