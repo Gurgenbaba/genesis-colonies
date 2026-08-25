@@ -8900,5 +8900,10 @@
   "server_event_effect_research_speed": "%(value)s % Vitesse de recherche",
   "server_event_effect_asteroid_spawn": "Apparition d’astéroïdes ×%(mult)s",
   "server_event_effect_world_boss_spawn": "Chasse au boss ×%(mult)s",
-  "server_event_effect_inactive_farm": "Fermes inactives ×%(mult)s"
+  "server_event_effect_inactive_farm": "Fermes inactives ×%(mult)s",
+  "alliance_relation_peace": "Offre de paix",
+  "alliance_dip_offer_peace": "Proposer la paix",
+  "peace_requires_war": "Une offre de paix n’est possible que pendant une guerre active.",
+  "war_active": "La guerre est active. Mettez-y fin avec une offre de paix avant tout autre pacte.",
+  "already_at_war": "Ces alliances sont déjà en guerre."
 }

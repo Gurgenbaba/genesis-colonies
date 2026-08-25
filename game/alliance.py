@@ -2432,6 +2432,37 @@ def _diplomacy_pair(a: int, b: int) -> Tuple[int, int]:
     return x, y
 
 
+def _invalidate_pending_diplomacy_requests_between(
+    alliance_id_a: int,
+    alliance_id_b: int,
+    *,
+    conn,
+    now: Optional[int] = None,
+    except_request_id: Optional[int] = None,
+) -> int:
+    """Close stale bilateral offers whenever a newer relation transition wins."""
+    a, b = int(alliance_id_a), int(alliance_id_b)
+    ts = int(now or _now())
+    params: List[Any] = [ts, a, b, b, a]
+    extra = ""
+    if except_request_id is not None:
+        extra = " AND id != ?"
+        params.append(int(except_request_id))
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        UPDATE alliance_diplomacy_requests
+        SET status = 'declined', responded_at = COALESCE(responded_at, ?)
+        WHERE status = 'pending'
+          AND ((from_alliance_id = ? AND to_alliance_id = ?)
+            OR (from_alliance_id = ? AND to_alliance_id = ?))
+          {extra};
+        """,
+        tuple(params),
+    )
+    return int(cur.rowcount or 0)
+
+
 def get_alliance_relation(alliance_id_a: int, alliance_id_b: int, conn=None) -> str:
     if int(alliance_id_a) == int(alliance_id_b):
         return "alliance"
@@ -2487,10 +2518,18 @@ def send_diplomacy_request(
         to_aid = int(target["id"])
         if to_aid == from_aid:
             raise ValueError("invalid_target")
+        current_relation = get_alliance_relation(from_aid, to_aid, conn=conn)
+        if rtype == "peace" and current_relation != "war":
+            raise ValueError("peace_requires_war")
+        if current_relation == "war" and rtype in ("nap", "alliance"):
+            raise ValueError("war_active")
+        if current_relation == "war" and rtype == "war":
+            raise ValueError("already_at_war")
         now = _now()
         if own:
             begin_write_transaction(conn)
         if rtype == "war":
+            _invalidate_pending_diplomacy_requests_between(from_aid, to_aid, conn=conn, now=now)
             lo, hi = _diplomacy_pair(from_aid, to_aid)
             conn.execute(
                 """
@@ -2502,15 +2541,27 @@ def send_diplomacy_request(
                 (lo, hi, now),
             )
         else:
-            cur.execute(
-                """
-                SELECT id FROM alliance_diplomacy_requests
-                WHERE from_alliance_id = ? AND to_alliance_id = ? AND request_type = ?
-                  AND status = 'pending'
-                LIMIT 1;
-                """,
-                (from_aid, to_aid, rtype),
-            )
+            if rtype == "peace":
+                cur.execute(
+                    """
+                    SELECT id FROM alliance_diplomacy_requests
+                    WHERE request_type = 'peace' AND status = 'pending'
+                      AND ((from_alliance_id = ? AND to_alliance_id = ?)
+                        OR (from_alliance_id = ? AND to_alliance_id = ?))
+                    LIMIT 1;
+                    """,
+                    (from_aid, to_aid, to_aid, from_aid),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id FROM alliance_diplomacy_requests
+                    WHERE from_alliance_id = ? AND to_alliance_id = ? AND request_type = ?
+                      AND status = 'pending'
+                    LIMIT 1;
+                    """,
+                    (from_aid, to_aid, rtype),
+                )
             if cur.fetchone():
                 raise ValueError("duplicate_diplomacy_request")
             conn.execute(
@@ -2564,19 +2615,38 @@ def respond_diplomacy_request(
         if own:
             begin_write_transaction(conn)
         if accept:
-            relation = "alliance" if str(req["request_type"]) == "alliance" else "nap"
-            if relation not in DIPLOMACY_RELATIONS:
-                relation = "nap"
-            lo, hi = _diplomacy_pair(int(req["from_alliance_id"]), to_aid)
-            conn.execute(
-                """
-                INSERT INTO alliance_diplomacy (alliance_id_low, alliance_id_high, relation, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(alliance_id_low, alliance_id_high) DO UPDATE SET
-                    relation = excluded.relation, updated_at = excluded.updated_at;
-                """,
-                (lo, hi, relation, now),
-            )
+            request_type = str(req["request_type"] or "").strip().lower()
+            from_aid = int(req["from_alliance_id"])
+            lo, hi = _diplomacy_pair(from_aid, to_aid)
+            if request_type == "peace":
+                if get_alliance_relation(from_aid, to_aid, conn=conn) != "war":
+                    raise ValueError("peace_requires_war")
+                conn.execute(
+                    "DELETE FROM alliance_diplomacy WHERE alliance_id_low = ? AND alliance_id_high = ?;",
+                    (lo, hi),
+                )
+                _invalidate_pending_diplomacy_requests_between(
+                    from_aid,
+                    to_aid,
+                    conn=conn,
+                    now=now,
+                    except_request_id=int(request_id),
+                )
+            else:
+                if get_alliance_relation(from_aid, to_aid, conn=conn) == "war":
+                    raise ValueError("war_active")
+                relation = "alliance" if request_type == "alliance" else "nap"
+                if relation not in DIPLOMACY_RELATIONS:
+                    relation = "nap"
+                conn.execute(
+                    """
+                    INSERT INTO alliance_diplomacy (alliance_id_low, alliance_id_high, relation, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(alliance_id_low, alliance_id_high) DO UPDATE SET
+                        relation = excluded.relation, updated_at = excluded.updated_at;
+                    """,
+                    (lo, hi, relation, now),
+                )
             conn.execute(
                 """
                 UPDATE alliance_diplomacy_requests

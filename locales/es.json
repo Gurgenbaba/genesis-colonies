@@ -8900,5 +8900,10 @@
   "server_event_effect_research_speed": "%(value)s % Velocidad de investigación",
   "server_event_effect_asteroid_spawn": "Aparición de asteroides ×%(mult)s",
   "server_event_effect_world_boss_spawn": "Caza de jefes ×%(mult)s",
-  "server_event_effect_inactive_farm": "Granjas inactivas ×%(mult)s"
+  "server_event_effect_inactive_farm": "Granjas inactivas ×%(mult)s",
+  "alliance_relation_peace": "Oferta de paz",
+  "alliance_dip_offer_peace": "Ofrecer la paz",
+  "peace_requires_war": "Solo se puede ofrecer la paz durante una guerra activa.",
+  "war_active": "La guerra está activa. Termínala primero mediante una oferta de paz.",
+  "already_at_war": "Estas alianzas ya están en guerra."
 }

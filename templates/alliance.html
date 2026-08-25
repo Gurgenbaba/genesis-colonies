@@ -745,6 +745,13 @@
             <span class="alliance-hub-tag">[{{ d.other_tag }}]</span>
             <span class="alliance-hub-dip-name">{{ d.other_name }}</span>
             {{ alliance_dip_relation(d.relation) }}
+            {% if d.relation == 'war' and st.can_manage %}
+            <form class="alliance-hub-dip-peace-form" data-alliance-action="diplomacy" method="post" action="#" novalidate>
+              <input type="hidden" name="tag" value="{{ d.other_tag }}">
+              <input type="hidden" name="request_type" value="peace">
+              <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" data-alliance-submit="diplomacy">{{ T("alliance_dip_offer_peace", "Frieden anbieten") }}</button>
+            </form>
+            {% endif %}
           </li>
           {% else %}
           <li class="alliance-hub-empty">{{ T("alliance_no_diplomacy", "Keine Beziehungen.") }}</li>

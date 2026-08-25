@@ -8900,5 +8900,10 @@
   "server_event_effect_research_speed": "%(value)s% Szybkość badań",
   "server_event_effect_asteroid_spawn": "Pojawianie asteroid ×%(mult)s",
   "server_event_effect_world_boss_spawn": "Polowanie na bossa ×%(mult)s",
-  "server_event_effect_inactive_farm": "Farmienie nieaktywnych ×%(mult)s"
+  "server_event_effect_inactive_farm": "Farmienie nieaktywnych ×%(mult)s",
+  "alliance_relation_peace": "Oferta pokoju",
+  "alliance_dip_offer_peace": "Zaproponuj pokój",
+  "peace_requires_war": "Ofertę pokoju można złożyć tylko podczas aktywnej wojny.",
+  "war_active": "Wojna trwa. Najpierw zakończ ją poprzez ofertę pokoju.",
+  "already_at_war": "Te sojusze są już w stanie wojny."
 }

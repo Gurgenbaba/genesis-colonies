@@ -31,6 +31,7 @@ from game.alliance import (
     leave_alliance,
     promote_member,
     respond_application,
+    respond_diplomacy_request,
     send_alliance_broadcast,
     send_diplomacy_request,
     set_member_role,
@@ -1152,6 +1153,156 @@ def test_diplomacy_war_and_duplicate_request(alliance_db):
         conn.close()
 
 
+
+
+def test_gc_al_war_01_lifecycle_bundle(alliance_db):
+    """GC-AL-WAR-01: one migrated DB covers peace, stale-request guards, permissions, fleet hooks and UI."""
+    from game.alliance import get_alliance_relation, get_players_diplomacy_relation
+    from game.fleet import mission_allowed_for_target, resolve_fleet_target
+
+    # _player() creates the account through its own DB connection. Create every
+    # participant before opening the shared diplomacy connection so SQLite never
+    # has two writers competing during this bundled regression.
+    leader_a = _player(name="War Leader A")
+    leader_b = _player(name="War Leader B")
+    member_a = _player(name="War Member A")
+    member_b = _player(name="War Member B")
+
+    conn = db()
+    try:
+        create_alliance("WPA", "War Peace A", leader_a, conn=conn)
+        create_alliance("WPB", "War Peace B", leader_b, conn=conn)
+        conn.commit()
+        aid_a = int(get_player_alliance(leader_a, conn=conn)["alliance_id"])
+        aid_b = int(get_player_alliance(leader_b, conn=conn)["alliance_id"])
+
+        for aid in (aid_a, aid_b):
+            conn.execute(
+                "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'diplomacy_center', 1);",
+                (aid,),
+            )
+        conn.commit()
+
+        # Older bilateral offers exist before the newer war transition.
+        send_diplomacy_request(leader_a, "WPB", "nap", conn=conn)
+        send_diplomacy_request(leader_a, "WPB", "alliance", conn=conn)
+        send_diplomacy_request(leader_b, "WPA", "nap", conn=conn)
+        conn.commit()
+        pending_before = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM alliance_diplomacy_requests
+            WHERE status = 'pending'
+              AND ((from_alliance_id = ? AND to_alliance_id = ?)
+                OR (from_alliance_id = ? AND to_alliance_id = ?));
+            """,
+            (aid_a, aid_b, aid_b, aid_a),
+        ).fetchone()["c"]
+        assert int(pending_before) == 3
+
+        send_diplomacy_request(leader_a, "WPB", "war", conn=conn)
+        conn.commit()
+        assert get_alliance_relation(aid_a, aid_b, conn=conn) == "war"
+        pending_after = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM alliance_diplomacy_requests
+            WHERE status = 'pending'
+              AND ((from_alliance_id = ? AND to_alliance_id = ?)
+                OR (from_alliance_id = ? AND to_alliance_id = ?));
+            """,
+            (aid_a, aid_b, aid_b, aid_a),
+        ).fetchone()["c"]
+        assert int(pending_after) == 0
+
+        with pytest.raises(ValueError, match="war_active"):
+            send_diplomacy_request(leader_a, "WPB", "nap", conn=conn)
+        with pytest.raises(ValueError, match="war_active"):
+            send_diplomacy_request(leader_a, "WPB", "alliance", conn=conn)
+        with pytest.raises(ValueError, match="already_at_war"):
+            send_diplomacy_request(leader_a, "WPB", "war", conn=conn)
+
+        # Peace is mutual: members cannot offer or accept it, leaders can decline without ending war.
+        send_diplomacy_request(leader_a, "WPB", "peace", conn=conn)
+        conn.commit()
+        peace_id = int(
+            conn.execute(
+                """
+                SELECT id FROM alliance_diplomacy_requests
+                WHERE from_alliance_id = ? AND to_alliance_id = ?
+                  AND request_type = 'peace' AND status = 'pending'
+                LIMIT 1;
+                """,
+                (aid_a, aid_b),
+            ).fetchone()["id"]
+        )
+
+        join_alliance_by_tag(member_a, "WPA", conn=conn)
+        join_alliance_by_tag(member_b, "WPB", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="forbidden"):
+            send_diplomacy_request(member_a, "WPB", "peace", conn=conn)
+        with pytest.raises(ValueError, match="forbidden"):
+            respond_diplomacy_request(member_b, peace_id, accept=True, conn=conn)
+
+        respond_diplomacy_request(leader_b, peace_id, accept=False, conn=conn)
+        conn.commit()
+        assert get_alliance_relation(aid_a, aid_b, conn=conn) == "war"
+
+        # A fresh peace offer can be accepted and immediately restores neutral fleet rules.
+        send_diplomacy_request(leader_a, "WPB", "peace", conn=conn)
+        conn.commit()
+        peace_id = int(
+            conn.execute(
+                """
+                SELECT id FROM alliance_diplomacy_requests
+                WHERE from_alliance_id = ? AND to_alliance_id = ?
+                  AND request_type = 'peace' AND status = 'pending'
+                ORDER BY id DESC LIMIT 1;
+                """,
+                (aid_a, aid_b),
+            ).fetchone()["id"]
+        )
+        respond_diplomacy_request(leader_b, peace_id, accept=True, conn=conn)
+        conn.commit()
+        assert get_alliance_relation(aid_a, aid_b, conn=conn) == "neutral"
+        assert get_players_diplomacy_relation(leader_a, leader_b, conn=conn) == "neutral"
+
+        planet_b = get_context_planet(player_id=leader_b, conn=conn)
+        target = resolve_fleet_target(
+            leader_a,
+            int(planet_b["galaxy"]),
+            int(planet_b["system"]),
+            int(planet_b["position"]),
+            conn=conn,
+        )
+        assert target["target_type"] == "foreign_planet"
+        assert target.get("diplomacy_relation") == "neutral"
+        assert mission_allowed_for_target("attack", target)[0] is True
+
+        with pytest.raises(ValueError, match="peace_requires_war"):
+            send_diplomacy_request(leader_a, "WPB", "peace", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Flask's test client bootstraps the application and may open its own SQLite
+    # writer. Never render UI while the explicit gameplay connection is alive.
+    neutral_body = _alliance_member_hub_html(alliance_db, uid=leader_a)
+    assert 'name="request_type" value="peace"' not in neutral_body
+
+    conn = db()
+    try:
+        send_diplomacy_request(leader_a, "WPB", "war", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    leader_body = _alliance_member_hub_html(alliance_db, uid=leader_a)
+    member_body = _alliance_member_hub_html(alliance_db, uid=member_a)
+    assert 'name="request_type" value="peace"' in leader_body
+    assert 'data-alliance-submit="diplomacy"' in leader_body
+    assert 'name="request_type" value="peace"' not in member_body
+
+
 def test_gc_al_dip_01_fleet_mission_hooks(alliance_db):
     """GC-AL-DIP-01: NAP blocks attack; diplomatic alliance allows transport; war keeps attack."""
     from game.alliance import get_players_diplomacy_relation, respond_diplomacy_request
@@ -1243,6 +1394,26 @@ def test_gc_al_dip_01_fleet_mission_hooks(alliance_db):
         assert "attack" in war_target["allowed_missions"]
         assert mission_allowed_for_target("attack", war_target)[0] is True
         assert mission_allowed_for_target("transport", war_target)[0] is False
+
+        # Accepted peace -> neutral immediately; canonical fleet hook follows relation state.
+        send_diplomacy_request(leader_a, "DBB", "peace", conn=conn)
+        conn.commit()
+        peace_req = int(
+            conn.execute(
+                """
+                SELECT id FROM alliance_diplomacy_requests
+                WHERE from_alliance_id = ? AND request_type = 'peace' AND status = 'pending'
+                LIMIT 1;
+                """,
+                (aid_a,),
+            ).fetchone()["id"]
+        )
+        respond_diplomacy_request(leader_b, peace_req, accept=True, conn=conn)
+        conn.commit()
+        assert get_players_diplomacy_relation(leader_a, leader_b, conn=conn) == "neutral"
+        peace_target = resolve_fleet_target(leader_a, g, s, p, conn=conn)
+        assert peace_target.get("diplomacy_relation") == "neutral"
+        assert "attack" in peace_target["allowed_missions"]
     finally:
         conn.close()
 

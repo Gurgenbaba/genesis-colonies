@@ -8900,5 +8900,10 @@
   "server_event_effect_research_speed": "%(value)s% Research Speed",
   "server_event_effect_asteroid_spawn": "Asteroid Spawns ×%(mult)s",
   "server_event_effect_world_boss_spawn": "Boss Hunt ×%(mult)s",
-  "server_event_effect_inactive_farm": "Inactive Farms ×%(mult)s"
+  "server_event_effect_inactive_farm": "Inactive Farms ×%(mult)s",
+  "alliance_relation_peace": "Peace offer",
+  "alliance_dip_offer_peace": "Offer peace",
+  "peace_requires_war": "A peace offer is only possible during an active war.",
+  "war_active": "The war is active. End it through a peace offer first.",
+  "already_at_war": "These alliances are already at war."
 }

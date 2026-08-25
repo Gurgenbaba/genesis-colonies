@@ -8900,5 +8900,10 @@
   "server_event_effect_research_speed": "%(value)s% Скорость исследований",
   "server_event_effect_asteroid_spawn": "Появление астероидов ×%(mult)s",
   "server_event_effect_world_boss_spawn": "Охота на босса ×%(mult)s",
-  "server_event_effect_inactive_farm": "Фарм неактивных ×%(mult)s"
+  "server_event_effect_inactive_farm": "Фарм неактивных ×%(mult)s",
+  "alliance_relation_peace": "Предложение мира",
+  "alliance_dip_offer_peace": "Предложить мир",
+  "peace_requires_war": "Предложить мир можно только во время активной войны.",
+  "war_active": "Война продолжается. Сначала завершите её через предложение мира.",
+  "already_at_war": "Эти альянсы уже находятся в состоянии войны."
 }

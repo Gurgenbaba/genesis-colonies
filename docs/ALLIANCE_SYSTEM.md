@@ -1,6 +1,6 @@
 # Alliance System — Genesis Colonies (EPIC-09)
 
-**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03) + **GC-AL-DIP-01** (Fleet Mission Hooks). Kriegs-Meta / End-War UI bewusst später.
+**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03) + **GC-AL-DIP-01** (Fleet Mission Hooks) + **GC-AL-WAR-01** (Peace Workflow). Kriegs-Score / Report-Meta folgt separat.
 
 **Owner:** `game/alliance.py` · Catalog: `game/alliance_catalog.py`  
 **UI:** `/alliance` (Hub) · `/alliance/<id>` (öffentliche Besucherseite) · `GC.modules.alliance` · `templates/alliance.html`  
@@ -161,7 +161,8 @@ Officer erhalten System-Nachricht bei Spende.
   - diplomatisches `alliance` → `ally_planet` (Transport/Hold wie Same-Alliance)
   - `nap` → `foreign_planet` ohne `attack` (`mission_blocked_nap`)
   - `war` → Attack erlaubt + `diplomacy_relation: "war"` am Target-Payload
-- **Follow-up:** Combat Kriegs-Meta (Reports/Score), End-War / Peace-UI
+- **GC-AL-WAR-01:** aktiver Krieg → gegenseitig bestätigtes Friedensangebot → `neutral`; Krieg invalidiert ältere Pact-Requests, damit keine stale Anfrage den neueren Kriegszustand überschreibt.
+- **Follow-up:** Combat Kriegs-Meta (Reports/Score/Badges) als GC-AL-WAR-02.
 
 ## Schema (Migration 088–092)
 

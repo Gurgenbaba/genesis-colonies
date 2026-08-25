@@ -8900,5 +8900,10 @@
   "server_event_effect_research_speed": "%(value)s% Araştırma hızı",
   "server_event_effect_asteroid_spawn": "Asteroit çıkışı ×%(mult)s",
   "server_event_effect_world_boss_spawn": "Boss avı ×%(mult)s",
-  "server_event_effect_inactive_farm": "Pasif oyuncu çiftlikleri ×%(mult)s"
+  "server_event_effect_inactive_farm": "Pasif oyuncu çiftlikleri ×%(mult)s",
+  "alliance_relation_peace": "Barış teklifi",
+  "alliance_dip_offer_peace": "Barış teklif et",
+  "peace_requires_war": "Barış teklifi yalnızca aktif bir savaş sırasında yapılabilir.",
+  "war_active": "Savaş devam ediyor. Önce bir barış teklifiyle savaşı sona erdirin.",
+  "already_at_war": "Bu ittifaklar zaten savaş halinde."
 }
