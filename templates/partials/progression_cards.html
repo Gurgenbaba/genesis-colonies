@@ -91,19 +91,17 @@
 
 {% macro render_resource_cost_chip(res_key, amount, unmet=false) %}
   {% set full_val = amount|fmt_int %}
-  {% set compact_val = amount|fmt_int_compact %}
   <span class="gc-cost-chip gc-cost-{{ res_key }}{% if unmet %} is-unmet{% endif %}">
     <span class="gc-cost-chip-leading">{{ render_resource_icon(res_key) }}</span>
-    <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>
+    <span class="gc-cost-val gc-num-compact" title="{{ full_val }}">{{ full_val }}</span>
   </span>
 {% endmacro %}
 
 {% macro render_energy_draw_cost_chip(draw) %}
   {% set full_val = draw|fmt_int %}
-  {% set compact_val = draw|fmt_int_compact %}
   <span class="gc-cost-chip gc-cost-energy" data-building-energy-draw>
     <span class="gc-cost-chip-leading">{{ render_resource_icon('energy', 'sm') }}</span>
-    <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="-{{ full_val }}"{% endif %}>-{{ compact_val }}</span>
+    <span class="gc-cost-val gc-num-compact" title="-{{ full_val }}">-{{ full_val }}</span>
   </span>
 {% endmacro %}
 

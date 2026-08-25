@@ -44,7 +44,7 @@
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("empire_label_total_score", "Gesamtpunkte") }}</dt>
-        <dd class="gc-mono empire-summary-value empire-summary-value--score gc-num-compact" title="{{ (em.total_score or 0)|fmt_int }}">{{ (em.total_score or 0)|fmt_int_compact }}</dd>
+        <dd class="gc-mono empire-summary-value empire-summary-value--score gc-num-compact" title="{{ (em.total_score or 0)|fmt_int }}">{{ (em.total_score or 0)|fmt_int }}</dd>
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("empire_label_energy_surplus", "Energie-Surplus") }}</dt>
@@ -63,21 +63,21 @@
         <div class="empire-prod-card-icon">{{ render_resource_icon('metal', 'lg') }}</div>
         <div class="empire-prod-card-body">
           <span class="empire-prod-card-label">{{ T("resource_metal") }}</span>
-          <span class="empire-prod-card-value gc-mono">+{{ (prod.metal or 0)|fmt_int_compact }}<span class="empire-prod-card-unit">/h</span></span>
+          <span class="empire-prod-card-value gc-mono gc-num-compact" title="+{{ (prod.metal or 0)|fmt_int }}/h">+{{ (prod.metal or 0)|fmt_int }}<span class="empire-prod-card-unit">/h</span></span>
         </div>
       </article>
       <article class="empire-prod-card empire-prod-card--crystal" aria-label="{{ T('resource_crystal') }}">
         <div class="empire-prod-card-icon">{{ render_resource_icon('crystal', 'lg') }}</div>
         <div class="empire-prod-card-body">
           <span class="empire-prod-card-label">{{ T("resource_crystal") }}</span>
-          <span class="empire-prod-card-value gc-mono">+{{ (prod.crystal or 0)|fmt_int_compact }}<span class="empire-prod-card-unit">/h</span></span>
+          <span class="empire-prod-card-value gc-mono gc-num-compact" title="+{{ (prod.crystal or 0)|fmt_int }}/h">+{{ (prod.crystal or 0)|fmt_int }}<span class="empire-prod-card-unit">/h</span></span>
         </div>
       </article>
       <article class="empire-prod-card empire-prod-card--fuel" aria-label="{{ T('resource_fuel_cells') }}">
         <div class="empire-prod-card-icon">{{ render_resource_icon('fuel_cells', 'lg') }}</div>
         <div class="empire-prod-card-body">
           <span class="empire-prod-card-label">{{ T("resource_fuel_cells") }}</span>
-          <span class="empire-prod-card-value gc-mono">+{{ (prod.fuel_cells or 0)|fmt_int_compact }}<span class="empire-prod-card-unit">/h</span></span>
+          <span class="empire-prod-card-value gc-mono gc-num-compact" title="+{{ (prod.fuel_cells or 0)|fmt_int }}/h">+{{ (prod.fuel_cells or 0)|fmt_int }}<span class="empire-prod-card-unit">/h</span></span>
         </div>
       </article>
       <article class="empire-prod-card empire-prod-card--energy" aria-label="{{ T('empire_label_energy_surplus', 'Energie-Surplus') }}">
@@ -175,13 +175,13 @@
                 {% if row.format == 'storage_fuel' and val|int == -1 %}
                   {{ T("empire_matrix_unlimited", "∞") }}
                 {% elif row.format == 'rate' %}
-                  +{{ val|fmt_int_compact }}<span class="empire-matrix-unit">/h</span>
+                  +{{ val|fmt_int }}<span class="empire-matrix-unit">/h</span>
                 {% elif row.format == 'level' %}
                   {% if val|int > 0 %}L{{ val|int }}{% else %}<span class="empire-matrix-zero">0</span>{% endif %}
                 {% elif row.format == 'count' %}
                   {% if val|int > 0 %}{{ val|fmt_int }}{% else %}<span class="empire-matrix-zero">0</span>{% endif %}
                 {% else %}
-                  {{ val|fmt_int_compact }}
+                  {{ val|fmt_int }}
                 {% endif %}
               </td>
               {% endfor %}
@@ -193,7 +193,7 @@
                   {% if row.format == 'level' %}
                     {% if tval|int > 0 %}L{{ tval|int }}{% else %}<span class="empire-matrix-zero">0</span>{% endif %}
                   {% else %}
-                    {{ tval|fmt_int_compact }}{% if row.format == 'rate' %}<span class="empire-matrix-unit">/h</span>{% endif %}
+                    {{ tval|fmt_int }}{% if row.format == 'rate' %}<span class="empire-matrix-unit">/h</span>{% endif %}
                   {% endif %}
                 {% else %}
                   —

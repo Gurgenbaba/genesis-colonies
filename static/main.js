@@ -161,37 +161,8 @@
     return _deIntFormatter.format(parseIntNumber(n));
   }
 
-  const COMPACT_THRESHOLD = 10_000_000n;
-
-  function _compactBigIntBody(abs, div) {
-    const whole = abs / div;
-    const tenth = ((abs % div) * 10n) / div;
-    return tenth === 0n ? String(whole) : `${whole},${tenth}`;
-  }
-
   function formatNumberCompact(n) {
-    const exact = parseDisplayBigInt(n);
-    if (exact === null) {
-      const num = parseIntNumber(n);
-      if (!Number.isFinite(num)) return "0";
-      if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);
-      return formatNumberCompact(BigInt(Math.trunc(num)));
-    }
-    const negative = exact < 0n;
-    const abs = negative ? -exact : exact;
-    if (abs < COMPACT_THRESHOLD) return _deIntFormatter.format(exact);
-    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _deIntFormatter.format(exact);
-    const sign = negative ? "-" : "";
-    if (abs >= 1_000_000_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000_000_000n)} Q`;
-    if (abs >= 1_000_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000_000n)} R`;
-    if (abs >= 1_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000n)} Y`;
-    if (abs >= 1_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000n)} Z`;
-    if (abs >= 1_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000n)} E`;
-    if (abs >= 1_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000n)} P`;
-    if (abs >= 1_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000n)} Bio.`;
-    if (abs >= 1_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000n)} Mrd.`;
-    if (abs >= 1_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000n)} Mio.`;
-    return `${sign}${_compactBigIntBody(abs, 1_000n)} Tsd.`;
+    return formatNumber(n);
   }
 
   function formatScore(n) { return formatNumberCompact(n); }
@@ -324,11 +295,8 @@
 
   function renderMonoCompact(n, prefix = "", suffix = "") {
     const p = fmtIntParts(n);
-    const text = `${prefix}${p.display}${suffix}`;
-    if (p.display === p.full && !prefix && !suffix) {
-      return `<span class="gc-mono gc-num-compact">${text}</span>`;
-    }
-    const title = `${prefix}${p.full}${suffix}`.replace(/"/g, "&quot;");
+    const text = `${prefix}${p.full}${suffix}`;
+    const title = text.replace(/"/g, "&quot;");
     return `<span class="gc-mono gc-num-compact" title="${title}">${text}</span>`;
   }
 

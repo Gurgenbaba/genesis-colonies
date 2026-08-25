@@ -25,95 +25,57 @@ def test_parse_int_number_accepts_de_grouped_strings():
     assert parse_int_number("1000000") == 1_000_000
 
 
-def test_fmt_int_compact_billions_one_decimal():
-    assert fmt_int_compact(149539413840) == "149,5 Mrd."
-    assert fmt_int_compact(149_000_000_000) == "149 Mrd."
-
-
-def test_fmt_int_compact_does_not_strip_integer_trailing_zero():
-    assert fmt_int_compact(150_000_000_000) == "150 Mrd."
-    assert fmt_int_compact(15_000_000_000) == "15 Mrd."
-
-
-def test_fmt_int_compact_below_threshold_uses_full():
-    assert fmt_int_compact(9_999_999) == "9.999.999"
-
-
-def test_fmt_int_parts_matches_full_for_tooltip():
-    parts = fmt_int_parts(149539413840)
-    assert parts["full"] == "149.539.413.840"
-    assert parts["display"] == "149,5 Mrd."
-
-
-def test_ranking_score_example_not_fifteen_billion():
-    compact = fmt_int_compact(149539413840)
-    assert compact != "15 Mrd."
-    assert compact.startswith("149")
-
-
-def test_million_and_trillion_tiers():
-    assert fmt_int_compact(12_345_678) == "12,3 Mio."
-    assert fmt_int_compact(2_500_000_000_000) == "2,5 Bio."
-
-
-def test_compact_high_tiers_are_human_readable_never_scientific():
-    cases = (
-        (2_658_735_763_000_000, "P"),
-        (2_500_000_000_000_000_000, "E"),
-        (2_500_000_000_000_000_000_000, "Z"),
-        (2_500_000_000_000_000_000_000_000, "Y"),
-        (2_500_000_000_000_000_000_000_000_000, "R"),
-        (2_500_000_000_000_000_000_000_000_000_000, "Q"),
+def test_fmt_int_compact_is_exact_compatibility_alias():
+    values = (
+        9_999_999,
+        12_345_678,
+        149_539_413_840,
+        2_500_000_000_000,
+        2_658_735_763_000_000,
+        4_322_745_658_911_545_655,
+        10**50 + 123456789,
+        -4_322_745_658_911_545_655,
     )
-    scientific = re.compile(r"\d[,.]?\d*e[+-]?\d+", re.IGNORECASE)
-    for value, suffix in cases:
-        rendered = fmt_int_compact(value)
-        assert rendered.endswith(f" {suffix}"), (value, rendered)
-        assert not scientific.search(rendered), (value, rendered)
-        assert "∞" not in rendered
+    for value in values:
+        assert fmt_int_compact(value) == fmt_int(value)
 
 
-def test_huge_integer_falls_back_to_full_grouped_digits_not_scientific():
-    huge = 10**50 + 123456789
-    full = fmt_int(huge)
-    compact = fmt_int_compact(huge)
-    assert full.replace(".", "") == str(huge)
-    assert compact == full
-    assert "∞" not in compact
-    assert not re.search(r"\d[,.]?\d*e[+-]?\d+", compact, re.IGNORECASE)
+def test_fmt_int_parts_never_abbreviates_player_values():
+    value = 4_322_745_658_911_545_655
+    parts = fmt_int_parts(value)
+    assert parts["full"] == "4.322.745.658.911.545.655"
+    assert parts["display"] == parts["full"]
 
 
-def test_frontend_compact_formatter_never_uses_scientific_notation():
-    """The JS mirror must keep suffix tiers and fall back to grouped full digits."""
+def test_frontend_compat_formatter_returns_full_grouped_number():
     source = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
-
+    assert "function formatNumberCompact(n) {\n    return formatNumber(n);\n  }" in source
+    assert "_compactBigIntBody" not in source
+    assert "COMPACT_THRESHOLD" not in source
     assert "_scientificBigInt" not in source
     assert "toExponential(" not in source
     assert "toPrecision(" not in source
 
-    full_fallback = (
-        "if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) "
-        "return _deIntFormatter.format(exact);"
-    )
-    assert full_fallback in source
 
-    suffixes = (
-        ("1_000_000_000_000_000_000_000_000_000_000n", "Q"),
-        ("1_000_000_000_000_000_000_000_000_000n", "R"),
-        ("1_000_000_000_000_000_000_000_000n", "Y"),
-        ("1_000_000_000_000_000_000_000n", "Z"),
-        ("1_000_000_000_000_000_000n", "E"),
-        ("1_000_000_000_000_000n", "P"),
-    )
-    previous = source.index(full_fallback)
-    for value, suffix in suffixes:
-        branch = f"if (abs >= {value})"
-        pos = source.index(branch)
-        assert pos > previous
-        fragment = source[pos : pos + 220]
-        assert f"_compactBigIntBody(abs, {value})" in fragment
-        assert f"}} {suffix}`;" in fragment
-        previous = pos
+def test_exact_number_layout_contract_for_costs_and_empire():
+    progression = (ROOT / "templates" / "partials" / "progression_cards.html").read_text(encoding="utf-8")
+    empire = (ROOT / "templates" / "empire.html").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+
+    assert "compact_val =" not in progression
+    assert 'title="{{ full_val }}">{{ full_val }}</span>' in progression
+    assert 'title="-{{ full_val }}">-{{ full_val }}</span>' in progression
+    assert "fmt_int_compact" not in empire
+    assert empire.count("empire-prod-card-value gc-mono gc-num-compact") == 3
+    assert "GC-EXACT-NUMBERS-001" in css
+    assert "text-overflow: ellipsis" in css
+
+
+def test_backend_has_no_abbreviation_tiers():
+    source = (ROOT / "game" / "number_format.py").read_text(encoding="utf-8")
+    assert "_COMPACT_TIERS" not in source
+    assert "_format_compact_body" not in source
+    assert 'return fmt_int(value)' in source
 
 
 def test_player_facing_js_has_no_explicit_scientific_formatters():
