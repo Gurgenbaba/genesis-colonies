@@ -25,10 +25,16 @@ def test_gc_al_war_01_lifecycle_bundle(alliance_db):
     from game.alliance import get_alliance_relation, get_players_diplomacy_relation
     from game.fleet import mission_allowed_for_target, resolve_fleet_target
 
+    # _player() creates the account through its own DB connection. Create every
+    # participant before opening the shared diplomacy connection so SQLite never
+    # has two writers competing during this bundled regression.
+    leader_a = _player(name="War Leader A")
+    leader_b = _player(name="War Leader B")
+    member_a = _player(name="War Member A")
+    member_b = _player(name="War Member B")
+
     conn = db()
     try:
-        leader_a = _player(conn=conn, name="War Leader A")
-        leader_b = _player(conn=conn, name="War Leader B")
         create_alliance("WPA", "War Peace A", leader_a, conn=conn)
         create_alliance("WPB", "War Peace B", leader_b, conn=conn)
         conn.commit()
@@ -94,8 +100,6 @@ def test_gc_al_war_01_lifecycle_bundle(alliance_db):
             ).fetchone()["id"]
         )
 
-        member_a = _player(conn=conn, name="War Member A")
-        member_b = _player(conn=conn, name="War Member B")
         join_alliance_by_tag(member_a, "WPA", conn=conn)
         join_alliance_by_tag(member_b, "WPB", conn=conn)
         conn.commit()
