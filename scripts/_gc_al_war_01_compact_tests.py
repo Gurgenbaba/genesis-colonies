@@ -145,20 +145,27 @@ def test_gc_al_war_01_lifecycle_bundle(alliance_db):
 
         with pytest.raises(ValueError, match="peace_requires_war"):
             send_diplomacy_request(leader_a, "WPB", "peace", conn=conn)
-
-        # UI exposes peace only to managers while the relation is an active war.
-        neutral_body = _alliance_member_hub_html(alliance_db, uid=leader_a)
-        assert 'name="request_type" value="peace"' not in neutral_body
-
-        send_diplomacy_request(leader_a, "WPB", "war", conn=conn)
         conn.commit()
-        leader_body = _alliance_member_hub_html(alliance_db, uid=leader_a)
-        member_body = _alliance_member_hub_html(alliance_db, uid=member_a)
-        assert 'name="request_type" value="peace"' in leader_body
-        assert 'data-alliance-submit="diplomacy"' in leader_body
-        assert 'name="request_type" value="peace"' not in member_body
     finally:
         conn.close()
+
+    # Flask's test client bootstraps the application and may open its own SQLite
+    # writer. Never render UI while the explicit gameplay connection is alive.
+    neutral_body = _alliance_member_hub_html(alliance_db, uid=leader_a)
+    assert 'name="request_type" value="peace"' not in neutral_body
+
+    conn = db()
+    try:
+        send_diplomacy_request(leader_a, "WPB", "war", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    leader_body = _alliance_member_hub_html(alliance_db, uid=leader_a)
+    member_body = _alliance_member_hub_html(alliance_db, uid=member_a)
+    assert 'name="request_type" value="peace"' in leader_body
+    assert 'data-alliance-submit="diplomacy"' in leader_body
+    assert 'name="request_type" value="peace"' not in member_body
 '''
 
 TESTS.write_text(text[:start] + bundle + text[end:], encoding="utf-8")
