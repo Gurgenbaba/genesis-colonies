@@ -169,24 +169,18 @@
     return tenth === 0n ? String(whole) : `${whole},${tenth}`;
   }
 
-  function _scientificBigInt(abs, negative) {
-    const digits = abs.toString();
-    let fraction = digits.slice(1, 3).replace(/0+$/, "");
-    const mantissa = fraction ? `${digits[0]},${fraction}` : digits[0];
-    return `${negative ? "-" : ""}${mantissa}e${digits.length - 1}`;
-  }
-
   function formatNumberCompact(n) {
     const exact = parseDisplayBigInt(n);
     if (exact === null) {
       const num = parseIntNumber(n);
+      if (!Number.isFinite(num)) return "0";
       if (Math.abs(num) < Number(COMPACT_THRESHOLD)) return formatNumber(num);
-      return formatNumberCompact(String(Math.trunc(num)));
+      return formatNumberCompact(BigInt(Math.trunc(num)));
     }
     const negative = exact < 0n;
     const abs = negative ? -exact : exact;
     if (abs < COMPACT_THRESHOLD) return _deIntFormatter.format(exact);
-    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _scientificBigInt(abs, negative);
+    if (abs >= 1_000_000_000_000_000_000_000_000_000_000_000n) return _deIntFormatter.format(exact);
     const sign = negative ? "-" : "";
     if (abs >= 1_000_000_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000_000_000n)} Q`;
     if (abs >= 1_000_000_000_000_000_000_000_000_000n) return `${sign}${_compactBigIntBody(abs, 1_000_000_000_000_000_000_000_000_000n)} R`;
