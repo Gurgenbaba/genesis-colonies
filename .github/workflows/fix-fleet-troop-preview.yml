@@ -28,7 +28,6 @@ jobs:
                   raise SystemExit(f'{path}: expected 1 anchor, found {count}: {old[:120]!r}')
               p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-          # Client preview must send the same troop selection as final send.
           main_path = Path('static/main.js')
           main = main_path.read_text(encoding='utf-8')
           p0 = main.index('    const runPreview = async (page) => {')
@@ -40,14 +39,9 @@ jobs:
           indent = preview_js[line_i:ships_i]
           insert_at = ships_i + len('ships,')
           if 'troops: getTroopsSelection(page)' not in preview_js[body_i:]:
-              preview_js = (
-                  preview_js[:insert_at]
-                  + f'\n{indent}troops: getTroopsSelection(page),'
-                  + preview_js[insert_at:]
-              )
+              preview_js = preview_js[:insert_at] + f'\n{indent}troops: getTroopsSelection(page),' + preview_js[insert_at:]
           main_path.write_text(main[:p0] + preview_js + main[p1:], encoding='utf-8')
 
-          # Preview endpoint forwards troops into the canonical server preview.
           replace_once(
               'app.py',
               '''            mission_type=mission_type,\n            ships=ships,\n            resources=data.get("resources") or {},\n            speed_percent=speed_percent,''',
@@ -56,7 +50,6 @@ jobs:
 
           fleet = Path('game/fleet.py')
           s = fleet.read_text(encoding='utf-8')
-
           helper_anchor = '\ndef build_fleet_send_preview(\n'
           helper = '''\ndef _fleet_preview_has_troop_stock(\n    origin_planet_id: int,\n    troops: Mapping[str, int] | None,\n    *,\n    conn,\n) -> bool:\n    \"\"\"Read-only troop stock check for launch preview; final send still deducts atomically.\"\"\"\n    if not troops:\n        return True\n    from .troop_defs import normalize_troops\n    from .troops import get_planet_troops\n\n    selected = normalize_troops(troops)\n    if not selected:\n        return True\n    stock = get_planet_troops(int(origin_planet_id), conn=conn)\n    return all(int(stock.get(key) or 0) >= int(qty) for key, qty in selected.items())\n\n\ndef build_fleet_send_preview(\n'''
           if s.count(helper_anchor) != 1:
@@ -104,7 +97,7 @@ jobs:
           test = test_path.read_text(encoding='utf-8')
           addition = '''\n\ndef test_fleet_preview_validates_selected_troops_before_enabling_launch():\n    main_js = Path(\"static/main.js\").read_text(encoding=\"utf-8\")\n    app_src = Path(\"app.py\").read_text(encoding=\"utf-8\")\n    fleet_src = Path(\"game/fleet.py\").read_text(encoding=\"utf-8\")\n\n    assert \"troops: getTroopsSelection(page)\" in main_js\n    preview_api = app_src[app_src.index('def api_fleet_preview():'):app_src.index('@app.route(\"/api/fleet/resolve-target\"') ]\n    assert 'troops=data.get(\"troops\") or {}' in preview_api\n    preview_src = fleet_src[fleet_src.index('def build_fleet_send_preview('):fleet_src.index('def list_admin_fleet_movements(')]\n    assert \"troops=troops\" in preview_src\n    assert \"_fleet_preview_has_troop_stock\" in preview_src\n    assert 'reason = \"not_enough_troops\"' in preview_src\n    assert 'payload[\"troop_slots_needed\"]' in preview_src\n    assert 'payload[\"troop_berths\"]' in preview_src\n'''
           if 'def test_fleet_preview_validates_selected_troops_before_enabling_launch()' not in test:
-              test_path.write_text(test.rstrip() + addition + '\n', encoding='utf-8')
+              test_path.write_text(test.rstrip() + addition.rstrip() + '\n', encoding='utf-8')
           PY
       - name: Syntax and diff gate
         run: |
