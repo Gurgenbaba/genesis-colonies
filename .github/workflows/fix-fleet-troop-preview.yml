@@ -34,11 +34,17 @@ jobs:
           p0 = main.index('    const runPreview = async (page) => {')
           p1 = main.index('\n    const schedulePreview = (page) => {', p0)
           preview_js = main[p0:p1]
-          old_js = '              ships,\n              resources: getResourcesSelection(page),'
-          new_js = '              ships,\n              troops: getTroopsSelection(page),\n              resources: getResourcesSelection(page),'
-          if preview_js.count(old_js) != 1:
-              raise SystemExit(f'static/main.js: preview troop anchor count={preview_js.count(old_js)}')
-          preview_js = preview_js.replace(old_js, new_js, 1)
+          body_i = preview_js.index('body: JSON.stringify({')
+          ships_i = preview_js.index('ships,', body_i)
+          line_i = preview_js.rfind('\n', 0, ships_i) + 1
+          indent = preview_js[line_i:ships_i]
+          insert_at = ships_i + len('ships,')
+          if 'troops: getTroopsSelection(page)' not in preview_js[body_i:]:
+              preview_js = (
+                  preview_js[:insert_at]
+                  + f'\n{indent}troops: getTroopsSelection(page),'
+                  + preview_js[insert_at:]
+              )
           main_path.write_text(main[:p0] + preview_js + main[p1:], encoding='utf-8')
 
           # Preview endpoint forwards troops into the canonical server preview.
