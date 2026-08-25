@@ -8905,5 +8905,11 @@
   "alliance_dip_offer_peace": "Barış teklif et",
   "peace_requires_war": "Barış teklifi yalnızca aktif bir savaş sırasında yapılabilir.",
   "war_active": "Savaş devam ediyor. Önce bir barış teklifiyle savaşı sona erdirin.",
-  "already_at_war": "Bu ittifaklar zaten savaş halinde."
+  "already_at_war": "Bu ittifaklar zaten savaş halinde.",
+  "alliance_war_score": "Savaş Skoru",
+  "alliance_war_battles": "Muharebeler",
+  "alliance_war_destroyed_units": "Yok edilen birimler",
+  "alliance_war_wins": "Zaferler",
+  "alliance_war_draws": "Beraberlikler",
+  "alliance_war_since": "Savaş başlangıcı"
 }

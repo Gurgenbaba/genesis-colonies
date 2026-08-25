@@ -669,7 +669,30 @@ def dispatch_combat_reports(
     defender_locale: str | None = None,
 ) -> dict[str, Any]:
     """Persist combat inbox messages for attacker and defender (``player_messages``)."""
-    meta = normalize_combat_metadata(metadata)
+    raw_meta = dict(metadata or {})
+    if conn is not None:
+        try:
+            from .alliance_war import record_war_combat_report
+
+            war_meta = record_war_combat_report(
+                attacker_player_id=int(attacker_id),
+                defender_player_id=int(defender_id),
+                attacker_losses=raw_meta.get("attacker_losses") or {},
+                defender_losses=raw_meta.get("defender_losses") or {},
+                result=str(raw_meta.get("result") or raw_meta.get("winner") or "undecided"),
+                fleet_id=raw_meta.get("fleet_id"),
+                conn=conn,
+            )
+            if war_meta:
+                raw_meta["alliance_war"] = war_meta
+        except Exception:
+            logger.exception(
+                "alliance war meta persist failed attacker_id=%s defender_id=%s fleet_id=%s",
+                int(attacker_id),
+                int(defender_id),
+                raw_meta.get("fleet_id"),
+            )
+    meta = normalize_combat_metadata(raw_meta)
     out: dict[str, Any] = {"attacker": None, "defender": None}
     # ``coords`` kept for call-site compatibility; subjects use names only.
     _ = coords

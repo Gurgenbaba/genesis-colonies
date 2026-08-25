@@ -259,3 +259,7 @@ Wenn eine Seite keine Kampfeinheiten hat — technisch 0 Runden.
 **Kampf — Angriff-Flotte vs. Planet**
 
 Rundenbasierter Resolver, max. 6 Runden. Verluste, Trümmer, Plunder für Sieger. Berichte an beide Seiten. Research-Modifikatoren. Trümmer in Galaxie sichtbar.
+
+### GC-AL-WAR-02 — Alliance war meta
+
+PvP-Attack reports call the derived `game/alliance_war.py` recorder through `messages.dispatch_combat_reports()`. Only an active `alliance_diplomacy.relation = 'war'` counts. War Score reuses `compute_destroyed_raw_from_losses()`; `fleet_id` is the idempotency key. The returned `alliance_war` metadata powers the localized WAR badge and campaign score panel in `static/js/messages.js`. Combat resolution itself remains unchanged.

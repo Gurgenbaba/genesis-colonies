@@ -8905,5 +8905,11 @@
   "alliance_dip_offer_peace": "Предложить мир",
   "peace_requires_war": "Предложить мир можно только во время активной войны.",
   "war_active": "Война продолжается. Сначала завершите её через предложение мира.",
-  "already_at_war": "Эти альянсы уже находятся в состоянии войны."
+  "already_at_war": "Эти альянсы уже находятся в состоянии войны.",
+  "alliance_war_score": "Военный счёт",
+  "alliance_war_battles": "Бои",
+  "alliance_war_destroyed_units": "Уничтоженные юниты",
+  "alliance_war_wins": "Победы",
+  "alliance_war_draws": "Ничьи",
+  "alliance_war_since": "Война с"
 }

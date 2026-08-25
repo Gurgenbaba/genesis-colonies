@@ -401,23 +401,64 @@
   }
 
   function combatKindBadgeHtml(meta) {
+    const badges = [];
+    const war = meta?.alliance_war;
+    if (war && war.active) {
+      badges.push(
+        `<span class="gc-combat-kind-badge gc-combat-kind-badge--war">${esc(
+          t("alliance_relation_war", "War")
+        )}</span>`
+      );
+    }
     const kind = String(meta?.combat_kind || "").trim().toLowerCase();
     if (kind === "world_boss") {
-      return `<span class="gc-combat-kind-badge gc-combat-kind-badge--world-boss">${esc(
+      badges.push(`<span class="gc-combat-kind-badge gc-combat-kind-badge--world-boss">${esc(
         t("combat_report_kind_world_boss", "World Boss")
-      )}</span>`;
+      )}</span>`);
     }
     if (kind === "pirate_base") {
-      return `<span class="gc-combat-kind-badge gc-combat-kind-badge--pirate">${esc(
+      badges.push(`<span class="gc-combat-kind-badge gc-combat-kind-badge--pirate">${esc(
         t("combat_report_kind_pirate_base", "Pirate base")
-      )}</span>`;
+      )}</span>`);
     }
     if (kind === "expedition_pirate") {
-      return `<span class="gc-combat-kind-badge gc-combat-kind-badge--pirate">${esc(
+      badges.push(`<span class="gc-combat-kind-badge gc-combat-kind-badge--pirate">${esc(
         t("combat_report_kind_expedition_pirate", "Expedition pirates")
-      )}</span>`;
+      )}</span>`);
     }
-    return "";
+    return badges.join("");
+  }
+
+  function renderAllianceWarPanel(meta) {
+    const war = meta?.alliance_war;
+    if (!war || !war.active) return "";
+    const attacker = war.attacker || {};
+    const defender = war.defender || {};
+    const side = (entry) => {
+      const tag = String(entry.tag || "").trim();
+      const name = String(entry.name || "").trim();
+      const identity = `${tag ? `[${tag}] ` : ""}${name || "—"}`;
+      return (
+        `<div class="gc-combat-war-side">` +
+          `<span class="gc-combat-war-name">${esc(identity)}</span>` +
+          `<strong class="gc-combat-war-score gc-mono">${esc(formatInt(entry.score_raw || 0))}</strong>` +
+          `<span class="gc-combat-war-meta gc-mono">${esc(t("alliance_war_wins", "Victories"))}: ${esc(
+            formatInt(entry.wins || 0)
+          )} · ${esc(t("alliance_war_destroyed_units", "Destroyed units"))}: ${esc(
+            formatInt(entry.units_destroyed || 0)
+          )}</span>` +
+        `</div>`
+      );
+    };
+    return renderCombatPanel(
+      t("alliance_war_score", "War Score"),
+      `<div class="gc-combat-war-duel">${side(attacker)}<span class="gc-combat-war-vs">VS</span>${side(defender)}</div>` +
+        `<div class="gc-combat-war-summary gc-mono">` +
+          `${esc(t("alliance_war_battles", "Battles"))}: ${esc(formatInt(war.battle_count || 0))} · ` +
+          `${esc(t("alliance_war_draws", "Draws"))}: ${esc(formatInt(war.draws || 0))}` +
+        `</div>`,
+      "gc-combat-report-panel--war"
+    );
   }
 
   function combatCoordsHtml(meta) {
@@ -1137,6 +1178,9 @@
         `</div>` +
       `</div>`
     );
+
+    const warPanel = renderAllianceWarPanel(safeMeta);
+    if (warPanel) sections.push(warPanel);
 
     const expoBattlePanel = renderExpeditionPirateBattlePanel(safeMeta);
     if (expoBattlePanel) sections.push(expoBattlePanel);

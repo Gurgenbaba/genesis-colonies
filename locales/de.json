@@ -8905,5 +8905,11 @@
   "alliance_dip_offer_peace": "Frieden anbieten",
   "peace_requires_war": "Ein Friedensangebot ist nur während eines aktiven Krieges möglich.",
   "war_active": "Der Krieg ist aktiv. Beendet ihn zuerst durch ein Friedensangebot.",
-  "already_at_war": "Diese Allianzen befinden sich bereits im Krieg."
+  "already_at_war": "Diese Allianzen befinden sich bereits im Krieg.",
+  "alliance_war_score": "Kriegs-Score",
+  "alliance_war_battles": "Gefechte",
+  "alliance_war_destroyed_units": "Zerstörte Einheiten",
+  "alliance_war_wins": "Siege",
+  "alliance_war_draws": "Unentschieden",
+  "alliance_war_since": "Krieg seit"
 }

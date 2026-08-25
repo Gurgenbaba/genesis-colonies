@@ -8905,5 +8905,11 @@
   "alliance_dip_offer_peace": "Oferecer paz",
   "peace_requires_war": "Uma oferta de paz só pode ser feita durante uma guerra ativa.",
   "war_active": "A guerra está ativa. Encerre-a primeiro por meio de uma oferta de paz.",
-  "already_at_war": "Essas alianças já estão em guerra."
+  "already_at_war": "Essas alianças já estão em guerra.",
+  "alliance_war_score": "Pontuação de guerra",
+  "alliance_war_battles": "Batalhas",
+  "alliance_war_destroyed_units": "Unidades destruídas",
+  "alliance_war_wins": "Vitórias",
+  "alliance_war_draws": "Empates",
+  "alliance_war_since": "Guerra desde"
 }

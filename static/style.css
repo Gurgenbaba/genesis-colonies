@@ -53659,3 +53659,44 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* GC-AL-WAR-02 — alliance campaign score + combat report marker */
+.alliance-hub-war-meta {
+  flex: 1 1 100%;
+  min-width: min(100%, 28rem);
+  padding: .55rem .7rem;
+  border: 1px solid color-mix(in srgb, var(--gc-danger, #ff5a6f) 35%, transparent);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--gc-danger, #ff5a6f) 8%, transparent);
+}
+.alliance-hub-war-scoreline,
+.alliance-hub-war-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .65rem;
+  align-items: center;
+}
+.alliance-hub-war-scoreline strong { font-size: 1.05rem; }
+.alliance-hub-war-detail { margin-top: .3rem; opacity: .78; font-size: .78rem; }
+.gc-combat-kind-badge--war {
+  border-color: color-mix(in srgb, var(--gc-danger, #ff5a6f) 62%, transparent);
+  background: color-mix(in srgb, var(--gc-danger, #ff5a6f) 14%, transparent);
+}
+.gc-combat-war-duel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: .75rem;
+  align-items: center;
+}
+.gc-combat-war-side { display: grid; gap: .25rem; min-width: 0; }
+.gc-combat-war-side:last-child { text-align: right; }
+.gc-combat-war-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-combat-war-score { font-size: 1.2rem; }
+.gc-combat-war-meta, .gc-combat-war-summary { font-size: .78rem; opacity: .78; }
+.gc-combat-war-vs { opacity: .55; font-weight: 800; }
+.gc-combat-war-summary { margin-top: .75rem; text-align: center; }
+@media (max-width: 620px) {
+  .gc-combat-war-duel { grid-template-columns: 1fr; }
+  .gc-combat-war-vs { text-align: center; }
+  .gc-combat-war-side:last-child { text-align: left; }
+}

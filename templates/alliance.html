@@ -745,6 +745,23 @@
             <span class="alliance-hub-tag">[{{ d.other_tag }}]</span>
             <span class="alliance-hub-dip-name">{{ d.other_name }}</span>
             {{ alliance_dip_relation(d.relation) }}
+            {% if d.relation == 'war' and d.war_stats %}
+            {% set ws = d.war_stats %}
+            <div class="alliance-hub-war-meta">
+              <div class="alliance-hub-war-scoreline gc-mono">
+                <span>{{ T("alliance_war_score", "War Score") }}</span>
+                <strong>{{ ws.self.score_raw|fmt_int }}</strong>
+                <span>:</span>
+                <strong>{{ ws.other.score_raw|fmt_int }}</strong>
+              </div>
+              <div class="alliance-hub-war-detail gc-mono">
+                <span>{{ T("alliance_war_battles", "Gefechte") }}: {{ ws.battle_count|fmt_int }}</span>
+                <span>{{ T("alliance_war_wins", "Siege") }}: {{ ws.self.wins|fmt_int }} : {{ ws.other.wins|fmt_int }}</span>
+                <span>{{ T("alliance_war_destroyed_units", "Zerstörte Einheiten") }}: {{ ws.self.units_destroyed|fmt_int }} : {{ ws.other.units_destroyed|fmt_int }}</span>
+                {% if ws.draws %}<span>{{ T("alliance_war_draws", "Unentschieden") }}: {{ ws.draws|fmt_int }}</span>{% endif %}
+              </div>
+            </div>
+            {% endif %}
             {% if d.relation == 'war' and st.can_manage %}
             <form class="alliance-hub-dip-peace-form" data-alliance-action="diplomacy" method="post" action="#" novalidate>
               <input type="hidden" name="tag" value="{{ d.other_tag }}">

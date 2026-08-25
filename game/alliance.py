@@ -893,7 +893,20 @@ def _diplomacy_rows(alliance_id: int, conn) -> List[Dict[str, Any]]:
         """,
         (int(alliance_id), int(alliance_id), int(alliance_id), int(alliance_id)),
     )
-    return [dict(r) for r in cur.fetchall()]
+    rows: List[Dict[str, Any]] = []
+    for raw in cur.fetchall():
+        item = dict(raw)
+        if str(item.get("relation") or "") == "war":
+            try:
+                from .alliance_war import get_active_war_stats_for_alliance_pair
+
+                item["war_stats"] = get_active_war_stats_for_alliance_pair(
+                    int(alliance_id), int(item["other_id"]), conn=conn
+                )
+            except Exception:
+                item["war_stats"] = None
+        rows.append(item)
+    return rows
 
 
 def _diplomacy_requests(alliance_id: int, conn) -> Dict[str, List[Dict[str, Any]]]:
