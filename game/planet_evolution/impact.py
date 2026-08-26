@@ -285,7 +285,7 @@ def event_outcome_impact_rows(outcome: Any, culture: Mapping[str, Any] | None = 
                 "kind": "failure",
                 "label_key": "pe_impact_effect_failure",
                 "target": failure_key,
-                "target_label_key": f"failure_{failure_key}",
+                "target_label_key": f"pe_failure_{failure_key}",
                 "scope_key": "pe_impact_scope_risk",
             }
         )

@@ -116,6 +116,57 @@
   {%- endif -%}
 {%- endmacro %}
 
+{% macro pe_impact_contract(impact, compact=false) %}
+  {% set rows = impact.rows if impact and impact.rows is defined else [] %}
+  {% set scopes = impact.scopes if impact and impact.scopes is defined else [] %}
+  <div class="pe-impact-contract{% if compact %} pe-impact-contract--compact{% endif %}">
+    {% if (impact.current is defined and impact.current is not none) or impact.current_label_key %}
+    <div class="pe-impact-state-grid">
+      <div class="pe-impact-state">
+        <span class="pe-impact-kicker">{{ T('pe_impact_current', 'Aktuell') }}</span>
+        <strong>{% if impact.current is defined and impact.current is not none %}{{ T('label_level_short', 'L') }}{{ impact.current }}{% elif impact.current_label_key %}{{ T(impact.current_label_key, pe_humanize_key(impact.current_label_key)) }}{% else %}{{ T('pe_impact_none', 'Keine') }}{% endif %}</strong>
+      </div>
+      <span class="pe-impact-arrow" aria-hidden="true">→</span>
+      <div class="pe-impact-state">
+        <span class="pe-impact-kicker">{{ T('pe_impact_after', 'Danach') }}</span>
+        <strong>{% if impact.after is defined and impact.after is not none %}{{ T('label_level_short', 'L') }}{{ impact.after }}{% elif impact.after_label_key %}{{ T(impact.after_label_key, pe_humanize_key(impact.after_label_key)) }}{% else %}{{ T('pe_impact_none', 'Keine') }}{% endif %}</strong>
+      </div>
+    </div>
+    {% endif %}
+    <div class="pe-impact-change">
+      <span class="pe-impact-kicker">{{ T('pe_impact_change', 'Änderung') }}</span>
+      {% if rows %}
+      <ul class="pe-impact-list">
+        {% for row in rows %}
+        <li class="pe-impact-row">
+          <span class="pe-impact-row-name">{{ T(row.label_key, pe_humanize_key(row.target or row.label_key)) }}</span>
+          {% if row.kind == 'culture_change' %}
+            <strong class="gc-mono">{{ row.current }} → {{ row.after }} <span class="pe-impact-delta">({{ row.value }})</span></strong>
+          {% elif row.value %}
+            <strong class="gc-mono">{{ row.value }}{% if row.kind == 'culture_drift' %} {{ T('pe_impact_per_day', 'pro Tag') }}{% endif %}</strong>
+          {% else %}
+            <strong>{{ T('pe_impact_enabled', 'Aktiv') }}</strong>
+          {% endif %}
+          {% if row.target %}
+            {% set target_text = T(row.target_label_key, '') if row.target_label_key else '' %}
+            <span class="pe-impact-target">{{ target_text if target_text and target_text != row.target_label_key else pe_humanize_key(row.target|replace(':', '_')) }}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="pe-impact-empty">{{ T('pe_impact_no_runtime_change', 'Diese Aktion verändert aktuell keinen zusätzlichen Laufzeit-Modifikator.') }}</p>
+      {% endif %}
+    </div>
+    {% if scopes %}
+    <div class="pe-impact-scopes">
+      <span class="pe-impact-kicker">{{ T('pe_impact_applies_to', 'Wirkt auf') }}</span>
+      <span class="pe-impact-scope-list">{% for scope in scopes %}<span class="pe-impact-scope">{{ T(scope, pe_humanize_key(scope)) }}</span>{% endfor %}</span>
+    </div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
 {% macro pe_tech_info_source(tech) %}
   {% set summary_key = tech.summary_key|default('pe_tech_summary_' ~ tech.tech_key) %}
   {% set effect_key = tech.effect_key|default('pe_tech_effect_' ~ tech.tech_key) %}
@@ -131,6 +182,7 @@
   {% set note_text = T(note_key, '') %}
   <div id="pe-tech-info-{{ tech.tech_key }}" class="pe-tech-info-source" hidden>
     <p class="pe-info-popover-title">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</p>
+    {{ pe_impact_contract(tech.impact) }}
     <dl class="pe-info-popover-list">
       <div>
         <dt>{{ T('pe_tech_info_summary_label', 'Kurz') }}</dt>
@@ -215,6 +267,16 @@
       {% if tech.reward_xp is defined and tech.reward_xp %}
       <span class="pe-tech-reward-chip gc-mono">{{ T('pe_tech_reward_chip', '⭐ +%(xp)s XP', xp=(tech.reward_xp|int)) }}</span>
       {% endif %}
+      <div class="pe-tech-impact-inline">
+        <span class="pe-impact-kicker">{{ T('pe_impact_change', 'Änderung') }}</span>
+        {% if tech.impact.rows %}
+          {% set first_fx = tech.impact.rows[0] %}
+          <strong>{{ T(first_fx.label_key, pe_humanize_key(first_fx.target or first_fx.label_key)) }}{% if first_fx.value %} <span class="gc-mono">{{ first_fx.value }}</span>{% endif %}</strong>
+          {% if tech.impact.scopes %}<span class="pe-tech-impact-scope">· {{ T('pe_impact_applies_to', 'Wirkt auf') }}: {{ T(tech.impact.scopes[0], pe_humanize_key(tech.impact.scopes[0])) }}</span>{% endif %}
+        {% else %}
+          <span>{{ T('pe_impact_no_runtime_change', 'Diese Aktion verändert aktuell keinen zusätzlichen Laufzeit-Modifikator.') }}</span>
+        {% endif %}
+      </div>
       {% if variant == 'locked' and tech.missing_human %}
       <p class="pe-tech-card-missing hint">
         {%- for line in tech.missing_human -%}
@@ -624,15 +686,11 @@
             {{ T("pe_xp_stage_complete", "Entwicklungsstufe %(level)s — Kernreich-Stufe erreicht", level=(ps.level or 1)) }}
           </p>
           {% endif %}
-          {% if prog.current_research_reward_xp %}
-          <p class="pe-hero-xp-reward hint gc-mono">{{ T('pe_hero_current_research_xp', 'Aktuelle Forschung: +%(xp)s XP', xp=(prog.current_research_reward_xp|int)) }}</p>
-          {% endif %}
         </div>
         {% set axp = dash.activity_xp if dash.activity_xp is defined else {} %}
-        {% if axp.visible %}
+        {% if axp.visible and (axp.today_earned or 0)|int > 0 %}
         <div class="pe-activity-xp pe-activity-xp--inline pe-activity-xp--theater">
           <span class="pe-activity-xp-stat">{{ T('pe_activity_xp_today', 'Heute verdient: %(xp)s XP', xp=(axp.today_earned or 0)|int) }}</span>
-          <span class="pe-activity-xp-stat gc-mono">{{ T('pe_activity_xp_expedition_progress', 'Expeditionen: %(count)s/%(max)s bis Bonus', count=(axp.expedition_progress or 0)|int, max=(axp.expedition_bonus_every or 10)|int) }}</span>
         </div>
         {% endif %}
         {% if dash.warnings %}
@@ -827,6 +885,25 @@
           <span class="pe-next-priority pe-next-priority-{{ action.priority or 'explore' }}">{{ T("pe_next_step", "Dein nächster Schritt") }}</span>
         </header>
         <div class="pe-goal-body">
+      {% set crisis = dash.crisis_ux if dash.crisis_ux is defined else {} %}
+      {% if crisis.active %}
+      <section class="pe-crisis-clarity" aria-label="{{ T('pe_crisis_clarity_title', 'Aktive Krise') }}">
+        <div class="pe-crisis-clarity-head">
+          <strong>{{ T('pe_crisis_clarity_title', 'Aktive Krise') }}</strong>
+          <span>{{ T('pe_crisis_clarity_body', 'Diese Zustände verändern den Planeten, bis ihre Erholung abgeschlossen ist.') }}</span>
+        </div>
+        <ul class="pe-crisis-list">
+          {% for failure in crisis.failures %}
+          <li>
+            <strong>{{ T('pe_failure_' ~ failure.failure_key, pe_humanize_key(failure.failure_key)) }}</strong>
+            {% if failure.remaining_seconds is not none %}<span>{{ T('pe_impact_recovery', 'Erholung') }}: {{ render_prog_duration(failure.remaining_seconds) }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {{ pe_impact_contract({'rows': crisis.rows, 'scopes': crisis.scopes}, true) }}
+        <p class="pe-crisis-recovery-hint">{{ T('pe_crisis_recovery_hint', 'Nach Ablauf der Erholung wird der Krisenzustand automatisch neu bewertet.') }}</p>
+      </section>
+      {% endif %}
           <p class="pe-goal-kicker">{{ T(action.title_key, "Weiterentwickeln") }}</p>
           <p class="pe-goal-text">
             {% if action.event_label_key and action.priority == 'event' %}{{ T(action.body_key, "Eine wichtige Entscheidung wartet.") }}
@@ -868,9 +945,13 @@
             {% if ps.active_event %}
             <div class="pe-goal-event-active" id="pe-event-decision">
               <span class="pe-goal-event-chip pe-goal-event-chip--urgent">{{ T("pe_event_urgent", "Dringend") }} · {{ T(ps.active_event.label_key, ps.active_event.event_key) }}</span>
-              <div class="pe-event-actions pe-goal-event-actions" id="pe-event-choices" data-event-id="{{ ps.active_event.id }}" data-planet-id="{{ ps.planet_id }}">
+              <div class="pe-event-actions pe-goal-event-actions pe-event-choice-grid" id="pe-event-choices" data-event-id="{{ ps.active_event.id }}" data-planet-id="{{ ps.planet_id }}">
                 {% for c in ps.active_event.choices or [] %}
-                <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-event-choice-btn" data-choice-key="{{ c.key }}">{{ T('pe_event_choice_' ~ c.key, c.key) }}</button>
+                <article class="pe-event-choice-card">
+                  <h4>{{ T('pe_event_choice_' ~ c.key, pe_humanize_key(c.key)) }}</h4>
+                  {{ pe_impact_contract(c.impact, true) }}
+                  <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-event-choice-btn" data-choice-key="{{ c.key }}">{{ T('pe_event_choice_commit', 'Entscheidung ausführen') }}</button>
+                </article>
                 {% endfor %}
               </div>
             </div>
@@ -902,9 +983,15 @@
           <div class="pe-policy-slot-card">
             <div class="pe-policy-options">
               {% for opt in slot.options if opt.eligible %}
-              <button type="button" class="gc-btn gc-btn-sm pe-policy-btn {% if slot.active and slot.active.policy_key == opt.policy_key %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}"
-                      data-planet-id="{{ ps.planet_id }}" data-slot="{{ slot.slot }}" data-policy-key="{{ opt.policy_key }}"
-                      {% if slot.active and slot.active.policy_key == opt.policy_key %}disabled{% endif %}>{{ T(opt.label_key, opt.policy_key) }}</button>
+              <article class="pe-policy-option-card{% if slot.active and slot.active.policy_key == opt.policy_key %} pe-policy-option-card--active{% endif %}">
+                <h4>{{ T(opt.label_key, pe_humanize_key(opt.policy_key)) }}</h4>
+                {{ pe_impact_contract(opt.impact, true) }}
+                <button type="button" class="gc-btn gc-btn-sm pe-policy-btn {% if slot.active and slot.active.policy_key == opt.policy_key %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}"
+                        data-planet-id="{{ ps.planet_id }}" data-slot="{{ slot.slot }}" data-policy-key="{{ opt.policy_key }}"
+                        {% if slot.active and slot.active.policy_key == opt.policy_key %}disabled{% endif %}>
+                  {% if slot.active and slot.active.policy_key == opt.policy_key %}{{ T('pe_impact_current', 'Aktuell') }}{% else %}{{ T('pe_policy_activate', 'Policy aktivieren') }}{% endif %}
+                </button>
+              </article>
               {% endfor %}
             </div>
           </div>
@@ -942,7 +1029,8 @@
           {% for card in asc.ascensions %}
           <article class="gc-ascension-card gc-prog-card{% if card.queue_job %} gc-ascension-card--in-queue{% endif %}{% if card.completed %} is-completed{% endif %}"
                    data-ascension-card data-ascension-key="{{ card.ascension_key }}" role="listitem">
-            <h4 class="gc-ascension-card-title">{{ T(card.label_key, card.ascension_key) }}</h4>
+            <h4 class="gc-ascension-card-title">{{ T(card.label_key, pe_humanize_key(card.ascension_key)) }}</h4>
+            {{ pe_impact_contract(card.impact, true) }}
           </article>
           {% endfor %}
         </div>

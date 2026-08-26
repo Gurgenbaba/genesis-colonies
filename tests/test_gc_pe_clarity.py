@@ -57,3 +57,28 @@ def test_failure_runtime_drift_is_single_canonical_projection():
     assert failure_runtime_culture_drift({"reactor_crisis"}) == {"stability": -0.5}
     assert failure_runtime_culture_drift({"stability_collapse"}) == {"stability": -1.0}
     assert failure_runtime_culture_drift({"reactor_crisis", "stability_collapse"}) == {"stability": -1.5}
+
+def test_planet_evolution_template_exposes_impact_before_actions():
+    from pathlib import Path
+    src=(Path(__file__).resolve().parents[1]/'templates'/'planet_evolution.html').read_text(encoding='utf-8')
+    assert 'macro pe_impact_contract' in src
+    assert 'pe-tech-impact-inline' in src
+    assert 'pe-policy-option-card' in src
+    assert 'pe-event-choice-card' in src
+    assert 'pe_impact_contract(card.impact, true)' in src
+    assert 'pe-crisis-clarity' in src
+    assert 'pe_hero_current_research_xp' not in src
+    assert 'pe_activity_xp_expedition_progress' not in src
+
+
+def test_impact_locale_contract_has_exact_parity():
+    from pathlib import Path
+    import json
+    root=Path(__file__).resolve().parents[1]/'locales'
+    langs=('de','en','fr','es','pl','tr','ru','pt')
+    payloads={lang:json.loads((root/f'{lang}.json').read_text(encoding='utf-8')) for lang in langs}
+    keys={k for k in payloads['en'] if k.startswith('pe_impact_') or k.startswith('pe_crisis_clarity_') or k.startswith('pe_failure_')}
+    assert keys
+    for lang in langs:
+        assert keys.issubset(payloads[lang])
+        assert all(str(payloads[lang][k]).strip() for k in keys)
