@@ -60,7 +60,6 @@ def _ensure_balance_row(player_id: int, *, conn) -> None:
 def get_balance(player_id: int, *, conn) -> int:
     if not schema_ready(conn):
         return 0
-    _ensure_balance_row(int(player_id), conn=conn)
     cur = conn.cursor()
     cur.execute(
         "SELECT balance_sec FROM timekeeper_balances WHERE player_id = ? LIMIT 1;",

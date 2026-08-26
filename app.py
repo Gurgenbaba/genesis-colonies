@@ -10923,11 +10923,24 @@ def _payload_from_live_context(
                 "new_items": [],
             }
 
+    try:
+        from game.battle_pass import serialize_for_client as bp_serialize
+
+        # Build once per game-state request. The same state feeds the premium payload
+        # and the nav claimable badge.
+        battle_pass_state = bp_serialize(
+            int(user_id), conn=conn, include_tracks=not lightweight
+        )
+    except Exception:
+        battle_pass_state = {"ready": False}
+
     with perf_span("payload.nav_badges"):
         try:
             from game.live_state import nav_badges_for_game_state
 
-            payload["nav_badges"] = nav_badges_for_game_state(user_id, conn=conn)
+            payload["nav_badges"] = nav_badges_for_game_state(
+                user_id, conn=conn, battle_pass=battle_pass_state
+            )
         except Exception:
             payload["nav_badges"] = {
                 "vote_center": {"active": False, "count": 0, "label": ""},
@@ -11080,16 +11093,7 @@ def _payload_from_live_context(
     except Exception:
         payload["login_rewards"] = {"ready": False, "available": False}
 
-    try:
-        from game.battle_pass import serialize_for_client as bp_serialize
-
-        # Full tracks only when not diet — premium page / include_panel keep cards.
-        # Diet needs claimable_count + ops for nav badge / toast (GC-PERF live-safe).
-        payload["battle_pass"] = bp_serialize(
-            int(user_id), conn=conn, include_tracks=not lightweight
-        )
-    except Exception:
-        payload["battle_pass"] = {"ready": False}
+    payload["battle_pass"] = battle_pass_state
 
     if include_panel:
         try:

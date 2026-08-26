@@ -463,7 +463,12 @@ def _nav_badge_entry(*, active: bool, count: int = 0, label: str = "") -> Dict[s
     }
 
 
-def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
+def nav_badges_for_game_state(
+    user_id: int,
+    *,
+    conn,
+    battle_pass: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Action hints for left-menu navigation (GC-702)."""
     from game.galactic_directives.state import count_pending_government_votes
     from game.referrals import count_claimable_referral_rewards
@@ -507,13 +512,20 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
         login_available = bool(lr.get("ready") and lr.get("available"))
     except Exception:
         login_available = False
-    try:
-        from game.battle_pass import serialize_for_client as bp_serialize
+    if isinstance(battle_pass, dict):
+        bp_claimable = (
+            int(battle_pass.get("claimable_count") or 0)
+            if battle_pass.get("ready")
+            else 0
+        )
+    else:
+        try:
+            from game.battle_pass import serialize_for_client as bp_serialize
 
-        bp = bp_serialize(uid, conn=conn)
-        bp_claimable = int(bp.get("claimable_count") or 0) if bp.get("ready") else 0
-    except Exception:
-        bp_claimable = 0
+            bp = bp_serialize(uid, conn=conn)
+            bp_claimable = int(bp.get("claimable_count") or 0) if bp.get("ready") else 0
+        except Exception:
+            bp_claimable = 0
     try:
         from game.story.service import count_story_attention
 
