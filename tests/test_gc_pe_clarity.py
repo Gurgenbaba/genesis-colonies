@@ -89,6 +89,21 @@ def test_planet_evolution_decision_first_layout_is_shell_owned():
     assert ".pe-goal-cta" in css
 
 
+
+def test_idle_research_surfaces_next_locked_tech_requirements():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
+    css = (root / "static" / "css" / "planet_evolution_clarity.css").read_text(encoding="utf-8")
+
+    assert "pe_next_locked = rdx.locked[0] if rdx.locked else none" in template
+    assert "T(pe_next_locked.label_key, pe_next_locked.tech_key)" in template
+    assert "pe_next_locked.missing_human[:2]" in template
+    assert "pe-research-next-unlock" in template
+    assert "pe-research-next-blockers" in css
+
+
 def test_impact_locale_contract_has_exact_parity():
     from pathlib import Path
     import json

@@ -865,7 +865,23 @@
           {% endfor %}
         </div>
         {% else %}
-        <p class="pe-zone-empty">{{ T("pe_research_empty", "Keine Forschung verfügbar — baue deinen Planeten weiter aus.") }}</p>
+        {% set pe_next_locked = rdx.locked[0] if rdx.locked else none %}
+        <div class="pe-research-idle-guide">
+          <p class="pe-zone-empty">{{ T("pe_research_empty", "Keine Forschung verfügbar — baue deinen Planeten weiter aus.") }}</p>
+          {% if pe_next_locked %}
+          <div class="pe-research-next-unlock">
+            <span class="pe-research-next-kicker">{{ T("pe_research_later", "Später verfügbar") }}</span>
+            <strong class="pe-research-next-name">{{ T(pe_next_locked.label_key, pe_next_locked.tech_key) }}</strong>
+            {% if pe_next_locked.missing_human %}
+            <ul class="pe-research-next-blockers">
+              {% for line in pe_next_locked.missing_human[:2] %}
+              <li>{{ line }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
         {% endif %}
         {% if rdx.locked %}
         <details class="pe-research-later">
