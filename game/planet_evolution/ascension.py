@@ -11,6 +11,7 @@ from ..models import db, try_spend_resources_conn
 from ..ranking import invalidate_player_score_cache
 from .definitions import get_ascension, get_ascensions
 from .history import append_history
+from .impact import impact_scopes, mechanics_impact_rows
 from .mechanics import compile_planet_mechanics
 from .planet_level import add_planet_xp
 from .repository import get_planet_row
@@ -162,12 +163,19 @@ def get_ascension_status(
         has_active = bool(active_row)
         for ascension_key, adef in sorted(get_ascensions().items()):
             ok, _missing = check_ascension_requirements(planet_id, ascension_key, conn)
+            impact_rows = mechanics_impact_rows(adef.get("permanent_mechanics") or {})
             ascensions.append(
                 {
                     "ascension_key": ascension_key,
                     "label_key": adef.get("label_key") or ascension_key,
                     "description_key": adef.get("description_key"),
                     "duration_days": float(adef.get("duration_days") or 7),
+                    "impact": {
+                        "current_label_key": f"ascension_{completed_key}" if completed_key else None,
+                        "after_label_key": adef.get("label_key") or ascension_key,
+                        "rows": impact_rows,
+                        "scopes": impact_scopes(impact_rows),
+                    },
                     "eligible": ok and not completed_key and not has_active,
                     "completed": str(completed_key) == str(ascension_key),
                     "is_active": bool(

@@ -117,8 +117,6 @@ def mechanics_impact_rows(raw: Any) -> List[Dict[str, Any]]:
     for token in unlocks:
         if token.startswith("required_unlock:chain:"):
             continue
-        if token.startswith("chain:") and token in required_chain_tokens:
-            pass
         rows.append(
             {
                 "kind": "unlock",

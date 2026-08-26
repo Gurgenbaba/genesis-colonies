@@ -38,6 +38,16 @@ FAILURE_AGGREGATE: Dict[str, str] = {
 }
 
 
+def failure_runtime_culture_drift(active_keys: Set[str]) -> Dict[str, float]:
+    """Per-day culture drift caused by currently active failure states."""
+    drift: Dict[str, float] = {}
+    if "reactor_crisis" in active_keys:
+        drift["stability"] = drift.get("stability", 0.0) - 0.5
+    if "stability_collapse" in active_keys:
+        drift["stability"] = drift.get("stability", 0.0) - 1.0
+    return drift
+
+
 def active_failure_keys(planet_id: int, conn: sqlite3.Connection) -> Set[str]:
     cur = conn.cursor()
     cur.execute(

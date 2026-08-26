@@ -15,6 +15,7 @@ from .policies import evaluate_policy_gate
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
 from .history import get_history
+from .impact import impact_scopes, mechanics_impact_rows, policy_tradeoff_rows
 from .planet_level import xp_threshold_for_level
 from .ascension import get_ascension_status
 from .planet_research import (
@@ -250,6 +251,15 @@ def _enrich_research_card(
         can_start = True
 
     xp_reward = compute_planet_research_reward_xp(tech_key)
+    impact_after_level = min(max_level, current + max(1, q_count))
+    impact_rows = mechanics_impact_rows(cfg.get("mechanics") or {}) if current <= 0 else []
+    impact = {
+        "current": current,
+        "after": impact_after_level,
+        "change": impact_after_level - current,
+        "rows": impact_rows,
+        "scopes": impact_scopes(impact_rows),
+    }
 
     return {
         "tech_key": tech_key,
@@ -278,6 +288,7 @@ def _enrich_research_card(
         "choice_group": tech.get("choice_group"),
         "choice_options": tech.get("choice_options"),
         "choice_made": tech.get("choice_made"),
+        "impact": impact,
         **planet_tech_info_locale_keys(tech_key),
         **xp_reward,
     }
@@ -511,6 +522,53 @@ def _warnings(
             }
         )
     return warnings
+
+
+def _crisis_ux(planet_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+    from .failures import active_failure_keys, failure_runtime_culture_drift
+
+    active_keys = active_failure_keys(planet_id, conn)
+    if not active_keys:
+        return {"active": False, "failures": [], "rows": [], "scopes": []}
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT failure_key, state, started_at, resolve_at
+        FROM planet_failure_states
+        WHERE planet_id = ? AND state IN ('active','recovering')
+        ORDER BY resolve_at ASC, failure_key ASC;
+        """,
+        (int(planet_id),),
+    )
+    now = time.time()
+    failures = []
+    for row in cur.fetchall():
+        item = dict(row)
+        resolve_at = float(item.get("resolve_at") or 0)
+        failures.append(
+            {
+                "failure_key": str(item.get("failure_key") or ""),
+                "state": str(item.get("state") or "active"),
+                "started_at": float(item.get("started_at") or 0),
+                "resolve_at": resolve_at or None,
+                "remaining_seconds": max(0, int(resolve_at - now)) if resolve_at else None,
+            }
+        )
+    rows = [
+        {
+            "kind": "culture_drift",
+            "label_key": f"pe_culture_{stat}",
+            "value": f"{float(delta):+g}",
+            "scope_key": "pe_impact_scope_culture",
+        }
+        for stat, delta in failure_runtime_culture_drift(active_keys).items()
+    ]
+    return {
+        "active": True,
+        "failures": failures,
+        "rows": rows,
+        "scopes": impact_scopes(rows) or ["pe_impact_scope_risk"],
+    }
 
 
 def _next_action(
@@ -836,10 +894,14 @@ def _policy_ux(
             pdef = get_policy(str(active.get("policy_key") or "")) or {}
             cooldown_until = float(active.get("cooldown_until") or 0)
             on_cooldown = cooldown_until > now
+            active_rows = mechanics_impact_rows(pdef.get("mechanics") or {})
+            active_rows.extend(policy_tradeoff_rows(pdef.get("tradeoffs") or {}))
             active_payload = {
                 "policy_key": active.get("policy_key"),
                 "label_key": pdef.get("label_key") or f"policy_{active.get('policy_key')}",
                 "cooldown_until": cooldown_until if on_cooldown else None,
+                "impact_rows": active_rows,
+                "impact_scopes": impact_scopes(active_rows),
             }
 
         options: List[Dict[str, Any]] = []
@@ -855,6 +917,8 @@ def _policy_ux(
                 archetype_key=archetype,
                 conn=conn,
             )
+            option_rows = mechanics_impact_rows(pdef.get("mechanics") or {})
+            option_rows.extend(policy_tradeoff_rows(pdef.get("tradeoffs") or {}))
             options.append(
                 {
                     "policy_key": policy_key,
@@ -862,6 +926,12 @@ def _policy_ux(
                     "eligible": eligible,
                     "locked_reason_key": locked_reason_key,
                     "min_slot": min_slot,
+                    "impact": {
+                        "current_label_key": active_payload.get("label_key") if active_payload else None,
+                        "after_label_key": pdef.get("label_key") or f"policy_{policy_key}",
+                        "rows": option_rows,
+                        "scopes": impact_scopes(option_rows),
+                    },
                 }
             )
         options.sort(key=lambda o: (not o["eligible"], o["label_key"]))
@@ -1106,6 +1176,7 @@ def build_dashboard_extras(
         "policy_ux": _policy_ux(planet_id, planet=planet, culture=culture, conn=conn),
         "policy_slots_max": _policy_slots_max(level),
         "warnings": warnings,
+        "crisis_ux": _crisis_ux(planet_id, conn=conn),
         "events_feed": _events_feed(planet_id, conn),
         "open_events_count": open_events,
         # GC-PERF-PJAX-BYTES-HEAVY-001: page SSR uses a smaller history window.
