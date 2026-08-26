@@ -21,6 +21,36 @@ def _bundle_has_effect(bundle: dict) -> bool:
     )
 
 
+def _repo_references(keys: set[str]) -> dict[str, list[dict]]:
+    allowed_suffixes = {".py", ".sql", ".md", ".html", ".js", ".json", ".yml", ".yaml"}
+    refs: dict[str, list[dict]] = defaultdict(list)
+    skip_paths = {
+        "scripts/_tmp_pe_mechanics_contract_audit.py",
+        ".github/workflows/gc-pe-mechanics-contract-audit.yml",
+    }
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in allowed_suffixes:
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in skip_paths or rel.startswith(".git/"):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(lines, 1):
+            matches = [key for key in keys if key in line]
+            for key in matches:
+                refs[key].append(
+                    {
+                        "path": rel,
+                        "line": line_no,
+                        "text": line.strip()[:220],
+                    }
+                )
+    return {key: refs.get(key, []) for key in sorted(keys)}
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="gc_pe_mech_audit_") as tmp:
         db_path = Path(tmp) / "audit.db"
@@ -91,12 +121,14 @@ def main() -> None:
                 else:
                     unsupported[field].append(entry)
 
+            unsupported_keys = set(unsupported)
             payload = {
                 "supported_keys": sorted(supported),
                 "special_consumers": {k: v for k, v in sorted(special.items())},
                 "unsupported": {k: v for k, v in sorted(unsupported.items())},
                 "unsupported_count": sum(len(v) for v in unsupported.values()),
                 "unsupported_key_count": len(unsupported),
+                "repo_references": _repo_references(unsupported_keys),
             }
             print("=== PE MECHANICS CONTRACT AUDIT ===")
             print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False))
