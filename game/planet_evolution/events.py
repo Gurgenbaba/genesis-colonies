@@ -115,6 +115,17 @@ def _stable_roll(planet_id: int, event_key: str, day_bucket: int) -> float:
     return int(digest[:8], 16) / 0xFFFFFFFF
 
 
+def preview_event_choice(edef: Dict[str, Any], choice_key: str) -> Optional[Dict[str, Any]]:
+    """Return the exact outcome payload resolve_choice() would apply."""
+    outcome_key = PlanetEventEngine._map_choice_to_outcome(edef, choice_key)
+    if not outcome_key:
+        return None
+    return {
+        "outcome_key": outcome_key,
+        "outcome": dict(_OUTCOME_DEFAULTS.get(outcome_key, {})),
+    }
+
+
 class PlanetEventEngine:
     """Server-authoritative planet events."""
 
@@ -202,11 +213,12 @@ class PlanetEventEngine:
 
         event = dict(row)
         edef = get_event(str(event["event_key"])) or {}
-        outcome_key = PlanetEventEngine._map_choice_to_outcome(edef, choice_key)
-        if not outcome_key:
+        preview = preview_event_choice(edef, choice_key)
+        if not preview:
             return False, "invalid_choice", None
 
-        outcome = dict(_OUTCOME_DEFAULTS.get(outcome_key, {}))
+        outcome_key = str(preview["outcome_key"])
+        outcome = dict(preview["outcome"])
         PlanetEventEngine._apply_outcome(conn, planet_id, outcome, str(event["event_key"]), edef)
         cur.execute(
             """

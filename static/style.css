@@ -53807,3 +53807,31 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
     width: 100%;
   }
 }
+
+
+/* GC-PE-UX-01 — canonical impact clarity contract */
+.pe-impact-contract{display:grid;gap:.55rem;padding:.65rem;border:1px solid rgba(135,185,220,.24);background:rgba(8,18,28,.42);border-radius:0}
+.pe-impact-contract--compact{padding:.55rem;gap:.4rem}
+.pe-impact-state-grid{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:.45rem;align-items:center}
+.pe-impact-state{display:grid;gap:.15rem;min-width:0}
+.pe-impact-state:last-child{text-align:right}
+.pe-impact-arrow{opacity:.62;font-weight:800}
+.pe-impact-kicker{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;opacity:.72;font-weight:800}
+.pe-impact-list,.pe-crisis-list{list-style:none;margin:.25rem 0 0;padding:0;display:grid;gap:.3rem}
+.pe-impact-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.25rem .55rem;align-items:baseline}
+.pe-impact-target{grid-column:1/-1;font-size:.72rem;opacity:.66}
+.pe-impact-delta{opacity:.72}
+.pe-impact-empty{margin:.2rem 0 0;font-size:.78rem;opacity:.78}
+.pe-impact-scopes{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
+.pe-impact-scope-list{display:flex;gap:.3rem;flex-wrap:wrap}
+.pe-impact-scope{padding:.14rem .38rem;border:1px solid rgba(135,185,220,.22);font-size:.7rem;font-weight:700;border-radius:0}
+.pe-tech-impact-inline{display:flex;gap:.35rem;align-items:baseline;flex-wrap:wrap;margin-top:.35rem;font-size:.74rem}
+.pe-tech-impact-scope{opacity:.7}
+.pe-policy-option-card,.pe-event-choice-card{display:grid;gap:.55rem;padding:.7rem;border:1px solid rgba(135,185,220,.2);background:rgba(6,16,26,.36);border-radius:0}
+.pe-policy-option-card h4,.pe-event-choice-card h4{margin:0}
+.pe-event-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem}
+.pe-crisis-clarity{display:grid;gap:.65rem;padding:.8rem;border:1px solid rgba(230,128,90,.42);background:rgba(55,18,14,.28);border-radius:0}
+.pe-crisis-clarity-head{display:grid;gap:.15rem}
+.pe-crisis-list li{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+.pe-crisis-recovery-hint{margin:0;font-size:.78rem;opacity:.78}
+@media(max-width:700px){.pe-impact-state-grid{grid-template-columns:1fr}.pe-impact-arrow{transform:rotate(90deg);justify-self:center}.pe-impact-state:last-child{text-align:left}.pe-impact-row{grid-template-columns:1fr}.pe-event-choice-grid{grid-template-columns:1fr}}

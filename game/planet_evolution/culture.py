@@ -113,12 +113,11 @@ def apply_culture_drift(
     for stat, val in _spec_drift(planet_id, conn).items():
         drift[stat] = drift.get(stat, 0.0) + float(val) * day_frac
 
-    from .failures import active_failure_keys
+    from .failures import active_failure_keys, failure_runtime_culture_drift
 
-    if "reactor_crisis" in active_failure_keys(planet_id, conn):
-        drift["stability"] = drift.get("stability", 0.0) - 0.5 * day_frac
-    if "stability_collapse" in active_failure_keys(planet_id, conn):
-        drift["stability"] = drift.get("stability", 0.0) - 1.0 * day_frac
+    failure_drift = failure_runtime_culture_drift(active_failure_keys(planet_id, conn))
+    for stat, per_day in failure_drift.items():
+        drift[stat] = drift.get(stat, 0.0) + float(per_day) * day_frac
 
     updated = dict(culture)
     for stat in (

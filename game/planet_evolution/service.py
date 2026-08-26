@@ -226,8 +226,25 @@ def get_planet_state_payload(
             from .definitions import get_event
 
             edef = get_event(str(event.get("event_key") or "")) or {}
+            from .events import preview_event_choice
+            from .impact import event_outcome_impact_rows, impact_scopes
+
             active_event = dict(event)
-            active_event["choices"] = edef.get("choices") or []
+            choice_rows = []
+            for raw_choice in edef.get("choices") or []:
+                choice = dict(raw_choice) if isinstance(raw_choice, dict) else {"key": str(raw_choice)}
+                preview = preview_event_choice(edef, str(choice.get("key") or ""))
+                rows = event_outcome_impact_rows(
+                    (preview or {}).get("outcome") or {},
+                    culture,
+                )
+                choice["impact"] = {
+                    "rows": rows,
+                    "scopes": impact_scopes(rows),
+                    "outcome_key": (preview or {}).get("outcome_key"),
+                }
+                choice_rows.append(choice)
+            active_event["choices"] = choice_rows
             active_event["label_key"] = edef.get("label_key") or event.get("event_key")
 
         from .dashboard import build_dashboard_extras
