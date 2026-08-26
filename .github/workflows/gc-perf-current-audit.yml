@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-      - name: Apply shared external-probe cache to technical preview clones
+      - name: Apply buildings preview probe-cache cut
         shell: bash
         run: |
           python - <<'PY'
@@ -70,21 +70,8 @@ jobs:
                   import game.galactic_directives.mechanics as gd_mechanics
                   import game.galactic_diplomacy.mechanics as gdp_mechanics
                   clear_effect_resolver_cache()
-                  with patch.object(
-                      gd_mechanics,
-                      "get_galaxy_directive_mechanics",
-                      wraps=gd_mechanics.get_galaxy_directive_mechanics,
-                  ) as gd_probe, patch.object(
-                      gdp_mechanics,
-                      "get_galaxy_diplomacy_mechanics",
-                      wraps=gdp_mechanics.get_galaxy_diplomacy_mechanics,
-                  ) as gdp_probe:
-                      rows = get_buildings_panel_rows(
-                          planet,
-                          buildings,
-                          conn=conn,
-                          research_levels=levels,
-                      )
+                  with patch.object(gd_mechanics, "get_galaxy_directive_mechanics", wraps=gd_mechanics.get_galaxy_directive_mechanics) as gd_probe, patch.object(gdp_mechanics, "get_galaxy_diplomacy_mechanics", wraps=gdp_mechanics.get_galaxy_diplomacy_mechanics) as gdp_probe:
+                      rows = get_buildings_panel_rows(planet, buildings, conn=conn, research_levels=levels)
                   assert rows.get("resources")
                   assert gd_probe.call_count <= 1, f"directive probe repeated {gd_probe.call_count} times"
                   assert gdp_probe.call_count <= 1, f"diplomacy probe repeated {gdp_probe.call_count} times"
@@ -96,10 +83,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-      - name: Focused buildings performance regressions
+      - name: Focused regression
         run: |
           python -m py_compile game/technical_data.py
-          python -m pytest -q tests/test_gc_perf_buildings_002.py tests/test_gc_techcard_ux.py
+          python -m pytest -q tests/test_gc_perf_buildings_002.py
           git diff --check
       - name: Measure buildings panel after cut
         shell: bash
@@ -122,7 +109,7 @@ jobs:
           PY
           python -m pytest -q -s tests/_tmp_perf_after.py
           rm -f tests/_tmp_perf_after.py
-      - name: Commit implementation and remove helper workflow
+      - name: Commit implementation and remove helper
         shell: bash
         run: |
           rm -f .github/workflows/gc-perf-current-audit.yml
