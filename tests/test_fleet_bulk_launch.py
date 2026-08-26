@@ -1,4 +1,3 @@
-
 """GC-FLT-UX-02 — selected saved fleets launch with partial success."""
 
 from __future__ import annotations
@@ -171,7 +170,8 @@ def test_bulk_launch_contract_reuses_reason_mapper_and_slim_state():
     assert 'data-fleet-bulk-preset' in tpl
     assert 'fleet-bulk-launch.js' in tpl
     assert 'GC.fleetReasonText' in js
-    assert 'item.textContent = `${name} — ${reasonText' in js
+    assert 'reasonEl.textContent = reasonText' in js
+    assert 'item.textContent = `${name}' not in js
     assert "send_fleet(" in module
     assert "fleet_movements" not in module.replace("existing ``fleet_movements`` state", "")
     assert "calculate_flight" not in module

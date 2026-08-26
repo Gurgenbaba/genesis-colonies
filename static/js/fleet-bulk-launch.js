@@ -1,4 +1,3 @@
-
 /* GC-FLT-UX-02 — partial-success launch for selected saved Fleet presets. */
 (() => {
   "use strict";
@@ -72,7 +71,15 @@
       skippedRows.forEach((row) => {
         const item = document.createElement("li");
         const name = String(row?.name || `#${Number(row?.preset_id || 0)}`);
-        item.textContent = `${name} — ${reasonText(row?.reason, row?.context || {})}`;
+        const nameEl = document.createElement("strong");
+        nameEl.className = "fleet-bulk-launch-skip-name";
+        nameEl.textContent = name;
+        const reasonEl = document.createElement("span");
+        reasonEl.className = "fleet-bulk-launch-skip-reason";
+        reasonEl.textContent = reasonText(row?.reason, row?.context || {});
+        item.appendChild(nameEl);
+        item.appendChild(document.createTextNode(" "));
+        item.appendChild(reasonEl);
         list.appendChild(item);
       });
       host.appendChild(list);
