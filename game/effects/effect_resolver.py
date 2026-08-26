@@ -1513,15 +1513,15 @@ def get_effect_resolver(
             except (TypeError, ValueError, KeyError):
                 planet_id = None
             try:
-                from ..galaxy import get_planet_coordinates
-
-                coords = get_planet_coordinates(planet_row)
-                if coords.get("position") is not None:
-                    planet_position = int(coords["position"])
-                if coords.get("galaxy") is not None:
-                    galaxy_id = int(coords["galaxy"])
-            except Exception:
-                pass
+                galaxy_raw = planet_row.get("galaxy")
+                galaxy_id = int(galaxy_raw) if galaxy_raw not in (None, "") else None
+            except (TypeError, ValueError, AttributeError):
+                galaxy_id = None
+            try:
+                position_raw = planet_row.get("position")
+                planet_position = int(position_raw) if position_raw not in (None, "") else None
+            except (TypeError, ValueError, AttributeError):
+                planet_position = None
 
         key = _resolver_cache_key(
             uid,

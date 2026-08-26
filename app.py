@@ -10608,7 +10608,7 @@ def _payload_from_live_context(
         conn = db()
 
     energy_efficiency_pct = int(round(float(ratio) * 100))
-    mods = get_research_modifiers(user_id)
+    mods = get_research_modifiers(user_id, conn=conn)
 
     from game.live_state import get_request_context_planet
 
