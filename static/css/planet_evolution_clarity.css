@@ -1,38 +1,4 @@
-#!/usr/bin/env python3
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def replace_once(path: Path, old: str, new: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{path}: expected one anchor, found {count}: {old[:80]!r}")
-    path.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-
-# 1) Explicit server-rendered state for the compact research layout.
-template = ROOT / "templates" / "planet_evolution.html"
-replace_once(
-    template,
-    '    <div class="pe-core-row">',
-    '    <div class="pe-core-row{% if not pe_visible_tech_cards %} pe-core-row--research-idle{% endif %}">',
-)
-
-# 2) Shell-owned stylesheet: must survive PJAX navigation because only #main-content is swapped.
-base = ROOT / "templates" / "base.html"
-style_anchor = '  <link rel="stylesheet" href="{{ url_for(\'static\', filename=\'style.css\') }}?v={{ GC_ASSET_VERSION }}">\n'
-style_link = (
-    style_anchor
-    + '  {# GC-PE-UX-02: shell-owned so Planet Evolution stays styled across PJAX navigation. #}\n'
-    + '  <link rel="stylesheet" href="{{ url_for(\'static\', filename=\'css/planet_evolution_clarity.css\') }}?v={{ GC_ASSET_VERSION }}">\n'
-)
-replace_once(base, style_anchor, style_link)
-
-# 3) Page-specific overrides, intentionally loaded after the global stylesheet.
-css = ROOT / "static" / "css" / "planet_evolution_clarity.css"
-css.write_text(r'''/* GC-PE-UX-02 — decision-first Planet Evolution layout.
+/* GC-PE-UX-02 — decision-first Planet Evolution layout.
    Shell-owned by base.html so the rules are present after PJAX navigation. */
 
 .planet-evolution-page .pe-core-row {
@@ -183,35 +149,3 @@ css.write_text(r'''/* GC-PE-UX-02 — decision-first Planet Evolution layout.
     padding-top: 0.55rem;
   }
 }
-''', encoding="utf-8")
-
-# 4) Source regression: decision hierarchy + PJAX-safe asset ownership.
-tests = ROOT / "tests" / "test_gc_pe_clarity.py"
-text = tests.read_text(encoding="utf-8")
-marker = "\ndef test_impact_locale_contract_has_exact_parity():\n"
-if marker not in text:
-    raise SystemExit("clarity test insertion anchor missing")
-new_test = r'''
-
-def test_planet_evolution_decision_first_layout_is_shell_owned():
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[1]
-    template = (root / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
-    base = (root / "templates" / "base.html").read_text(encoding="utf-8")
-    css = (root / "static" / "css" / "planet_evolution_clarity.css").read_text(encoding="utf-8")
-
-    assert "pe-core-row--research-idle" in template
-    assert "css/planet_evolution_clarity.css" in base
-    assert 'grid-template-areas: "goal tech"' in css
-    assert ".pe-core-row--research-idle" in css
-    assert "grid-template-columns: minmax(0, 1.58fr)" in css
-    assert 'grid-template-areas:\n      "goal"\n      "tech"' in css
-    assert ".pe-goal-cta" in css
-
-'''
-if "test_planet_evolution_decision_first_layout_is_shell_owned" in text:
-    raise SystemExit("clarity layout regression already exists")
-tests.write_text(text.replace(marker, new_test + marker, 1), encoding="utf-8")
-
-print("GC-PE-UX-02 product patch applied")

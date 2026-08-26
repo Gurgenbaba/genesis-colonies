@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Orbitron:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
+  {# GC-PE-UX-02: shell-owned so Planet Evolution stays styled across PJAX navigation. #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/planet_evolution_clarity.css') }}?v={{ GC_ASSET_VERSION }}">
 
   {# GC-INSTANT-LANDSCAPE-001: start planet surface fetch before first paint (shell + stage). #}
   {% if current_planet_landscape_webp_url is defined and current_planet_landscape_webp_url %}
