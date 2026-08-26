@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "Aucun vaisseau capable d’espionnage n’est disponible sur la planète de départ.",
   "fleet_error_cargo_required_for_collect": "Les missions de collecte nécessitent des vaisseaux disposant de capacité de fret.",
   "fleet_error_cargo_required_for_recycle": "Le recyclage nécessite des reclaimers adaptés avec de la capacité de fret.",
-  "fleet_error_recycle_no_departure_cargo": "Une mission de recyclage ne peut pas emporter de cargaison normale au départ."
+  "fleet_error_recycle_no_departure_cargo": "Une mission de recyclage ne peut pas emporter de cargaison normale au départ.",
+  "fleet_bulk_launch_select": "Sélectionner",
+  "fleet_bulk_launch_select_hint": "Inclure ce préréglage de flotte enregistré dans le lancement groupé.",
+  "fleet_bulk_launch_select_all": "Sélectionner tous les préréglages",
+  "fleet_bulk_launch_start": "Lancer toutes les flottes sélectionnées éligibles",
+  "fleet_bulk_launch_hint": "Les préréglages éligibles partent immédiatement. Les autres sont ignorés avec leur raison.",
+  "fleet_bulk_launch_none_selected": "Sélectionnez au moins un préréglage de flotte.",
+  "fleet_bulk_launch_summary": "{started} lancées · {skipped} ignorées",
+  "fleet_bulk_launch_skipped_title": "Ignorées",
+  "fleet_bulk_launch_success": "Lancement groupé des flottes terminé.",
+  "fleet_error_bulk_preset_incomplete": "Ce préréglage n’a pas encore de mission, de cible ou de sélection de vaisseaux complète.",
+  "fleet_error_bulk_preset_not_found": "Ce préréglage est introuvable ou n’appartient plus à votre compte.",
+  "fleet_error_bulk_no_selection": "Aucun préréglage de flotte n’a été sélectionné pour le lancement groupé.",
+  "fleet_error_bulk_too_many_presets": "Trop de préréglages pour un lancement groupé. Sélectionnez-en au maximum 50."
 }

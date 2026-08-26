@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "No hay ninguna nave con capacidad de espionaje disponible en el planeta de origen.",
   "fleet_error_cargo_required_for_collect": "Las misiones de recolección requieren naves con capacidad de carga.",
   "fleet_error_cargo_required_for_recycle": "El reciclaje requiere reclaimers adecuados con capacidad de carga.",
-  "fleet_error_recycle_no_departure_cargo": "Una misión de reciclaje no puede llevar carga normal al partir."
+  "fleet_error_recycle_no_departure_cargo": "Una misión de reciclaje no puede llevar carga normal al partir.",
+  "fleet_bulk_launch_select": "Seleccionar",
+  "fleet_bulk_launch_select_hint": "Incluir este preset de flota guardado en el lanzamiento masivo.",
+  "fleet_bulk_launch_select_all": "Seleccionar todos los presets",
+  "fleet_bulk_launch_start": "Lanzar todas las flotas seleccionadas aptas",
+  "fleet_bulk_launch_hint": "Los presets aptos salen de inmediato. Los bloqueados se omiten y muestran el motivo.",
+  "fleet_bulk_launch_none_selected": "Selecciona al menos un preset de flota.",
+  "fleet_bulk_launch_summary": "{started} iniciadas · {skipped} omitidas",
+  "fleet_bulk_launch_skipped_title": "Omitidas",
+  "fleet_bulk_launch_success": "Lanzamiento masivo de flotas completado.",
+  "fleet_error_bulk_preset_incomplete": "Este preset aún no tiene guardados una misión, un objetivo o una selección de naves completos.",
+  "fleet_error_bulk_preset_not_found": "Este preset no se encontró o ya no pertenece a tu cuenta.",
+  "fleet_error_bulk_no_selection": "No se seleccionaron presets de flota para el lanzamiento masivo.",
+  "fleet_error_bulk_too_many_presets": "Demasiados presets para un lanzamiento masivo. Selecciona como máximo 50."
 }

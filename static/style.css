@@ -53753,3 +53753,57 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   margin: 0;
   line-height: 1.4;
 }
+
+
+/* GC-FLT-UX-02 — bulk preset launch */
+#fleet-page .fleet-preset-bulk-select,
+#fleet-page .fleet-bulk-launch-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+#fleet-page .fleet-bulk-launch-panel {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gc-border, rgba(255, 255, 255, 0.14));
+}
+#fleet-page .fleet-bulk-launch-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+#fleet-page .fleet-bulk-launch-hint {
+  margin: 0.55rem 0 0;
+}
+#fleet-page .fleet-bulk-launch-result {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.14));
+  border-radius: 0;
+}
+#fleet-page .fleet-bulk-launch-summary,
+#fleet-page .fleet-bulk-launch-skipped-title {
+  display: block;
+}
+#fleet-page .fleet-bulk-launch-skipped-title {
+  margin-top: 0.55rem;
+}
+#fleet-page .fleet-bulk-launch-skipped-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+}
+#fleet-page .fleet-bulk-launch-skipped-list li + li {
+  margin-top: 0.25rem;
+}
+@media (max-width: 640px) {
+  #fleet-page .fleet-bulk-launch-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  #fleet-page [data-fleet-bulk-launch] {
+    width: 100%;
+  }
+}

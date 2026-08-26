@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "No available espionage-capable ship is present on the origin planet.",
   "fleet_error_cargo_required_for_collect": "Collect missions require ships with cargo capacity.",
   "fleet_error_cargo_required_for_recycle": "Recycling requires suitable reclaimers with cargo capacity.",
-  "fleet_error_recycle_no_departure_cargo": "A recycle mission cannot carry normal departure cargo."
+  "fleet_error_recycle_no_departure_cargo": "A recycle mission cannot carry normal departure cargo.",
+  "fleet_bulk_launch_select": "Select",
+  "fleet_bulk_launch_select_hint": "Include this saved fleet preset in the bulk launch.",
+  "fleet_bulk_launch_select_all": "Select all presets",
+  "fleet_bulk_launch_start": "Launch all selected eligible fleets",
+  "fleet_bulk_launch_hint": "Eligible presets launch immediately. Blocked presets are skipped and listed with a reason.",
+  "fleet_bulk_launch_none_selected": "Select at least one fleet preset.",
+  "fleet_bulk_launch_summary": "{started} started · {skipped} skipped",
+  "fleet_bulk_launch_skipped_title": "Skipped",
+  "fleet_bulk_launch_success": "Fleet bulk launch complete.",
+  "fleet_error_bulk_preset_incomplete": "This preset does not yet have a complete mission, target, or ship selection saved.",
+  "fleet_error_bulk_preset_not_found": "This preset was not found or no longer belongs to your account.",
+  "fleet_error_bulk_no_selection": "No fleet presets were selected for bulk launch.",
+  "fleet_error_bulk_too_many_presets": "Too many presets for one bulk launch. Select at most 50."
 }

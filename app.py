@@ -395,6 +395,7 @@ _FLEET_TICK_SKIP_ENDPOINTS = frozenset(
         "api_notifications_summary",
         # GC-PERF-FLEET-SEND: mutation RTT must not wait on global fleet tick
         "api_fleet_send",
+        "api_fleet_bulk_launch_presets",
         "api_fleet_recall",
         "api_fleet_mass_expedition",
         "api_fleet_mass_expedition_preview",
@@ -1606,6 +1607,7 @@ def _is_game_state_poll_source(finish_source: str) -> bool:
 _FLEET_MUTATION_LIVE_SOURCES = frozenset(
     {
         "api_fleet_send",
+        "api_fleet_bulk_launch_presets",
         "api_fleet_recall",
     }
 )
@@ -11421,6 +11423,7 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "game_state_buildings_finish",
         "api_planets_active",
         "api_fleet_send",
+        "api_fleet_bulk_launch_presets",
         "api_fleet_recall",
         "api_timekeeper_apply",
         # Meta/reward HUD actions — no buildings/research catalog needed
@@ -12270,6 +12273,67 @@ def api_fleet_send():
             if result.get(context_key) is not None:
                 err_data[context_key] = result[context_key]
     return jsonify(fleet_err(reason or "generic", data=err_data)), 400
+
+
+@app.route("/api/fleet/bulk-launch-presets", methods=["POST"])
+@require_login_api
+def api_fleet_bulk_launch_presets():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_bulk import launch_selected_presets
+    from game.fleet_origin import resolve_fleet_origin_planet_id
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
+        body = fleet_err("fleet_unavailable", data={"state": state})
+        body["state"] = state
+        return jsonify(body), 503
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    preset_ids = data.get("preset_ids") or []
+    if not isinstance(preset_ids, list) or not preset_ids:
+        state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
+        body = fleet_err("bulk_no_selection", data={"state": state})
+        body["state"] = state
+        return jsonify(body), 400
+
+    def _bulk(conn):
+        dom_raw = request.headers.get("X-GC-Dom-Planet-Id") or data.get("dom_planet_id")
+        dom_planet_id = int(dom_raw) if dom_raw not in (None, "") else None
+        origin_id, _origin_audit = resolve_fleet_origin_planet_id(
+            user_id,
+            data.get("origin_planet_id"),
+            conn=conn,
+            dom_planet_id=dom_planet_id,
+        )
+        return launch_selected_presets(
+            user_id,
+            int(origin_id),
+            preset_ids,
+            conn=conn,
+        )
+
+    ok, reason, result = _fleet_write_transaction(_bulk)
+    state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
+    if ok:
+        body = fleet_ok(result or {}, message_key="fleet_bulk_launch_success")
+        body["state"] = state
+        if request_id:
+            save_idempotent_action(user_id, request_id, body)
+        return jsonify(body)
+
+    body = fleet_err(reason or "bulk_launch_failed", data={"state": state})
+    body["state"] = state
+    return jsonify(body), 400
 
 
 @app.route("/api/fleet/recall", methods=["POST"])
