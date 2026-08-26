@@ -6,7 +6,7 @@ on:
       - perf/current-hotspot-pass-02
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   APP_ENV: development
@@ -22,28 +22,103 @@ env:
   GC_PERF_INTEL: '1'
 
 jobs:
-  audit:
+  implement:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: perf/current-hotspot-pass-02
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
           cache: pip
+      - name: Apply minimal core connection cut
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          effect = Path('game/effects/effect_resolver.py')
+          src = effect.read_text(encoding='utf-8')
+          old = '''            try:\n                from ..galaxy import get_planet_coordinates\n\n                coords = get_planet_coordinates(planet_row)\n                if coords.get("position") is not None:\n                    planet_position = int(coords["position"])\n                if coords.get("galaxy") is not None:\n                    galaxy_id = int(coords["galaxy"])\n            except Exception:\n                pass\n'''
+          new = '''            try:\n                galaxy_raw = planet_row.get("galaxy")\n                galaxy_id = int(galaxy_raw) if galaxy_raw not in (None, "") else None\n            except (TypeError, ValueError, AttributeError):\n                galaxy_id = None\n            try:\n                position_raw = planet_row.get("position")\n                planet_position = int(position_raw) if position_raw not in (None, "") else None\n            except (TypeError, ValueError, AttributeError):\n                planet_position = None\n'''
+          if src.count(old) != 1:
+              raise SystemExit(f'effect resolver anchor count={src.count(old)}')
+          effect.write_text(src.replace(old, new, 1), encoding='utf-8')
+
+          app = Path('app.py')
+          app_src = app.read_text(encoding='utf-8')
+          old_app = '    mods = get_research_modifiers(user_id)\n'
+          new_app = '    mods = get_research_modifiers(user_id, conn=conn)\n'
+          if app_src.count(old_app) != 1:
+              raise SystemExit(f'app research modifiers anchor count={app_src.count(old_app)}')
+          app.write_text(app_src.replace(old_app, new_app, 1), encoding='utf-8')
+          PY
+          cat > tests/test_gc_perf_pass_02.py <<'PYTEST'
+          """GC-PERF-PASS-02 — request connection reuse regressions."""
+
+          from __future__ import annotations
+
+          pytest_plugins = ["tests.test_game_state_live"]
+
+
+          def test_game_state_research_modifiers_reuses_request_connection(game_client, monkeypatch):
+              import game.logic as logic
+
+              client, _pid = game_client
+              real = logic.get_research_modifiers
+              seen = []
+
+              def wrapped(user_id, conn=None):
+                  seen.append(conn)
+                  return real(user_id, conn=conn)
+
+              monkeypatch.setattr(logic, "get_research_modifiers", wrapped)
+              resp = client.get("/api/game-state")
+              assert resp.status_code == 200
+              assert seen
+              assert all(conn is not None for conn in seen)
+
+
+          def test_resolver_identity_uses_loaded_planet_fields_without_coordinate_db_probe(monkeypatch):
+              import game.galaxy as galaxy
+              from game.effects.effect_resolver import clear_effect_resolver_cache, get_effect_resolver
+
+              clear_effect_resolver_cache()
+
+              def forbidden(_planet):
+                  raise AssertionError("resolver identity must not call get_planet_coordinates")
+
+              monkeypatch.setattr(galaxy, "get_planet_coordinates", forbidden)
+              resolver = get_effect_resolver(
+                  7,
+                  buildings={"metal_mine": 3},
+                  research={"energy_tech": 2},
+                  settings={},
+                  planet={"id": 99, "galaxy": 1, "system": 42, "position": 3},
+              )
+              assert resolver.planet_id == 99
+              assert resolver.galaxy_id == 1
+              assert resolver.planet_position == 3
+              clear_effect_resolver_cache()
+          PYTEST
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-      - name: Trace DB connection callers
+      - name: Focused regression
+        run: |
+          python -m py_compile app.py game/effects/effect_resolver.py
+          python -m pytest -q tests/test_gc_perf_pass_02.py tests/test_gc_perf_core_001.py
+          git diff --check
+      - name: Measure diet and overview after cut
         shell: bash
         run: |
-          cat > tests/_tmp_perf_pass_02_callers.py <<'PY'
+          cat > tests/_tmp_perf_pass_02_after.py <<'PY'
           from __future__ import annotations
 
-          import collections
-          import traceback
-          from unittest.mock import patch
-
+          import logging
           import pytest
 
           pytest_plugins = ["tests.test_game_state_live"]
@@ -53,40 +128,26 @@ jobs:
               ("overview", "/api/game-state?include_panel=1&panel_page=overview"),
           ]
 
-          def _signature():
-              stack = traceback.extract_stack(limit=36)[:-2]
-              project = []
-              for frame in stack:
-                  name = frame.filename.replace("\\", "/")
-                  if "/genesis-colonies/" not in name:
-                      continue
-                  rel = name.split("/genesis-colonies/", 1)[1]
-                  if rel.startswith("tests/") or rel.startswith(".venv/"):
-                      continue
-                  project.append(f"{rel}:{frame.lineno}:{frame.name}")
-              return " <- ".join(project[-8:]) or "unknown"
-
           @pytest.mark.parametrize("label,route", ROUTES)
-          def test_connection_callers(game_client, label, route):
-              import game.db as dbmod
-
+          def test_after(game_client, caplog, label, route):
               client, _pid = game_client
-              warm = client.get(route)
-              assert warm.status_code == 200
-              real_connect = dbmod.sqlite3.connect
-              counts = collections.Counter()
-
-              def traced_connect(*args, **kwargs):
-                  counts[_signature()] += 1
-                  return real_connect(*args, **kwargs)
-
-              with patch.object(dbmod.sqlite3, "connect", side_effect=traced_connect):
+              assert client.get(route).status_code == 200
+              caplog.clear()
+              with caplog.at_level(logging.INFO):
                   resp = client.get(route)
               assert resp.status_code == 200
-              print(f"\n=== PERF02 {label.upper()} DB OPEN CALLERS ===")
-              print("TOTAL_TRACED_OPENS", sum(counts.values()))
-              for sig, n in counts.most_common(60):
-                  print(f"OPEN x{n}: {sig}")
+              logs = [r.message for r in caplog.records if "[GC REQUEST PERF]" in r.message]
+              assert logs
+              print(f"\nPERF02_AFTER {label} {logs[-1]}")
           PY
-          python -m pytest -q -s tests/_tmp_perf_pass_02_callers.py
-          rm -f tests/_tmp_perf_pass_02_callers.py
+          python -m pytest -q -s tests/_tmp_perf_pass_02_after.py
+          rm -f tests/_tmp_perf_pass_02_after.py
+      - name: Commit implementation and remove helper
+        shell: bash
+        run: |
+          rm -f .github/workflows/gc-perf-pass-02-audit.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py game/effects/effect_resolver.py tests/test_gc_perf_pass_02.py .github/workflows/gc-perf-pass-02-audit.yml
+          git commit -m "perf(core): reuse request connection in game-state resolver path"
+          git push origin HEAD:perf/current-hotspot-pass-02
