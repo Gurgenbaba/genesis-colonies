@@ -59,6 +59,13 @@ template.write_text(src,encoding='utf-8')
 """)
 
 apply_src = apply_src[:start] + middle + apply_src[end:]
+
+locale_old = '''    dup=expected.intersection(parsed)\n    if dup: raise SystemExit(f'locale keys already exist in {lang}: {sorted(dup)[:3]}')\n    idx=text.rfind('\\n}')\n    if idx<0: raise SystemExit(f'bad locale tail {lang}')\n    insertion=',\\n' + ',\\n'.join('  '+json.dumps(k,ensure_ascii=False)+': '+json.dumps(v,ensure_ascii=False) for k,v in data.items())\n    p.write_text(text[:idx]+insertion+text[idx:],encoding='utf-8')\n'''
+locale_new = '''    existing=expected.intersection(parsed)\n    if any(not str(parsed[k]).strip() for k in existing):\n        raise SystemExit(f'empty existing locale value in {lang}')\n    missing=[k for k in data if k not in parsed]\n    if not missing:\n        continue\n    idx=text.rfind('\\n}')\n    if idx<0: raise SystemExit(f'bad locale tail {lang}')\n    insertion=',\\n' + ',\\n'.join('  '+json.dumps(k,ensure_ascii=False)+': '+json.dumps(data[k],ensure_ascii=False) for k in missing)\n    p.write_text(text[:idx]+insertion+text[idx:],encoding='utf-8')\n'''
+if apply_src.count(locale_old) != 1:
+    raise SystemExit(f"locale writer anchor={apply_src.count(locale_old)}")
+apply_src = apply_src.replace(locale_old, locale_new, 1)
+
 apply_path = ROOT / "scripts/_tmp_pe_clarity_ui_generated.py"
 apply_path.write_text(apply_src, encoding="utf-8")
 subprocess.run(["python", str(apply_path)], cwd=ROOT, check=True)
