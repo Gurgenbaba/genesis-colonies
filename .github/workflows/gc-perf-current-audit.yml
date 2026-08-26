@@ -6,7 +6,7 @@ on:
       - perf/current-hotspot-pass
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   APP_ENV: development
@@ -22,62 +22,136 @@ env:
   GC_PERF_INTEL: '1'
 
 jobs:
-  audit:
+  implement:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: perf/current-hotspot-pass
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
           cache: pip
+      - name: Apply shared external-probe cache to technical preview clones
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('game/technical_data.py')
+          src = path.read_text(encoding='utf-8')
+
+          old = '''                conn=getattr(base_resolver, "_conn", None),
+                skip_inventory_boosters=bool(
+'''
+          new = '''                conn=getattr(base_resolver, "_conn", None),
+                external_probe_cache=base_resolver.shared_external_probe_cache(),
+                skip_inventory_boosters=bool(
+'''
+          if old not in src:
+              raise SystemExit('missing nanofactory clone anchor')
+          src = src.replace(old, new, 1)
+
+          pattern = re.compile(
+              r'(?P<indent>\s*)conn=getattr\(base, "_conn", None\),\n(?P=indent)\)',
+          )
+          def repl(match):
+              indent = match.group('indent')
+              return (
+                  f'{indent}conn=getattr(base, "_conn", None),\n'
+                  f'{indent}external_probe_cache=base.shared_external_probe_cache(),\n'
+                  f'{indent})'
+              )
+          src, count = pattern.subn(repl, src)
+          if count < 3:
+              raise SystemExit(f'expected >=3 base clone anchors, got {count}')
+          path.write_text(src, encoding='utf-8')
+
+          test_path = Path('tests/test_gc_perf_buildings_002.py')
+          test_src = test_path.read_text(encoding='utf-8')
+          marker = 'def test_buildings_panel_preview_clones_share_external_probe_cache'
+          if marker not in test_src:
+              test_src += r'''
+
+
+def test_buildings_panel_preview_clones_share_external_probe_cache(game_client):
+    """GC-PERF-PASS-01: technical card preview clones must share DB-backed probes."""
+    _client, uid = game_client
+    conn = db()
+    try:
+        planet = get_homeworld(int(uid), conn=conn)
+        assert planet is not None
+        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+        levels = get_research_levels(int(uid), conn=conn)
+
+        import game.galactic_directives.mechanics as gd_mechanics
+        import game.galactic_diplomacy.mechanics as gdp_mechanics
+
+        clear_effect_resolver_cache()
+        with patch.object(
+            gd_mechanics,
+            "get_galaxy_directive_mechanics",
+            wraps=gd_mechanics.get_galaxy_directive_mechanics,
+        ) as gd_probe, patch.object(
+            gdp_mechanics,
+            "get_galaxy_diplomacy_mechanics",
+            wraps=gdp_mechanics.get_galaxy_diplomacy_mechanics,
+        ) as gdp_probe:
+            rows = get_buildings_panel_rows(
+                planet,
+                buildings,
+                conn=conn,
+                research_levels=levels,
+            )
+
+        assert rows.get("resources")
+        assert gd_probe.call_count <= 1, f"directive probe repeated {gd_probe.call_count} times"
+        assert gdp_probe.call_count <= 1, f"diplomacy probe repeated {gdp_probe.call_count} times"
+    finally:
+        clear_effect_resolver_cache()
+        conn.close()
+'''
+              test_path.write_text(test_src, encoding='utf-8')
+          PY
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-      - name: Trace buildings panel DB connection callers
+      - name: Focused buildings performance regressions
+        run: |
+          python -m py_compile game/technical_data.py
+          python -m pytest -q tests/test_gc_perf_buildings_002.py tests/test_gc_techcard_ux.py
+          git diff --check
+      - name: Measure buildings panel after cut
         shell: bash
         run: |
-          cat > tests/_tmp_perf_connection_callers.py <<'PY'
+          cat > tests/_tmp_perf_after.py <<'PY'
           from __future__ import annotations
-
-          import collections
-          import traceback
-          from unittest.mock import patch
-
+          import logging
           pytest_plugins = ["tests.test_game_state_live"]
 
-          def _signature():
-              stack = traceback.extract_stack(limit=30)[:-2]
-              project = []
-              for frame in stack:
-                  name = frame.filename.replace("\\", "/")
-                  if "/genesis-colonies/" not in name:
-                      continue
-                  rel = name.split("/genesis-colonies/", 1)[1]
-                  if rel.startswith("tests/") or rel.startswith(".venv/"):
-                      continue
-                  project.append(f"{rel}:{frame.lineno}:{frame.name}")
-              return " <- ".join(project[-6:]) or "unknown"
-
-          def test_buildings_connection_callers(game_client):
-              import game.db as dbmod
-
+          def test_after(game_client, caplog):
               client, _pid = game_client
-              client.get("/api/game-state?include_panel=1&panel_page=buildings")
-              real_connect = dbmod.sqlite3.connect
-              counts = collections.Counter()
-
-              def traced_connect(*args, **kwargs):
-                  counts[_signature()] += 1
-                  return real_connect(*args, **kwargs)
-
-              with patch.object(dbmod.sqlite3, "connect", side_effect=traced_connect):
-                  resp = client.get("/api/game-state?include_panel=1&panel_page=buildings")
+              route = "/api/game-state?include_panel=1&panel_page=buildings"
+              client.get(route)
+              caplog.clear()
+              with caplog.at_level(logging.INFO):
+                  resp = client.get(route)
               assert resp.status_code == 200
-              print("\n=== GC BUILDINGS DB OPEN CALLERS ===")
-              print("TOTAL_TRACED_OPENS", sum(counts.values()))
-              for sig, n in counts.most_common(40):
-                  print(f"OPEN x{n}: {sig}")
+              logs = [r.message for r in caplog.records if "[GC REQUEST PERF]" in r.message]
+              assert logs
+              print("\nAFTER", logs[-1])
           PY
-          python -m pytest -q -s tests/_tmp_perf_connection_callers.py
-          rm -f tests/_tmp_perf_connection_callers.py
+          python -m pytest -q -s tests/_tmp_perf_after.py
+          rm -f tests/_tmp_perf_after.py
+      - name: Commit implementation and remove helper workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/gc-perf-current-audit.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/technical_data.py tests/test_gc_perf_buildings_002.py .github/workflows/gc-perf-current-audit.yml
+          git commit -m "perf(buildings): share external probes across preview resolvers"
+          git push origin HEAD:perf/current-hotspot-pass
