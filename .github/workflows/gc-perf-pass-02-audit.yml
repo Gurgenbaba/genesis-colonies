@@ -34,13 +34,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-      - name: Measure current game-state paths
+      - name: Trace DB connection callers
         shell: bash
         run: |
-          cat > tests/_tmp_perf_pass_02.py <<'PY'
+          cat > tests/_tmp_perf_pass_02_callers.py <<'PY'
           from __future__ import annotations
 
-          import logging
+          import collections
+          import traceback
+          from unittest.mock import patch
 
           import pytest
 
@@ -49,22 +51,42 @@ jobs:
           ROUTES = [
               ("diet", "/api/game-state"),
               ("overview", "/api/game-state?include_panel=1&panel_page=overview"),
-              ("research", "/api/game-state?include_panel=1&panel_page=research"),
-              ("fleet", "/api/game-state?include_panel=1&panel_page=fleet"),
           ]
 
+          def _signature():
+              stack = traceback.extract_stack(limit=36)[:-2]
+              project = []
+              for frame in stack:
+                  name = frame.filename.replace("\\", "/")
+                  if "/genesis-colonies/" not in name:
+                      continue
+                  rel = name.split("/genesis-colonies/", 1)[1]
+                  if rel.startswith("tests/") or rel.startswith(".venv/"):
+                      continue
+                  project.append(f"{rel}:{frame.lineno}:{frame.name}")
+              return " <- ".join(project[-8:]) or "unknown"
+
           @pytest.mark.parametrize("label,route", ROUTES)
-          def test_measure_route(game_client, caplog, label, route):
+          def test_connection_callers(game_client, label, route):
+              import game.db as dbmod
+
               client, _pid = game_client
               warm = client.get(route)
               assert warm.status_code == 200
-              caplog.clear()
-              with caplog.at_level(logging.INFO):
+              real_connect = dbmod.sqlite3.connect
+              counts = collections.Counter()
+
+              def traced_connect(*args, **kwargs):
+                  counts[_signature()] += 1
+                  return real_connect(*args, **kwargs)
+
+              with patch.object(dbmod.sqlite3, "connect", side_effect=traced_connect):
                   resp = client.get(route)
               assert resp.status_code == 200
-              logs = [r.message for r in caplog.records if "[GC REQUEST PERF]" in r.message]
-              assert logs
-              print(f"\nPERF02 {label} {logs[-1]}")
+              print(f"\n=== PERF02 {label.upper()} DB OPEN CALLERS ===")
+              print("TOTAL_TRACED_OPENS", sum(counts.values()))
+              for sig, n in counts.most_common(60):
+                  print(f"OPEN x{n}: {sig}")
           PY
-          python -m pytest -q -s tests/_tmp_perf_pass_02.py
-          rm -f tests/_tmp_perf_pass_02.py
+          python -m pytest -q -s tests/_tmp_perf_pass_02_callers.py
+          rm -f tests/_tmp_perf_pass_02_callers.py
