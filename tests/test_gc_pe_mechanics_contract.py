@@ -1,39 +1,7 @@
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def replace_one(path: str, old: str, new: str, label: str) -> None:
-    p = ROOT / path
-    text = p.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{label}: expected one anchor, got {count}")
-    p.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-
-replace_one(
-    "game/planet_evolution/impact.py",
-    '    "discovery_roll_bonus": "pe_impact_scope_discoveries",\n',
-    '    "discovery_roll_bonus": "pe_impact_scope_discoveries",\n    "discovery_roll_mult": "pe_impact_scope_discoveries",\n',
-    "impact scope",
-)
-replace_one(
-    "game/planet_evolution/impact.py",
-    '    "discovery_roll_bonus": "pe_impact_effect_discovery_chance",\n',
-    '    "discovery_roll_bonus": "pe_impact_effect_discovery_chance",\n    "discovery_roll_mult": "pe_impact_effect_discovery_chance",\n',
-    "impact label",
-)
-replace_one(
-    "game/planet_evolution/impact.py",
-    '        if key in {"planet_research_speed_bonus", "trade_route_bonus", "discovery_roll_bonus"}:\n            value_text = _signed_percent(value)\n        elif key == "chain_output_mult":\n',
-    '        if key in {"planet_research_speed_bonus", "trade_route_bonus", "discovery_roll_bonus"}:\n            value_text = _signed_percent(value)\n        elif key == "discovery_roll_mult":\n            value_text = _multiplier_delta(value)\n        elif key == "chain_output_mult":\n',
-    "impact value",
-)
-
-(ROOT / "tests/test_gc_pe_mechanics_contract.py").write_text(r'''from __future__ import annotations
+from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from game.planet_evolution.impact import mechanics_impact_rows
 from game.planet_evolution.mechanics import (
@@ -207,4 +175,3 @@ def test_active_migrated_definition_contract(tmp_path, monkeypatch):
     finally:
         conn.close()
         gdb._DB_PATH = None
-'''.replace('import sqlite3\n', 'import sqlite3\nfrom pathlib import Path\n'), encoding="utf-8")

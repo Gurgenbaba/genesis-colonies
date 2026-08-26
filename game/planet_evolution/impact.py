@@ -19,6 +19,7 @@ _SCOPE_BY_FLAG = {
     "auto_conversion": "pe_impact_scope_conversion",
     "trade_route_bonus": "pe_impact_scope_trade",
     "discovery_roll_bonus": "pe_impact_scope_discoveries",
+    "discovery_roll_mult": "pe_impact_scope_discoveries",
     "experimental_slot": "pe_impact_scope_experimental",
     "export_slots_bonus": "pe_impact_scope_trade",
     "stability_penalty": "pe_impact_scope_culture",
@@ -34,6 +35,7 @@ _LABEL_BY_FLAG = {
     "auto_conversion": "pe_impact_effect_auto_conversion",
     "trade_route_bonus": "pe_impact_effect_trade_routes",
     "discovery_roll_bonus": "pe_impact_effect_discovery_chance",
+    "discovery_roll_mult": "pe_impact_effect_discovery_chance",
     "experimental_slot": "pe_impact_effect_experimental_slots",
     "export_slots_bonus": "pe_impact_effect_export_slots",
     "stability_penalty": "pe_impact_effect_stability",
@@ -179,6 +181,8 @@ def mechanics_impact_rows(raw: Any) -> List[Dict[str, Any]]:
         scope_key = _SCOPE_BY_FLAG.get(key, "pe_impact_scope_planet")
         if key in {"planet_research_speed_bonus", "trade_route_bonus", "discovery_roll_bonus"}:
             value_text = _signed_percent(value)
+        elif key == "discovery_roll_mult":
+            value_text = _multiplier_delta(value)
         elif key == "chain_output_mult":
             value_text = _multiplier_delta(value)
         elif key == "chain_output_bonus" and isinstance(value, Mapping):
