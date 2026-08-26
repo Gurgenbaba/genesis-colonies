@@ -197,7 +197,12 @@ def next_expansion_slot_homeworld_level(expansion_colonies: int) -> Optional[int
     return int(_slot_gate_for_next_expansion(next_index)["homeworld_level"])
 
 
-def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+def expansion_gameplay_cap(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+    mandate_state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Ark slots + late mandates + directive bonus, capped by admin ceiling."""
     from game.logic import get_max_planets_per_player
     from .imperial_mandates import ARK_SLOT_MAX, ensure_player_mandate_state
@@ -205,8 +210,12 @@ def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[
     uid = int(player_id)
     hw_level = get_homeworld_level(uid, conn=conn)
     slots = expansion_slots_unlocked(hw_level)
-    mandate_state = ensure_player_mandate_state(uid, conn=conn)
-    late_slots = int(mandate_state.get("late_slots") or 0)
+    resolved_mandates = (
+        dict(mandate_state)
+        if isinstance(mandate_state, dict)
+        else ensure_player_mandate_state(uid, conn=conn)
+    )
+    late_slots = int(resolved_mandates.get("late_slots") or 0)
     effective = 1 + int(slots) + late_slots
     # GC-720J: expansion directive may grant extra colony slots (galaxy of homeworld).
     try:
@@ -225,8 +234,8 @@ def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[
         "expansion_slots_unlocked": int(slots),
         "ark_slot_max": int(ARK_SLOT_MAX),
         "late_slots": int(late_slots),
-        "legacy_slots": int(mandate_state.get("legacy_slots") or 0),
-        "mandate_slots": int(mandate_state.get("mandate_slots") or 0),
+        "legacy_slots": int(resolved_mandates.get("legacy_slots") or 0),
+        "mandate_slots": int(resolved_mandates.get("mandate_slots") or 0),
         "effective_max_worlds": int(effective),
         "admin_ceiling": admin,
         "gameplay_cap": min(effective, admin),
@@ -477,7 +486,8 @@ def get_expansion_limit_block(
     planets = get_planets_by_player(uid, conn=conn) or []
     expansion_count = sum(1 for p in planets if not bool(p.get("is_homeworld")))
     total = len(planets)
-    cap = expansion_gameplay_cap(uid, conn=conn)
+    mandate_state = ensure_player_mandate_state(uid, conn=conn, persist=False)
+    cap = expansion_gameplay_cap(uid, conn=conn, mandate_state=mandate_state)
     hw_level = int(cap["homeworld_level"])
     slots_unlocked = int(cap["expansion_slots_unlocked"])
     late_slots = int(cap.get("late_slots") or 0)
@@ -494,7 +504,6 @@ def get_expansion_limit_block(
         if expansion_count >= slots_unlocked and slots_unlocked < ARK_SLOT_MAX
         else None
     )
-    mandate_state = ensure_player_mandate_state(uid, conn=conn)
     next_mandate = mandate_state.get("next_mandate")
     mat_ok, mat_reason, mat_meta = colony_maturity_gate(uid, conn=conn)
     gate_reason = str(reason or "")
