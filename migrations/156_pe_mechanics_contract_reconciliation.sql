@@ -1,3 +1,4 @@
+-- GC-REQUIRES-TABLES: pe_research_definitions, pe_policy_definitions, pe_discovery_definitions, pe_ascension_definitions
 -- GC-PE-MECH-01: remove silently inert/deferred PE mechanics from the active
 -- definition state. Historical seed 017 remains untouched; future features may
 -- reintroduce deferred keys only together with a real runtime consumer.
