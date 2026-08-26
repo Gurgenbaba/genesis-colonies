@@ -160,3 +160,25 @@ def test_mine_evolution_panel_rank_read_reuses_request_connection(game_client):
     finally:
         clear_effect_resolver_cache()
         conn.close()
+
+
+def test_buildings_panel_preview_clones_share_external_probe_cache(game_client):
+    """GC-PERF-PASS-01: technical-card preview clones share DB-backed probes."""
+    _client, uid = game_client
+    conn = db()
+    try:
+        planet = get_homeworld(int(uid), conn=conn)
+        assert planet is not None
+        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+        levels = get_research_levels(int(uid), conn=conn)
+        import game.galactic_directives.mechanics as gd_mechanics
+        import game.galactic_diplomacy.mechanics as gdp_mechanics
+        clear_effect_resolver_cache()
+        with patch.object(gd_mechanics, "get_galaxy_directive_mechanics", wraps=gd_mechanics.get_galaxy_directive_mechanics) as gd_probe, patch.object(gdp_mechanics, "get_galaxy_diplomacy_mechanics", wraps=gdp_mechanics.get_galaxy_diplomacy_mechanics) as gdp_probe:
+            rows = get_buildings_panel_rows(planet, buildings, conn=conn, research_levels=levels)
+        assert rows.get("resources")
+        assert gd_probe.call_count <= 1, f"directive probe repeated {gd_probe.call_count} times"
+        assert gdp_probe.call_count <= 1, f"diplomacy probe repeated {gdp_probe.call_count} times"
+    finally:
+        clear_effect_resolver_cache()
+        conn.close()

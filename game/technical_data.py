@@ -649,6 +649,7 @@ def build_nanofactory_time_preview(
                 planet_position=getattr(base_resolver, "planet_position", None),
                 galaxy_id=getattr(base_resolver, "galaxy_id", None),
                 conn=getattr(base_resolver, "_conn", None),
+                external_probe_cache=base_resolver.shared_external_probe_cache(),
                 skip_inventory_boosters=bool(
                     getattr(base_resolver, "_skip_inventory_boosters", False)
                 ),
@@ -1189,6 +1190,7 @@ def resolve_building_impact(
                     planet_position=getattr(base, "planet_position", None),
                     galaxy_id=getattr(base, "galaxy_id", None),
                     conn=getattr(base, "_conn", None),
+                external_probe_cache=base.shared_external_probe_cache(),
                 )
             else:
                 er = EffectResolver(bld, dict(research_levels or {}))
@@ -1219,6 +1221,7 @@ def resolve_building_impact(
                     planet_position=getattr(base, "planet_position", None),
                     galaxy_id=getattr(base, "galaxy_id", None),
                     conn=getattr(base, "_conn", None),
+                external_probe_cache=base.shared_external_probe_cache(),
                 )
             else:
                 er = EffectResolver(dict(bld_levels), research)
@@ -1278,6 +1281,7 @@ def resolve_building_impact(
                     planet_position=getattr(base, "planet_position", None),
                     galaxy_id=getattr(base, "galaxy_id", None),
                     conn=getattr(base, "_conn", None),
+                external_probe_cache=base.shared_external_probe_cache(),
                 )
             else:
                 er = EffectResolver(dict(bld), dict(research_levels or {}))
