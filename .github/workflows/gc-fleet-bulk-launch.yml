@@ -1,0 +1,1018 @@
+name: GC Fleet Bulk Launch
+
+on:
+  push:
+    branches:
+      - feature/fleet-bulk-launch
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/fleet-bulk-launch
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Apply GC-FLT-UX-02
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import textwrap
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"missing anchor: {label}")
+              return text.replace(old, new, 1)
+
+          def replace_after(text: str, marker: str, old: str, new: str, label: str) -> str:
+              pos = text.find(marker)
+              if pos < 0:
+                  raise SystemExit(f"missing marker: {label}")
+              tail = text[pos:]
+              if old not in tail:
+                  raise SystemExit(f"missing anchor after marker: {label}")
+              tail = tail.replace(old, new, 1)
+              return text[:pos] + tail
+
+          Path("game/fleet_bulk.py").write_text(textwrap.dedent(r'''
+          """GC-FLT-UX-02 — partial-success bulk launch for saved fleet presets.
+
+          This module is an orchestration adapter only. Fleet validation, math, stock
+          deduction, slot accounting, protection and diplomacy stay authoritative in
+          ``game.fleet.send_fleet`` and existing ``fleet_movements`` state.
+          """
+
+          from __future__ import annotations
+
+          import json
+          import time
+          from typing import Any, Dict, Mapping, Sequence, Tuple
+
+          MAX_BULK_PRESETS = 50
+          SAFE_SKIP_CONTEXT_KEYS = (
+              "attack_limit",
+              "noob_protection",
+              "troop_slots_needed",
+              "troop_berths",
+          )
+
+
+          def _json_object(raw: Any) -> Dict[str, Any]:
+              if isinstance(raw, dict):
+                  return dict(raw)
+              if raw in (None, ""):
+                  return {}
+              try:
+                  value = json.loads(str(raw))
+              except (TypeError, ValueError, json.JSONDecodeError):
+                  return {}
+              return dict(value) if isinstance(value, dict) else {}
+
+
+          def _normalize_preset_ids(values: Sequence[Any]) -> list[int]:
+              out: list[int] = []
+              seen: set[int] = set()
+              for raw in values:
+                  try:
+                      preset_id = int(raw)
+                  except (TypeError, ValueError):
+                      continue
+                  if preset_id <= 0 or preset_id in seen:
+                      continue
+                  seen.add(preset_id)
+                  out.append(preset_id)
+              return out
+
+
+          def _safe_skip_context(result: Any) -> Dict[str, Any]:
+              if not isinstance(result, Mapping):
+                  return {}
+              return {
+                  key: result[key]
+                  for key in SAFE_SKIP_CONTEXT_KEYS
+                  if result.get(key) is not None
+              }
+
+
+          def _skip(preset_id: int, name: str, reason: str, result: Any = None) -> Dict[str, Any]:
+              row: Dict[str, Any] = {
+                  "preset_id": int(preset_id),
+                  "name": str(name or ""),
+                  "reason": str(reason or "generic"),
+              }
+              context = _safe_skip_context(result)
+              if context:
+                  row["context"] = context
+              return row
+
+
+          def _create_batch(player_id: int, *, conn) -> int:
+              now = float(time.time())
+              cur = conn.cursor()
+              cur.execute(
+                  """
+                  INSERT INTO fleet_batches
+                      (player_id, batch_type, label, status, total_fleets, created_at, updated_at)
+                  VALUES (?, 'custom', 'bulk_presets', 'running', 0, ?, ?);
+                  """,
+                  (int(player_id), now, now),
+              )
+              return int(cur.lastrowid)
+
+
+          def launch_selected_presets(
+              player_id: int,
+              origin_planet_id: int,
+              preset_ids: Sequence[Any],
+              *,
+              conn,
+          ) -> Tuple[bool, str, Dict[str, Any] | None]:
+              """Launch selected owned presets sequentially with partial success.
+
+              Normal per-preset validation failures are collected in ``skipped`` and do
+              not roll back successful launches. Structural request errors remain fatal.
+              """
+              from .fleet import send_fleet
+              from .fleet_calc import normalize_ships
+
+              ids = _normalize_preset_ids(preset_ids)
+              if not ids:
+                  return False, "bulk_no_selection", None
+              if len(ids) > MAX_BULK_PRESETS:
+                  return False, "bulk_too_many_presets", None
+
+              placeholders = ",".join("?" for _ in ids)
+              cur = conn.cursor()
+              cur.execute(
+                  f"SELECT * FROM fleet_presets WHERE player_id = ? AND id IN ({placeholders});",
+                  (int(player_id), *ids),
+              )
+              presets = {int(row["id"]): dict(row) for row in cur.fetchall()}
+
+              started: list[Dict[str, Any]] = []
+              skipped: list[Dict[str, Any]] = []
+              batch_id: int | None = None
+
+              for preset_id in ids:
+                  preset = presets.get(int(preset_id))
+                  if not preset:
+                      skipped.append(_skip(preset_id, "", "bulk_preset_not_found"))
+                      continue
+
+                  name = str(preset.get("name") or "")
+                  mission = str(preset.get("mission_type") or "").strip().lower()
+                  try:
+                      galaxy = int(preset.get("target_galaxy") or 0)
+                      system = int(preset.get("target_system") or 0)
+                      position = int(preset.get("target_position") or 0)
+                  except (TypeError, ValueError):
+                      galaxy = system = position = 0
+
+                  ships = normalize_ships(_json_object(preset.get("ships_json")))
+                  if not ships:
+                      skipped.append(_skip(preset_id, name, "no_ships"))
+                      continue
+                  if not mission or galaxy <= 0 or system <= 0 or position <= 0:
+                      skipped.append(_skip(preset_id, name, "bulk_preset_incomplete"))
+                      continue
+
+                  if batch_id is None:
+                      batch_id = _create_batch(int(player_id), conn=conn)
+
+                  resources = _json_object(preset.get("resources_json"))
+                  try:
+                      speed_percent = int(preset.get("speed_percent") or 100)
+                  except (TypeError, ValueError):
+                      speed_percent = 100
+
+                  ok, reason, result = send_fleet(
+                      player_id=int(player_id),
+                      origin_planet_id=int(origin_planet_id),
+                      target_galaxy=galaxy,
+                      target_system=system,
+                      target_position=position,
+                      mission_type=mission,
+                      ships=ships,
+                      resources=resources,
+                      speed_percent=speed_percent,
+                      preset_id=int(preset_id),
+                      batch_id=int(batch_id),
+                      conn=conn,
+                  )
+                  if not ok:
+                      skipped.append(_skip(preset_id, name, reason or "generic", result))
+                      continue
+
+                  fleet = result.get("fleet") if isinstance(result, Mapping) else {}
+                  fleet = fleet if isinstance(fleet, Mapping) else {}
+                  started.append(
+                      {
+                          "preset_id": int(preset_id),
+                          "name": name,
+                          "mission_type": mission,
+                          "target_galaxy": galaxy,
+                          "target_system": system,
+                          "target_position": position,
+                          "movement_id": int(fleet.get("id") or fleet.get("movement_id") or 0),
+                          "status": str(fleet.get("status") or "outbound"),
+                      }
+                  )
+
+              if batch_id is not None:
+                  conn.execute(
+                      """
+                      UPDATE fleet_batches
+                      SET status = 'completed', total_fleets = ?, updated_at = ?
+                      WHERE id = ? AND player_id = ?;
+                      """,
+                      (len(started), float(time.time()), int(batch_id), int(player_id)),
+                  )
+
+              return True, "", {
+                  "batch_id": int(batch_id) if batch_id is not None else None,
+                  "started_count": len(started),
+                  "skipped_count": len(skipped),
+                  "started": started,
+                  "skipped": skipped,
+              }
+          '''), encoding="utf-8")
+
+          Path("static/js/fleet-bulk-launch.js").write_text(textwrap.dedent(r'''
+          /* GC-FLT-UX-02 — partial-success launch for selected saved Fleet presets. */
+          (() => {
+            "use strict";
+
+            const GC = window.GC || (window.GC = {});
+            if (GC.FleetBulkLaunchBound) return;
+            GC.FleetBulkLaunchBound = true;
+
+            const t = (key, fallback) =>
+              typeof GC.t === "function" ? GC.t(key, fallback) : (fallback || key);
+            const reasonText = (reason, context) => {
+              if (typeof GC.fleetReasonText === "function") {
+                return GC.fleetReasonText(reason, context || {});
+              }
+              return t(`fleet_error_${String(reason || "generic")}`, t("fleet_error_generic", "Fleet action failed."));
+            };
+            const makeRequestId = () => {
+              if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+                return crypto.randomUUID();
+              }
+              return `fleet-bulk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+            };
+            const page = () => document.getElementById("fleet-page");
+            const selectedIds = (root) =>
+              Array.from(root?.querySelectorAll("[data-fleet-bulk-preset]:checked") || [])
+                .map((input) => parseInt(input.value || "0", 10))
+                .filter((id) => id > 0);
+
+            const syncButton = (root) => {
+              if (!root) return;
+              const btn = root.querySelector("[data-fleet-bulk-launch]");
+              if (!btn || btn.getAttribute("aria-busy") === "true") return;
+              btn.disabled = selectedIds(root).length === 0;
+              const all = root.querySelector("[data-fleet-bulk-select-all]");
+              const items = Array.from(root.querySelectorAll("[data-fleet-bulk-preset]"));
+              if (all && items.length) {
+                const checked = items.filter((item) => item.checked).length;
+                all.checked = checked === items.length;
+                all.indeterminate = checked > 0 && checked < items.length;
+              }
+            };
+
+            const clearNode = (node) => {
+              while (node?.firstChild) node.removeChild(node.firstChild);
+            };
+
+            const renderResult = (root, payload) => {
+              const host = root?.querySelector("[data-fleet-bulk-result]");
+              if (!host) return "";
+              clearNode(host);
+              host.hidden = false;
+              const started = Math.max(0, Number(payload?.started_count || 0));
+              const skipped = Math.max(0, Number(payload?.skipped_count || 0));
+              const template = t("fleet_bulk_launch_summary", "{started} started · {skipped} skipped");
+              const summary = template
+                .replace("{started}", String(started))
+                .replace("{skipped}", String(skipped));
+              const summaryEl = document.createElement("strong");
+              summaryEl.className = "fleet-bulk-launch-summary";
+              summaryEl.textContent = summary;
+              host.appendChild(summaryEl);
+
+              const skippedRows = Array.isArray(payload?.skipped) ? payload.skipped : [];
+              if (skippedRows.length) {
+                const title = document.createElement("span");
+                title.className = "fleet-bulk-launch-skipped-title";
+                title.textContent = t("fleet_bulk_launch_skipped_title", "Skipped");
+                host.appendChild(title);
+                const list = document.createElement("ul");
+                list.className = "fleet-bulk-launch-skipped-list";
+                skippedRows.forEach((row) => {
+                  const item = document.createElement("li");
+                  const name = String(row?.name || `#${Number(row?.preset_id || 0)}`);
+                  item.textContent = `${name} — ${reasonText(row?.reason, row?.context || {})}`;
+                  list.appendChild(item);
+                });
+                host.appendChild(list);
+              }
+              return summary;
+            };
+
+            const setBusy = (btn, busy) => {
+              if (!btn) return;
+              btn.setAttribute("aria-busy", busy ? "true" : "false");
+              btn.disabled = Boolean(busy);
+            };
+
+            const launch = async (root, btn) => {
+              const presetIds = selectedIds(root);
+              const resultHost = root.querySelector("[data-fleet-bulk-result]");
+              if (!presetIds.length) {
+                if (resultHost) {
+                  clearNode(resultHost);
+                  resultHost.hidden = false;
+                  resultHost.textContent = t("fleet_bulk_launch_none_selected", "Select at least one fleet preset.");
+                }
+                return;
+              }
+              const originPlanetId = parseInt(root.dataset.planetId || "0", 10) || 0;
+              if (!originPlanetId) {
+                if (resultHost) {
+                  clearNode(resultHost);
+                  resultHost.hidden = false;
+                  resultHost.textContent = reasonText("origin_not_found");
+                }
+                return;
+              }
+
+              setBusy(btn, true);
+              try {
+                if (typeof GC.fetchGameAction !== "function") throw new Error("fleet_bulk_fetch_unavailable");
+                const res = await GC.fetchGameAction("/api/fleet/bulk-launch-presets", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-GC-Dom-Planet-Id": String(originPlanetId),
+                  },
+                  body: JSON.stringify({
+                    origin_planet_id: originPlanetId,
+                    preset_ids: presetIds,
+                    request_id: makeRequestId(),
+                  }),
+                });
+                if (!res?.ok) {
+                  const payload = (res?.data && typeof res.data === "object") ? res.data : {};
+                  const msg = reasonText(res?.error || res?.reason || "generic", payload);
+                  if (resultHost) {
+                    clearNode(resultHost);
+                    resultHost.hidden = false;
+                    resultHost.textContent = msg;
+                  }
+                  if (typeof GC.showNotify === "function") GC.showNotify(msg, "error");
+                  return;
+                }
+
+                if (typeof GC.applyActionState === "function") {
+                  GC.applyActionState(res, "fleet_bulk_launch");
+                }
+                const payload = (res.data && typeof res.data === "object") ? res.data : {};
+                const summary = renderResult(root, payload);
+                if (typeof GC.showNotify === "function") {
+                  GC.showNotify(summary || t("fleet_bulk_launch_success", "Fleet bulk launch complete."), Number(payload.started_count || 0) > 0 ? "success" : "info");
+                }
+                root.querySelectorAll("[data-fleet-bulk-preset]").forEach((input) => { input.checked = false; });
+                const selectAll = root.querySelector("[data-fleet-bulk-select-all]");
+                if (selectAll) {
+                  selectAll.checked = false;
+                  selectAll.indeterminate = false;
+                }
+                if (typeof GC.refreshGameState === "function") {
+                  Promise.resolve(GC.refreshGameState()).catch(() => {});
+                }
+              } catch (_) {
+                const msg = reasonText("generic");
+                if (resultHost) {
+                  clearNode(resultHost);
+                  resultHost.hidden = false;
+                  resultHost.textContent = msg;
+                }
+                if (typeof GC.showNotify === "function") GC.showNotify(msg, "error");
+              } finally {
+                setBusy(btn, false);
+                syncButton(root);
+              }
+            };
+
+            document.addEventListener("change", (event) => {
+              const root = page();
+              if (!root) return;
+              const all = event.target.closest?.("[data-fleet-bulk-select-all]");
+              if (all && root.contains(all)) {
+                root.querySelectorAll("[data-fleet-bulk-preset]").forEach((input) => {
+                  input.checked = Boolean(all.checked);
+                });
+                syncButton(root);
+                return;
+              }
+              const preset = event.target.closest?.("[data-fleet-bulk-preset]");
+              if (preset && root.contains(preset)) syncButton(root);
+            });
+
+            document.addEventListener("click", (event) => {
+              const btn = event.target.closest?.("[data-fleet-bulk-launch]");
+              const root = page();
+              if (!btn || !root || !root.contains(btn)) return;
+              event.preventDefault();
+              launch(root, btn);
+            });
+
+            syncButton(page());
+          })();
+          '''), encoding="utf-8")
+
+          Path("tests/test_fleet_bulk_launch.py").write_text(textwrap.dedent(r'''
+          """GC-FLT-UX-02 — selected saved fleets launch with partial success."""
+
+          from __future__ import annotations
+
+          import importlib
+          import json
+          from pathlib import Path
+
+          from game.db import db
+          from game.fleet import create_preset, get_planet_ships
+          from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player
+          from tests.test_fleet import (
+              _fund_planet,
+              _planet_coords,
+              _policy_safe_username,
+              _second_colony,
+              _seed_ships,
+          )
+
+          pytest_plugins = ("tests.test_fleet",)
+          ROOT = Path(__file__).resolve().parents[1]
+
+
+          def _src(rel: str) -> str:
+              return (ROOT / rel).read_text(encoding="utf-8")
+
+
+          def _client_and_presets(monkeypatch):
+              import app as app_module
+
+              monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+              importlib.reload(app_module)
+              app_module.app.config["TESTING"] = True
+              app_module.app.config["WTF_CSRF_ENABLED"] = False
+
+              conn = db()
+              uname = _policy_safe_username("fbulk")
+              ok, _, user = create_user(uname, "test-pass-123")
+              assert ok
+              uid = int(user["id"])
+              ensure_player_and_homeworld(uid, player_name="Bulk Admiral", conn=conn)
+              origin = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+              colony = _second_colony(uid, conn=conn)
+              galaxy, system, position = _planet_coords(colony, conn=conn)
+              _fund_planet(conn.cursor(), origin)
+              _seed_ships(origin, uid, {"mule_courier": 3}, conn=conn)
+              conn.commit()
+              conn.close()
+
+              ok1, reason1, p1 = create_preset(
+                  uid,
+                  name="Supply Alpha",
+                  preset_type="transport",
+                  ships_json={"mule_courier": 2},
+                  resources_json={},
+                  speed_percent=100,
+                  mission_type="transport",
+                  target_galaxy=galaxy,
+                  target_system=system,
+                  target_position=position,
+              )
+              assert ok1, reason1
+              ok2, reason2, p2 = create_preset(
+                  uid,
+                  name="Supply Heavy",
+                  preset_type="transport",
+                  ships_json={"mule_courier": 99},
+                  resources_json={},
+                  speed_percent=100,
+                  mission_type="transport",
+                  target_galaxy=galaxy,
+                  target_system=system,
+                  target_position=position,
+              )
+              assert ok2, reason2
+              ok3, reason3, p3 = create_preset(
+                  uid,
+                  name="Incomplete",
+                  preset_type="transport",
+                  ships_json={"mule_courier": 1},
+                  resources_json={},
+                  speed_percent=100,
+                  mission_type="transport",
+              )
+              assert ok3, reason3
+
+              client = app_module.app.test_client()
+              login = client.post("/login", data={"username": uname, "password": "test-pass-123"})
+              assert login.status_code in (200, 302)
+              return app_module, client, uid, origin, [int(p1["id"]), int(p2["id"]), int(p3["id"])]
+
+
+          def test_bulk_launch_partial_success_and_skip_reasons(fleet_db, monkeypatch):
+              _app, client, uid, origin, preset_ids = _client_and_presets(monkeypatch)
+              request_id = "gc-fleet-bulk-partial-1"
+              resp = client.post(
+                  "/api/fleet/bulk-launch-presets",
+                  json={"origin_planet_id": origin, "preset_ids": preset_ids, "request_id": request_id},
+                  headers={"Content-Type": "application/json"},
+              )
+              assert resp.status_code == 200, resp.get_data(as_text=True)
+              body = resp.get_json()
+              assert body["ok"] is True
+              data = body["data"]
+              assert data["started_count"] == 1
+              assert data["skipped_count"] == 2
+              reasons = {row["reason"] for row in data["skipped"]}
+              assert "not_enough_ships" in reasons
+              assert "bulk_preset_incomplete" in reasons
+              assert data["batch_id"]
+              assert body.get("state")
+
+              verify = db()
+              try:
+                  assert int(get_planet_ships(origin, conn=verify).get("mule_courier", 0)) == 1
+                  count = verify.execute(
+                      "SELECT COUNT(*) AS n FROM fleet_movements WHERE player_id = ?;", (uid,)
+                  ).fetchone()["n"]
+                  assert int(count) == 1
+                  batch = verify.execute(
+                      "SELECT status, total_fleets FROM fleet_batches WHERE id = ?;", (data["batch_id"],)
+                  ).fetchone()
+                  assert batch["status"] == "completed"
+                  assert int(batch["total_fleets"]) == 1
+              finally:
+                  verify.close()
+
+              again = client.post(
+                  "/api/fleet/bulk-launch-presets",
+                  json={"origin_planet_id": origin, "preset_ids": preset_ids, "request_id": request_id},
+                  headers={"Content-Type": "application/json"},
+              )
+              assert again.status_code == 200
+              assert again.get_json()["data"]["started_count"] == 1
+              verify = db()
+              try:
+                  count = verify.execute(
+                      "SELECT COUNT(*) AS n FROM fleet_movements WHERE player_id = ?;", (uid,)
+                  ).fetchone()["n"]
+                  assert int(count) == 1
+              finally:
+                  verify.close()
+
+
+          def test_bulk_launch_unknown_owned_preset_is_skipped(fleet_db, monkeypatch):
+              _app, client, _uid, origin, preset_ids = _client_and_presets(monkeypatch)
+              resp = client.post(
+                  "/api/fleet/bulk-launch-presets",
+                  json={"origin_planet_id": origin, "preset_ids": [preset_ids[0], 999999999]},
+                  headers={"Content-Type": "application/json"},
+              )
+              assert resp.status_code == 200
+              data = resp.get_json()["data"]
+              assert data["started_count"] == 1
+              assert data["skipped_count"] == 1
+              assert data["skipped"][0]["reason"] == "bulk_preset_not_found"
+
+
+          def test_bulk_launch_contract_reuses_reason_mapper_and_slim_state():
+              app = _src("app.py")
+              main = _src("static/main.js")
+              tpl = _src("templates/fleet.html")
+              js = _src("static/js/fleet-bulk-launch.js")
+              module = _src("game/fleet_bulk.py")
+
+              assert '@app.route("/api/fleet/bulk-launch-presets", methods=["POST"])' in app
+              assert app.count('"api_fleet_bulk_launch_presets"') >= 3
+              assert 'GC.fleetReasonText = reasonText;' in main
+              assert 'data-fleet-bulk-launch' in tpl
+              assert 'data-fleet-bulk-preset' in tpl
+              assert 'fleet-bulk-launch.js' in tpl
+              assert 'GC.fleetReasonText' in js
+              assert 'item.textContent = `${name} — ${reasonText' in js
+              assert "send_fleet(" in module
+              assert "fleet_movements" not in module.replace("existing ``fleet_movements`` state", "")
+              assert "calculate_flight" not in module
+
+
+          def test_bulk_launch_locale_parity():
+              keys = {
+                  "fleet_bulk_launch_select", "fleet_bulk_launch_select_hint",
+                  "fleet_bulk_launch_select_all", "fleet_bulk_launch_start",
+                  "fleet_bulk_launch_hint", "fleet_bulk_launch_none_selected",
+                  "fleet_bulk_launch_summary", "fleet_bulk_launch_skipped_title",
+                  "fleet_bulk_launch_success", "fleet_error_bulk_preset_incomplete",
+                  "fleet_error_bulk_preset_not_found", "fleet_error_bulk_no_selection",
+                  "fleet_error_bulk_too_many_presets",
+              }
+              for loc in ("de", "en", "fr", "es", "pl", "tr", "ru", "pt"):
+                  data = json.loads((ROOT / f"locales/{loc}.json").read_text(encoding="utf-8"))
+                  missing = keys - set(data)
+                  assert not missing, f"{loc} missing {sorted(missing)}"
+                  assert all(str(data[k]).strip() for k in keys)
+          '''), encoding="utf-8")
+
+          # app.py: mark the new Fleet mutation as a low-latency source and add route.
+          app_path = Path("app.py")
+          app = app_path.read_text(encoding="utf-8")
+          if "def api_fleet_bulk_launch_presets():" not in app:
+              app = replace_after(
+                  app,
+                  "_FLEET_TICK_SKIP_ENDPOINTS = frozenset(",
+                  '        "api_fleet_send",\n        "api_fleet_recall",',
+                  '        "api_fleet_send",\n        "api_fleet_bulk_launch_presets",\n        "api_fleet_recall",',
+                  "fleet tick skip",
+              )
+              app = replace_after(
+                  app,
+                  "_FLEET_MUTATION_LIVE_SOURCES = frozenset(",
+                  '        "api_fleet_send",\n        "api_fleet_recall",',
+                  '        "api_fleet_send",\n        "api_fleet_bulk_launch_presets",\n        "api_fleet_recall",',
+                  "fleet mutation live sources",
+              )
+              app = replace_after(
+                  app,
+                  "def _uses_action_state_diet(finish_source: str)",
+                  '        "api_fleet_send",\n        "api_fleet_recall",',
+                  '        "api_fleet_send",\n        "api_fleet_bulk_launch_presets",\n        "api_fleet_recall",',
+                  "action state diet",
+              )
+              route = textwrap.dedent(r'''
+              @app.route("/api/fleet/bulk-launch-presets", methods=["POST"])
+              @require_login_api
+              def api_fleet_bulk_launch_presets():
+                  from game.fleet import fleet_schema_ready
+                  from game.fleet_api import fleet_err, fleet_ok
+                  from game.fleet_bulk import launch_selected_presets
+                  from game.fleet_origin import resolve_fleet_origin_planet_id
+
+                  user_id = int(session.get("user_id") or 0)
+                  if not user_id:
+                      return jsonify(fleet_err("not_logged_in")), 401
+                  if not fleet_schema_ready(db()):
+                      state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
+                      body = fleet_err("fleet_unavailable", data={"state": state})
+                      body["state"] = state
+                      return jsonify(body), 503
+
+                  data = request.get_json(silent=True) or {}
+                  request_id = _extract_request_id(data)
+                  if request_id:
+                      cached = get_idempotent_action(user_id, request_id)
+                      if cached is not None:
+                          return jsonify(cached)
+
+                  preset_ids = data.get("preset_ids") or []
+                  if not isinstance(preset_ids, list) or not preset_ids:
+                      state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
+                      body = fleet_err("bulk_no_selection", data={"state": state})
+                      body["state"] = state
+                      return jsonify(body), 400
+
+                  def _bulk(conn):
+                      dom_raw = request.headers.get("X-GC-Dom-Planet-Id") or data.get("dom_planet_id")
+                      dom_planet_id = int(dom_raw) if dom_raw not in (None, "") else None
+                      origin_id, _origin_audit = resolve_fleet_origin_planet_id(
+                          user_id,
+                          data.get("origin_planet_id"),
+                          conn=conn,
+                          dom_planet_id=dom_planet_id,
+                      )
+                      return launch_selected_presets(
+                          user_id,
+                          int(origin_id),
+                          preset_ids,
+                          conn=conn,
+                      )
+
+                  ok, reason, result = _fleet_write_transaction(_bulk)
+                  state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
+                  if ok:
+                      body = fleet_ok(result or {}, message_key="fleet_bulk_launch_success")
+                      body["state"] = state
+                      if request_id:
+                          save_idempotent_action(user_id, request_id, body)
+                      return jsonify(body)
+
+                  body = fleet_err(reason or "bulk_launch_failed", data={"state": state})
+                  body["state"] = state
+                  return jsonify(body), 400
+              ''').strip() + "\n\n\n"
+              app = replace_once(
+                  app,
+                  '@app.route("/api/fleet/recall", methods=["POST"])',
+                  route + '@app.route("/api/fleet/recall", methods=["POST"])',
+                  "insert fleet bulk route",
+              )
+          app_path.write_text(app, encoding="utf-8")
+
+          # Expose the already-central GC-FLT-UX-01 reason mapper; do not duplicate it.
+          main_path = Path("static/main.js")
+          main = main_path.read_text(encoding="utf-8")
+          if "GC.fleetReasonText = reasonText;" not in main:
+              anchor = '      return withFleetActionHint(base, reason);\n    };\n\n    const getPage = () => {'
+              replacement = '      return withFleetActionHint(base, reason);\n    };\n    GC.fleetReasonText = reasonText;\n\n    const getPage = () => {'
+              main = replace_once(main, anchor, replacement, "fleet reason mapper export")
+          main_path.write_text(main, encoding="utf-8")
+
+          # Fleet page: selectable presets + summary panel + page-scoped JS.
+          tpl_path = Path("templates/fleet.html")
+          tpl = tpl_path.read_text(encoding="utf-8")
+          if "data-fleet-bulk-preset" not in tpl:
+              tpl = replace_once(
+                  tpl,
+                  '                  <div class="fleet-preset-actions">\n                    <button type="button" class="gc-btn gc-btn-ghost" data-preset-load="{{ preset.id }}">{{ T("fleet_preset_load_btn") }}</button>',
+                  '                  <div class="fleet-preset-actions">\n                    <label class="fleet-preset-bulk-select" title="{{ T(\'fleet_bulk_launch_select_hint\') }}">\n                      <input type="checkbox" data-fleet-bulk-preset value="{{ preset.id }}" aria-label="{{ T(\'fleet_bulk_launch_select\') }}: {{ preset.name }}">\n                      <span>{{ T("fleet_bulk_launch_select") }}</span>\n                    </label>\n                    <button type="button" class="gc-btn gc-btn-ghost" data-preset-load="{{ preset.id }}">{{ T("fleet_preset_load_btn") }}</button>',
+                  "preset bulk selector",
+              )
+              panel = textwrap.dedent(r'''
+                            </ul>
+                            <div class="fleet-bulk-launch-panel" data-fleet-bulk-launch-panel>
+                              <div class="fleet-bulk-launch-controls">
+                                <label class="fleet-bulk-launch-select-all">
+                                  <input type="checkbox" data-fleet-bulk-select-all>
+                                  <span>{{ T("fleet_bulk_launch_select_all") }}</span>
+                                </label>
+                                <button type="button" class="gc-btn gc-btn-primary" data-fleet-bulk-launch disabled>
+                                  {{ T("fleet_bulk_launch_start") }}
+                                </button>
+                              </div>
+                              <p class="hint fleet-bulk-launch-hint">{{ T("fleet_bulk_launch_hint") }}</p>
+                              <div class="fleet-bulk-launch-result" data-fleet-bulk-result hidden role="status" aria-live="polite"></div>
+                            </div>
+              ''').strip("\n")
+              tpl = replace_once(
+                  tpl,
+                  '              </ul>\n            </div>\n            <div class="fleet-ogame-footer-col">',
+                  panel + '\n            </div>\n            <div class="fleet-ogame-footer-col">',
+                  "bulk panel",
+              )
+          if "fleet-bulk-launch.js" not in tpl:
+              tpl = tpl.rstrip() + textwrap.dedent(r'''
+
+              {% block extra_scripts %}
+              {{ super() }}
+              <script src="{{ url_for('static', filename='js/fleet-bulk-launch.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+              {% endblock %}
+              ''')
+          tpl_path.write_text(tpl, encoding="utf-8")
+
+          css_path = Path("static/style.css")
+          css = css_path.read_text(encoding="utf-8")
+          marker = "/* GC-FLT-UX-02 — bulk preset launch */"
+          if marker not in css:
+              css += textwrap.dedent(r'''
+
+              /* GC-FLT-UX-02 — bulk preset launch */
+              #fleet-page .fleet-preset-bulk-select,
+              #fleet-page .fleet-bulk-launch-select-all {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                cursor: pointer;
+              }
+              #fleet-page .fleet-bulk-launch-panel {
+                margin-top: 0.75rem;
+                padding-top: 0.75rem;
+                border-top: 1px solid var(--gc-border, rgba(255, 255, 255, 0.14));
+              }
+              #fleet-page .fleet-bulk-launch-controls {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 0.65rem;
+              }
+              #fleet-page .fleet-bulk-launch-hint {
+                margin: 0.55rem 0 0;
+              }
+              #fleet-page .fleet-bulk-launch-result {
+                margin-top: 0.65rem;
+                padding: 0.65rem 0.75rem;
+                border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.14));
+                border-radius: 0;
+              }
+              #fleet-page .fleet-bulk-launch-summary,
+              #fleet-page .fleet-bulk-launch-skipped-title {
+                display: block;
+              }
+              #fleet-page .fleet-bulk-launch-skipped-title {
+                margin-top: 0.55rem;
+              }
+              #fleet-page .fleet-bulk-launch-skipped-list {
+                margin: 0.35rem 0 0;
+                padding-left: 1.15rem;
+              }
+              #fleet-page .fleet-bulk-launch-skipped-list li + li {
+                margin-top: 0.25rem;
+              }
+              @media (max-width: 640px) {
+                #fleet-page .fleet-bulk-launch-controls {
+                  align-items: stretch;
+                  flex-direction: column;
+                }
+                #fleet-page [data-fleet-bulk-launch] {
+                  width: 100%;
+                }
+              }
+              ''')
+          css_path.write_text(css, encoding="utf-8")
+
+          locale_values = {
+              "de": {
+                  "fleet_bulk_launch_select": "Auswählen",
+                  "fleet_bulk_launch_select_hint": "Dieses gespeicherte Flotten-Preset in den Sammelstart aufnehmen.",
+                  "fleet_bulk_launch_select_all": "Alle Presets auswählen",
+                  "fleet_bulk_launch_start": "Alle ausgewählten sendbaren starten",
+                  "fleet_bulk_launch_hint": "Startbare Presets fliegen los. Geblockte Presets werden übersprungen und mit Grund aufgeführt.",
+                  "fleet_bulk_launch_none_selected": "Wähle mindestens ein Flotten-Preset aus.",
+                  "fleet_bulk_launch_summary": "{started} gestartet · {skipped} übersprungen",
+                  "fleet_bulk_launch_skipped_title": "Übersprungen",
+                  "fleet_bulk_launch_success": "Flotten-Sammelstart abgeschlossen.",
+                  "fleet_error_bulk_preset_incomplete": "Dieses Preset hat noch keine vollständige Mission, kein vollständiges Ziel oder keine Schiffe gespeichert.",
+                  "fleet_error_bulk_preset_not_found": "Dieses Preset wurde nicht gefunden oder gehört nicht mehr zu deinem Konto.",
+                  "fleet_error_bulk_no_selection": "Es wurden keine Flotten-Presets für den Sammelstart ausgewählt.",
+                  "fleet_error_bulk_too_many_presets": "Zu viele Presets für einen Sammelstart. Wähle höchstens 50 aus."
+              },
+              "en": {
+                  "fleet_bulk_launch_select": "Select",
+                  "fleet_bulk_launch_select_hint": "Include this saved fleet preset in the bulk launch.",
+                  "fleet_bulk_launch_select_all": "Select all presets",
+                  "fleet_bulk_launch_start": "Launch all selected eligible fleets",
+                  "fleet_bulk_launch_hint": "Eligible presets launch immediately. Blocked presets are skipped and listed with a reason.",
+                  "fleet_bulk_launch_none_selected": "Select at least one fleet preset.",
+                  "fleet_bulk_launch_summary": "{started} started · {skipped} skipped",
+                  "fleet_bulk_launch_skipped_title": "Skipped",
+                  "fleet_bulk_launch_success": "Fleet bulk launch complete.",
+                  "fleet_error_bulk_preset_incomplete": "This preset does not yet have a complete mission, target, or ship selection saved.",
+                  "fleet_error_bulk_preset_not_found": "This preset was not found or no longer belongs to your account.",
+                  "fleet_error_bulk_no_selection": "No fleet presets were selected for bulk launch.",
+                  "fleet_error_bulk_too_many_presets": "Too many presets for one bulk launch. Select at most 50."
+              },
+              "fr": {
+                  "fleet_bulk_launch_select": "Sélectionner",
+                  "fleet_bulk_launch_select_hint": "Inclure ce préréglage de flotte enregistré dans le lancement groupé.",
+                  "fleet_bulk_launch_select_all": "Sélectionner tous les préréglages",
+                  "fleet_bulk_launch_start": "Lancer toutes les flottes sélectionnées éligibles",
+                  "fleet_bulk_launch_hint": "Les préréglages éligibles partent immédiatement. Les autres sont ignorés avec leur raison.",
+                  "fleet_bulk_launch_none_selected": "Sélectionnez au moins un préréglage de flotte.",
+                  "fleet_bulk_launch_summary": "{started} lancées · {skipped} ignorées",
+                  "fleet_bulk_launch_skipped_title": "Ignorées",
+                  "fleet_bulk_launch_success": "Lancement groupé des flottes terminé.",
+                  "fleet_error_bulk_preset_incomplete": "Ce préréglage n’a pas encore de mission, de cible ou de sélection de vaisseaux complète.",
+                  "fleet_error_bulk_preset_not_found": "Ce préréglage est introuvable ou n’appartient plus à votre compte.",
+                  "fleet_error_bulk_no_selection": "Aucun préréglage de flotte n’a été sélectionné pour le lancement groupé.",
+                  "fleet_error_bulk_too_many_presets": "Trop de préréglages pour un lancement groupé. Sélectionnez-en au maximum 50."
+              },
+              "es": {
+                  "fleet_bulk_launch_select": "Seleccionar",
+                  "fleet_bulk_launch_select_hint": "Incluir este preset de flota guardado en el lanzamiento masivo.",
+                  "fleet_bulk_launch_select_all": "Seleccionar todos los presets",
+                  "fleet_bulk_launch_start": "Lanzar todas las flotas seleccionadas aptas",
+                  "fleet_bulk_launch_hint": "Los presets aptos salen de inmediato. Los bloqueados se omiten y muestran el motivo.",
+                  "fleet_bulk_launch_none_selected": "Selecciona al menos un preset de flota.",
+                  "fleet_bulk_launch_summary": "{started} iniciadas · {skipped} omitidas",
+                  "fleet_bulk_launch_skipped_title": "Omitidas",
+                  "fleet_bulk_launch_success": "Lanzamiento masivo de flotas completado.",
+                  "fleet_error_bulk_preset_incomplete": "Este preset aún no tiene guardados una misión, un objetivo o una selección de naves completos.",
+                  "fleet_error_bulk_preset_not_found": "Este preset no se encontró o ya no pertenece a tu cuenta.",
+                  "fleet_error_bulk_no_selection": "No se seleccionaron presets de flota para el lanzamiento masivo.",
+                  "fleet_error_bulk_too_many_presets": "Demasiados presets para un lanzamiento masivo. Selecciona como máximo 50."
+              },
+              "pl": {
+                  "fleet_bulk_launch_select": "Wybierz",
+                  "fleet_bulk_launch_select_hint": "Dodaj ten zapisany preset floty do startu zbiorczego.",
+                  "fleet_bulk_launch_select_all": "Wybierz wszystkie presety",
+                  "fleet_bulk_launch_start": "Wyślij wszystkie wybrane możliwe floty",
+                  "fleet_bulk_launch_hint": "Możliwe presety wystartują od razu. Zablokowane zostaną pominięte z podaniem powodu.",
+                  "fleet_bulk_launch_none_selected": "Wybierz co najmniej jeden preset floty.",
+                  "fleet_bulk_launch_summary": "{started} wysłano · {skipped} pominięto",
+                  "fleet_bulk_launch_skipped_title": "Pominięte",
+                  "fleet_bulk_launch_success": "Zbiorczy start flot zakończony.",
+                  "fleet_error_bulk_preset_incomplete": "Ten preset nie ma jeszcze kompletnej misji, celu lub zapisanej floty.",
+                  "fleet_error_bulk_preset_not_found": "Nie znaleziono tego presetu albo nie należy już do twojego konta.",
+                  "fleet_error_bulk_no_selection": "Nie wybrano presetów floty do startu zbiorczego.",
+                  "fleet_error_bulk_too_many_presets": "Za dużo presetów w jednym starcie zbiorczym. Wybierz maksymalnie 50."
+              },
+              "tr": {
+                  "fleet_bulk_launch_select": "Seç",
+                  "fleet_bulk_launch_select_hint": "Bu kayıtlı filo ön ayarını toplu fırlatmaya dahil et.",
+                  "fleet_bulk_launch_select_all": "Tüm ön ayarları seç",
+                  "fleet_bulk_launch_start": "Seçilen uygun filoların tümünü gönder",
+                  "fleet_bulk_launch_hint": "Uygun ön ayarlar hemen yola çıkar. Engellenenler atlanır ve nedenleri gösterilir.",
+                  "fleet_bulk_launch_none_selected": "En az bir filo ön ayarı seç.",
+                  "fleet_bulk_launch_summary": "{started} gönderildi · {skipped} atlandı",
+                  "fleet_bulk_launch_skipped_title": "Atlananlar",
+                  "fleet_bulk_launch_success": "Toplu filo gönderimi tamamlandı.",
+                  "fleet_error_bulk_preset_incomplete": "Bu ön ayarda henüz eksiksiz bir görev, hedef veya gemi seçimi kayıtlı değil.",
+                  "fleet_error_bulk_preset_not_found": "Bu ön ayar bulunamadı veya artık hesabına ait değil.",
+                  "fleet_error_bulk_no_selection": "Toplu gönderim için hiçbir filo ön ayarı seçilmedi.",
+                  "fleet_error_bulk_too_many_presets": "Tek bir toplu gönderim için çok fazla ön ayar var. En fazla 50 seç."
+              },
+              "ru": {
+                  "fleet_bulk_launch_select": "Выбрать",
+                  "fleet_bulk_launch_select_hint": "Добавить этот сохранённый шаблон флота в массовый запуск.",
+                  "fleet_bulk_launch_select_all": "Выбрать все шаблоны",
+                  "fleet_bulk_launch_start": "Запустить все выбранные доступные флоты",
+                  "fleet_bulk_launch_hint": "Доступные шаблоны отправятся сразу. Заблокированные будут пропущены с указанием причины.",
+                  "fleet_bulk_launch_none_selected": "Выберите хотя бы один шаблон флота.",
+                  "fleet_bulk_launch_summary": "{started} запущено · {skipped} пропущено",
+                  "fleet_bulk_launch_skipped_title": "Пропущено",
+                  "fleet_bulk_launch_success": "Массовый запуск флотов завершён.",
+                  "fleet_error_bulk_preset_incomplete": "В этом шаблоне ещё не сохранены полные данные миссии, цели или состава кораблей.",
+                  "fleet_error_bulk_preset_not_found": "Этот шаблон не найден или больше не принадлежит вашему аккаунту.",
+                  "fleet_error_bulk_no_selection": "Для массового запуска не выбрано ни одного шаблона флота.",
+                  "fleet_error_bulk_too_many_presets": "Слишком много шаблонов для одного массового запуска. Выберите не более 50."
+              },
+              "pt": {
+                  "fleet_bulk_launch_select": "Selecionar",
+                  "fleet_bulk_launch_select_hint": "Incluir este preset de frota salvo no lançamento em massa.",
+                  "fleet_bulk_launch_select_all": "Selecionar todos os presets",
+                  "fleet_bulk_launch_start": "Lançar todas as frotas selecionadas elegíveis",
+                  "fleet_bulk_launch_hint": "Os presets elegíveis partem imediatamente. Os bloqueados são ignorados e mostram o motivo.",
+                  "fleet_bulk_launch_none_selected": "Selecione pelo menos um preset de frota.",
+                  "fleet_bulk_launch_summary": "{started} lançadas · {skipped} ignoradas",
+                  "fleet_bulk_launch_skipped_title": "Ignoradas",
+                  "fleet_bulk_launch_success": "Lançamento em massa de frotas concluído.",
+                  "fleet_error_bulk_preset_incomplete": "Este preset ainda não tem missão, alvo ou seleção de naves completos salvos.",
+                  "fleet_error_bulk_preset_not_found": "Este preset não foi encontrado ou já não pertence à sua conta.",
+                  "fleet_error_bulk_no_selection": "Nenhum preset de frota foi selecionado para o lançamento em massa.",
+                  "fleet_error_bulk_too_many_presets": "Presets demais para um único lançamento em massa. Selecione no máximo 50."
+              },
+          }
+          for loc, values in locale_values.items():
+              path = Path(f"locales/{loc}.json")
+              data = json.loads(path.read_text(encoding="utf-8"))
+              data.update(values)
+              path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          docs_path = Path("docs/FLEET_SYSTEM.md")
+          docs = docs_path.read_text(encoding="utf-8")
+          if "## GC-FLT-UX-02 — Bulk preset launch" not in docs:
+              docs += textwrap.dedent(r'''
+
+              ## GC-FLT-UX-02 — Bulk preset launch
+
+              - `POST /api/fleet/bulk-launch-presets` launches a player-selected set of existing `fleet_presets` from the context/origin planet.
+              - The endpoint is **partial-success**: every complete candidate is passed sequentially through canonical `send_fleet()`; a normal Fleet validation failure skips only that preset.
+              - No Fleet rules are duplicated: slot, ship, fuel, cargo, target, protection, diplomacy, mission and attack-limit checks remain owned by `game/fleet.py`.
+              - Successful movements remain canonical `fleet_movements`; an existing `fleet_batches` row with `batch_type=custom` groups the successful launch attempt for traceability.
+              - Response: `started_count`, `skipped_count`, `started[]`, `skipped[]`. Skip rows expose only the reason key plus the same small safe context used by GC-FLT-UX-01.
+              - Client copy reuses the central GC-FLT-UX-01 reason mapper; raw internal reason keys are never rendered.
+              - Bulk requests support `request_id` idempotency and return the same slim Fleet mutation `state` used by send/recall.
+              ''')
+          docs_path.write_text(docs, encoding="utf-8")
+
+          # The implementation workflow is a one-shot helper; remove it from the feature diff.
+          Path(".github/workflows/gc-fleet-bulk-launch.yml").unlink(missing_ok=True)
+          PY
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
+      - name: Focused tests
+        run: |
+          python -m py_compile game/fleet_bulk.py
+          node --check static/js/fleet-bulk-launch.js
+          python -m pytest tests/test_fleet_bulk_launch.py tests/test_fleet_action_reasons.py tests/test_gc_perf_fleet_send_001.py -v
+          python -m pytest tests/test_fleet.py -q -k "preset or send or slot"
+          git diff --check
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --stat
+          git commit -m "feat(fleet): launch eligible saved fleets in bulk"
+          git push origin HEAD:feature/fleet-bulk-launch
