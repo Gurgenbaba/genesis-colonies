@@ -93,7 +93,7 @@ css_append = r'''
 '''
 if "GC-PE-UX-03" in css_text:
     raise SystemExit("GC-PE-UX-03 CSS already present")
-css.write_text(css_text.rstrip() + css_append + "\n", encoding="utf-8")
+css.write_text(css_text.rstrip() + css_append.rstrip() + "\n", encoding="utf-8")
 
 tests = ROOT / "tests" / "test_gc_pe_clarity.py"
 test_text = tests.read_text(encoding="utf-8")
