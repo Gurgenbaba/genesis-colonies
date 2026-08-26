@@ -2,6 +2,7 @@
 -- GC-PE-MECH-01: remove silently inert/deferred PE mechanics from the active
 -- definition state. Historical seed 017 remains untouched; future features may
 -- reintroduce deferred keys only together with a real runtime consumer.
+-- Historical snapshots without the PE definition module are intentionally a no-op.
 
 UPDATE pe_research_definitions
 SET mechanics_json = '{}'
