@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "Çıkış gezegeninde kullanılabilir casusluk yetenekli bir gemi yok.",
   "fleet_error_cargo_required_for_collect": "Toplama görevleri yük kapasitesine sahip gemiler gerektirir.",
   "fleet_error_cargo_required_for_recycle": "Geri dönüşüm uygun ve yük kapasitesi olan reclaimer gemileri gerektirir.",
-  "fleet_error_recycle_no_departure_cargo": "Geri dönüşüm görevi kalkışta normal yük taşıyamaz."
+  "fleet_error_recycle_no_departure_cargo": "Geri dönüşüm görevi kalkışta normal yük taşıyamaz.",
+  "fleet_bulk_launch_select": "Seç",
+  "fleet_bulk_launch_select_hint": "Bu kayıtlı filo ön ayarını toplu fırlatmaya dahil et.",
+  "fleet_bulk_launch_select_all": "Tüm ön ayarları seç",
+  "fleet_bulk_launch_start": "Seçilen uygun filoların tümünü gönder",
+  "fleet_bulk_launch_hint": "Uygun ön ayarlar hemen yola çıkar. Engellenenler atlanır ve nedenleri gösterilir.",
+  "fleet_bulk_launch_none_selected": "En az bir filo ön ayarı seç.",
+  "fleet_bulk_launch_summary": "{started} gönderildi · {skipped} atlandı",
+  "fleet_bulk_launch_skipped_title": "Atlananlar",
+  "fleet_bulk_launch_success": "Toplu filo gönderimi tamamlandı.",
+  "fleet_error_bulk_preset_incomplete": "Bu ön ayarda henüz eksiksiz bir görev, hedef veya gemi seçimi kayıtlı değil.",
+  "fleet_error_bulk_preset_not_found": "Bu ön ayar bulunamadı veya artık hesabına ait değil.",
+  "fleet_error_bulk_no_selection": "Toplu gönderim için hiçbir filo ön ayarı seçilmedi.",
+  "fleet_error_bulk_too_many_presets": "Tek bir toplu gönderim için çok fazla ön ayar var. En fazla 50 seç."
 }

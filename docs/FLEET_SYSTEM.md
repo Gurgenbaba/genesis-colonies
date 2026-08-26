@@ -468,3 +468,14 @@ Schiffe pro Welt, Bewegungen imperiumsweit. Orbitalwerft nötig. Missionen: Tran
 - Unknown/internal reason codes never render raw; the UI falls back to `fleet_error_generic`.
 - `/api/fleet/send` forwards only small safe context needed for actionable copy (attack limit, noob protection, troop berths), never the full validator payload.
 - The same reason mapper is used for preview and final server rejection, forming the contract for a later partial/bulk “launch eligible fleets” flow with per-fleet skip reasons.
+
+
+## GC-FLT-UX-02 — Bulk preset launch
+
+- `POST /api/fleet/bulk-launch-presets` launches a player-selected set of existing `fleet_presets` from the context/origin planet.
+- The endpoint is **partial-success**: every complete candidate is passed sequentially through canonical `send_fleet()`; a normal Fleet validation failure skips only that preset.
+- No Fleet rules are duplicated: slot, ship, fuel, cargo, target, protection, diplomacy, mission and attack-limit checks remain owned by `game/fleet.py`.
+- Successful movements remain canonical `fleet_movements`; an existing `fleet_batches` row with `batch_type=custom` groups the successful launch attempt for traceability.
+- Response: `started_count`, `skipped_count`, `started[]`, `skipped[]`. Skip rows expose only the reason key plus the same small safe context used by GC-FLT-UX-01.
+- Client copy reuses the central GC-FLT-UX-01 reason mapper; raw internal reason keys are never rendered.
+- Bulk requests support `request_id` idempotency and return the same slim Fleet mutation `state` used by send/recall.

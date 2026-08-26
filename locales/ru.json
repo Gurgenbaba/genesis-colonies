@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "На планете отправления нет доступного корабля с возможностью шпионажа.",
   "fleet_error_cargo_required_for_collect": "Для миссий сбора нужны корабли с грузовым отсеком.",
   "fleet_error_cargo_required_for_recycle": "Для переработки нужны подходящие reclaimers с грузовым отсеком.",
-  "fleet_error_recycle_no_departure_cargo": "Миссия переработки не может брать обычный груз при отправлении."
+  "fleet_error_recycle_no_departure_cargo": "Миссия переработки не может брать обычный груз при отправлении.",
+  "fleet_bulk_launch_select": "Выбрать",
+  "fleet_bulk_launch_select_hint": "Добавить этот сохранённый шаблон флота в массовый запуск.",
+  "fleet_bulk_launch_select_all": "Выбрать все шаблоны",
+  "fleet_bulk_launch_start": "Запустить все выбранные доступные флоты",
+  "fleet_bulk_launch_hint": "Доступные шаблоны отправятся сразу. Заблокированные будут пропущены с указанием причины.",
+  "fleet_bulk_launch_none_selected": "Выберите хотя бы один шаблон флота.",
+  "fleet_bulk_launch_summary": "{started} запущено · {skipped} пропущено",
+  "fleet_bulk_launch_skipped_title": "Пропущено",
+  "fleet_bulk_launch_success": "Массовый запуск флотов завершён.",
+  "fleet_error_bulk_preset_incomplete": "В этом шаблоне ещё не сохранены полные данные миссии, цели или состава кораблей.",
+  "fleet_error_bulk_preset_not_found": "Этот шаблон не найден или больше не принадлежит вашему аккаунту.",
+  "fleet_error_bulk_no_selection": "Для массового запуска не выбрано ни одного шаблона флота.",
+  "fleet_error_bulk_too_many_presets": "Слишком много шаблонов для одного массового запуска. Выберите не более 50."
 }

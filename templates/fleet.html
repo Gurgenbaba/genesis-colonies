@@ -529,6 +529,10 @@
                   <span class="fleet-preset-type">{{ T("fleet_preset_type_" ~ preset.preset_type) }}</span>
                   <span class="fleet-preset-name">{{ preset.name }}</span>
                   <div class="fleet-preset-actions">
+                    <label class="fleet-preset-bulk-select" title="{{ T('fleet_bulk_launch_select_hint') }}">
+                      <input type="checkbox" data-fleet-bulk-preset value="{{ preset.id }}" aria-label="{{ T('fleet_bulk_launch_select') }}: {{ preset.name }}">
+                      <span>{{ T("fleet_bulk_launch_select") }}</span>
+                    </label>
                     <button type="button" class="gc-btn gc-btn-ghost" data-preset-load="{{ preset.id }}">{{ T("fleet_preset_load_btn") }}</button>
                     <button type="button" class="gc-btn gc-btn-ghost gc-btn-danger" data-preset-delete="{{ preset.id }}">{{ T("fleet_preset_delete") }}</button>
                   </div>
@@ -536,7 +540,20 @@
                 {% else %}
                 <li class="fleet-preset-empty">{{ T("fleet_no_presets") }}</li>
                 {% endfor %}
-              </ul>
+</ul>
+<div class="fleet-bulk-launch-panel" data-fleet-bulk-launch-panel>
+  <div class="fleet-bulk-launch-controls">
+    <label class="fleet-bulk-launch-select-all">
+      <input type="checkbox" data-fleet-bulk-select-all>
+      <span>{{ T("fleet_bulk_launch_select_all") }}</span>
+    </label>
+    <button type="button" class="gc-btn gc-btn-primary" data-fleet-bulk-launch disabled>
+      {{ T("fleet_bulk_launch_start") }}
+    </button>
+  </div>
+  <p class="hint fleet-bulk-launch-hint">{{ T("fleet_bulk_launch_hint") }}</p>
+  <div class="fleet-bulk-launch-result" data-fleet-bulk-result hidden role="status" aria-live="polite"></div>
+</div>
             </div>
             <div class="fleet-ogame-footer-col">
               <details class="fleet-mass-expo-legacy" data-fleet-mass-expo-legacy>
@@ -585,4 +602,9 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/fleet-bulk-launch.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}

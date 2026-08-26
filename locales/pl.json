@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "Na planecie startowej nie ma dostępnego statku zdolnego do szpiegowania.",
   "fleet_error_cargo_required_for_collect": "Misje zbierania wymagają statków z przestrzenią ładunkową.",
   "fleet_error_cargo_required_for_recycle": "Recykling wymaga odpowiednich reclaimerów z przestrzenią ładunkową.",
-  "fleet_error_recycle_no_departure_cargo": "Misja recyklingu nie może zabierać zwykłego ładunku przy starcie."
+  "fleet_error_recycle_no_departure_cargo": "Misja recyklingu nie może zabierać zwykłego ładunku przy starcie.",
+  "fleet_bulk_launch_select": "Wybierz",
+  "fleet_bulk_launch_select_hint": "Dodaj ten zapisany preset floty do startu zbiorczego.",
+  "fleet_bulk_launch_select_all": "Wybierz wszystkie presety",
+  "fleet_bulk_launch_start": "Wyślij wszystkie wybrane możliwe floty",
+  "fleet_bulk_launch_hint": "Możliwe presety wystartują od razu. Zablokowane zostaną pominięte z podaniem powodu.",
+  "fleet_bulk_launch_none_selected": "Wybierz co najmniej jeden preset floty.",
+  "fleet_bulk_launch_summary": "{started} wysłano · {skipped} pominięto",
+  "fleet_bulk_launch_skipped_title": "Pominięte",
+  "fleet_bulk_launch_success": "Zbiorczy start flot zakończony.",
+  "fleet_error_bulk_preset_incomplete": "Ten preset nie ma jeszcze kompletnej misji, celu lub zapisanej floty.",
+  "fleet_error_bulk_preset_not_found": "Nie znaleziono tego presetu albo nie należy już do twojego konta.",
+  "fleet_error_bulk_no_selection": "Nie wybrano presetów floty do startu zbiorczego.",
+  "fleet_error_bulk_too_many_presets": "Za dużo presetów w jednym starcie zbiorczym. Wybierz maksymalnie 50."
 }

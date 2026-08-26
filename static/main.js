@@ -26682,6 +26682,7 @@
         : tt("fleet_error_generic", "Fleet action failed.");
       return withFleetActionHint(base, reason);
     };
+    GC.fleetReasonText = reasonText;
 
     const getPage = () => {
       const page = document.getElementById("fleet-page");

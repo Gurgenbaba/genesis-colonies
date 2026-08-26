@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "Auf dem Startplaneten ist kein verfügbares Spionageschiff vorhanden.",
   "fleet_error_cargo_required_for_collect": "Zum Einsammeln werden Schiffe mit Frachtraum benötigt.",
   "fleet_error_cargo_required_for_recycle": "Zum Recyceln werden geeignete Reclaimer mit Frachtraum benötigt.",
-  "fleet_error_recycle_no_departure_cargo": "Bei einer Recycling-Mission kann keine normale Fracht beim Abflug geladen werden."
+  "fleet_error_recycle_no_departure_cargo": "Bei einer Recycling-Mission kann keine normale Fracht beim Abflug geladen werden.",
+  "fleet_bulk_launch_select": "Auswählen",
+  "fleet_bulk_launch_select_hint": "Dieses gespeicherte Flotten-Preset in den Sammelstart aufnehmen.",
+  "fleet_bulk_launch_select_all": "Alle Presets auswählen",
+  "fleet_bulk_launch_start": "Alle ausgewählten sendbaren starten",
+  "fleet_bulk_launch_hint": "Startbare Presets fliegen los. Geblockte Presets werden übersprungen und mit Grund aufgeführt.",
+  "fleet_bulk_launch_none_selected": "Wähle mindestens ein Flotten-Preset aus.",
+  "fleet_bulk_launch_summary": "{started} gestartet · {skipped} übersprungen",
+  "fleet_bulk_launch_skipped_title": "Übersprungen",
+  "fleet_bulk_launch_success": "Flotten-Sammelstart abgeschlossen.",
+  "fleet_error_bulk_preset_incomplete": "Dieses Preset hat noch keine vollständige Mission, kein vollständiges Ziel oder keine Schiffe gespeichert.",
+  "fleet_error_bulk_preset_not_found": "Dieses Preset wurde nicht gefunden oder gehört nicht mehr zu deinem Konto.",
+  "fleet_error_bulk_no_selection": "Es wurden keine Flotten-Presets für den Sammelstart ausgewählt.",
+  "fleet_error_bulk_too_many_presets": "Zu viele Presets für einen Sammelstart. Wähle höchstens 50 aus."
 }

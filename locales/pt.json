@@ -8959,5 +8959,18 @@
   "fleet_error_no_spy_probes_available": "Não existe nenhuma nave com capacidade de espionagem disponível no planeta de origem.",
   "fleet_error_cargo_required_for_collect": "As missões de recolha requerem naves com capacidade de carga.",
   "fleet_error_cargo_required_for_recycle": "A reciclagem requer reclaimers adequados com capacidade de carga.",
-  "fleet_error_recycle_no_departure_cargo": "Uma missão de reciclagem não pode levar carga normal na partida."
+  "fleet_error_recycle_no_departure_cargo": "Uma missão de reciclagem não pode levar carga normal na partida.",
+  "fleet_bulk_launch_select": "Selecionar",
+  "fleet_bulk_launch_select_hint": "Incluir este preset de frota salvo no lançamento em massa.",
+  "fleet_bulk_launch_select_all": "Selecionar todos os presets",
+  "fleet_bulk_launch_start": "Lançar todas as frotas selecionadas elegíveis",
+  "fleet_bulk_launch_hint": "Os presets elegíveis partem imediatamente. Os bloqueados são ignorados e mostram o motivo.",
+  "fleet_bulk_launch_none_selected": "Selecione pelo menos um preset de frota.",
+  "fleet_bulk_launch_summary": "{started} lançadas · {skipped} ignoradas",
+  "fleet_bulk_launch_skipped_title": "Ignoradas",
+  "fleet_bulk_launch_success": "Lançamento em massa de frotas concluído.",
+  "fleet_error_bulk_preset_incomplete": "Este preset ainda não tem missão, alvo ou seleção de naves completos salvos.",
+  "fleet_error_bulk_preset_not_found": "Este preset não foi encontrado ou já não pertence à sua conta.",
+  "fleet_error_bulk_no_selection": "Nenhum preset de frota foi selecionado para o lançamento em massa.",
+  "fleet_error_bulk_too_many_presets": "Presets demais para um único lançamento em massa. Selecione no máximo 50."
 }
