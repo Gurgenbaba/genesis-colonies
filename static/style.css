@@ -53745,3 +53745,11 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 #alliance-page [data-alliance-panel="diplomacy"] .alliance-hub-dip-outgoing {
   margin-top: 14px;
 }
+
+
+/* GC-FLT-UX-01: actionable fleet launch reasons. */
+#fleet-page .fleet-launch-reason {
+  border-radius: 0;
+  margin: 0;
+  line-height: 1.4;
+}

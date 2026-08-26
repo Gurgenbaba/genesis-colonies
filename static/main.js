@@ -26586,6 +26586,49 @@
     const tt = (key, fallback) => t(key, fallback);
     const fleetPayload = (res) => ((res && res.data && typeof res.data === "object") ? res.data : res) || {};
     const apiError = (res) => (res && (res.error || res.reason)) || "generic";
+    const fleetReasonHintKey = (reason) => {
+      const key = String(reason || "generic");
+      const groups = {
+        fleet_action_hint_ships: new Set([
+          "no_ships", "not_enough_ships", "unknown_ship", "no_combat_ships_available",
+          "no_spy_probes_available", "spy_requires_probe", "colonize_requires_ark",
+          "recycle_requires_reclaimer", "mass_expo_no_expedition_ships",
+        ]),
+        fleet_action_hint_slots: new Set(["fleet_slots_full", "mass_expo_slots_reserved"]),
+        fleet_action_hint_resources: new Set([
+          "not_enough_resources", "no_resources", "not_enough_cargo",
+          "cargo_required_for_resources", "cargo_required_for_collect", "cargo_required_for_recycle",
+          "invalid_target_resources", "no_deliverable_resources", "recycle_no_departure_cargo",
+        ]),
+        fleet_action_hint_target: new Set([
+          "invalid_target", "invalid_target_planet", "invalid_world_key", "same_origin_target",
+          "coordinate_occupied", "no_debris_at_target", "no_asteroid_at_target",
+          "pirate_base_inactive", "world_boss_inactive",
+        ]),
+        fleet_action_hint_relation: new Set([
+          "mission_blocked_nap", "noob_protection_blocked", "vacation_target_protected",
+        ]),
+        fleet_action_hint_mission: new Set([
+          "invalid_mission", "mission_blocked_not_expedition_slot", "mission_locked",
+          "troops_attack_only", "use_world_boss_attack", "vault_ground_raid",
+        ]),
+        fleet_action_hint_troops: new Set([
+          "not_enough_troop_berths", "not_enough_troops", "troops_unavailable",
+        ]),
+        fleet_action_hint_wait: new Set(["attack_limit_reached"]),
+      };
+      for (const [hintKey, reasons] of Object.entries(groups)) {
+        if (reasons.has(key)) return hintKey;
+      }
+      return "";
+    };
+    const withFleetActionHint = (message, reason) => {
+      const hintKey = fleetReasonHintKey(reason);
+      if (!hintKey) return message;
+      const hint = tt(hintKey, "");
+      if (!hint || hint === hintKey || String(message).includes(hint)) return message;
+      return `${message} ${hint}`.trim();
+    };
     const reasonText = (reason, preview) => {
       if (reason === "mission_locked") {
         const lock = preview?.mission_lock || {};
@@ -26593,14 +26636,17 @@
         if (until > 0) {
           const when = new Date(until * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
           const tpl = tt("fleet_mission_locked_until", "This mission is locked until {datetime}.");
-          return tpl.replace("{datetime}", when);
+          return withFleetActionHint(tpl.replace("{datetime}", when), reason);
         }
-        return tt("fleet_mission_locked", "This mission is currently locked.");
+        return withFleetActionHint(tt("fleet_mission_locked", "This mission is currently locked."), reason);
       }
       if (reason === "attack_limit_reached") {
-        return tt(
-          "fleet_attack_limit_reached",
-          "Attack limit reached: you can only attack the same planet 5 times within 24 hours."
+        return withFleetActionHint(
+          tt(
+            "fleet_attack_limit_reached",
+            "Attack limit reached: you can only attack the same planet 5 times within 24 hours."
+          ),
+          reason
         );
       }
       if (reason === "noob_protection_blocked") {
@@ -26609,12 +26655,32 @@
           "fleet_noob_protection_blocked",
           "Attack blocked: player scores must be within {factor}× of each other (you: {attacker_score}, target: {defender_score})."
         );
-        return tpl
+        const msg = tpl
           .replace("{factor}", String(np.factor || 5))
           .replace("{attacker_score}", fmtNumber(np.attacker_score || 0))
           .replace("{defender_score}", fmtNumber(np.defender_score || 0));
+        return withFleetActionHint(msg, reason);
       }
-      return tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
+      if (reason === "not_enough_troop_berths") {
+        const needed = Number(preview?.troop_slots_needed || 0);
+        const berths = Number(preview?.troop_berths || 0);
+        if (needed > 0) {
+          const tpl = tt(
+            "fleet_error_not_enough_troop_berths_detail",
+            "Selected troops need {needed} berths, but this fleet only has {available}."
+          );
+          return withFleetActionHint(
+            tpl.replace("{needed}", fmtNumber(needed)).replace("{available}", fmtNumber(berths)),
+            reason
+          );
+        }
+      }
+      const translatedKey = `fleet_error_${String(reason || "generic")}`;
+      const translated = tt(translatedKey, "");
+      const base = translated && translated !== translatedKey
+        ? translated
+        : tt("fleet_error_generic", "Fleet action failed.");
+      return withFleetActionHint(base, reason);
     };
 
     const getPage = () => {
@@ -28140,6 +28206,7 @@
       const previewMissionBadge = page.querySelector("[data-preview-mission-badge]");
       const previewArrival = page.querySelector("[data-preview-arrival]");
       const missionFeedback = page.querySelector("[data-fleet-mission-feedback]");
+      const errorEl = page.querySelector("[data-fleet-error]");
       const sendBtn = page.querySelector("[data-fleet-send-btn]");
       const ships = getShipsSelection(page);
       enforceFleetUrlMissionLock(page);
@@ -28183,6 +28250,10 @@
       };
       if (!Object.keys(ships).length) {
         resetPreview();
+        if (errorEl) {
+          errorEl.textContent = reasonText("no_ships");
+          errorEl.hidden = false;
+        }
         return;
       }
       try {
@@ -28321,13 +28392,33 @@
             previewArrival.textContent = flightSec > 0 ? formatCountdownRemain(flightSec) : "–";
           }
           if (sendBtn) sendBtn.disabled = !p.can_send;
+          if (errorEl) {
+            if (p.can_send) {
+              errorEl.hidden = true;
+              errorEl.textContent = "";
+            } else {
+              const reason = p.block_reason || p.mission_block_reason || "generic";
+              errorEl.textContent = reasonText(reason, p);
+              errorEl.hidden = false;
+            }
+          }
           updateFleetTargetInlineError(page, null);
           if (p.expedition_daily) syncExpeditionDailyEfficiencyUi(page, p.expedition_daily);
         } else {
+          const reason = apiError(res);
+          const context = fleetPayload(res);
           resetPreview();
+          if (errorEl) {
+            errorEl.textContent = reasonText(reason, context);
+            errorEl.hidden = false;
+          }
         }
       } catch (_) {
         resetPreview();
+        if (errorEl) {
+          errorEl.textContent = reasonText("generic");
+          errorEl.hidden = false;
+        }
       }
     };
 
@@ -29087,7 +29178,7 @@
             if (fInp) fInp.value = "0";
             schedulePreview(page);
           } else {
-            const msg = reasonText(apiError(res));
+            const msg = reasonText(apiError(res), fleetPayload(res));
             if (errorEl) {
               errorEl.textContent = msg;
               errorEl.hidden = false;

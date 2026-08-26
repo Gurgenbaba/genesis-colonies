@@ -458,3 +458,13 @@ Overview und Fleet zeigen **alle** Bewegungen — nicht nur die der aktiven Welt
 **Flotte — Missionen und Imperium-Operationen**
 
 Schiffe pro Welt, Bewegungen imperiumsweit. Orbitalwerft nötig. Missionen: Transport, Kolonisierung, Expedition, Angriff, Logistik. Ziele: Welten und Koordinaten. Navigation-Tech = mehr Slots.
+
+
+## GC-FLT-UX-01 — Actionable Fleet Block Reasons
+
+- Fleet launch validation remains server-authoritative (`evaluate_fleet_mission_target`, preview/send validators, `fleet_err`).
+- A disabled launch button now shows the concrete localized block reason beside the action before the player clicks it.
+- Reason copy is paired with a localized next-step hint (ships, slots, resources, target, diplomacy/protection, mission, troops, or wait).
+- Unknown/internal reason codes never render raw; the UI falls back to `fleet_error_generic`.
+- `/api/fleet/send` forwards only small safe context needed for actionable copy (attack limit, noob protection, troop berths), never the full validator payload.
+- The same reason mapper is used for preview and final server rejection, forming the contract for a later partial/bulk “launch eligible fleets” flow with per-fleet skip reasons.
