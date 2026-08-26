@@ -65,7 +65,12 @@ def _table_ready(conn: sqlite3.Connection, table: str) -> bool:
         return False
 
 
-def ensure_legacy_slots(player_id: int, *, conn: sqlite3.Connection) -> int:
+def ensure_legacy_slots(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+    persist: bool = True,
+) -> int:
     """Idempotent snapshot of pre-mandate extrapolated ark slots beyond 6."""
     uid = int(player_id)
     if not _column_ready(conn, "players", "expansion_legacy_migrated"):
@@ -85,14 +90,15 @@ def ensure_legacy_slots(player_id: int, *, conn: sqlite3.Connection) -> int:
     hw = get_homeworld_level(uid, conn=conn)
     old_slots = legacy_expansion_slots_unlocked(hw)
     legacy = max(0, int(old_slots) - ARK_SLOT_MAX)
-    conn.execute(
-        """
-        UPDATE players
-        SET expansion_legacy_slots = ?, expansion_legacy_migrated = 1
-        WHERE id = ?;
-        """,
-        (int(legacy), uid),
-    )
+    if persist:
+        conn.execute(
+            """
+            UPDATE players
+            SET expansion_legacy_slots = ?, expansion_legacy_migrated = 1
+            WHERE id = ?;
+            """,
+            (int(legacy), uid),
+        )
     return int(legacy)
 
 
@@ -240,34 +246,53 @@ def sync_earned_mandates(
     conn: sqlite3.Connection,
     now: float | None = None,
     legacy_slots: int = 0,
+    persist: bool = True,
 ) -> List[str]:
-    """Grant next mandates in order when conditions are met (legacy credits first N)."""
+    """Resolve earned mandates in order; optionally persist newly earned rows."""
     uid = int(player_id)
     ts = float(now if now is not None else time.time())
     legacy_n = min(LATE_SLOT_MAX, max(0, int(legacy_slots)))
     earned = set(list_earned_mandates(uid, conn=conn))
+    grants_ready = _table_ready(conn, "player_imperial_mandates")
     for index, key in enumerate(MANDATE_ORDER):
         if key in earned:
             continue
         if index < legacy_n:
-            if _grant_mandate(uid, key, conn=conn, now=ts) or key in list_earned_mandates(uid, conn=conn):
+            if not grants_ready:
+                continue
+            if persist:
+                if _grant_mandate(uid, key, conn=conn, now=ts) or key in list_earned_mandates(uid, conn=conn):
+                    earned.add(key)
+            else:
                 earned.add(key)
             continue
         prog = mandate_progress(key, uid, conn=conn)
         if not prog.get("met"):
             break
-        if _grant_mandate(uid, key, conn=conn, now=ts) or key in list_earned_mandates(uid, conn=conn):
-            earned.add(key)
-        else:
+        if not grants_ready:
             break
+        if persist:
+            if _grant_mandate(uid, key, conn=conn, now=ts) or key in list_earned_mandates(uid, conn=conn):
+                earned.add(key)
+            else:
+                break
+        else:
+            earned.add(key)
     return [k for k in MANDATE_ORDER if k in earned]
 
 
-def ensure_player_mandate_state(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+def ensure_player_mandate_state(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+    persist: bool = True,
+) -> Dict[str, Any]:
     """Lazy migrate + sync grants; returns late-slot breakdown for cap merge."""
     uid = int(player_id)
-    legacy = ensure_legacy_slots(uid, conn=conn)
-    earned = sync_earned_mandates(uid, conn=conn, legacy_slots=legacy)
+    legacy = ensure_legacy_slots(uid, conn=conn, persist=persist)
+    earned = sync_earned_mandates(
+        uid, conn=conn, legacy_slots=legacy, persist=persist
+    )
     mandate_count = len(earned)
     # Cap: late = min(4, mandate_count) — legacy is already baked into earned rows.
     late = min(LATE_SLOT_MAX, mandate_count)
