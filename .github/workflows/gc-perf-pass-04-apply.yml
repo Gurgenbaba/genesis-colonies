@@ -1,0 +1,314 @@
+name: GC Performance Pass 04 Apply
+
+on:
+  push:
+    branches:
+      - perf/game-state-readonly-pass-04
+
+permissions:
+  contents: write
+
+env:
+  APP_ENV: development
+  FLASK_ENV: development
+  FLASK_DEBUG: '0'
+  SECRET_KEY: ci-perf-pass-04-not-for-production
+  GC_SKIP_MIGRATION_CHECK: '1'
+  GC_EMBEDDED_CRON: '0'
+  GC_DB_BACKEND: sqlite
+  GC_REQUEST_PERF_DEBUG: '1'
+  GC_REQUEST_PERF_SLOW_MS: '0'
+  GC_REQUEST_PERF_SAMPLE: '1.0'
+  GC_PERF_INTEL: '1'
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/game-state-readonly-pass-04
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Apply read-only mandate snapshot cut
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          path = Path('game/planet_evolution/imperial_mandates.py')
+          src = path.read_text(encoding='utf-8')
+
+          old_sig = 'def ensure_legacy_slots(player_id: int, *, conn: sqlite3.Connection) -> int:\n'
+          new_sig = '''def ensure_legacy_slots(\n    player_id: int,\n    *,\n    conn: sqlite3.Connection,\n    persist: bool = True,\n) -> int:\n'''
+          if src.count(old_sig) != 1:
+              raise SystemExit(f'ensure_legacy_slots signature anchor count={src.count(old_sig)}')
+          src = src.replace(old_sig, new_sig, 1)
+
+          old_update = '''    conn.execute(\n        """\n        UPDATE players\n        SET expansion_legacy_slots = ?, expansion_legacy_migrated = 1\n        WHERE id = ?;\n        """,\n        (int(legacy), uid),\n    )\n    return int(legacy)\n'''
+          new_update = '''    if persist:\n        conn.execute(\n            """\n            UPDATE players\n            SET expansion_legacy_slots = ?, expansion_legacy_migrated = 1\n            WHERE id = ?;\n            """,\n            (int(legacy), uid),\n        )\n    return int(legacy)\n'''
+          if src.count(old_update) != 1:
+              raise SystemExit(f'legacy update anchor count={src.count(old_update)}')
+          src = src.replace(old_update, new_update, 1)
+
+          start = src.find('def sync_earned_mandates(\n')
+          end = src.find('\n\ndef ensure_player_mandate_state(', start)
+          if start < 0 or end < 0:
+              raise SystemExit('sync_earned_mandates anchors missing')
+          new_sync = '''
+          def sync_earned_mandates(
+              player_id: int,
+              *,
+              conn: sqlite3.Connection,
+              now: float | None = None,
+              legacy_slots: int = 0,
+              persist: bool = True,
+          ) -> List[str]:
+              """Resolve earned mandates in order; optionally persist newly earned rows."""
+              uid = int(player_id)
+              ts = float(now if now is not None else time.time())
+              legacy_n = min(LATE_SLOT_MAX, max(0, int(legacy_slots)))
+              earned = set(list_earned_mandates(uid, conn=conn))
+              grants_ready = _table_ready(conn, "player_imperial_mandates")
+              for index, key in enumerate(MANDATE_ORDER):
+                  if key in earned:
+                      continue
+                  if index < legacy_n:
+                      if not grants_ready:
+                          continue
+                      if persist:
+                          if _grant_mandate(uid, key, conn=conn, now=ts) or key in list_earned_mandates(uid, conn=conn):
+                              earned.add(key)
+                      else:
+                          earned.add(key)
+                      continue
+                  prog = mandate_progress(key, uid, conn=conn)
+                  if not prog.get("met"):
+                      break
+                  if not grants_ready:
+                      break
+                  if persist:
+                      if _grant_mandate(uid, key, conn=conn, now=ts) or key in list_earned_mandates(uid, conn=conn):
+                          earned.add(key)
+                      else:
+                          break
+                  else:
+                      earned.add(key)
+              return [k for k in MANDATE_ORDER if k in earned]
+          '''
+          src = src[:start] + textwrap.dedent(new_sync).lstrip() + src[end:]
+
+          old_state_sig = 'def ensure_player_mandate_state(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:\n'
+          new_state_sig = '''def ensure_player_mandate_state(\n    player_id: int,\n    *,\n    conn: sqlite3.Connection,\n    persist: bool = True,\n) -> Dict[str, Any]:\n'''
+          if src.count(old_state_sig) != 1:
+              raise SystemExit(f'mandate state signature anchor count={src.count(old_state_sig)}')
+          src = src.replace(old_state_sig, new_state_sig, 1)
+          old_state_body = '''    legacy = ensure_legacy_slots(uid, conn=conn)\n    earned = sync_earned_mandates(uid, conn=conn, legacy_slots=legacy)\n'''
+          new_state_body = '''    legacy = ensure_legacy_slots(uid, conn=conn, persist=persist)\n    earned = sync_earned_mandates(\n        uid, conn=conn, legacy_slots=legacy, persist=persist\n    )\n'''
+          if src.count(old_state_body) != 1:
+              raise SystemExit(f'mandate state body anchor count={src.count(old_state_body)}')
+          src = src.replace(old_state_body, new_state_body, 1)
+          path.write_text(src, encoding='utf-8')
+
+          path = Path('game/planet_evolution/expansion_protocol.py')
+          src = path.read_text(encoding='utf-8')
+          start = src.find('def expansion_gameplay_cap(')
+          end = src.find('\n\ndef _expansion_slot_cap_reached(', start)
+          if start < 0 or end < 0:
+              raise SystemExit('expansion_gameplay_cap anchors missing')
+          old_block = src[start:end]
+          if 'mandate_state = ensure_player_mandate_state(uid, conn=conn)' not in old_block:
+              raise SystemExit('expansion mandate anchor missing')
+          new_block = old_block
+          new_block = new_block.replace(
+              'def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:',
+              'def expansion_gameplay_cap(\n    player_id: int,\n    *,\n    conn: sqlite3.Connection,\n    mandate_state: Optional[Dict[str, Any]] = None,\n) -> Dict[str, Any]:',
+              1,
+          )
+          new_block = new_block.replace(
+              '    mandate_state = ensure_player_mandate_state(uid, conn=conn)\n    late_slots = int(mandate_state.get("late_slots") or 0)\n',
+              '    resolved_mandates = (\n        dict(mandate_state)\n        if isinstance(mandate_state, dict)\n        else ensure_player_mandate_state(uid, conn=conn)\n    )\n    late_slots = int(resolved_mandates.get("late_slots") or 0)\n',
+              1,
+          )
+          new_block = new_block.replace('mandate_state.get("legacy_slots")', 'resolved_mandates.get("legacy_slots")')
+          new_block = new_block.replace('mandate_state.get("mandate_slots")', 'resolved_mandates.get("mandate_slots")')
+          src = src[:start] + new_block + src[end:]
+
+          block_start = src.find('def get_expansion_limit_block(\n')
+          block_end = src.find('\n\ndef build_expansion_launch_checklist(', block_start)
+          if block_start < 0 or block_end < 0:
+              raise SystemExit('get_expansion_limit_block anchors missing')
+          block = src[block_start:block_end]
+          old_cap = '    cap = expansion_gameplay_cap(uid, conn=conn)\n'
+          old_second = '    mandate_state = ensure_player_mandate_state(uid, conn=conn)\n'
+          if block.count(old_cap) != 1 or block.count(old_second) != 1:
+              raise SystemExit(f'limit block anchors cap={block.count(old_cap)} state={block.count(old_second)}')
+          block = block.replace(
+              old_cap,
+              '    mandate_state = ensure_player_mandate_state(uid, conn=conn, persist=False)\n    cap = expansion_gameplay_cap(uid, conn=conn, mandate_state=mandate_state)\n',
+              1,
+          )
+          block = block.replace(old_second, '', 1)
+          src = src[:block_start] + block + src[block_end:]
+          path.write_text(src, encoding='utf-8')
+          PY
+
+          cat > tests/test_gc_perf_pass_04.py <<'PYTEST'
+          """GC-PERF-PASS-04 — expansion limit reads must not self-heal/persist."""
+          from __future__ import annotations
+
+          from unittest.mock import patch
+
+          pytest_plugins = ["tests.test_game_state_live"]
+
+
+          def test_read_only_mandate_state_virtualizes_legacy_without_persisting(game_client):
+              from game.db import db
+              from game.models import get_homeworld
+              from game.planet_evolution.imperial_mandates import ensure_player_mandate_state
+
+              _client, uid = game_client
+              conn = db()
+              try:
+                  hw = get_homeworld(int(uid), conn=conn)
+                  assert hw
+                  conn.execute("UPDATE planets SET planet_level = 40 WHERE id = ?;", (int(hw["id"]),))
+                  conn.execute(
+                      "UPDATE players SET expansion_legacy_slots = 0, expansion_legacy_migrated = 0 WHERE id = ?;",
+                      (int(uid),),
+                  )
+                  conn.execute("DELETE FROM player_imperial_mandates WHERE player_id = ?;", (int(uid),))
+                  conn.commit()
+
+                  state = ensure_player_mandate_state(int(uid), conn=conn, persist=False)
+                  assert state["legacy_slots"] == 2
+                  assert state["late_slots"] == 2
+                  assert state["earned_mandates"][:2] == ["survey", "presence"]
+
+                  row = conn.execute(
+                      "SELECT expansion_legacy_slots, expansion_legacy_migrated FROM players WHERE id = ?;",
+                      (int(uid),),
+                  ).fetchone()
+                  assert int(row["expansion_legacy_slots"] or 0) == 0
+                  assert int(row["expansion_legacy_migrated"] or 0) == 0
+                  count = conn.execute(
+                      "SELECT COUNT(*) AS n FROM player_imperial_mandates WHERE player_id = ?;",
+                      (int(uid),),
+                  ).fetchone()
+                  assert int(count["n"] or 0) == 0
+
+                  persisted = ensure_player_mandate_state(int(uid), conn=conn, persist=True)
+                  assert persisted["legacy_slots"] == state["legacy_slots"]
+                  assert persisted["late_slots"] == state["late_slots"]
+                  row2 = conn.execute(
+                      "SELECT expansion_legacy_slots, expansion_legacy_migrated FROM players WHERE id = ?;",
+                      (int(uid),),
+                  ).fetchone()
+                  assert int(row2["expansion_legacy_slots"] or 0) == 2
+                  assert int(row2["expansion_legacy_migrated"] or 0) == 1
+              finally:
+                  conn.rollback()
+                  conn.close()
+
+
+          def test_game_state_has_no_expansion_self_heal_write(game_client):
+              import game.live_state as live_state
+              from game.db import db
+
+              client, uid = game_client
+              conn = db()
+              try:
+                  conn.execute(
+                      "UPDATE players SET expansion_legacy_slots = 0, expansion_legacy_migrated = 0 WHERE id = ?;",
+                      (int(uid),),
+                  )
+                  conn.commit()
+              finally:
+                  conn.close()
+
+              writes = []
+              def callback(statement):
+                  sql = " ".join(str(statement or "").strip().split())
+                  upper = sql.upper()
+                  if upper.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
+                      writes.append(upper)
+
+              def attach(conn):
+                  try:
+                      conn.set_trace_callback(callback)
+                  except Exception:
+                      pass
+
+              with patch.object(live_state, "attach_request_perf_sql_trace", side_effect=attach):
+                  resp = client.get("/api/game-state")
+              assert resp.status_code == 200
+              assert not any("EXPANSION_LEGACY" in sql for sql in writes)
+          PYTEST
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+
+      - name: Focused regression
+        run: |
+          python -m py_compile game/planet_evolution/imperial_mandates.py game/planet_evolution/expansion_protocol.py
+          python -m pytest -q \
+            tests/test_gc_perf_pass_04.py \
+            tests/test_imperial_mandates.py \
+            tests/test_gc_perf_pass_03.py \
+            tests/test_gc_perf_core_001.py
+          git diff --check
+
+      - name: Measure five warm diet samples
+        shell: bash
+        run: |
+          cat > tests/_tmp_perf_pass_04_measure.py <<'PY'
+          from __future__ import annotations
+          import logging, re, statistics
+          pytest_plugins = ["tests.test_game_state_live"]
+          KEYS = ("total_ms", "sql_count", "sql_write_count", "db_connection_open_count", "live_context_ms", "payload_ms")
+          def parse(message):
+              out = {}
+              for key in KEYS:
+                  m = re.search(rf"(?:^| ){key}=([^ ]+)", message)
+                  if m:
+                      try: out[key] = float(m.group(1))
+                      except ValueError: pass
+              return out
+          def test_measure(game_client, caplog):
+              client, _uid = game_client
+              for _ in range(2):
+                  assert client.get("/api/game-state").status_code == 200
+              samples=[]
+              for idx in range(5):
+                  caplog.clear()
+                  with caplog.at_level(logging.INFO):
+                      resp=client.get("/api/game-state")
+                  assert resp.status_code == 200
+                  logs=[r.message for r in caplog.records if "[GC REQUEST PERF]" in r.message]
+                  assert logs
+                  samples.append(parse(logs[-1]))
+                  print(f"\nPASS04 SAMPLE #{idx+1} {logs[-1]}")
+              med={k:statistics.median([s[k] for s in samples if k in s]) for k in KEYS}
+              print("\nPASS04 MEDIAN " + " ".join(f"{k}={v:g}" for k,v in med.items()))
+              assert med["sql_write_count"] <= 1
+              assert med["sql_count"] < 797
+          PY
+          python -m pytest -q -s tests/_tmp_perf_pass_04_measure.py
+          rm -f tests/_tmp_perf_pass_04_measure.py
+
+      - name: Commit implementation and remove helper
+        shell: bash
+        run: |
+          rm -f .github/workflows/gc-perf-pass-04-apply.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/planet_evolution/imperial_mandates.py game/planet_evolution/expansion_protocol.py tests/test_gc_perf_pass_04.py .github/workflows/gc-perf-pass-04-apply.yml
+          git commit -m "perf(expansion): keep game-state mandate reads read-only"
+          git push origin HEAD:perf/game-state-readonly-pass-04
