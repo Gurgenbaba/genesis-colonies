@@ -822,6 +822,44 @@ def _serialize_op_row(row: Mapping[str, Any], meta: Mapping[str, Any]) -> Dict[s
     }
 
 
+def _op_row_for_serialize(
+    player_id: int,
+    season_id: int,
+    period_key: str,
+    op_key: str,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Read-only current-period row; missing Ops are virtual until a real mutation."""
+    meta = OPS_CATALOG[str(op_key)]
+    row = _get_op_row(
+        int(player_id),
+        int(season_id),
+        str(period_key),
+        str(op_key),
+        conn=conn,
+    )
+    if row is None:
+        return {
+            "player_id": int(player_id),
+            "season_id": int(season_id),
+            "period_key": str(period_key),
+            "op_key": str(op_key),
+            "progress": 0,
+            "target": int(meta["target"]),
+            "xp_reward": int(meta["xp_reward"]),
+            "claimed_at": None,
+            "updated_at": 0.0,
+        }
+    # Unclaimed rows reflect live catalog retunes in the client without
+    # rewriting the same target/xp values on every poll.
+    if row.get("claimed_at") is None:
+        row = dict(row)
+        row["target"] = int(meta["target"])
+        row["xp_reward"] = int(meta["xp_reward"])
+    return row
+
+
 def serialize_ops(
     player_id: int,
     season_id: int,
@@ -834,7 +872,6 @@ def serialize_ops(
     ts = float(now if now is not None else time.time())
     pid = int(player_id)
     sid = int(season_id)
-    ensure_ops_for_period(pid, sid, conn=conn, now=ts)
     daily_key = daily_period_key(ts)
     weekly_key = weekly_period_key(ts)
     drip_today = _drip_granted_today(pid, sid, daily_key, conn=conn)
@@ -842,16 +879,14 @@ def serialize_ops(
     daily: List[Dict[str, Any]] = []
     for op_key in DAILY_OP_KEYS:
         meta = OPS_CATALOG[op_key]
-        row = _get_op_row(pid, sid, daily_key, op_key, conn=conn)
-        if row:
-            daily.append(_serialize_op_row(row, meta))
+        row = _op_row_for_serialize(pid, sid, daily_key, op_key, conn=conn)
+        daily.append(_serialize_op_row(row, meta))
 
     weekly: List[Dict[str, Any]] = []
     for op_key in WEEKLY_OP_KEYS:
         meta = OPS_CATALOG[op_key]
-        row = _get_op_row(pid, sid, weekly_key, op_key, conn=conn)
-        if row:
-            weekly.append(_serialize_op_row(row, meta))
+        row = _op_row_for_serialize(pid, sid, weekly_key, op_key, conn=conn)
+        weekly.append(_serialize_op_row(row, meta))
 
     return {
         "daily": daily,
@@ -861,7 +896,6 @@ def serialize_ops(
         "daily_period_key": daily_key,
         "weekly_period_key": weekly_key,
     }
-
 
 def credit_xp(
     player_id: int,
