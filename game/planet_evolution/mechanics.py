@@ -20,6 +20,50 @@ from .repository import (
 )
 
 
+# GC-PE-MECH-01: active definition JSON must not silently invent mechanics.
+# Generic keys are compiled by _parse_mechanics_json. Domain-specific keys are
+# deliberately consumed by their owning subsystem instead of the generic flag
+# compiler (research availability / specialization import-demand sync).
+PE_CANONICAL_MECHANICS_KEYS = frozenset(
+    {
+        "unlock_chain",
+        "required_unlock",
+        "unlock_export",
+        "unlocks",
+        "enable_experimental",
+        "enable_event_pool",
+        "enable_policy",
+        "unlock_policy_tier",
+        "unlock_queue",
+        "conversion_queue",
+        "planet_research_speed_flag",
+        "chain_output_bonus",
+        "chain_output_mult",
+        "auto_conversion",
+        "trade_route_bonus",
+        "discovery_roll_bonus",
+        "discovery_roll_mult",
+        "experimental_slot",
+        "export_slots",
+        "stability_penalty",
+        "permanent_flag",
+        "auto_research_weekly",
+    }
+)
+PE_DIRECT_MECHANICS_KEYS_BY_DOMAIN = {
+    "research": frozenset({"choice_required"}),
+    "specialization": frozenset({"import_demands"}),
+}
+
+
+def is_supported_mechanics_key(key: str, *, domain: str) -> bool:
+    """Return whether an active PE definition key has an authoritative consumer."""
+    raw = str(key or "").strip()
+    if raw in PE_CANONICAL_MECHANICS_KEYS:
+        return True
+    return raw in PE_DIRECT_MECHANICS_KEYS_BY_DOMAIN.get(str(domain or ""), frozenset())
+
+
 def _merge_mechanics_bundle(bundle: Dict[str, Any], target: Dict[str, Any]) -> None:
     for unlock in bundle.get("unlocks") or []:
         if unlock not in target["unlocks"]:
@@ -141,6 +185,8 @@ def _parse_mechanics_json(raw: Any) -> Dict[str, Any]:
         out["flags"]["trade_route_bonus"] = float(raw["trade_route_bonus"])
     if raw.get("discovery_roll_bonus"):
         out["flags"]["discovery_roll_bonus"] = float(raw["discovery_roll_bonus"])
+    if raw.get("discovery_roll_mult"):
+        out["flags"]["discovery_roll_mult"] = float(raw["discovery_roll_mult"])
     if raw.get("experimental_slot"):
         out["flags"]["experimental_slot"] = int(out["flags"].get("experimental_slot", 0)) + int(raw["experimental_slot"])
     if raw.get("export_slots"):

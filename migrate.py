@@ -307,6 +307,46 @@ def _is_idempotent_sqlite_error(e: sqlite3.Error) -> bool:
     return False
 
 
+def _required_tables(sql_text: str) -> List[str]:
+    """Read an optional migration table-precondition directive.
+
+    Syntax: ``-- GC-REQUIRES-TABLES: table_a, table_b``.  This is used for
+    data-only migrations that legitimately have nothing to do on historical
+    snapshots where an optional module was never installed.
+    """
+    prefix = "-- GC-REQUIRES-TABLES:"
+    for line in strip_bom(sql_text).splitlines()[:20]:
+        stripped = line.strip()
+        if not stripped.upper().startswith(prefix):
+            continue
+        names: List[str] = []
+        for raw in stripped[len(prefix):].split(","):
+            name = raw.strip()
+            if not name:
+                continue
+            if not (name[0].isalpha() or name[0] == "_") or not all(ch.isalnum() or ch == "_" for ch in name):
+                raise ValueError(f"invalid GC-REQUIRES-TABLES identifier: {name!r}")
+            names.append(name)
+        return names
+    return []
+
+
+def _table_exists(conn: Any, table_name: str) -> bool:
+    cur = conn.cursor()
+    if _backend() == "postgres":
+        cur.execute(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = ? LIMIT 1;",
+            (str(table_name),),
+        )
+    else:
+        cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;",
+            (str(table_name),),
+        )
+    return cur.fetchone() is not None
+
+
 # ----------------------------------------
 # Apply Migration
 # ----------------------------------------
@@ -321,6 +361,17 @@ def apply_migration(conn: Any, filename: str, sql_text: str) -> None:
     - idempotente Fehler pro Statement werden übersprungen
     """
     print(f"  -> wende Migration an: {filename}")
+
+    required_tables = _required_tables(sql_text)
+    if required_tables:
+        missing_tables = [name for name in required_tables if not _table_exists(conn, name)]
+        if missing_tables:
+            print(
+                "     [skip not-applicable] required table(s) missing: "
+                + ", ".join(missing_tables)
+            )
+            mark_migration_applied(conn, filename)
+            return
 
     if _backend() == "postgres":
         from game.sql_pg_rewrite import rewrite_migration_script
