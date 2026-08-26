@@ -1,0 +1,108 @@
+name: GC Performance Pass 03 Write Trace
+
+on:
+  push:
+    branches:
+      - perf/game-state-readonly-pass-03
+
+permissions:
+  contents: read
+
+env:
+  APP_ENV: development
+  FLASK_ENV: development
+  FLASK_DEBUG: '0'
+  SECRET_KEY: ci-perf-pass-03-not-for-production
+  GC_SKIP_MIGRATION_CHECK: '1'
+  GC_EMBEDDED_CRON: '0'
+  GC_DB_BACKEND: sqlite
+  GC_REQUEST_PERF_DEBUG: '1'
+  GC_REQUEST_PERF_SLOW_MS: '0'
+  GC_REQUEST_PERF_SAMPLE: '1.0'
+  GC_PERF_INTEL: '1'
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Trace warm diet write SQL and callers
+        shell: bash
+        run: |
+          cat > tests/_tmp_perf_pass_03_write_trace.py <<'PY'
+          from __future__ import annotations
+
+          import collections
+          import re
+          import traceback
+          from unittest.mock import patch
+
+          pytest_plugins = ["tests.test_game_state_live"]
+
+          WRITE_RE = re.compile(r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b", re.I)
+
+          def _fingerprint(sql: str) -> str:
+              text = " ".join(str(sql or "").strip().split())
+              text = re.sub(r"'[^']*'", "?", text)
+              text = re.sub(r"\b\d+(?:\.\d+)?\b", "?", text)
+              return text[:320]
+
+          def _caller_signature() -> str:
+              stack = traceback.extract_stack(limit=40)[:-2]
+              project = []
+              for frame in stack:
+                  name = frame.filename.replace("\\", "/")
+                  if "/genesis-colonies/" not in name:
+                      continue
+                  rel = name.split("/genesis-colonies/", 1)[1]
+                  if rel.startswith("tests/") or rel.startswith(".venv/"):
+                      continue
+                  project.append(f"{rel}:{frame.lineno}:{frame.name}")
+              return " <- ".join(project[-7:]) or "unknown"
+
+          def test_trace_diet_writes(game_client):
+              import game.live_state as live_state
+
+              client, _pid = game_client
+              assert client.get("/api/game-state").status_code == 200
+
+              grouped = collections.Counter()
+              raw = []
+
+              def trace_callback(statement):
+                  match = WRITE_RE.match(str(statement or ""))
+                  if not match:
+                      return
+                  fp = _fingerprint(statement)
+                  caller = _caller_signature()
+                  grouped[(match.group(1).upper(), fp, caller)] += 1
+                  raw.append((match.group(1).upper(), fp, caller))
+
+              def attach_trace(conn):
+                  try:
+                      conn.set_trace_callback(trace_callback)
+                  except Exception:
+                      pass
+
+              # Replace request-perf SQL attachment only inside this diagnostic test.
+              # game.db.db imports this function lazily for every newly opened connection.
+              with patch.object(live_state, "attach_request_perf_sql_trace", side_effect=attach_trace):
+                  resp = client.get("/api/game-state")
+              assert resp.status_code == 200
+
+              print("\n=== GC PERF PASS 03 DIET WRITE TRACE ===")
+              print("TOTAL_WRITE_STATEMENTS", len(raw))
+              for (kind, fp, caller), count in grouped.most_common(80):
+                  print(f"WRITE x{count} [{kind}] {fp}")
+                  print(f"  CALLER {caller}")
+          PY
+          python -m pytest -q -s tests/_tmp_perf_pass_03_write_trace.py
+          rm -f tests/_tmp_perf_pass_03_write_trace.py
