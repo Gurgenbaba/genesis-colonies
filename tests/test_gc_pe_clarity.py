@@ -71,6 +71,24 @@ def test_planet_evolution_template_exposes_impact_before_actions():
     assert 'pe_activity_xp_expedition_progress' not in src
 
 
+
+def test_planet_evolution_decision_first_layout_is_shell_owned():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
+    base = (root / "templates" / "base.html").read_text(encoding="utf-8")
+    css = (root / "static" / "css" / "planet_evolution_clarity.css").read_text(encoding="utf-8")
+
+    assert "pe-core-row--research-idle" in template
+    assert "css/planet_evolution_clarity.css" in base
+    assert 'grid-template-areas: "goal tech"' in css
+    assert ".pe-core-row--research-idle" in css
+    assert "grid-template-columns: minmax(0, 1.58fr)" in css
+    assert 'grid-template-areas:\n      "goal"\n      "tech"' in css
+    assert ".pe-goal-cta" in css
+
+
 def test_impact_locale_contract_has_exact_parity():
     from pathlib import Path
     import json

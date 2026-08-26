@@ -837,7 +837,7 @@
     {% endif %}
 
     {# ── 3. PLANET-TECH + NÄCHSTES ZIEL ── #}
-    <div class="pe-core-row">
+    <div class="pe-core-row{% if not pe_visible_tech_cards %} pe-core-row--research-idle{% endif %}">
       <section class="pe-zone pe-zone--tech gc-panel" id="pe-section-research">
         <header class="pe-zone-head">
           <div class="pe-zone-head-main">
