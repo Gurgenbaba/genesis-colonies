@@ -34,76 +34,50 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
-      - name: Run representative request matrix
+      - name: Trace buildings panel DB connection callers
         shell: bash
         run: |
-          cat > tests/_tmp_perf_current_audit.py <<'PY'
+          cat > tests/_tmp_perf_connection_callers.py <<'PY'
           from __future__ import annotations
 
-          import logging
-          import re
-
-          import pytest
+          import collections
+          import traceback
+          from unittest.mock import patch
 
           pytest_plugins = ["tests.test_game_state_live"]
 
-          ROUTES = [
-              ("diet", "/api/game-state", {}),
-              ("panel_buildings", "/api/game-state?include_panel=1&panel_page=buildings", {}),
-              ("panel_research", "/api/game-state?include_panel=1&panel_page=research", {}),
-              ("panel_overview", "/api/game-state?include_panel=1&panel_page=overview", {}),
-              ("panel_fleet", "/api/game-state?include_panel=1&panel_page=fleet", {}),
-              ("page_overview", "/overview", {}),
-              ("page_buildings", "/buildings", {}),
-              ("page_research", "/research", {}),
-              ("page_fleet", "/fleet", {}),
-          ]
-
-          KEYS = (
-              "total_ms",
-              "sql_count",
-              "sql_write_count",
-              "db_connection_open_count",
-              "live_context_ms",
-              "payload_ms",
-              "page_context_ms",
-              "panel_total_ms",
-              "payload_panel_ms",
-              "panel_buildings_rows_ms",
-              "hud_research_ms",
-              "live_hud_reads_ms",
-              "payload_nav_badges_ms",
-              "payload_fleets_hud_ms",
-          )
-
-          def parse(msg: str):
-              out = {}
-              for key in KEYS:
-                  m = re.search(rf"(?:^| )({re.escape(key)})=([^ ]+)", msg)
-                  if m:
-                      out[key] = m.group(2)
-              return out
-
-          def test_current_request_perf_matrix(game_client, caplog):
-              client, _pid = game_client
-              # Warm imports/caches and establish the normal poll state first.
-              client.get("/api/game-state")
-              print("\n=== GC PERF CURRENT AUDIT ===")
-              for label, route, headers in ROUTES:
-                  # Warm this exact route once, then capture a repeat request.
-                  client.get(route, headers=headers)
-                  caplog.clear()
-                  with caplog.at_level(logging.INFO):
-                      resp = client.get(route, headers=headers)
-                  assert resp.status_code == 200, (label, resp.status_code, resp.get_data(as_text=True)[:300])
-                  logs = [r.message for r in caplog.records if "[GC REQUEST PERF]" in r.message]
-                  if not logs:
-                      print(f"AUDIT {label}: NO_PERF_LOG")
+          def _signature():
+              stack = traceback.extract_stack(limit=30)[:-2]
+              project = []
+              for frame in stack:
+                  name = frame.filename.replace("\\", "/")
+                  if "/genesis-colonies/" not in name:
                       continue
-                  msg = logs[-1]
-                  fields = parse(msg)
-                  print("AUDIT", label, "route=" + route, " ".join(f"{k}={fields[k]}" for k in KEYS if k in fields))
-                  print("RAW", label, msg)
+                  rel = name.split("/genesis-colonies/", 1)[1]
+                  if rel.startswith("tests/") or rel.startswith(".venv/"):
+                      continue
+                  project.append(f"{rel}:{frame.lineno}:{frame.name}")
+              return " <- ".join(project[-6:]) or "unknown"
+
+          def test_buildings_connection_callers(game_client):
+              import game.db as dbmod
+
+              client, _pid = game_client
+              client.get("/api/game-state?include_panel=1&panel_page=buildings")
+              real_connect = dbmod.sqlite3.connect
+              counts = collections.Counter()
+
+              def traced_connect(*args, **kwargs):
+                  counts[_signature()] += 1
+                  return real_connect(*args, **kwargs)
+
+              with patch.object(dbmod.sqlite3, "connect", side_effect=traced_connect):
+                  resp = client.get("/api/game-state?include_panel=1&panel_page=buildings")
+              assert resp.status_code == 200
+              print("\n=== GC BUILDINGS DB OPEN CALLERS ===")
+              print("TOTAL_TRACED_OPENS", sum(counts.values()))
+              for sig, n in counts.most_common(40):
+                  print(f"OPEN x{n}: {sig}")
           PY
-          python -m pytest -q -s tests/_tmp_perf_current_audit.py
-          rm -f tests/_tmp_perf_current_audit.py
+          python -m pytest -q -s tests/_tmp_perf_connection_callers.py
+          rm -f tests/_tmp_perf_connection_callers.py
