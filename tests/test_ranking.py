@@ -92,11 +92,34 @@ def _close_db() -> None:
 
 
 def _create_player(username: str) -> int:
-    uname = f"{username}_{uuid.uuid4().int % 100_000_000:08d}"
-    ok, err, user = create_user(uname, "test-pass-123")
-    assert ok and user, err
+    last_err = ""
+    for _ in range(32):
+        uname = f"{username}_{uuid.uuid4().int % 100_000_000:08d}"
+        ok, err, user = create_user(uname, "test-pass-123")
+        if ok and user:
+            _close_db()
+            return int(user["id"])
+        last_err = str(err or "")
+        _close_db()
+        if last_err != "name_policy_forbidden":
+            break
+    raise AssertionError(last_err or "create_user_failed")
+
+
+def test_create_player_helper_retries_name_policy_collision(temp_db, monkeypatch):
+    _run_migrate(temp_db)
+    init_db()
     _close_db()
-    return int(user["id"])
+
+    values = iter((1488, 2468))
+
+    class _FakeUuid:
+        def __init__(self, value: int):
+            self.int = value
+
+    monkeypatch.setattr(uuid, "uuid4", lambda: _FakeUuid(next(values)))
+    pid = _create_player("ranking_helper")
+    assert pid > 0
 
 
 def _seed_scores(player_id: int, building: int, research: int) -> None:
@@ -709,7 +732,7 @@ def test_ranking_uses_single_join_query(temp_db):
     assert "card_name_style" in social_select
 
     for i in range(3):
-        pid = _create_player(f"rankingrow_{i}")
+        pid = _create_player(f"join_{i}")
         _seed_scores(pid, 100 * (i + 1), 50)
     recalculate_ranks()
     _close_db()
