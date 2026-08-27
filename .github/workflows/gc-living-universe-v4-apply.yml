@@ -53,7 +53,9 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements.txt pytest
       - name: Focused living universe tests
-        run: pytest -q tests/test_living_universe_gc2622.py tests/test_inactive_autoplay_gc2621.py tests/test_inactive_autoplay.py
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q tests/test_living_universe_gc2622.py tests/test_inactive_autoplay_gc2621.py tests/test_inactive_autoplay.py
       - name: Commit tested implementation
         run: |
           rm -f \
