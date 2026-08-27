@@ -17,293 +17,42 @@ jobs:
         with:
           ref: feature/living-universe-diversity-v4
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Apply GC-2622 strategic diversity
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected exactly 1 match, got {count}")
-              return text.replace(old, new, 1)
-
-          auto_path = Path('game/auto_empire.py')
-          auto = auto_path.read_text(encoding='utf-8')
-
-          auto = replace_once(auto, '''def try_enqueue_building(
-              conn,
-              *,
-              player_id: int,
-              planet: Mapping[str, Any],
-              building_type: str,
-              now: float,
-              duration_cap: Optional[int] = None,
-          ) -> Dict[str, Any]:''', '''def try_enqueue_building(
-              conn,
-              *,
-              player_id: int,
-              planet: Mapping[str, Any],
-              building_type: str,
-              now: float,
-              duration_cap: Optional[int] = None,
-              target_scale: float = 1.0,
-          ) -> Dict[str, Any]:''', 'building signature')
-
-          auto = replace_once(auto, '''    target_cap = int(BUILD_TARGETS.get(building_type, 8)) + _stable_jitter(
-              player_id, building_type, BUILD_TARGET_JITTER
-          )
-          target_cap = max(1, target_cap)''', '''    scale = max(0.65, min(1.60, float(target_scale or 1.0)))
-          base_target = int(BUILD_TARGETS.get(building_type, 8))
-          target_cap = int(round(float(base_target) * scale)) + _stable_jitter(
-              player_id, building_type, BUILD_TARGET_JITTER
-          )
-          target_cap = max(1, target_cap)''', 'building target scale')
-
-          auto = replace_once(auto, '''def try_enqueue_research(
-              conn,
-              *,
-              player_id: int,
-              tech_key: str,
-              now: float,
-              duration_cap: Optional[int] = None,
-          ) -> Dict[str, Any]:''', '''def try_enqueue_research(
-              conn,
-              *,
-              player_id: int,
-              tech_key: str,
-              now: float,
-              duration_cap: Optional[int] = None,
-              target_scale: float = 1.0,
-          ) -> Dict[str, Any]:''', 'research signature')
-
-          auto = replace_once(auto, '''    target_cap = int(RESEARCH_TARGETS.get(tech_key, 5)) + _stable_jitter(
-              player_id, tech_key, RESEARCH_TARGET_JITTER
-          )
-          target_cap = max(1, target_cap)''', '''    scale = max(0.65, min(1.60, float(target_scale or 1.0)))
-          base_target = int(RESEARCH_TARGETS.get(tech_key, 5))
-          target_cap = int(round(float(base_target) * scale)) + _stable_jitter(
-              player_id, tech_key, RESEARCH_TARGET_JITTER
-          )
-          target_cap = max(1, target_cap)''', 'research target scale')
-
-          auto = replace_once(auto, '''def try_build_defense(
-              conn,
-              *,
-              player_id: int,
-              planet_id: int,
-              personality: str,
-          ) -> Dict[str, Any]:''', '''def try_build_defense(
-              conn,
-              *,
-              player_id: int,
-              planet_id: int,
-              personality: str,
-              target_scale: float = 1.0,
-          ) -> Dict[str, Any]:''', 'defense signature')
-
-          auto = replace_once(auto, '''    for defense_key, want in targets:
-              have = int(current.get(defense_key) or 0)
-              if have >= int(want):
-                  continue
-              amount = min(10, max(1, int(want) - have))''', '''    scale = max(0.65, min(1.60, float(target_scale or 1.0)))
-          for defense_key, want in targets:
-              wanted = max(1, int(round(float(want) * scale)))
-              have = int(current.get(defense_key) or 0)
-              if have >= wanted:
-                  continue
-              amount = min(10, max(1, wanted - have))''', 'defense target scale')
-
-          auto = replace_once(auto, '''    research_duration_cap: Optional[int] = None,
-              source: str = "auto_empire",''', '''    research_duration_cap: Optional[int] = None,
-              target_scale: float = 1.0,
-              source: str = "auto_empire",''', 'planner target_scale signature')
-
-          auto = replace_once(auto, '''                    now=ts,
-                      duration_cap=build_duration_cap,
-                  )''', '''                    now=ts,
-                      duration_cap=build_duration_cap,
-                      target_scale=target_scale,
-                  )''', 'planner building scale call')
-
-          auto = replace_once(auto, '''                    tech_key=tech,
-                      now=ts,
-                      duration_cap=research_duration_cap,
-                  )''', '''                    tech_key=tech,
-                      now=ts,
-                      duration_cap=research_duration_cap,
-                      target_scale=target_scale,
-                  )''', 'planner research scale call')
-
-          auto = replace_once(auto, '''            planet_id=planet_id,
-              personality=str(personality),
-          )
-          if def_res.get("ok"):''', '''            planet_id=planet_id,
-              personality=str(personality),
-              target_scale=target_scale,
-          )
-          if def_res.get("ok"):''', 'planner defense scale call')
-
-          auto_path.write_text(auto, encoding='utf-8')
-
-          inactive_path = Path('game/inactive_autoplay.py')
-          inactive = inactive_path.read_text(encoding='utf-8')
-
-          inactive = replace_once(inactive, '''INACTIVE_ACTION_PACE_RANGES_SEC = {
-              "aggressive": (5 * 60, 14 * 60),
-              "swarm": (6 * 60, 16 * 60),
-              "elite": (8 * 60, 20 * 60),
-              "economy": (10 * 60, 24 * 60),
-              "spy": (12 * 60, 28 * 60),
-              "turtle": (15 * 60, 35 * 60),
-          }
-          INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05''', '''INACTIVE_ACTION_PACE_RANGES_SEC = {
-              "aggressive": (5 * 60, 14 * 60),
-              "swarm": (6 * 60, 16 * 60),
-              "elite": (8 * 60, 20 * 60),
-              "economy": (10 * 60, 24 * 60),
-              "spy": (12 * 60, 28 * 60),
-              "turtle": (15 * 60, 35 * 60),
-          }
-          # Permanent empire ambition: same personality != same ceiling. The personal
-          # factor is deterministic, cheap, and only changes planner target caps.
-          INACTIVE_AMBITION_BASE = {
-              "economy": 1.16,
-              "aggressive": 1.02,
-              "turtle": 1.08,
-              "spy": 0.96,
-              "swarm": 1.04,
-              "elite": 1.12,
-          }
-          # Strategic phases shift priorities for dozens of decisions at a time.
-          # No extra worker or polling is introduced; the current action sequence is
-          # enough to derive the phase.
-          INACTIVE_STRATEGIC_PHASES = ("growth", "research", "fortification", "balanced")
-          INACTIVE_PHASE_DOMAIN_MULT = {
-              "growth": {"building": 1.75, "research": 0.70, "defense": 0.55},
-              "research": {"building": 0.70, "research": 1.85, "defense": 0.55},
-              "fortification": {"building": 0.70, "research": 0.65, "defense": 1.90},
-              "balanced": {"building": 1.00, "research": 1.00, "defense": 1.00},
-          }
-          INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05''', 'inactive strategic constants')
-
-          old_domain = '''def _action_domain_for_player(player_id: int, personality: str, action_seq: int) -> str:
-              weights = INACTIVE_ACTION_WEIGHTS.get(str(personality)) or INACTIVE_ACTION_WEIGHTS["economy"]
-              total = sum(max(0, int(weights.get(key) or 0)) for key in INACTIVE_ACTION_DOMAINS)
-              if total <= 0:
-                  return "building"
-              roll = _stable_roll(player_id, "domain", action_seq, total)
-              cursor = 0
-              for domain in INACTIVE_ACTION_DOMAINS:
-                  cursor += max(0, int(weights.get(domain) or 0))
-                  if roll < cursor:
-                      return domain
-              return "building"
-          '''
-          new_domain = '''def _ambition_scale(player_id: int, personality: str) -> float:
-              base = float(INACTIVE_AMBITION_BASE.get(str(personality), 1.0))
-              personal_pct = 84 + _stable_roll(player_id, "ambition", 0, 43)  # 0.84..1.26
-              return round(max(0.72, min(1.55, base * (float(personal_pct) / 100.0))), 3)
-          
-          
-          def _strategic_phase_for_player(player_id: int, action_seq: int) -> str:
-              span = 36 + _stable_roll(player_id, "phase-span", 0, 37)  # 36..72 decisions
-              offset = _stable_roll(player_id, "phase-offset", 0, len(INACTIVE_STRATEGIC_PHASES))
-              idx = ((max(0, int(action_seq)) // max(1, int(span))) + int(offset)) % len(
-                  INACTIVE_STRATEGIC_PHASES
-              )
-              return INACTIVE_STRATEGIC_PHASES[idx]
-          
-          
-          def _action_domain_for_player(player_id: int, personality: str, action_seq: int) -> str:
-              base_weights = INACTIVE_ACTION_WEIGHTS.get(str(personality)) or INACTIVE_ACTION_WEIGHTS["economy"]
-              phase = _strategic_phase_for_player(player_id, action_seq)
-              phase_mult = INACTIVE_PHASE_DOMAIN_MULT.get(phase) or INACTIVE_PHASE_DOMAIN_MULT["balanced"]
-              weights = {
-                  key: max(0, int(round(float(base_weights.get(key) or 0) * float(phase_mult.get(key) or 1.0))))
-                  for key in INACTIVE_ACTION_DOMAINS
-              }
-              total = sum(max(0, int(weights.get(key) or 0)) for key in INACTIVE_ACTION_DOMAINS)
-              if total <= 0:
-                  return "building"
-              roll = _stable_roll(player_id, f"domain:{phase}", action_seq, total)
-              cursor = 0
-              for domain in INACTIVE_ACTION_DOMAINS:
-                  cursor += max(0, int(weights.get(domain) or 0))
-                  if roll < cursor:
-                      return domain
-              return "building"
-          '''
-          inactive = replace_once(inactive, old_domain, new_domain, 'strategic domain selector')
-
-          inactive = replace_once(inactive, '''    personality = personality_for_player(player_id)
-              seq = max(0, int(action_seq or 0))''', '''    personality = personality_for_player(player_id)
-              seq = max(0, int(action_seq or 0))
-              strategic_phase = _strategic_phase_for_player(player_id, seq)
-              ambition_scale = _ambition_scale(player_id, personality)''', 'economy strategy metadata')
-
-          inactive = replace_once(inactive, '''                    research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
-                      source="inactive_autoplay",''', '''                    research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
-                      target_scale=ambition_scale,
-                      source="inactive_autoplay",''', 'inactive target scale planner call')
-
-          inactive = replace_once(inactive, '''        "personal_cooldown": personal_cooldown,
-              "boss_participation": boss_participation,''', '''        "personal_cooldown": personal_cooldown,
-              "strategic_phase": strategic_phase,
-              "ambition_scale": ambition_scale,
-              "boss_participation": boss_participation,''', 'inactive result strategy metadata')
-
-          inactive_path.write_text(inactive, encoding='utf-8')
-
-          doc_path = Path('docs/INACTIVE_AUTOPLAY.md')
-          doc = doc_path.read_text(encoding='utf-8')
-          marker = '## Living Universe V4 — strategic diversity'
-          if marker not in doc:
-              doc += '''\n\n## Living Universe V4 — strategic diversity\n\nDormant commanders no longer converge on nearly identical long-term ceilings. Each account receives a deterministic empire ambition factor, while longer strategic phases temporarily favor growth, research, fortification, or a balanced posture. The existing one-action decision contract and SQLite writer budget remain unchanged.\n\nPlayer-facing messages describe colony operations and commander activity only. Internal implementation terminology must not be surfaced in public reports, community announcements, or Discord-facing text.\n'''
-          doc_path.write_text(doc, encoding='utf-8')
-
-          test_path = Path('tests/test_living_universe_gc2622.py')
-          test_path.write_text('''from __future__ import annotations\n\nfrom unittest.mock import patch\n\n\ndef test_gc2622_ambition_is_stable_but_not_cloned():\n    from game.auto_empire import personality_for_player\n    from game.inactive_autoplay import _ambition_scale\n\n    values = []\n    for player_id in range(1, 80):\n        personality = personality_for_player(player_id)\n        value = _ambition_scale(player_id, personality)\n        assert value == _ambition_scale(player_id, personality)\n        assert 0.72 <= value <= 1.55\n        values.append(value)\n    assert len(set(values)) >= 15\n\n\ndef test_gc2622_strategic_phases_are_stable_and_rotate():\n    from game.inactive_autoplay import (\n        INACTIVE_STRATEGIC_PHASES,\n        _strategic_phase_for_player,\n    )\n\n    seen = set()\n    for player_id in range(1, 30):\n        p0 = _strategic_phase_for_player(player_id, 0)\n        assert p0 == _strategic_phase_for_player(player_id, 0)\n        assert p0 in INACTIVE_STRATEGIC_PHASES\n        seen.add(p0)\n        for seq in (36, 72, 108, 144, 216, 288):\n            seen.add(_strategic_phase_for_player(player_id, seq))\n    assert seen == set(INACTIVE_STRATEGIC_PHASES)\n\n\ndef test_gc2622_planner_threads_target_scale_without_parallel_systems():\n    from game.auto_empire import plan_passive_planet_tick\n\n    build_result = {\n        "ok": True,\n        "job_id": 7,\n        "building_type": "metal_mine",\n        "target_level": 2,\n        "duration": 60,\n    }\n    with patch("game.auto_empire._finish_due", return_value={}), patch(\n        "game.auto_empire.try_enqueue_building", return_value=build_result\n    ) as enqueue:\n        out = plan_passive_planet_tick(\n            object(),\n            player_id=17,\n            planet={"id": 91},\n            now=12345.0,\n            allow_buildings=True,\n            allow_research=False,\n            allow_ships=False,\n            allow_defense=False,\n            target_scale=1.37,\n        )\n    assert out["build"]["job_id"] == 7\n    assert enqueue.call_args.kwargs["target_scale"] == 1.37\n\n\ndef test_gc2622_inactive_decision_passes_personal_ambition():\n    from game.auto_empire import personality_for_player\n    from game.inactive_autoplay import _ambition_scale, _run_player_economy\n\n    player_id = 23\n    personality = personality_for_player(player_id)\n    expected = _ambition_scale(player_id, personality)\n\n    class Row(dict):\n        pass\n\n    home = Row(id=101, is_homeworld=1)\n    conn = object()\n    with patch("game.models.get_homeworld", return_value=home), patch(\n        "game.models.get_planets_by_player", return_value=[home]\n    ), patch("game.inactive_autoplay._ensure_resource_floor", return_value={}), patch(\n        "game.inactive_autoplay.plan_passive_planet_tick"\n    ) as planner, patch("game.inactive_autoplay._maybe_join_world_boss", return_value={"ok": True, "joined": False}):\n        planner.return_value = {\n            "build": None,\n            "research": None,\n            "defense": None,\n            "builds": [],\n            "researches": [],\n            "finished": {},\n        }\n        result = _run_player_economy(conn, player_id, now=50000.0, action_seq=4)\n\n    assert planner.call_args.kwargs["target_scale"] == expected\n    assert result["ambition_scale"] == expected\n    assert result["strategic_phase"]\n''', encoding='utf-8')
-          PY
-
+        run: python scripts/_apply_gc_living_universe_v4.py
       - name: Public wording guard
-        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           text = Path('game/inactive_autoplay.py').read_text(encoding='utf-8')
-          player_section = text[text.index('def _send_autoplay_report'):]
-          forbidden = ['Automatisierter Betriebsbericht', 'automatisch weitergeführt', 'Inactive Autoplay', 'Bot-Aktivität']
-          hits = [token for token in forbidden if token in player_section]
+          start = text.index('def _send_autoplay_report')
+          public = text[start:]
+          forbidden = [
+              'Automatisierter Betriebsbericht',
+              'automatisch weitergeführt',
+              'Inactive Autoplay',
+              'Bot-Aktivität',
+          ]
+          hits = [token for token in forbidden if token in public]
           if hits:
-              raise SystemExit(f'player-facing implementation wording leaked: {hits}')
+              raise SystemExit(f'implementation wording leaked into player-facing section: {hits}')
           PY
-
       - name: Syntax check
         run: python -m py_compile game/auto_empire.py game/inactive_autoplay.py tests/test_living_universe_gc2622.py
-
       - name: Install test dependencies
         run: pip install -r requirements.txt pytest
-
       - name: Focused living universe tests
         run: pytest -q tests/test_living_universe_gc2622.py tests/test_inactive_autoplay_gc2621.py tests/test_inactive_autoplay.py
-
       - name: Commit tested implementation
-        shell: bash
         run: |
-          rm -f .github/workflows/gc-living-universe-v4-apply.yml
+          rm -f \
+            .github/workflows/gc-living-universe-v4-apply.yml \
+            .github/workflows/gc-living-universe-v4-apply2.yml \
+            scripts/_apply_gc_living_universe_v4.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/auto_empire.py game/inactive_autoplay.py docs/INACTIVE_AUTOPLAY.md tests/test_living_universe_gc2622.py .github/workflows/gc-living-universe-v4-apply.yml
-          if git diff --cached --quiet; then
-            echo 'Nothing to commit'
-            exit 0
-          fi
+          git add -A
           git commit -m 'feat: diversify living universe progression'
           git push origin HEAD:feature/living-universe-diversity-v4
