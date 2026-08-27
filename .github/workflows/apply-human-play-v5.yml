@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Apply Human Play V5 codemod
+      - name: Apply Human Play V5
         shell: bash
         run: |
           python - <<'PY'
@@ -30,44 +30,34 @@ jobs:
           import re
           import textwrap
 
-          def read(path):
-              return Path(path).read_text(encoding="utf-8")
+          PATH = Path("game/inactive_autoplay.py")
+          text = PATH.read_text(encoding="utf-8")
 
-          def write(path, text):
-              Path(path).write_text(text, encoding="utf-8")
-
-          def one(path, old, new):
-              text = read(path)
+          def once(old: str, new: str) -> None:
+              global text
               if old not in text:
-                  raise SystemExit(f"missing literal in {path}: {old[:120]!r}")
-              write(path, text.replace(old, new, 1))
+                  raise SystemExit(f"missing literal: {old[:120]!r}")
+              text = text.replace(old, new, 1)
 
-          def sub(path, pattern, replacement):
-              text = read(path)
-              out, count = re.subn(pattern, lambda _m: replacement, text, count=1, flags=re.S)
+          def sub(pattern: str, replacement: str) -> None:
+              global text
+              text2, count = re.subn(
+                  pattern, lambda _m: replacement, text, count=1, flags=re.S
+              )
               if count != 1:
-                  raise SystemExit(f"expected one match in {path}, got {count}: {pattern}")
-              write(path, out)
+                  raise SystemExit(f"expected one regex match, got {count}: {pattern}")
+              text = text2
 
-          ia = "game/inactive_autoplay.py"
-          ae = "game/auto_empire.py"
-          tests = "tests/test_inactive_autoplay.py"
-          v4tests = "tests/test_living_universe_gc2622.py"
-
-          one(
-              ia,
+          once(
               "GC-INACTIVE-SHIFT-001 — Day Shift: a small shift crew (2–3) stays visibly\nonline; after a fixed tenure they rotate back to the dormant queue. Never\nfleets or expeditions.",
               "GC-INACTIVE-SHIFT-001 — Day Shift: a small shift crew (2–3) stays visibly\nonline; after a fixed tenure they rotate back to the dormant queue. Human Play\nV5 adds sparse canonical shipyard and expedition decisions without another loop.",
           )
-
-          one(
-              ia,
+          once(
               'INACTIVE_ACTION_DOMAINS = ("building", "research", "defense")',
               'INACTIVE_ACTION_DOMAINS = ("building", "research", "ships", "defense", "expedition")',
           )
 
           sub(
-              ia,
               r"INACTIVE_ACTION_WEIGHTS = \{.*?\n\}\nINACTIVE_ACTION_PACE_RANGES_SEC =",
               textwrap.dedent('''\
               INACTIVE_ACTION_WEIGHTS = {
@@ -82,7 +72,6 @@ jobs:
           )
 
           sub(
-              ia,
               r"INACTIVE_PHASE_DOMAIN_MULT = \{.*?\n\}\nINACTIVE_WORLD_BOSS_SAFE_HP_RATIO =",
               textwrap.dedent('''\
               INACTIVE_PHASE_DOMAIN_MULT = {
@@ -94,26 +83,16 @@ jobs:
               INACTIVE_WORLD_BOSS_SAFE_HP_RATIO ='''),
           )
 
-          sub(
-              ia,
-              r"# Soft floor so empty dormant empires can enqueue \(far below pirate seed\)\.\nINACTIVE_RESOURCE_FLOOR = \{.*?\n\}",
-              textwrap.dedent('''\
-              # Compatibility constant only. Human Play V5 never injects resources into
-              # dormant human accounts; canonical production/loot must finance their actions.
-              INACTIVE_RESOURCE_FLOOR = {
-                  "metal": 0,
-                  "crystal": 0,
-                  "fuel_cells": 0,
-              }
-              INACTIVE_EXPEDITION_SHIP_PREFERENCE = ("solar_skiff", "eclipse_runner")'''),
+          once(
+              'INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05',
+              'INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05\nINACTIVE_EXPEDITION_SHIP_PREFERENCE = ("solar_skiff", "eclipse_runner")',
           )
 
           sub(
-              ia,
               r"def _next_action_delay_sec\(.*?\n\n\ndef is_inactive_autoplay_enabled",
               textwrap.dedent('''\
               def _next_action_delay_sec(player_id: int, personality: str, action_seq: int) -> int:
-                  """Human-shaped cadence: short bursts interrupted by real breaks."""
+                  """Human-shaped cadence: short bursts interrupted by longer breaks."""
                   low, high = INACTIVE_ACTION_PACE_RANGES_SEC.get(
                       str(personality), INACTIVE_ACTION_PACE_RANGES_SEC["economy"]
                   )
@@ -146,46 +125,36 @@ jobs:
               def is_inactive_autoplay_enabled'''),
           )
 
-          sub(
-              ia,
-              r"def _ensure_resource_floor\(.*?\n\n\ndef _describe_last_action",
-              textwrap.dedent('''\
-              def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
-                  """Observe stockpile only; dormant human accounts receive no resources."""
-                  row = conn.execute(
-                      """
-                      SELECT COALESCE(metal, 0) AS metal,
-                             COALESCE(crystal, 0) AS crystal,
-                             COALESCE(fuel_cells, 0) AS fuel_cells
-                      FROM planets WHERE id = ? LIMIT 1;
-                      """,
-                      (int(planet_id),),
-                  ).fetchone()
-                  if not row:
-                      return {}
-                  return {
-                      "metal": int(float(row["metal"] or 0)),
-                      "crystal": int(float(row["crystal"] or 0)),
-                      "fuel_cells": int(float(row["fuel_cells"] or 0)),
-                      "raised": 0,
-                      "farm_mult": 1.0,
-                  }
-
-
-              def _describe_last_action'''),
-          )
-
           helpers = textwrap.dedent('''\
+
+          def _stockpile_snapshot(conn, planet_id: int) -> Dict[str, int]:
+              """Read the real stockpile; Human Play V5 never injects resources."""
+              row = conn.execute(
+                  """
+                  SELECT COALESCE(metal, 0) AS metal,
+                         COALESCE(crystal, 0) AS crystal,
+                         COALESCE(fuel_cells, 0) AS fuel_cells
+                  FROM planets WHERE id = ? LIMIT 1;
+                  """,
+                  (int(planet_id),),
+              ).fetchone()
+              if not row:
+                  return {}
+              return {
+                  "metal": int(float(row["metal"] or 0)),
+                  "crystal": int(float(row["crystal"] or 0)),
+                  "fuel_cells": int(float(row["fuel_cells"] or 0)),
+                  "raised": 0,
+              }
+
 
           def _pick_progression_planet(
               player_id: int,
               planets: Sequence[Mapping[str, Any]],
               *,
               action_seq: int,
-              home_id: int,
           ) -> Optional[Dict[str, Any]]:
-              """Spread local actions across owned worlds without extra DB reads."""
-              del home_id
+              """Spread local decisions across the commander's owned planets."""
               candidates = [dict(p) for p in planets if int(p.get("id") or 0) > 0]
               if not candidates:
                   return None
@@ -194,6 +163,38 @@ jobs:
                   return candidates[0]
               idx = _stable_roll(player_id, "planet-choice", action_seq, len(candidates))
               return candidates[idx]
+
+
+          def _sync_planet_for_decision(
+              conn,
+              player_id: int,
+              planet: Mapping[str, Any],
+              *,
+              now: float,
+              is_home: bool,
+              personality: str,
+              ambition_scale: float,
+          ) -> Dict[str, Any]:
+              """Finish due work/update production without starting a new domain."""
+              return plan_passive_planet_tick(
+                  conn,
+                  player_id=int(player_id),
+                  planet=planet,
+                  now=float(now),
+                  is_home=bool(is_home),
+                  allow_buildings=False,
+                  allow_research=False,
+                  allow_ships=False,
+                  allow_defense=False,
+                  personality=str(personality),
+                  build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
+                  research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
+                  target_scale=float(ambition_scale),
+                  source="inactive_autoplay",
+                  update_scores=True,
+                  chain_limit=INACTIVE_CHAIN_LIMIT,
+                  idle_chance=0.0,
+              )
 
 
           def _pick_expedition_force(
@@ -226,6 +227,7 @@ jobs:
                   for ship_key in ship_order:
                       if int(hangar.get(ship_key) or 0) >= 1:
                           return {
+                              "planet": planet,
                               "planet_id": planet_id,
                               "galaxy": int(planet.get("galaxy") or 1),
                               "system": int(planet.get("system") or 1),
@@ -240,14 +242,27 @@ jobs:
               *,
               now: float,
               action_seq: int,
+              home_id: int,
+              personality: str,
+              ambition_scale: float,
           ) -> Dict[str, Any]:
-              """Send one canonical expedition when a real hull/slot/fuel permits."""
-              del now
+              """Send one canonical expedition when hull, slot and fuel permit it."""
               force = _pick_expedition_force(
                   conn, int(player_id), action_seq=int(action_seq)
               )
               if not force:
                   return {"ok": True, "sent": False, "reason": "no_expedition_ship"}
+
+              planet = dict(force["planet"])
+              _sync_planet_for_decision(
+                  conn,
+                  int(player_id),
+                  planet,
+                  now=float(now),
+                  is_home=int(force["planet_id"]) == int(home_id),
+                  personality=str(personality),
+                  ambition_scale=float(ambition_scale),
+              )
 
               from .fleet import send_fleet
               from .fleet_defs import EXPEDITION_POSITION
@@ -281,10 +296,9 @@ jobs:
                   "expedition_hours": int(hours),
               }
           ''')
-          one(ia, "\n\ndef _run_player_economy(", helpers + "\n\ndef _run_player_economy(")
+          once("\n\ndef _run_player_economy(", helpers + "\n\ndef _run_player_economy(")
 
           sub(
-              ia,
               r"def _run_player_economy\(.*?\n\n\ndef get_roster_snapshot",
               textwrap.dedent('''\
               def _run_player_economy(
@@ -296,7 +310,8 @@ jobs:
                   action_seq: int = 0,
                   next_action_at: Optional[float] = None,
               ) -> Dict[str, Any]:
-                  """Execute one human-shaped decision through canonical systems."""
+                  """Execute one human-shaped decision through canonical game systems."""
+                  from .auto_empire import try_build_defense, try_build_ships
                   from .models import get_homeworld, get_planets_by_player
 
                   home = get_homeworld(player_id, conn=conn)
@@ -306,10 +321,9 @@ jobs:
                           "error": "no_homeworld",
                           "player_id": player_id,
                       }
-
                   home = dict(home)
                   home_id = int(home["id"])
-                  stockpile = _ensure_resource_floor(conn, home_id)
+                  stockpile = _stockpile_snapshot(conn, home_id)
                   planets = [
                       dict(p)
                       for p in (get_planets_by_player(player_id, conn=conn) or [home])
@@ -330,73 +344,124 @@ jobs:
                       if personal_cooldown
                       else _action_domain_for_player(player_id, personality, seq)
                   )
-                  idle_chance = (
-                      1.0
-                      if personal_cooldown
-                      else 0.0
-                      if is_wake
-                      else AUTOPLAY_STANDING_IDLE_CHANCE
+                  should_idle = bool(
+                      not is_wake
+                      and not personal_cooldown
+                      and _stable_roll(player_id, "idle", seq, 1000)
+                      < int(AUTOPLAY_STANDING_IDLE_CHANCE * 1000)
                   )
 
                   results: List[Dict[str, Any]] = []
+                  direct_action: Optional[Dict[str, Any]] = None
+                  target_planet: Optional[Dict[str, Any]] = None
                   if action_domain == "research" or is_wake:
                       target_planet = home
                   elif action_domain in {"building", "ships", "defense"}:
                       target_planet = _pick_progression_planet(
-                          player_id,
-                          planets,
-                          action_seq=seq,
-                          home_id=home_id,
+                          player_id, planets, action_seq=seq
                       )
-                  else:
-                      target_planet = None
 
                   if target_planet is not None:
                       is_home = int(target_planet["id"]) == home_id or bool(
                           target_planet.get("is_homeworld")
                       )
-                      try:
-                          results.append(
-                              plan_passive_planet_tick(
+                      if action_domain in {"building", "research"}:
+                          try:
+                              results.append(
+                                  plan_passive_planet_tick(
+                                      conn,
+                                      player_id=player_id,
+                                      planet=target_planet,
+                                      now=now,
+                                      is_home=is_home,
+                                      allow_buildings=action_domain == "building",
+                                      allow_research=action_domain == "research",
+                                      allow_ships=False,
+                                      allow_defense=False,
+                                      personality=personality,
+                                      build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
+                                      research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
+                                      target_scale=ambition_scale,
+                                      source="inactive_autoplay",
+                                      update_scores=True,
+                                      chain_limit=INACTIVE_CHAIN_LIMIT,
+                                      idle_chance=(1.0 if personal_cooldown or should_idle else 0.0),
+                                  )
+                              )
+                          except Exception:
+                              logger.exception(
+                                  "inactive autoplay economy failed player=%s planet=%s",
+                                  player_id,
+                                  target_planet.get("id"),
+                              )
+                      elif not personal_cooldown and not should_idle:
+                          try:
+                              sync = _sync_planet_for_decision(
                                   conn,
-                                  player_id=player_id,
-                                  planet=target_planet,
+                                  player_id,
+                                  target_planet,
                                   now=now,
                                   is_home=is_home,
-                                  allow_buildings=action_domain == "building",
-                                  allow_research=action_domain == "research",
-                                  allow_ships=action_domain == "ships",
-                                  allow_defense=action_domain == "defense",
                                   personality=personality,
-                                  build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
-                                  research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
-                                  target_scale=ambition_scale,
-                                  source="inactive_autoplay",
-                                  update_scores=True,
-                                  chain_limit=INACTIVE_CHAIN_LIMIT,
-                                  idle_chance=idle_chance,
-                                  auto_boost_timekeeper=False,
+                                  ambition_scale=ambition_scale,
                               )
-                          )
-                      except Exception:
-                          logger.exception(
-                              "inactive autoplay economy failed player=%s planet=%s",
-                              player_id,
-                              target_planet.get("id"),
-                          )
+                              if action_domain == "ships":
+                                  direct_action = try_build_ships(
+                                      conn,
+                                      player_id=player_id,
+                                      planet_id=int(target_planet["id"]),
+                                      personality=personality,
+                                  )
+                                  if direct_action.get("ok"):
+                                      sync["ships"] = direct_action
+                              elif action_domain == "defense":
+                                  direct_action = try_build_defense(
+                                      conn,
+                                      player_id=player_id,
+                                      planet_id=int(target_planet["id"]),
+                                      personality=personality,
+                                      target_scale=ambition_scale,
+                                  )
+                                  if direct_action.get("ok"):
+                                      sync["defense"] = direct_action
+                              results.append(sync)
+                          except Exception:
+                              logger.exception(
+                                  "inactive autoplay local action failed player=%s planet=%s",
+                                  player_id,
+                                  target_planet.get("id"),
+                              )
 
                   expedition = {
                       "ok": True,
                       "sent": False,
                       "reason": "not_selected",
                   }
-                  if action_domain == "expedition" and not personal_cooldown:
-                      expedition = _maybe_send_expedition(
-                          conn,
-                          player_id,
-                          now=now,
-                          action_seq=seq,
-                      )
+                  if (
+                      action_domain == "expedition"
+                      and not personal_cooldown
+                      and not should_idle
+                  ):
+                      try:
+                          expedition = _maybe_send_expedition(
+                              conn,
+                              player_id,
+                              now=now,
+                              action_seq=seq,
+                              home_id=home_id,
+                              personality=personality,
+                              ambition_scale=ambition_scale,
+                          )
+                      except Exception:
+                          logger.exception(
+                              "inactive autoplay expedition failed player=%s",
+                              player_id,
+                          )
+                          expedition = {
+                              "ok": False,
+                              "sent": False,
+                              "reason": "exception",
+                          }
 
                   enqueued = any(
                       r.get("build")
@@ -465,89 +530,7 @@ jobs:
               def get_roster_snapshot'''),
           )
 
-          one(
-              ae,
-              "    idle_chance: float = 0.0,\n) -> Dict[str, Any]:",
-              "    idle_chance: float = 0.0,\n    auto_boost_timekeeper: bool = True,\n) -> Dict[str, Any]:",
-          )
-
-          sub(
-              ae,
-              r'''        if ship_res\.get\("ok"\):\n            out\["ships"\] = ship_res\n            _auto_boost_timekeeper\(\n                conn, player_id=int\(player_id\), planet_id=planet_id, domain="shipyard"\n            \)''',
-              textwrap.dedent('''\
-                      if ship_res.get("ok"):
-                          out["ships"] = ship_res
-                          if auto_boost_timekeeper:
-                              _auto_boost_timekeeper(
-                                  conn,
-                                  player_id=int(player_id),
-                                  planet_id=planet_id,
-                                  domain="shipyard",
-                              )'''),
-          )
-
-          sub(
-              ae,
-              r'''        if def_res\.get\("ok"\):\n            out\["defense"\] = def_res\n            _auto_boost_timekeeper\(\n                conn, player_id=int\(player_id\), planet_id=planet_id, domain="defense"\n            \)''',
-              textwrap.dedent('''\
-                      if def_res.get("ok"):
-                          out["defense"] = def_res
-                          if auto_boost_timekeeper:
-                              _auto_boost_timekeeper(
-                                  conn,
-                                  player_id=int(player_id),
-                                  planet_id=planet_id,
-                                  domain="defense",
-                              )'''),
-          )
-
-          one(
-              ae,
-              '    if out["ships"] or out["defense"]:',
-              '    if auto_boost_timekeeper and (out["ships"] or out["defense"]):',
-          )
-
-          sub(
-              tests,
-              r"def test_inactive_resource_floor_raises_empty_stockpile\(autoplay_db\):.*?\n\n\ndef test_max_concurrent_sessions_default_and_clamp",
-              textwrap.dedent('''\
-              def test_inactive_resource_floor_does_not_grant_resources(autoplay_db):
-                  """Human Play V5: dormant humans must finance actions normally."""
-                  from game.inactive_autoplay import _ensure_resource_floor
-
-                  uid = _register_user()
-                  conn = db()
-                  try:
-                      begin_write_transaction(conn)
-                      player = _seed_dormant(conn, uid, days_inactive=5.0)
-                      conn.execute(
-                          "UPDATE planets SET metal = 0, crystal = 0, fuel_cells = 0 WHERE id = ?;",
-                          (int(player["planet_id"]),),
-                      )
-                      stock = _ensure_resource_floor(
-                          conn, int(player["planet_id"])
-                      )
-                      assert stock.get("raised") == 0
-                      row = conn.execute(
-                          "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;",
-                          (int(player["planet_id"]),),
-                      ).fetchone()
-                      assert float(row["metal"]) == 0
-                      assert float(row["crystal"]) == 0
-                      assert float(row["fuel_cells"]) == 0
-                      commit(conn)
-                  finally:
-                      conn.close()
-
-
-              def test_max_concurrent_sessions_default_and_clamp'''),
-          )
-
-          one(
-              v4tests,
-              '''    ), patch("game.inactive_autoplay._ensure_resource_floor", return_value={}), patch(\n        "game.inactive_autoplay.plan_passive_planet_tick"\n    ) as planner, patch(''',
-              '''    ), patch("game.inactive_autoplay._ensure_resource_floor", return_value={}), patch(\n        "game.inactive_autoplay._action_domain_for_player", return_value="building"\n    ), patch(\n        "game.inactive_autoplay.plan_passive_planet_tick"\n    ) as planner, patch(''',
-          )
+          PATH.write_text(text, encoding="utf-8")
 
           Path("tests/test_human_play_loop_v5.py").write_text(
               textwrap.dedent('''\
@@ -556,14 +539,14 @@ jobs:
               from unittest.mock import patch
 
 
-              def test_v5_action_pool_includes_real_fleet_progression():
+              def test_v5_action_pool_has_ships_and_expeditions():
                   from game.inactive_autoplay import INACTIVE_ACTION_DOMAINS
 
                   assert "ships" in INACTIVE_ACTION_DOMAINS
                   assert "expedition" in INACTIVE_ACTION_DOMAINS
 
 
-              def test_v5_cadence_contains_bursts_and_long_breaks():
+              def test_v5_cadence_has_short_returns_and_long_breaks():
                   from game.inactive_autoplay import _next_action_delay_sec
 
                   gaps = [
@@ -580,18 +563,17 @@ jobs:
 
                   planets = [{"id": 1}, {"id": 2}, {"id": 3}]
                   picked = {
-                      _pick_progression_planet(
-                          17, planets, action_seq=seq, home_id=1
-                      )["id"]
+                      _pick_progression_planet(17, planets, action_seq=seq)["id"]
                       for seq in range(20)
                   }
                   assert len(picked) >= 2
 
 
-              def test_v5_expedition_uses_canonical_fleet_send():
+              def test_v5_expedition_uses_canonical_send_fleet():
                   from game.inactive_autoplay import _maybe_send_expedition
 
                   force = {
+                      "planet": {"id": 77, "galaxy": 2, "system": 19},
                       "planet_id": 77,
                       "galaxy": 2,
                       "system": 19,
@@ -602,11 +584,20 @@ jobs:
                       "game.inactive_autoplay._pick_expedition_force",
                       return_value=force,
                   ), patch(
+                      "game.inactive_autoplay._sync_planet_for_decision",
+                      return_value={},
+                  ), patch(
                       "game.fleet.send_fleet",
                       return_value=(True, "ok", meta),
                   ) as send:
                       out = _maybe_send_expedition(
-                          object(), 9, now=12345.0, action_seq=6
+                          object(),
+                          9,
+                          now=12345.0,
+                          action_seq=6,
+                          home_id=77,
+                          personality="spy",
+                          ambition_scale=1.0,
                       )
 
                   assert out["sent"] is True
@@ -617,34 +608,33 @@ jobs:
                   assert 1 <= kwargs["expedition_hours"] <= 4
 
 
-              def test_v5_inactive_shipyard_never_receives_free_timekeeper():
-                  from game.auto_empire import plan_passive_planet_tick
+              def test_v5_runtime_does_not_call_resource_floor():
+                  from game.inactive_autoplay import _run_player_economy
 
-                  ship_result = {
-                      "ok": True,
-                      "ship_key": "solar_skiff",
-                      "amount": 1,
-                      "meta": {},
-                  }
-                  with patch(
-                      "game.auto_empire._finish_due", return_value={}
+                  home = {"id": 5, "is_homeworld": 1, "galaxy": 1, "system": 1}
+                  with patch("game.models.get_homeworld", return_value=home), patch(
+                      "game.models.get_planets_by_player", return_value=[home]
                   ), patch(
-                      "game.auto_empire.try_build_ships",
-                      return_value=ship_result,
-                  ), patch("game.auto_empire._auto_boost_timekeeper") as boost:
-                      out = plan_passive_planet_tick(
-                          object(),
-                          player_id=4,
-                          planet={"id": 8},
-                          now=1000.0,
-                          allow_buildings=False,
-                          allow_research=False,
-                          allow_ships=True,
-                          allow_defense=False,
-                          auto_boost_timekeeper=False,
+                      "game.inactive_autoplay._stockpile_snapshot",
+                      return_value={"metal": 0, "crystal": 0, "fuel_cells": 0, "raised": 0},
+                  ), patch(
+                      "game.inactive_autoplay._ensure_resource_floor"
+                  ) as floor, patch(
+                      "game.inactive_autoplay._action_domain_for_player",
+                      return_value="building",
+                  ), patch(
+                      "game.inactive_autoplay.plan_passive_planet_tick",
+                      return_value={"build": None, "finished": {}},
+                  ), patch(
+                      "game.inactive_autoplay._maybe_join_world_boss",
+                      return_value={"ok": True, "joined": False},
+                  ):
+                      out = _run_player_economy(
+                          object(), 4, now=1000.0, action_seq=0
                       )
-                  assert out["ships"] == ship_result
-                  boost.assert_not_called()
+
+                  assert out["ok"] is True
+                  floor.assert_not_called()
               '''),
               encoding="utf-8",
           )
@@ -656,9 +646,6 @@ jobs:
         run: |
           python -m py_compile \
             game/inactive_autoplay.py \
-            game/auto_empire.py \
-            tests/test_inactive_autoplay.py \
-            tests/test_living_universe_gc2622.py \
             tests/test_human_play_loop_v5.py
 
       - name: Install test dependencies
@@ -681,9 +668,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             game/inactive_autoplay.py \
-            game/auto_empire.py \
-            tests/test_inactive_autoplay.py \
-            tests/test_living_universe_gc2622.py \
             tests/test_human_play_loop_v5.py \
             .github/workflows/apply-human-play-v5.yml
           git commit -m "feat: humanize dormant commander play loop"
