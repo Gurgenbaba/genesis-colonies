@@ -42,17 +42,36 @@ jobs:
 
       - name: Sentinel syntax gate
         run: |
-          python -m py_compile scripts/browser_test_support.py scripts/browser_sentinel.py
+          python -m py_compile scripts/browser_test_support.py scripts/browser_sentinel.py scripts/browser_report.py
           git diff --check
 
       - name: Run sandbox browser journey
-        run: python scripts/browser_sentinel.py --mode sandbox --fail-on high
+        run: python scripts/browser_sentinel.py --mode sandbox --fail-on none
+
+      - name: Evaluate Sentinel gate
+        run: python scripts/browser_report.py artifacts/browser/report.json --fail-on high
 
       - name: Upload Sentinel evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: genesis-sentinel-${{ github.run_id }}
-          path: artifacts/browser/
+          path: |
+            artifacts/browser/report.json
+            artifacts/browser/report.html
+            artifacts/browser/gate.json
+            artifacts/browser/server.log
+            artifacts/browser/screenshots/
+            artifacts/browser/dom/
+            artifacts/browser/findings/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-sentinel-traces-${{ github.run_id }}
+          path: artifacts/browser/traces/
+          if-no-files-found: warn
+          retention-days: 7
