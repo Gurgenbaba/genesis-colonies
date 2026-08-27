@@ -915,12 +915,12 @@ def _send_autoplay_report(conn, item: Mapping[str, Any]) -> None:
             )
         intro = tr(
             "inactive_autoplay_report_intro",
-            "Während du offline warst, hat die Kolonieverwaltung deine Kolonie automatisch weitergeführt:",
+            "Während deiner Abwesenheit hat die Kolonieverwaltung den laufenden Betrieb fortgesetzt:",
             locale=loc,
         )
         subject = tr(
             "inactive_autoplay_report_subject",
-            "Automatisierter Betriebsbericht",
+            "Kolonie-Betriebsbericht",
             locale=loc,
         )
         sender = tr(
