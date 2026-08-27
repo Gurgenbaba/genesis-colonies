@@ -25,6 +25,31 @@ jobs:
       - name: Apply GC-2621
         run: python scripts/_apply_gc2621_inactive_living_universe.py
 
+      - name: Preserve first-wake activity contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("game/inactive_autoplay.py")
+          text = p.read_text(encoding="utf-8")
+          old = '''    action_domain = None if personal_cooldown else _action_domain_for_player(
+              player_id, personality, seq
+          )
+          '''
+          new = '''    action_domain = (
+              "building"
+              if is_wake
+              else None
+              if personal_cooldown
+              else _action_domain_for_player(player_id, personality, seq)
+          )
+          '''
+          if old not in text:
+              raise SystemExit("missing GC-2621 first-wake action anchor")
+          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
       - name: Syntax check
         run: python -m py_compile game/inactive_autoplay.py tests/test_inactive_autoplay_gc2621.py
 
