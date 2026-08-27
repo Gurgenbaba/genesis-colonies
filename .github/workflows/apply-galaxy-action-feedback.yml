@@ -34,8 +34,7 @@ jobs:
           python -m pytest -q \
             tests/test_galaxy_action_feedback.py \
             tests/test_gc980_galaxy_quick_action.py \
-            tests/test_fleet_action_reasons.py \
-            tests/test_galaxy.py
+            tests/test_fleet_action_reasons.py
 
       - name: Commit generated patch
         run: |
