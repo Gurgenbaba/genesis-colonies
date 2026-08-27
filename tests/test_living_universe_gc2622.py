@@ -62,7 +62,7 @@ def test_gc2622_inactive_decision_passes_personal_ambition():
     home = {"id": 101, "is_homeworld": 1}
     with patch("game.models.get_homeworld", return_value=home), patch(
         "game.models.get_planets_by_player", return_value=[home]
-    ), patch("game.inactive_autoplay._ensure_resource_floor", return_value={}), patch(
+    ), patch("game.inactive_autoplay._stockpile_snapshot", return_value={}), patch(
         "game.inactive_autoplay.plan_passive_planet_tick"
     ) as planner, patch(
         "game.inactive_autoplay._maybe_join_world_boss", return_value={"ok": True, "joined": False}
