@@ -29,25 +29,29 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
           p = Path("game/inactive_autoplay.py")
           text = p.read_text(encoding="utf-8")
-          old = '''    action_domain = None if personal_cooldown else _action_domain_for_player(
-              player_id, personality, seq
+          pattern = (
+              r"(?m)^    action_domain = None if personal_cooldown else _action_domain_for_player\(\n"
+              r"\s+player_id, personality, seq\n"
+              r"\s+\)\n"
           )
-          '''
-          new = '''    action_domain = (
-              "building"
-              if is_wake
-              else None
-              if personal_cooldown
-              else _action_domain_for_player(player_id, personality, seq)
+          replacement = (
+              "    action_domain = (\n"
+              "        \"building\"\n"
+              "        if is_wake\n"
+              "        else None\n"
+              "        if personal_cooldown\n"
+              "        else _action_domain_for_player(player_id, personality, seq)\n"
+              "    )\n"
           )
-          '''
-          if old not in text:
+          text, count = re.subn(pattern, replacement, text, count=1)
+          if count != 1:
               raise SystemExit("missing GC-2621 first-wake action anchor")
-          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+          p.write_text(text, encoding="utf-8")
           PY
 
       - name: Syntax check
