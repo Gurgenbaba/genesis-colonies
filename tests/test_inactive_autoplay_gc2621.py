@@ -72,15 +72,13 @@ def test_gc2621_personal_pace_is_deterministic_and_varied():
 
 
 def test_gc2621_one_progression_domain_per_decision(autoplay_v3_db):
-    from game.auto_empire import personality_for_player
-    from game.inactive_autoplay import _action_domain_for_player, _run_player_economy
+    from game.inactive_autoplay import _run_player_economy
 
     uid = _register_user()
     conn = db()
     try:
         begin_write_transaction(conn)
         _seed_dormant(conn, uid)
-        personality = personality_for_player(uid)
         with patch("game.inactive_autoplay.plan_passive_planet_tick") as planner:
             planner.return_value = {
                 "build": None,
@@ -102,8 +100,9 @@ def test_gc2621_one_progression_domain_per_decision(autoplay_v3_db):
             + int(bool(kwargs["allow_defense"]))
         )
         assert enabled == 1
+        assert kwargs["allow_buildings"] is True
         assert kwargs["allow_ships"] is False
-        assert result["action_domain"] == _action_domain_for_player(uid, personality, 3)
+        assert result["action_domain"] == "building"
         assert result["action_seq"] == 4
         assert result["next_action_at"] > time.time()
         commit(conn)
