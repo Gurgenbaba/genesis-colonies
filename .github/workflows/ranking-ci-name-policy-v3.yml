@@ -1,0 +1,68 @@
+name: Fix Ranking CI Name Policy V3
+
+on:
+  push:
+    branches:
+      - hotfix/ranking-ci-name-policy-v2
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: '0'
+      SECRET_KEY: ci-ranking-name-policy-v3-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: '1'
+      GC_EMBEDDED_CRON: '0'
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/ranking-ci-name-policy-v2
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Apply robust fixture fix
+        run: python scripts/apply_ranking_ci_name_policy_v3.py
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+
+      - name: Compile and diff check
+        run: |
+          python -m py_compile tests/test_ranking.py game/ranking.py game/name_policy.py
+          node --check static/main.js
+          node --check static/js/ranking_page.js
+          git diff --check
+
+      - name: Name-policy collision regression
+        run: python -m pytest -q --tb=line tests/test_ranking.py::test_create_player_helper_retries_name_policy_collision
+
+      - name: Big-score regression suite
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_ranking.py tests/test_number_format.py tests/test_playercard_exact_scores.py tests/test_noob_protection.py \
+            tests/test_big_score_migration.py \
+            tests/test_gc622_integer_overflow.py::TestGC622SchemaTypes::test_player_scores_use_decimal_text \
+            tests/test_gc622_integer_overflow.py::TestGC622Ranking
+
+      - name: Commit clean test-only fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/ranking-ci-name-policy-v3.yml scripts/apply_ranking_ci_name_policy_v3.py
+          git add tests/test_ranking.py
+          git diff --cached --check
+          git commit -m "test: retry ranking fixtures on name-policy collisions"
+          git push origin HEAD:hotfix/ranking-ci-name-policy-v2
