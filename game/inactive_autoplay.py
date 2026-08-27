@@ -1,8 +1,8 @@
 """Inactive autoplay — living dormant empires (EPIC-26 / GC-2601).
 
 GC-INACTIVE-SHIFT-001 — Day Shift: a small shift crew (2–3) stays visibly
-online; after a fixed tenure they rotate back to the dormant queue. Never
-fleets or expeditions.
+online; after a fixed tenure they rotate back to the dormant queue. Human Play
+V5 adds sparse canonical shipyard and expedition decisions without another loop.
 """
 
 from __future__ import annotations
@@ -47,14 +47,14 @@ INACTIVE_CHAIN_LIMIT = 1
 # GC-2621 — Living Universe V3. One dormant commander decision starts at most
 # one progression domain. Per-player cadence breaks ranking lockstep without
 # increasing the global SQLite writer budget.
-INACTIVE_ACTION_DOMAINS = ("building", "research", "defense")
+INACTIVE_ACTION_DOMAINS = ("building", "research", "ships", "defense", "expedition")
 INACTIVE_ACTION_WEIGHTS = {
-    "economy": {"building": 65, "research": 25, "defense": 10},
-    "aggressive": {"building": 40, "research": 25, "defense": 35},
-    "turtle": {"building": 45, "research": 15, "defense": 40},
-    "spy": {"building": 35, "research": 50, "defense": 15},
-    "swarm": {"building": 45, "research": 25, "defense": 30},
-    "elite": {"building": 45, "research": 35, "defense": 20},
+    "economy": {"building": 55, "research": 20, "ships": 10, "defense": 8, "expedition": 7},
+    "aggressive": {"building": 30, "research": 15, "ships": 30, "defense": 15, "expedition": 10},
+    "turtle": {"building": 35, "research": 10, "ships": 12, "defense": 35, "expedition": 8},
+    "spy": {"building": 25, "research": 35, "ships": 12, "defense": 8, "expedition": 20},
+    "swarm": {"building": 30, "research": 15, "ships": 35, "defense": 10, "expedition": 10},
+    "elite": {"building": 28, "research": 25, "ships": 27, "defense": 10, "expedition": 10},
 }
 INACTIVE_ACTION_PACE_RANGES_SEC = {
     "aggressive": (5 * 60, 14 * 60),
@@ -76,12 +76,13 @@ INACTIVE_AMBITION_BASE = {
 # Longer strategic phases shift priorities without extra polling or workers.
 INACTIVE_STRATEGIC_PHASES = ("growth", "research", "fortification", "balanced")
 INACTIVE_PHASE_DOMAIN_MULT = {
-    "growth": {"building": 1.75, "research": 0.70, "defense": 0.55},
-    "research": {"building": 0.70, "research": 1.85, "defense": 0.55},
-    "fortification": {"building": 0.70, "research": 0.65, "defense": 1.90},
-    "balanced": {"building": 1.00, "research": 1.00, "defense": 1.00},
+    "growth": {"building": 1.75, "research": 0.70, "ships": 0.85, "defense": 0.55, "expedition": 0.75},
+    "research": {"building": 0.70, "research": 1.85, "ships": 0.75, "defense": 0.55, "expedition": 0.90},
+    "fortification": {"building": 0.70, "research": 0.65, "ships": 1.15, "defense": 1.90, "expedition": 0.65},
+    "balanced": {"building": 1.00, "research": 1.00, "ships": 1.00, "defense": 1.00, "expedition": 1.00},
 }
 INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05
+INACTIVE_EXPEDITION_SHIP_PREFERENCE = ("solar_skiff", "eclipse_runner")
 
 # Soft floor so empty dormant empires can enqueue (far below pirate seed).
 INACTIVE_RESOURCE_FLOOR = {
@@ -280,11 +281,34 @@ def _action_domain_for_player(player_id: int, personality: str, action_seq: int)
 
 
 def _next_action_delay_sec(player_id: int, personality: str, action_seq: int) -> int:
+    """Human-shaped cadence: short bursts interrupted by longer breaks."""
     low, high = INACTIVE_ACTION_PACE_RANGES_SEC.get(
         str(personality), INACTIVE_ACTION_PACE_RANGES_SEC["economy"]
     )
     low_i, high_i = max(60, int(low)), max(int(low), int(high))
-    return low_i + _stable_roll(player_id, "pace", action_seq, high_i - low_i + 1)
+    seq = max(0, int(action_seq))
+    cycle = seq // 8
+    burst_len = 3 + _stable_roll(player_id, "session-span", cycle, 5)
+    if seq > 0 and seq % burst_len == 0:
+        return 45 * 60 + _stable_roll(
+            player_id, "session-break", seq, 3 * 3600 + 1
+        )
+
+    quick_chance = {
+        "aggressive": 55,
+        "swarm": 50,
+        "elite": 45,
+        "spy": 40,
+        "economy": 35,
+        "turtle": 25,
+    }.get(str(personality), 35)
+    if _stable_roll(player_id, "quick-return", seq, 100) < quick_chance:
+        return 3 * 60 + _stable_roll(
+            player_id, "quick-gap", seq, 8 * 60 + 1
+        )
+    return low_i + _stable_roll(
+        player_id, "pace", seq, high_i - low_i + 1
+    )
 
 
 def is_inactive_autoplay_enabled(*, conn=None) -> bool:
@@ -751,6 +775,176 @@ def _maybe_join_world_boss(conn, player_id: int, *, now: float) -> Dict[str, Any
         logger.exception("inactive autoplay world boss participation failed player=%s", player_id)
         return {"ok": False, "joined": False, "reason": "world_boss_error"}
 
+def _stockpile_snapshot(conn, planet_id: int) -> Dict[str, int]:
+    """Read the real stockpile; Human Play V5 never injects resources."""
+    row = conn.execute(
+        """
+        SELECT COALESCE(metal, 0) AS metal,
+               COALESCE(crystal, 0) AS crystal,
+               COALESCE(fuel_cells, 0) AS fuel_cells
+        FROM planets WHERE id = ? LIMIT 1;
+        """,
+        (int(planet_id),),
+    ).fetchone()
+    if not row:
+        return {}
+    return {
+        "metal": int(float(row["metal"] or 0)),
+        "crystal": int(float(row["crystal"] or 0)),
+        "fuel_cells": int(float(row["fuel_cells"] or 0)),
+        "raised": 0,
+    }
+
+
+def _pick_progression_planet(
+    player_id: int,
+    planets: Sequence[Mapping[str, Any]],
+    *,
+    action_seq: int,
+) -> Optional[Dict[str, Any]]:
+    """Spread local decisions across the commander's owned planets."""
+    candidates = [dict(p) for p in planets if int(p.get("id") or 0) > 0]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: int(p.get("id") or 0))
+    if len(candidates) == 1:
+        return candidates[0]
+    idx = _stable_roll(player_id, "planet-choice", action_seq, len(candidates))
+    return candidates[idx]
+
+
+def _sync_planet_for_decision(
+    conn,
+    player_id: int,
+    planet: Mapping[str, Any],
+    *,
+    now: float,
+    is_home: bool,
+    personality: str,
+    ambition_scale: float,
+) -> Dict[str, Any]:
+    """Finish due work/update production without starting a new action."""
+    return plan_passive_planet_tick(
+        conn,
+        player_id=int(player_id),
+        planet=planet,
+        now=float(now),
+        is_home=bool(is_home),
+        allow_buildings=False,
+        allow_research=False,
+        allow_ships=False,
+        allow_defense=False,
+        personality=str(personality),
+        build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
+        research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
+        target_scale=float(ambition_scale),
+        source="inactive_autoplay",
+        update_scores=True,
+        chain_limit=INACTIVE_CHAIN_LIMIT,
+        idle_chance=0.0,
+    )
+
+
+def _pick_expedition_force(
+    conn,
+    player_id: int,
+    *,
+    action_seq: int,
+) -> Optional[Dict[str, Any]]:
+    """Pick one real expedition-capable ship from an owned planet."""
+    from .fleet import get_planet_ships
+    from .models import get_planets_by_player
+
+    planets = [
+        dict(p)
+        for p in (get_planets_by_player(int(player_id), conn=conn) or [])
+    ]
+    if not planets:
+        return None
+    planets.sort(key=lambda p: int(p.get("id") or 0))
+    start = _stable_roll(
+        player_id, "expedition-origin", action_seq, len(planets)
+    )
+    ordered = planets[start:] + planets[:start]
+    ship_order = list(INACTIVE_EXPEDITION_SHIP_PREFERENCE)
+    if _stable_roll(player_id, "expedition-hull", action_seq, 2):
+        ship_order.reverse()
+    for planet in ordered:
+        planet_id = int(planet.get("id") or 0)
+        hangar = get_planet_ships(planet_id, conn=conn)
+        for ship_key in ship_order:
+            if int(hangar.get(ship_key) or 0) >= 1:
+                return {
+                    "planet": planet,
+                    "planet_id": planet_id,
+                    "galaxy": int(planet.get("galaxy") or 1),
+                    "system": int(planet.get("system") or 1),
+                    "ships": {ship_key: 1},
+                }
+    return None
+
+
+def _maybe_send_expedition(
+    conn,
+    player_id: int,
+    *,
+    now: float,
+    action_seq: int,
+    home_id: int,
+    personality: str,
+    ambition_scale: float,
+) -> Dict[str, Any]:
+    """Send one canonical expedition when hull, slot and fuel permit it."""
+    force = _pick_expedition_force(
+        conn, int(player_id), action_seq=int(action_seq)
+    )
+    if not force:
+        return {"ok": True, "sent": False, "reason": "no_expedition_ship"}
+
+    planet = dict(force["planet"])
+    _sync_planet_for_decision(
+        conn,
+        int(player_id),
+        planet,
+        now=float(now),
+        is_home=int(force["planet_id"]) == int(home_id),
+        personality=str(personality),
+        ambition_scale=float(ambition_scale),
+    )
+
+    from .fleet import send_fleet
+    from .fleet_defs import EXPEDITION_POSITION
+
+    hours = 1 + _stable_roll(player_id, "expedition-hours", action_seq, 4)
+    ok, reason, meta = send_fleet(
+        player_id=int(player_id),
+        origin_planet_id=int(force["planet_id"]),
+        mission_type="expedition",
+        target_galaxy=int(force["galaxy"]),
+        target_system=int(force["system"]),
+        target_position=int(EXPEDITION_POSITION),
+        ships=dict(force["ships"]),
+        resources={},
+        speed_percent=100,
+        expedition_hours=int(hours),
+        conn=conn,
+    )
+    if not ok:
+        return {
+            "ok": True,
+            "sent": False,
+            "reason": str(reason or "blocked"),
+            "planet_id": int(force["planet_id"]),
+        }
+    return {
+        "ok": True,
+        "sent": True,
+        "fleet_id": int((meta or {}).get("fleet", {}).get("id") or 0),
+        "planet_id": int(force["planet_id"]),
+        "ships": dict(force["ships"]),
+        "expedition_hours": int(hours),
+    }
+
 
 def _run_player_economy(
     conn,
@@ -761,24 +955,20 @@ def _run_player_economy(
     action_seq: int = 0,
     next_action_at: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Run one economy tick for a sticky-roster account.
-
-    `is_wake` (GC-2618): True only for the exact tick a dormant account joins
-    the roster — that tick must stay deterministic (a "just logged in" moment
-    always does something, matching `test_inactive_autoplay_wake_touches_...`).
-    Standing RR ticks (`is_wake=False`, the default) pass
-    `AUTOPLAY_STANDING_IDLE_CHANCE` so an established account occasionally
-    idles for a round instead of a perfectly monotonic staircase every cycle.
-    """
+    """Execute one human-shaped decision through canonical game systems."""
+    from .auto_empire import try_build_defense, try_build_ships
     from .models import get_homeworld, get_planets_by_player
 
     home = get_homeworld(player_id, conn=conn)
     if not home:
         return {"ok": False, "error": "no_homeworld", "player_id": player_id}
-
+    home = dict(home)
     home_id = int(home["id"])
-    floor = _ensure_resource_floor(conn, home_id)
-    planets = get_planets_by_player(player_id, conn=conn) or [home]
+    stockpile = _stockpile_snapshot(conn, home_id)
+    planets = [
+        dict(p)
+        for p in (get_planets_by_player(player_id, conn=conn) or [home])
+    ]
     personality = personality_for_player(player_id)
     seq = max(0, int(action_seq or 0))
     strategic_phase = _strategic_phase_for_player(player_id, seq)
@@ -795,26 +985,39 @@ def _run_player_economy(
         if personal_cooldown
         else _action_domain_for_player(player_id, personality, seq)
     )
-    idle_chance = 1.0 if personal_cooldown else (
-        0.0 if is_wake else AUTOPLAY_STANDING_IDLE_CHANCE
+    should_idle = bool(
+        not is_wake
+        and not personal_cooldown
+        and _stable_roll(player_id, "idle", seq, 1000)
+        < int(AUTOPLAY_STANDING_IDLE_CHANCE * 1000)
     )
+
     results: List[Dict[str, Any]] = []
-    for planet in planets:
-        is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
-        if not is_home and results:
-            continue
-        try:
-            results.append(
-                plan_passive_planet_tick(
+    home_synced = False
+    target_planet: Optional[Dict[str, Any]] = None
+    if action_domain == "research" or is_wake:
+        target_planet = home
+    elif action_domain in {"building", "ships", "defense"}:
+        target_planet = _pick_progression_planet(
+            player_id, planets, action_seq=seq
+        )
+
+    if target_planet is not None:
+        is_home = int(target_planet["id"]) == home_id or bool(
+            target_planet.get("is_homeworld")
+        )
+        if action_domain in {"building", "research"}:
+            try:
+                planned = plan_passive_planet_tick(
                     conn,
                     player_id=player_id,
-                    planet=planet,
+                    planet=target_planet,
                     now=now,
                     is_home=is_home,
                     allow_buildings=action_domain == "building",
                     allow_research=action_domain == "research",
                     allow_ships=False,
-                    allow_defense=action_domain == "defense",
+                    allow_defense=False,
                     personality=personality,
                     build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
                     research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
@@ -822,42 +1025,145 @@ def _run_player_economy(
                     source="inactive_autoplay",
                     update_scores=True,
                     chain_limit=INACTIVE_CHAIN_LIMIT,
-                    idle_chance=idle_chance,
+                    idle_chance=(
+                        1.0 if personal_cooldown or should_idle else 0.0
+                    ),
                 )
+                results.append(planned)
+                home_synced = bool(is_home)
+            except Exception:
+                logger.exception(
+                    "inactive autoplay economy failed player=%s planet=%s",
+                    player_id,
+                    target_planet.get("id"),
+                )
+        elif not personal_cooldown and not should_idle:
+            try:
+                sync = _sync_planet_for_decision(
+                    conn,
+                    player_id,
+                    target_planet,
+                    now=now,
+                    is_home=is_home,
+                    personality=personality,
+                    ambition_scale=ambition_scale,
+                )
+                home_synced = bool(is_home)
+                if action_domain == "ships":
+                    direct_action = try_build_ships(
+                        conn,
+                        player_id=player_id,
+                        planet_id=int(target_planet["id"]),
+                        personality=personality,
+                    )
+                    if direct_action.get("ok"):
+                        sync["ships"] = direct_action
+                elif action_domain == "defense":
+                    direct_action = try_build_defense(
+                        conn,
+                        player_id=player_id,
+                        planet_id=int(target_planet["id"]),
+                        personality=personality,
+                        target_scale=ambition_scale,
+                    )
+                    if direct_action.get("ok"):
+                        sync["defense"] = direct_action
+                results.append(sync)
+            except Exception:
+                logger.exception(
+                    "inactive autoplay local action failed player=%s planet=%s",
+                    player_id,
+                    target_planet.get("id"),
+                )
+
+    expedition = {"ok": True, "sent": False, "reason": "not_selected"}
+    if (
+        action_domain == "expedition"
+        and not personal_cooldown
+        and not should_idle
+    ):
+        try:
+            expedition = _maybe_send_expedition(
+                conn,
+                player_id,
+                now=now,
+                action_seq=seq,
+                home_id=home_id,
+                personality=personality,
+                ambition_scale=ambition_scale,
             )
+            if int(expedition.get("planet_id") or 0) == home_id:
+                home_synced = True
         except Exception:
             logger.exception(
-                "inactive autoplay economy failed player=%s planet=%s",
-                player_id,
-                planet.get("id"),
+                "inactive autoplay expedition failed player=%s", player_id
             )
-        if len(results) >= 2:
-            break
+            expedition = {
+                "ok": False,
+                "sent": False,
+                "reason": "exception",
+            }
+
+    # A human may idle, use a colony, or fail to launch a fleet. Due homeworld
+    # work must still complete so old queues do not freeze between sessions.
+    if not home_synced:
+        try:
+            results.append(
+                _sync_planet_for_decision(
+                    conn,
+                    player_id,
+                    home,
+                    now=now,
+                    is_home=True,
+                    personality=personality,
+                    ambition_scale=ambition_scale,
+                )
+            )
+            home_synced = True
+        except Exception:
+            logger.exception(
+                "inactive autoplay home sync failed player=%s", player_id
+            )
 
     enqueued = any(
         r.get("build")
         or r.get("research")
+        or r.get("ships")
         or r.get("defense")
         or r.get("builds")
         or r.get("researches")
         for r in results
-    )
+    ) or bool(expedition.get("sent"))
     finished_any = any((r.get("finished") or {}) for r in results)
-    finished_totals = {"buildings": 0, "research": 0, "defense": 0, "shipyard": 0}
-    for r in results:
-        fin = r.get("finished") or {}
+    finished_totals = {
+        "buildings": 0,
+        "research": 0,
+        "defense": 0,
+        "shipyard": 0,
+    }
+    for result in results:
+        finished = result.get("finished") or {}
         for key in finished_totals:
             try:
-                finished_totals[key] += int(fin.get(key) or 0)
+                finished_totals[key] += int(finished.get(key) or 0)
             except (TypeError, ValueError):
                 continue
+
     boss_participation = _maybe_join_world_boss(conn, player_id, now=now)
     next_seq = seq if personal_cooldown else seq + 1
-    next_at = float(next_action_at) if personal_cooldown and next_action_at is not None else None
+    next_at = (
+        float(next_action_at)
+        if personal_cooldown and next_action_at is not None
+        else None
+    )
     next_delay = None
     if not personal_cooldown:
         next_delay = _next_action_delay_sec(player_id, personality, seq)
         next_at = float(now) + float(next_delay)
+
+    last_action = _describe_last_action(results)
+    if not last_action and expedition.get("sent"):
+        last_action = "expedition"
     return {
         "ok": True,
         "player_id": player_id,
@@ -865,8 +1171,8 @@ def _run_player_economy(
         "enqueued": enqueued,
         "finished": finished_any,
         "finished_totals": finished_totals,
-        "last_action": _describe_last_action(results),
-        "resource_floor": floor,
+        "last_action": last_action,
+        "resource_floor": stockpile,
         "action_domain": action_domain,
         "action_seq": next_seq,
         "next_action_delay_sec": next_delay,
@@ -874,6 +1180,7 @@ def _run_player_economy(
         "personal_cooldown": personal_cooldown,
         "strategic_phase": strategic_phase,
         "ambition_scale": ambition_scale,
+        "expedition": expedition,
         "boss_participation": boss_participation,
     }
 
