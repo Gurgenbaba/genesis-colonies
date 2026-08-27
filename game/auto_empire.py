@@ -490,6 +490,7 @@ def try_enqueue_building(
     building_type: str,
     now: float,
     duration_cap: Optional[int] = None,
+    target_scale: float = 1.0,
 ) -> Dict[str, Any]:
     from .buildings import (
         BuildingsPanelContext,
@@ -511,7 +512,9 @@ def try_enqueue_building(
     buildings = get_planet_buildings(planet_id, conn=conn)
     research = get_research_levels(player_id, conn=conn)
     current = int(buildings.get(building_type, 0) or 0)
-    target_cap = int(BUILD_TARGETS.get(building_type, 8)) + _stable_jitter(
+    scale = max(0.65, min(1.60, float(target_scale or 1.0)))
+    base_target = int(BUILD_TARGETS.get(building_type, 8))
+    target_cap = int(round(float(base_target) * scale)) + _stable_jitter(
         player_id, building_type, BUILD_TARGET_JITTER
     )
     target_cap = max(1, target_cap)
@@ -562,6 +565,7 @@ def try_enqueue_research(
     tech_key: str,
     now: float,
     duration_cap: Optional[int] = None,
+    target_scale: float = 1.0,
 ) -> Dict[str, Any]:
     from .models import (
         add_research_job,
@@ -597,7 +601,9 @@ def try_enqueue_research(
     if int(buildings.get("research_lab", 0) or 0) <= 0:
         return {"ok": False, "error": "no_lab"}
     current = int(levels.get(tech_key, 0) or 0)
-    target_cap = int(RESEARCH_TARGETS.get(tech_key, 5)) + _stable_jitter(
+    scale = max(0.65, min(1.60, float(target_scale or 1.0)))
+    base_target = int(RESEARCH_TARGETS.get(tech_key, 5))
+    target_cap = int(round(float(base_target) * scale)) + _stable_jitter(
         player_id, tech_key, RESEARCH_TARGET_JITTER
     )
     target_cap = max(1, target_cap)
@@ -689,6 +695,7 @@ def try_build_defense(
     player_id: int,
     planet_id: int,
     personality: str,
+    target_scale: float = 1.0,
 ) -> Dict[str, Any]:
     from .db import table_exists
     from .defense import build_defense
@@ -705,11 +712,13 @@ def try_build_defense(
         PERSONALITY_DEFENSE_BIAS.get(personality)
         or PERSONALITY_DEFENSE_BIAS["aggressive"]
     )
+    scale = max(0.65, min(1.60, float(target_scale or 1.0)))
     for defense_key, want in targets:
+        wanted = max(1, int(round(float(want) * scale)))
         have = int(current.get(defense_key) or 0)
-        if have >= int(want):
+        if have >= wanted:
             continue
-        amount = min(10, max(1, int(want) - have))
+        amount = min(10, max(1, wanted - have))
         ok, reason, meta = build_defense(
             player_id=player_id,
             planet_id=planet_id,
@@ -834,6 +843,7 @@ def plan_passive_planet_tick(
     personality: str = "economy",
     build_duration_cap: Optional[int] = None,
     research_duration_cap: Optional[int] = None,
+    target_scale: float = 1.0,
     source: str = "auto_empire",
     update_scores: bool = True,
     chain_limit: int = 1,
@@ -907,6 +917,7 @@ def plan_passive_planet_tick(
                     building_type=bkey,
                     now=ts,
                     duration_cap=build_duration_cap,
+                        target_scale=target_scale,
                 )
                 if res.get("ok"):
                     out["build"] = res
@@ -931,6 +942,7 @@ def plan_passive_planet_tick(
                     tech_key=tech,
                     now=ts,
                     duration_cap=research_duration_cap,
+                        target_scale=target_scale,
                 )
                 if res.get("ok"):
                     out["research"] = res
@@ -989,6 +1001,7 @@ def plan_passive_planet_tick(
             player_id=int(player_id),
             planet_id=planet_id,
             personality=str(personality),
+            target_scale=target_scale,
         )
         if def_res.get("ok"):
             out["defense"] = def_res
