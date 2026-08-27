@@ -248,3 +248,10 @@ Admin-KPIs: `economy_interval_sec`, `wait_economy_sec`.
 - Pro Commander-Entscheidung genau eine Progression-Domäne.
 - Deterministische 5–35-Minuten-Pace je Personality.
 - Ein minimaler World-Boss-Token-Schlag pro Event bei vorhandenem Kampfschiff; kein Auto-Finisher unter 5% HP.
+
+
+## Living Universe V4 — strategic diversity
+
+Dormant commanders no longer converge on nearly identical long-term ceilings. Each account receives a deterministic empire ambition factor, while longer strategic phases temporarily favor growth, research, fortification, or a balanced posture. The existing one-action decision contract and SQLite writer budget remain unchanged.
+
+Player-facing messages describe colony operations and commander activity only. Internal implementation terminology must not be surfaced in public reports, community announcements, or Discord-facing text.

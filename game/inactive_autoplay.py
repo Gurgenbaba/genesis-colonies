@@ -64,6 +64,23 @@ INACTIVE_ACTION_PACE_RANGES_SEC = {
     "spy": (12 * 60, 28 * 60),
     "turtle": (15 * 60, 35 * 60),
 }
+# Permanent empire ambition: equal personalities still develop different ceilings.
+INACTIVE_AMBITION_BASE = {
+    "economy": 1.16,
+    "aggressive": 1.02,
+    "turtle": 1.08,
+    "spy": 0.96,
+    "swarm": 1.04,
+    "elite": 1.12,
+}
+# Longer strategic phases shift priorities without extra polling or workers.
+INACTIVE_STRATEGIC_PHASES = ("growth", "research", "fortification", "balanced")
+INACTIVE_PHASE_DOMAIN_MULT = {
+    "growth": {"building": 1.75, "research": 0.70, "defense": 0.55},
+    "research": {"building": 0.70, "research": 1.85, "defense": 0.55},
+    "fortification": {"building": 0.70, "research": 0.65, "defense": 1.90},
+    "balanced": {"building": 1.00, "research": 1.00, "defense": 1.00},
+}
 INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05
 
 # Soft floor so empty dormant empires can enqueue (far below pirate seed).
@@ -227,12 +244,33 @@ def _stable_roll(player_id: int, namespace: str, sequence: int, modulo: int) -> 
     return int(digest[:16], 16) % cap
 
 
+def _ambition_scale(player_id: int, personality: str) -> float:
+    base = float(INACTIVE_AMBITION_BASE.get(str(personality), 1.0))
+    personal_pct = 84 + _stable_roll(player_id, "ambition", 0, 43)  # 0.84..1.26
+    return round(max(0.72, min(1.55, base * (float(personal_pct) / 100.0))), 3)
+
+
+def _strategic_phase_for_player(player_id: int, action_seq: int) -> str:
+    span = 36 + _stable_roll(player_id, "phase-span", 0, 37)  # 36..72 decisions
+    offset = _stable_roll(player_id, "phase-offset", 0, len(INACTIVE_STRATEGIC_PHASES))
+    idx = ((max(0, int(action_seq)) // max(1, int(span))) + int(offset)) % len(
+        INACTIVE_STRATEGIC_PHASES
+    )
+    return INACTIVE_STRATEGIC_PHASES[idx]
+
+
 def _action_domain_for_player(player_id: int, personality: str, action_seq: int) -> str:
-    weights = INACTIVE_ACTION_WEIGHTS.get(str(personality)) or INACTIVE_ACTION_WEIGHTS["economy"]
+    base_weights = INACTIVE_ACTION_WEIGHTS.get(str(personality)) or INACTIVE_ACTION_WEIGHTS["economy"]
+    phase = _strategic_phase_for_player(player_id, action_seq)
+    phase_mult = INACTIVE_PHASE_DOMAIN_MULT.get(phase) or INACTIVE_PHASE_DOMAIN_MULT["balanced"]
+    weights = {
+        key: max(0, int(round(float(base_weights.get(key) or 0) * float(phase_mult.get(key) or 1.0))))
+        for key in INACTIVE_ACTION_DOMAINS
+    }
     total = sum(max(0, int(weights.get(key) or 0)) for key in INACTIVE_ACTION_DOMAINS)
     if total <= 0:
         return "building"
-    roll = _stable_roll(player_id, "domain", action_seq, total)
+    roll = _stable_roll(player_id, f"domain:{phase}", action_seq, total)
     cursor = 0
     for domain in INACTIVE_ACTION_DOMAINS:
         cursor += max(0, int(weights.get(domain) or 0))
@@ -743,6 +781,8 @@ def _run_player_economy(
     planets = get_planets_by_player(player_id, conn=conn) or [home]
     personality = personality_for_player(player_id)
     seq = max(0, int(action_seq or 0))
+    strategic_phase = _strategic_phase_for_player(player_id, seq)
+    ambition_scale = _ambition_scale(player_id, personality)
     personal_cooldown = bool(
         not is_wake
         and next_action_at is not None
@@ -778,6 +818,7 @@ def _run_player_economy(
                     personality=personality,
                     build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
                     research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
+                    target_scale=ambition_scale,
                     source="inactive_autoplay",
                     update_scores=True,
                     chain_limit=INACTIVE_CHAIN_LIMIT,
@@ -831,6 +872,8 @@ def _run_player_economy(
         "next_action_delay_sec": next_delay,
         "next_action_at": next_at,
         "personal_cooldown": personal_cooldown,
+        "strategic_phase": strategic_phase,
+        "ambition_scale": ambition_scale,
         "boss_participation": boss_participation,
     }
 
