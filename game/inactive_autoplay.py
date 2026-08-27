@@ -7,6 +7,7 @@ fleets or expeditions.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -42,6 +43,28 @@ INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
 INACTIVE_RESEARCH_DURATION_CAP = 1200  # 20 min
 # GC-PERF-AUTOPLAY-003: no same-tick force-complete chains (was 2).
 INACTIVE_CHAIN_LIMIT = 1
+
+# GC-2621 — Living Universe V3. One dormant commander decision starts at most
+# one progression domain. Per-player cadence breaks ranking lockstep without
+# increasing the global SQLite writer budget.
+INACTIVE_ACTION_DOMAINS = ("building", "research", "defense")
+INACTIVE_ACTION_WEIGHTS = {
+    "economy": {"building": 65, "research": 25, "defense": 10},
+    "aggressive": {"building": 40, "research": 25, "defense": 35},
+    "turtle": {"building": 45, "research": 15, "defense": 40},
+    "spy": {"building": 35, "research": 50, "defense": 15},
+    "swarm": {"building": 45, "research": 25, "defense": 30},
+    "elite": {"building": 45, "research": 35, "defense": 20},
+}
+INACTIVE_ACTION_PACE_RANGES_SEC = {
+    "aggressive": (5 * 60, 14 * 60),
+    "swarm": (6 * 60, 16 * 60),
+    "elite": (8 * 60, 20 * 60),
+    "economy": (10 * 60, 24 * 60),
+    "spy": (12 * 60, 28 * 60),
+    "turtle": (15 * 60, 35 * 60),
+}
+INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05
 
 # Soft floor so empty dormant empires can enqueue (far below pirate seed).
 INACTIVE_RESOURCE_FLOOR = {
@@ -194,6 +217,36 @@ def online_percent() -> float:
 def online_visible_cap(*, conn=None, now: Optional[float] = None) -> int:
     """GC-INACTIVE-SHIFT-001: shift size (== visible online)."""
     return shift_cap(now=now, conn=conn)
+
+
+def _stable_roll(player_id: int, namespace: str, sequence: int, modulo: int) -> int:
+    """Process-stable deterministic roll; Python's salted hash() is forbidden here."""
+    cap = max(1, int(modulo))
+    raw = f"inactive:{namespace}:{int(player_id)}:{int(sequence)}".encode("utf-8")
+    digest = hashlib.sha256(raw).hexdigest()
+    return int(digest[:16], 16) % cap
+
+
+def _action_domain_for_player(player_id: int, personality: str, action_seq: int) -> str:
+    weights = INACTIVE_ACTION_WEIGHTS.get(str(personality)) or INACTIVE_ACTION_WEIGHTS["economy"]
+    total = sum(max(0, int(weights.get(key) or 0)) for key in INACTIVE_ACTION_DOMAINS)
+    if total <= 0:
+        return "building"
+    roll = _stable_roll(player_id, "domain", action_seq, total)
+    cursor = 0
+    for domain in INACTIVE_ACTION_DOMAINS:
+        cursor += max(0, int(weights.get(domain) or 0))
+        if roll < cursor:
+            return domain
+    return "building"
+
+
+def _next_action_delay_sec(player_id: int, personality: str, action_seq: int) -> int:
+    low, high = INACTIVE_ACTION_PACE_RANGES_SEC.get(
+        str(personality), INACTIVE_ACTION_PACE_RANGES_SEC["economy"]
+    )
+    low_i, high_i = max(60, int(low)), max(int(low), int(high))
+    return low_i + _stable_roll(player_id, "pace", action_seq, high_i - low_i + 1)
 
 
 def is_inactive_autoplay_enabled(*, conn=None) -> bool:
@@ -422,6 +475,8 @@ def _load_roster(conn=None) -> List[Dict[str, Any]]:
                     "builds_done": int(item.get("builds_done") or 0),
                     "research_done": int(item.get("research_done") or 0),
                     "defense_done": int(item.get("defense_done") or 0),
+                "action_seq": int(item.get("action_seq") or 0),
+                "next_action_at": item.get("next_action_at"),
                 }
             )
 
@@ -484,6 +539,8 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "builds_done": int(item.get("builds_done") or 0),
                 "research_done": int(item.get("research_done") or 0),
                 "defense_done": int(item.get("defense_done") or 0),
+                "action_seq": int(item.get("action_seq") or 0),
+                "next_action_at": item.get("next_action_at"),
             }
         )
     return kept
@@ -584,12 +641,87 @@ def _describe_last_action(results: Sequence[Mapping[str, Any]]) -> Optional[str]
     return None
 
 
+def _weakest_combat_ship_for_player(conn, player_id: int) -> Optional[Dict[str, Any]]:
+    """Find one weakest combat-capable ship across the commander's empire."""
+    from .combat_models import combat_stats_for_ship
+
+    rows = conn.execute(
+        """
+        SELECT ps.planet_id, ps.ship_key, ps.amount
+        FROM planet_ships ps
+        JOIN planets p ON p.id = ps.planet_id
+        WHERE p.player_id = ? AND COALESCE(ps.amount, 0) > 0;
+        """,
+        (int(player_id),),
+    ).fetchall()
+    best: Optional[Tuple[int, str, int]] = None
+    for row in rows:
+        stats = combat_stats_for_ship(str(row["ship_key"]))
+        if stats is None or int(stats.attack or 0) <= 0:
+            continue
+        candidate = (int(stats.attack or 0), str(row["ship_key"]), int(row["planet_id"]))
+        if best is None or candidate < best:
+            best = candidate
+    if best is None:
+        return None
+    return {"planet_id": best[2], "ships": {best[1]: 1}}
+
+
+def _maybe_join_world_boss(conn, player_id: int, *, now: float) -> Dict[str, Any]:
+    """One tiny canonical instant strike per boss, never during the final 5% HP."""
+    try:
+        from .world_boss import can_player_attack_boss, execute_instant_attack, list_active_events
+
+        token_force = _weakest_combat_ship_for_player(conn, int(player_id))
+        if not token_force:
+            return {"ok": True, "joined": False, "reason": "no_combat_ships"}
+        for event in list_active_events(conn=conn, now=float(now), limit=3):
+            max_hp = max(1, int(event.get("max_hp") or 1))
+            hp_ratio = float(event.get("current_hp") or 0) / float(max_hp)
+            if hp_ratio <= INACTIVE_WORLD_BOSS_SAFE_HP_RATIO:
+                continue
+            ok, _reason, meta = can_player_attack_boss(
+                int(player_id),
+                int(event["id"]),
+                conn=conn,
+                now=float(now),
+                enforce_cooldown=False,
+                check_inflight=False,
+            )
+            if not ok or int((meta or {}).get("waves") or 0) > 0:
+                continue
+            strike = execute_instant_attack(
+                int(player_id),
+                int(event["id"]),
+                token_force["ships"],
+                planet_id=int(token_force["planet_id"]),
+                conn=conn,
+                now=float(now),
+                auto_select=False,
+                hit_mult=1,
+            )
+            if strike.get("ok"):
+                return {
+                    "ok": True,
+                    "joined": True,
+                    "event_id": int(event["id"]),
+                    "damage": int(strike.get("damage") or 0),
+                    "ships": dict(token_force["ships"]),
+                }
+        return {"ok": True, "joined": False, "reason": "no_eligible_boss"}
+    except Exception:
+        logger.exception("inactive autoplay world boss participation failed player=%s", player_id)
+        return {"ok": False, "joined": False, "reason": "world_boss_error"}
+
+
 def _run_player_economy(
     conn,
     player_id: int,
     *,
     now: float,
     is_wake: bool = False,
+    action_seq: int = 0,
+    next_action_at: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Run one economy tick for a sticky-roster account.
 
@@ -610,7 +742,22 @@ def _run_player_economy(
     floor = _ensure_resource_floor(conn, home_id)
     planets = get_planets_by_player(player_id, conn=conn) or [home]
     personality = personality_for_player(player_id)
-    idle_chance = 0.0 if is_wake else AUTOPLAY_STANDING_IDLE_CHANCE
+    seq = max(0, int(action_seq or 0))
+    personal_cooldown = bool(
+        not is_wake
+        and next_action_at is not None
+        and float(now) < float(next_action_at)
+    )
+    action_domain = (
+        "building"
+        if is_wake
+        else None
+        if personal_cooldown
+        else _action_domain_for_player(player_id, personality, seq)
+    )
+    idle_chance = 1.0 if personal_cooldown else (
+        0.0 if is_wake else AUTOPLAY_STANDING_IDLE_CHANCE
+    )
     results: List[Dict[str, Any]] = []
     for planet in planets:
         is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
@@ -624,10 +771,10 @@ def _run_player_economy(
                     planet=planet,
                     now=now,
                     is_home=is_home,
-                    allow_buildings=True,
-                    allow_research=True,
+                    allow_buildings=action_domain == "building",
+                    allow_research=action_domain == "research",
                     allow_ships=False,
-                    allow_defense=True,
+                    allow_defense=action_domain == "defense",
                     personality=personality,
                     build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
                     research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
@@ -663,6 +810,13 @@ def _run_player_economy(
                 finished_totals[key] += int(fin.get(key) or 0)
             except (TypeError, ValueError):
                 continue
+    boss_participation = _maybe_join_world_boss(conn, player_id, now=now)
+    next_seq = seq if personal_cooldown else seq + 1
+    next_at = float(next_action_at) if personal_cooldown and next_action_at is not None else None
+    next_delay = None
+    if not personal_cooldown:
+        next_delay = _next_action_delay_sec(player_id, personality, seq)
+        next_at = float(now) + float(next_delay)
     return {
         "ok": True,
         "player_id": player_id,
@@ -672,6 +826,12 @@ def _run_player_economy(
         "finished_totals": finished_totals,
         "last_action": _describe_last_action(results),
         "resource_floor": floor,
+        "action_domain": action_domain,
+        "action_seq": next_seq,
+        "next_action_delay_sec": next_delay,
+        "next_action_at": next_at,
+        "personal_cooldown": personal_cooldown,
+        "boss_participation": boss_participation,
     }
 
 
@@ -700,6 +860,10 @@ def _apply_economy_result_to_roster_item(
     item["defense_done"] = int(item.get("defense_done") or 0) + int(
         totals.get("defense") or 0
     )
+    if result.get("action_seq") is not None:
+        item["action_seq"] = max(0, int(result.get("action_seq") or 0))
+    if result.get("next_action_at") is not None:
+        item["next_action_at"] = float(result["next_action_at"])
     action = result.get("last_action")
     if action:
         item["last_action"] = action
@@ -751,12 +915,12 @@ def _send_autoplay_report(conn, item: Mapping[str, Any]) -> None:
             )
         intro = tr(
             "inactive_autoplay_report_intro",
-            "Während du offline warst, hat die Kolonieverwaltung deine Kolonie automatisch weitergeführt:",
+            "Während deiner Abwesenheit hat die Kolonieverwaltung den laufenden Betrieb fortgesetzt:",
             locale=loc,
         )
         subject = tr(
             "inactive_autoplay_report_subject",
-            "Automatisierter Betriebsbericht",
+            "Kolonie-Betriebsbericht",
             locale=loc,
         )
         sender = tr(
@@ -1077,7 +1241,13 @@ def run_inactive_autoplay_tick(
                     break
 
                 def _tick_one(player_id=pid, roster_item=item):
-                    res = _run_player_economy(conn, player_id, now=ts)
+                    res = _run_player_economy(
+                        conn,
+                        player_id,
+                        now=ts,
+                        action_seq=int(roster_item.get("action_seq") or 0),
+                        next_action_at=roster_item.get("next_action_at"),
+                    )
                     _apply_economy_result_to_roster_item(roster_item, res)
                     return res
 

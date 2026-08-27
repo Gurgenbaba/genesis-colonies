@@ -9,13 +9,14 @@ Dormante Menschen-Konten rotieren auf eine kleine **Day-Shift** (2–3 online). 
 | Regel | Verhalten |
 |-------|-----------|
 | Presence | Shift-Roster **ist** die Online-Menge: alle aktuellen Schicht-Mitglieder bekommen frisches `last_seen` (GC-INACTIVE-SHIFT-001). Tagsüber (Europe/Berlin 08–23) Target **3**, nachts **2**, gedeckelt durch Ops-Ceiling |
-| Economy | `plan_passive_planet_tick` mit Soft-Caps (15/20 min) + Chain **1** (kein same-tick Force-Complete); Standing-RR nur alle **`economy_interval`** (Default 300s), entkoppelt vom Fleet-Due-Pfad |
+| Economy | `plan_passive_planet_tick` mit Soft-Caps (15/20 min) + Chain **1**; GC-2621 startet pro Commander-Entscheidung nur **eine** Progression-Domäne und nutzt eine stabile 5–35-Minuten-Pace je Personality. Standing-RR bleibt global budgetiert. |
 | Anti-Klon-Varianz | Jeder Account (Inactive **und** Pirate-AI) bekommt eine deterministische `personality` (`auto_empire.personality_for_player`/`pirates._personality_for_bot`), die Bau-/Forschungsreihenfolge (`*_BY_PERSONALITY`), Ziel-Level-Jitter (`_stable_jitter`, ±2 Gebäude/±1 Forschung) und Defense-Bias steuert; standing Ticks (nicht Wake) rollen zusätzlich `AUTOPLAY_STANDING_IDLE_CHANCE` (25%) und lassen eine Runde aus (GC-2618) |
 | Day Shift | Roster-Größe = sichtbare Online-Zahl (`shift_cap`); kein stiller Mass-Builder-Pool mehr |
 | Roster-Rotation | Nach **Tenure** (default 3h) Evict + Betriebsbericht; nächster Dormant rückt nach (batch 1). Evicted bleiben bis `revisit_sec` (12h) in der Queue hinten |
 | Sichtbare Aktivität | Beim Eviction bekommt der Account **eine** Inbox-Nachricht ("Automatisierter Betriebsbericht") mit den kumulierten Zahlen (GC-2615, `_send_autoplay_report` → `messages.create_message`) — kein stiller Tick |
 | Timekeeper-Boost | Defense-/Shipyard-Queues (kein `duration_cap`, da echte Formel) werden nach erfolgreichem Enqueue automatisch per **echtem** Timekeeper-Ledger beschleunigt: Auto-Credit auf 10h wenn Balance leer, danach Auto-Apply `mode="max"` (GC-2616, `_auto_boost_timekeeper` in `game/auto_empire.py`) — gilt für Inactive **und** Pirate-AI gleichermaßen, da beide `plan_passive_planet_tick` teilen |
 | Ships | **nein** (Inactive) / ja (Pirate-AI, siehe unten) |
+| World Boss | GC-2621: Inaktive mit vorhandenen Kampfschiffen setzen pro aktivem Boss genau **einen** Token-Schlag mit dem schwächsten verfügbaren Kampfschiff. Instant-Attack verursacht keine Schiffsverluste; unter 5% Boss-HP wird nicht mehr automatisch angegriffen. |
 | Fleets / Expeditionen | **nie** (Inactive) |
 | Stagger | Wake-Batches (default 1 / 15 min); Economy-Slice default 1/Cron; Shift-Cap default 3 (Clamp 2–4) |
 | Revisit | ~12h — Cooldown nach Schicht, bevor erneut wählbar |
@@ -240,3 +241,10 @@ Admin-KPIs: `economy_interval_sec`, `wait_economy_sec`.
 - Inaktive Autoplay-Konten **fliegen keine Expeditionen** und starten keine Angriffe.
 - Pirate-AI (EPIC-21) darf Expeditionen fliegen — siehe [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md).
 - Ranking-Inactive-Schwelle bleibt 3 Tage; Autoplay hält Roster-Konten darunter.
+
+
+## GC-2621 — Living Universe V3
+
+- Pro Commander-Entscheidung genau eine Progression-Domäne.
+- Deterministische 5–35-Minuten-Pace je Personality.
+- Ein minimaler World-Boss-Token-Schlag pro Event bei vorhandenem Kampfschiff; kein Auto-Finisher unter 5% HP.
