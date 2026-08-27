@@ -13,6 +13,7 @@
       showNotify: typeof GC.showNotify === "function" ? GC.showNotify.bind(GC) : () => {},
       applyActionState: typeof GC.applyActionState === "function" ? GC.applyActionState.bind(GC) : () => {},
       mapActionError: typeof GC.mapActionError === "function" ? GC.mapActionError.bind(GC) : null,
+      fleetReasonText: typeof GC.fleetReasonText === "function" ? GC.fleetReasonText.bind(GC) : null,
       fetchGameAction: typeof GC.fetchGameAction === "function" ? GC.fetchGameAction.bind(GC) : null,
       getDomPlanetId: typeof GC.getDomPlanetId === "function" ? GC.getDomPlanetId.bind(GC) : () => 0,
       formatNumber: typeof GC.formatNumber === "function" ? GC.formatNumber.bind(GC) : (n) => String(n),
@@ -24,6 +25,7 @@
     _attackTrigger: null,
     _attackPresetsCache: null,
     _attackPresetsLoading: false,
+    _attackPresetsLoadFailed: false,
     _recycleFleetStatuses: null,
     _recycleArrivalReloadTimer: null,
     _unwatchRecycleArrivals: null,
@@ -83,7 +85,7 @@
       const cached = this.getAvailableReclaimers(root);
       if (cached > 0) return cached;
       const { fetchGameAction } = deps();
-      if (!fetchGameAction) return 0;
+      if (!fetchGameAction) return null;
       try {
         const res = await fetchGameAction("/api/shipyard", {
           method: "GET",
@@ -101,9 +103,9 @@
           return Math.max(0, parseInt(row?.count || row?.amount || "0", 10) || 0);
         }
       } catch (_) {
-        /* fall through */
+        return null;
       }
-      return 0;
+      return null;
     },
 
     /**
@@ -126,6 +128,10 @@
       const need = Math.max(0, parseInt(needed || "0", 10) || 0);
       const originPlanetId = this.getOriginPlanetId(root);
       const available = await this.resolveAvailableReclaimersAsync(root);
+      if (available === null) {
+        showNotify(t("fleet_error_server_error", t("fleet_error_generic", "Fleet action failed.")), "error");
+        return null;
+      }
       const sendCount = Math.min(available, need);
 
       if (!originPlanetId) {
@@ -318,18 +324,51 @@
       };
     },
 
+    fleetPayload(res) {
+      if (res?.data && typeof res.data === "object") return res.data;
+      if (res?.payload && typeof res.payload === "object") return res.payload;
+      return res || {};
+    },
+
+    fleetReason(res, fallback = "generic") {
+      const payload = this.fleetPayload(res);
+      return String(
+        res?.error ||
+        res?.reason ||
+        payload?.error ||
+        payload?.reason ||
+        fallback
+      );
+    },
+
     notifyFleetError(reason, res, reasonMap) {
-      const { t, showNotify, mapActionError } = deps();
+      const { t, showNotify, mapActionError, fleetReasonText } = deps();
       const key = String(reason || "generic");
-      let msg;
+      const payload = this.fleetPayload(res);
+      let msg = "";
+
       if (reasonMap && Object.prototype.hasOwnProperty.call(reasonMap, key)) {
         const entry = reasonMap[key];
         msg = typeof entry === "function" ? entry(res) : entry;
-      } else if (mapActionError) {
-        msg = mapActionError(key, res?.payload || res);
-      } else {
-        msg = t(`fleet_error_${key}`, t("fleet_error_generic", "Fleet action failed."));
       }
+
+      if (!msg) {
+        const fleetKey = `fleet_error_${key}`;
+        const translated = t(fleetKey, "");
+        if (translated && translated !== fleetKey) msg = translated;
+      }
+
+      if (!msg && fleetReasonText) {
+        msg = fleetReasonText(key, payload);
+      }
+
+      if (!msg && mapActionError) {
+        const mapped = mapActionError(key, payload);
+        const genericAction = t("msg_generic_error", "");
+        if (mapped && mapped !== genericAction) msg = mapped;
+      }
+
+      if (!msg) msg = t("fleet_error_generic", "Fleet action failed.");
       showNotify(msg, "error");
     },
 
@@ -378,20 +417,28 @@
       };
 
       const exec = async () => {
-        const res = await fetchGameAction("/api/fleet/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
+        let res;
+        try {
+          res = await fetchGameAction("/api/fleet/send", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Requested-With": "XMLHttpRequest",
+              ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+            },
+            body: JSON.stringify(payload),
+          });
+        } catch (_err) {
+          if (typeof onError === "function") {
+            onError("server_error", { ok: false, error: "server_error" });
+          }
+          return null;
+        }
         if (res?.ok) {
           applyActionState(res, applyReason);
           if (typeof onSuccess === "function") onSuccess(res);
         } else if (typeof onError === "function") {
-          onError(res?.error || res?.reason || "generic", res);
+          onError(this.fleetReason(res), res);
         }
         return res;
       };
@@ -436,7 +483,9 @@
       const { t, formatNumber } = deps();
       const fleetHref = (trigger.dataset.fleetHref || "").trim();
       const menuLabel = t("galaxy_quick_attack_menu_label", "Raid templates");
-      const emptyText = t("galaxy_quick_attack_empty", "No raid template available.");
+      const emptyText = this._attackPresetsLoadFailed
+        ? t("fleet_error_server_error", t("fleet_error_generic", "Fleet action failed."))
+        : t("galaxy_quick_attack_empty", "No raid template available.");
       const fleetLinkText = t("galaxy_quick_attack_open_fleet", "Open fleet page");
       const moreTpl = t("galaxy_quick_attack_more_ships", "+%(count)s more");
       let bodyHtml;
@@ -527,11 +576,18 @@
           credentials: "same-origin",
         });
         const body = await res.json().catch(() => ({}));
-        const presets = body?.ok && body?.data?.presets ? body.data.presets : [];
+        if (!res.ok || !body?.ok) {
+          this._attackPresetsLoadFailed = true;
+          this._attackPresetsCache = null;
+          return [];
+        }
+        const presets = body?.data?.presets || [];
+        this._attackPresetsLoadFailed = false;
         this._attackPresetsCache = Array.isArray(presets) ? presets : [];
         return this._attackPresetsCache;
       } catch (_err) {
-        this._attackPresetsCache = [];
+        this._attackPresetsLoadFailed = true;
+        this._attackPresetsCache = null;
         return [];
       } finally {
         this._attackPresetsLoading = false;
@@ -723,6 +779,10 @@
       const originPlanetId = this.getOriginPlanetId(root);
       // Board + ring: send min(needed, available); if short, send all free reclaimers.
       const available = await this.resolveAvailableReclaimersAsync(root);
+      if (available === null) {
+        showNotify(t("fleet_error_server_error", t("fleet_error_generic", "Fleet action failed.")), "error");
+        return;
+      }
       const sendCount = Math.min(available, needed);
 
       if (!originPlanetId) {
@@ -872,19 +932,25 @@
       if (!targetGalaxy || !targetSystem || !targetPosition || !fetchGameAction) return;
 
       await this.runGuarded(btn, async () => {
-        const res = await fetchGameAction("/api/planet/relocation/start", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          body: JSON.stringify({
-            galaxy: targetGalaxy,
-            system: targetSystem,
-            position: targetPosition,
-            request_id: this.makeRequestId("galaxy-reloc"),
-          }),
-        });
+        let res;
+        try {
+          res = await fetchGameAction("/api/planet/relocation/start", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Requested-With": "XMLHttpRequest",
+            },
+            body: JSON.stringify({
+              galaxy: targetGalaxy,
+              system: targetSystem,
+              position: targetPosition,
+              request_id: this.makeRequestId("galaxy-reloc"),
+            }),
+          });
+        } catch (_err) {
+          showNotify(t("fleet_error_server_error", t("planet_relocation_failed", "Relocation failed.")), "error");
+          return;
+        }
         if (res?.ok) {
           applyActionState(res, "planet_relocation_start");
           const tpl = t("galaxy_relocation_success", "Evacuation to %(coords)s started.");
