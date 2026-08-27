@@ -21,7 +21,16 @@ jobs:
         with:
           python-version: '3.11'
       - name: Apply GC-2622 strategic diversity
-        run: python scripts/_apply_gc_living_universe_v4.py
+        run: |
+          python scripts/_apply_gc_living_universe_v4.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('game/inactive_autoplay.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('\\"strategic_phase\\"', '"strategic_phase"')
+          text = text.replace('\\"ambition_scale\\"', '"ambition_scale"')
+          path.write_text(text, encoding='utf-8')
+          PY
       - name: Public wording guard
         run: |
           python - <<'PY'
