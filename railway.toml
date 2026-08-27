@@ -1,4 +1,5 @@
 # Railway deploy config — https://docs.railway.com/reference/config-as-code
+# GC-DEPLOY-20260827: redeploy after Galaxy action-feedback hardening and CI stabilization.
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
