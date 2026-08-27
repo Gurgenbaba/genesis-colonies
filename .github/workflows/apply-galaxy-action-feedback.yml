@@ -23,82 +23,7 @@ jobs:
           python-version: '3.12'
 
       - name: Apply Galaxy feedback hardening
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('static/js/galaxy-quick-action.js')
-          src = path.read_text(encoding='utf-8')
-
-          # 1) Optional canonical Fleet-page reason mapper when it is already initialized.
-          needle = '      mapActionError: typeof GC.mapActionError === "function" ? GC.mapActionError.bind(GC) : null,\n'
-          repl = needle + '      fleetReasonText: typeof GC.fleetReasonText === "function" ? GC.fleetReasonText.bind(GC) : null,\n'
-          if 'fleetReasonText:' not in src:
-              assert needle in src
-              src = src.replace(needle, repl, 1)
-
-          # 2) Track preset-load failures separately from a genuinely empty preset list.
-          needle = '    _attackPresetsLoading: false,\n'
-          if '_attackPresetsLoadFailed' not in src:
-              assert needle in src
-              src = src.replace(needle, needle + '    _attackPresetsLoadFailed: false,\n', 1)
-
-          # 3) Recycler lookup failure must not masquerade as "zero ships".
-          src = src.replace('      if (!fetchGameAction) return 0;\n', '      if (!fetchGameAction) return null;\n', 1)
-          old = '''      } catch (_) {\n        /* fall through */\n      }\n      return 0;\n    },\n\n    /**\n     * One-click recycle send'''
-          new = '''      } catch (_) {\n        return null;\n      }\n      return null;\n    },\n\n    /**\n     * One-click recycle send'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          # Debris lookup: distinguish API failure from a real 0 inventory.
-          old = '''      const available = await this.resolveAvailableReclaimersAsync(root);\n      const sendCount = Math.min(available, need);\n\n      if (!originPlanetId) {'''
-          new = '''      const available = await this.resolveAvailableReclaimersAsync(root);\n      if (available === null) {\n        showNotify(t("fleet_error_server_error", t("fleet_error_generic", "Fleet action failed.")), "error");\n        return null;\n      }\n      const sendCount = Math.min(available, need);\n\n      if (!originPlanetId) {'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          # Asteroid lookup: same contract.
-          old = '''      const available = await this.resolveAvailableReclaimersAsync(root);\n      const sendCount = Math.min(available, needed);\n\n      if (!originPlanetId) {'''
-          new = '''      const available = await this.resolveAvailableReclaimersAsync(root);\n      if (available === null) {\n        showNotify(t("fleet_error_server_error", t("fleet_error_generic", "Fleet action failed.")), "error");\n        return;\n      }\n      const sendCount = Math.min(available, needed);\n\n      if (!originPlanetId) {'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          # 4) Replace Galaxy's generic-first error path with Fleet-first reason resolution.
-          pattern = re.compile(r'''    notifyFleetError\(reason, res, reasonMap\) \{.*?\n    \},\n\n    async runGuarded''', re.S)
-          replacement = '''    fleetPayload(res) {\n      if (res?.data && typeof res.data === "object") return res.data;\n      if (res?.payload && typeof res.payload === "object") return res.payload;\n      return res || {};\n    },\n\n    fleetReason(res, fallback = "generic") {\n      const payload = this.fleetPayload(res);\n      return String(\n        res?.error ||\n        res?.reason ||\n        payload?.error ||\n        payload?.reason ||\n        fallback\n      );\n    },\n\n    notifyFleetError(reason, res, reasonMap) {\n      const { t, showNotify, mapActionError, fleetReasonText } = deps();\n      const key = String(reason || "generic");\n      const payload = this.fleetPayload(res);\n      let msg = "";\n\n      // Context-specific Galaxy wording wins when present.\n      if (reasonMap && Object.prototype.hasOwnProperty.call(reasonMap, key)) {\n        const entry = reasonMap[key];\n        msg = typeof entry === "function" ? entry(res) : entry;\n      }\n\n      // Fleet business errors must never be swallowed by the generic action mapper.\n      if (!msg) {\n        const fleetKey = `fleet_error_${key}`;\n        const translated = t(fleetKey, "");\n        if (translated && translated !== fleetKey) msg = translated;\n      }\n\n      // Reuse the richer Fleet-page mapper when available (adds actionable hints).\n      if (!msg && fleetReasonText) {\n        msg = fleetReasonText(key, payload);\n      }\n\n      // Generic mapper is last-resort only; reject its generic "unexpected" fallback.\n      if (!msg && mapActionError) {\n        const mapped = mapActionError(key, payload);\n        const genericAction = t("msg_generic_error", "");\n        if (mapped && mapped !== genericAction) msg = mapped;\n      }\n\n      if (!msg) msg = t("fleet_error_generic", "Fleet action failed.");\n      showNotify(msg, "error");\n    },\n\n    async runGuarded'''
-          src2, count = pattern.subn(replacement, src, count=1)
-          assert count == 1, count
-          src = src2
-
-          # 5) All /api/fleet/send calls normalize response envelopes and catch transport failures.
-          old = '''      const exec = async () => {\n        const res = await fetchGameAction("/api/fleet/send", {\n          method: "POST",\n          headers: {\n            "Content-Type": "application/json",\n            "X-Requested-With": "XMLHttpRequest",\n            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),\n          },\n          body: JSON.stringify(payload),\n        });\n        if (res?.ok) {\n          applyActionState(res, applyReason);\n          if (typeof onSuccess === "function") onSuccess(res);\n        } else if (typeof onError === "function") {\n          onError(res?.error || res?.reason || "generic", res);\n        }\n        return res;\n      };'''
-          new = '''      const exec = async () => {\n        let res;\n        try {\n          res = await fetchGameAction("/api/fleet/send", {\n            method: "POST",\n            headers: {\n              "Content-Type": "application/json",\n              "X-Requested-With": "XMLHttpRequest",\n              ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),\n            },\n            body: JSON.stringify(payload),\n          });\n        } catch (_err) {\n          if (typeof onError === "function") {\n            onError("server_error", { ok: false, error: "server_error" });\n          }\n          return null;\n        }\n        if (res?.ok) {\n          applyActionState(res, applyReason);\n          if (typeof onSuccess === "function") onSuccess(res);\n        } else if (typeof onError === "function") {\n          onError(this.fleetReason(res), res);\n        }\n        return res;\n      };'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          # 6) Attack preset API failures are not displayed as "no presets" and are retryable.
-          old = '      const emptyText = t("galaxy_quick_attack_empty", "No raid template available.");\n'
-          new = '''      const emptyText = this._attackPresetsLoadFailed\n        ? t("fleet_error_server_error", t("fleet_error_generic", "Fleet action failed."))\n        : t("galaxy_quick_attack_empty", "No raid template available.");\n'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          old = '''        const body = await res.json().catch(() => ({}));\n        const presets = body?.ok && body?.data?.presets ? body.data.presets : [];\n        this._attackPresetsCache = Array.isArray(presets) ? presets : [];\n        return this._attackPresetsCache;\n      } catch (_err) {\n        this._attackPresetsCache = [];\n        return [];\n      } finally {'''
-          new = '''        const body = await res.json().catch(() => ({}));\n        if (!res.ok || !body?.ok) {\n          this._attackPresetsLoadFailed = true;\n          this._attackPresetsCache = null;\n          return [];\n        }\n        const presets = body?.data?.presets || [];\n        this._attackPresetsLoadFailed = false;\n        this._attackPresetsCache = Array.isArray(presets) ? presets : [];\n        return this._attackPresetsCache;\n      } catch (_err) {\n        this._attackPresetsLoadFailed = true;\n        this._attackPresetsCache = null;\n        return [];\n      } finally {'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          # 7) Relocation also gets a clear local network/server failure instead of a rejected promise.
-          old = '''      await this.runGuarded(btn, async () => {\n        const res = await fetchGameAction("/api/planet/relocation/start", {\n          method: "POST",\n          headers: {\n            "Content-Type": "application/json",\n            "X-Requested-With": "XMLHttpRequest",\n          },\n          body: JSON.stringify({\n            galaxy: targetGalaxy,\n            system: targetSystem,\n            position: targetPosition,\n            request_id: this.makeRequestId("galaxy-reloc"),\n          }),\n        });\n        if (res?.ok) {'''
-          new = '''      await this.runGuarded(btn, async () => {\n        let res;\n        try {\n          res = await fetchGameAction("/api/planet/relocation/start", {\n            method: "POST",\n            headers: {\n              "Content-Type": "application/json",\n              "X-Requested-With": "XMLHttpRequest",\n            },\n            body: JSON.stringify({\n              galaxy: targetGalaxy,\n              system: targetSystem,\n              position: targetPosition,\n              request_id: this.makeRequestId("galaxy-reloc"),\n            }),\n          });\n        } catch (_err) {\n          showNotify(t("fleet_error_server_error", t("planet_relocation_failed", "Relocation failed.")), "error");\n          return;\n        }\n        if (res?.ok) {'''
-          assert old in src
-          src = src.replace(old, new, 1)
-
-          path.write_text(src, encoding='utf-8')
-
-          test_path = Path('tests/test_galaxy_action_feedback.py')
-          test_path.write_text(r'''from pathlib import Path\nimport json\n\n\ndef _js() -> str:\n    return Path("static/js/galaxy-quick-action.js").read_text(encoding="utf-8")\n\n\ndef test_galaxy_fleet_errors_prefer_fleet_reason_over_generic_mapper():\n    js = _js()\n    block = js.split("notifyFleetError(reason, res, reasonMap)")[1].split("async runGuarded")[0]\n    assert "fleet_error_${key}" in block\n    assert "mapActionError(key, payload)" in block\n    assert block.index("fleet_error_${key}") < block.index("mapActionError(key, payload)")\n    assert 't("msg_generic_error", "")' in block\n    assert "mapped !== genericAction" in block\n\n\ndef test_galaxy_fleet_send_normalizes_reason_and_handles_transport_failure():\n    js = _js()\n    block = js.split("async postFleetSend")[1].split("closeAttackMenu")[0]\n    assert "this.fleetReason(res)" in block\n    assert 'onError("server_error", { ok: false, error: "server_error" })' in block\n\n\ndef test_galaxy_recycler_lookup_failure_is_not_reported_as_no_ships():\n    js = _js()\n    assert "if (available === null)" in js\n    assert 't("fleet_error_server_error"' in js\n    helper = js.split("async resolveAvailableReclaimersAsync")[1].split("async sendDebrisRecycle")[0]\n    assert "return null" in helper\n\n\ndef test_galaxy_attack_preset_load_failure_is_retryable_and_clear():\n    js = _js()\n    block = js.split("async loadAttackPresets")[1].split("async sendAttackPreset")[0]\n    assert "_attackPresetsLoadFailed = true" in block\n    assert "_attackPresetsCache = null" in block\n    render = js.split("renderAttackMenu(menu, presets, trigger)")[1].split("async loadAttackPresets")[0]\n    assert "_attackPresetsLoadFailed" in render\n    assert "fleet_error_server_error" in render\n\n\ndef test_galaxy_relocation_transport_failure_has_specific_feedback():\n    js = _js()\n    block = js.split("async handleRelocationClick")[1].split("bindRingView(root)")[0]\n    assert 't("fleet_error_server_error"' in block\n    assert "catch (_err)" in block\n\n\ndef test_fleet_slots_full_translation_exists_in_all_supported_locales():\n    for loc in ("de", "en", "fr", "es", "pl", "tr", "ru", "pt"):\n        data = json.loads(Path(f"locales/{loc}.json").read_text(encoding="utf-8"))\n        assert str(data.get("fleet_error_fleet_slots_full") or "").strip(), loc\n''', encoding='utf-8')
-          PY
+        run: python scripts/apply_galaxy_feedback_fix.py
 
       - name: JS syntax
         run: node --check static/js/galaxy-quick-action.js
@@ -113,11 +38,10 @@ jobs:
             tests/test_galaxy.py
 
       - name: Commit generated patch
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add static/js/galaxy-quick-action.js tests/test_galaxy_action_feedback.py
+          git add static/js/galaxy-quick-action.js
           if git diff --cached --quiet; then
             echo "No generated changes"
             exit 0
