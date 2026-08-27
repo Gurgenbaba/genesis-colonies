@@ -709,7 +709,7 @@ def test_ranking_uses_single_join_query(temp_db):
     assert "card_name_style" in social_select
 
     for i in range(3):
-        pid = _create_player(f"join_{i}")
+        pid = _create_player(f"rankingrow_{i}")
         _seed_scores(pid, 100 * (i + 1), 50)
     recalculate_ranks()
     _close_db()
