@@ -1,4 +1,5 @@
 -- GC-PERF-FLEET-IDLE-002
+-- GC-REQUIRES-TABLES: fleet_movements
 -- High-frequency player polls probe only whether a Fleet phase is due.
 -- Keep those timestamp checks index-backed; global worker already had arrival/return
 -- indexes, but holding_until had no equivalent deadline index.
