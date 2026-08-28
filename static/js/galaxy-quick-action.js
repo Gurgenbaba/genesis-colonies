@@ -161,7 +161,7 @@
       const line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
       if (!line) return;
       const fuelIcon = String.fromCodePoint(0x26fd);
-      line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`;
+      line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`; // i18n-ok: language-neutral fuel glyph and formatted number
       line.classList.toggle("is-blocked", missing > 0);
     },
 
