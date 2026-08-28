@@ -33,7 +33,9 @@ jobs:
           pip install -r requirements-prod.txt pytest
 
       - name: Apply i18n cleanup
-        run: python scripts/patch_player_changelog_i18n_gate.py
+        run: |
+          python scripts/patch_player_changelog_i18n_gate.py
+          git checkout origin/main -- templates/partials/bottom_utility_bar.html
 
       - name: Remove one-shot tooling before audit
         run: |
