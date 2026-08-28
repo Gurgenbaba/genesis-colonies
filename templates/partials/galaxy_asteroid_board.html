@@ -75,8 +75,8 @@
     <ul class="galaxy-asteroid-board-list">
       {% for entry in board %}
       {% set harvest_locked = entry.viewer_harvest_locked if entry.viewer_harvest_locked is defined else false %}
-{% set returning = entry.viewer_returning if entry.viewer_returning is defined else false %}
-{% set mega_limit = entry.viewer_mega_quota_exhausted if entry.viewer_mega_quota_exhausted is defined else false %}
+      {% set returning = entry.viewer_returning if entry.viewer_returning is defined else false %}
+      {% set mega_limit = entry.viewer_mega_quota_exhausted if entry.viewer_mega_quota_exhausted is defined else false %}
       <li class="galaxy-asteroid-board-row{% if entry.is_current_system %} is-current-system{% endif %}{% if entry.viewer_en_route or returning %} is-en-route{% endif %}">
         <div class="galaxy-asteroid-board-row-main">
           <span class="galaxy-asteroid-board-thumb" aria-hidden="true"></span>
@@ -152,7 +152,7 @@
                     data-galaxy-ring-asteroid-recycle
                     {% if harvest_locked %}disabled aria-disabled="true"{% endif %}
                     title="{% if mega_limit %}{{ T('galaxy_asteroid_mega_limit_reached', 'Dein 10%-Anteil an diesem Mega-Belt ist ausgeschöpft.') }}{% elif returning %}{{ T('fleet_status_returning', 'Rückflug') }}{% elif harvest_locked %}{{ T('galaxy_asteroid_en_route_title', 'Harvest-Flotte unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest_click', 'Harvest Reclaimer zum Asteroiden senden') }}{% endif %}">
-              {{ T('galaxy_asteroid_harvest', 'Abbauen') }}
+              {% if mega_limit %}10% ✓{% elif returning %}{{ T('fleet_status_returning', 'Rückflug') }}{% elif entry.viewer_en_route %}{{ T('galaxy_asteroid_en_route', 'Unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest', 'Abbauen') }}{% endif %}
             </button>
           </span>
         </div>
