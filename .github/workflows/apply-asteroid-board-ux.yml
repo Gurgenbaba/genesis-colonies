@@ -23,28 +23,25 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          js_path = Path('static/js/galaxy-quick-action.js')
-          js = js_path.read_text(encoding='utf-8')
+          js_path = Path("static/js/galaxy-quick-action.js")
+          js = js_path.read_text(encoding="utf-8")
 
-          old = '  const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;\n'
-          new = old + '  const ASTEROID_PREVIEW_CONCURRENCY = 3;\n'
-          if old not in js:
-              raise SystemExit('missing preview constant anchor')
-          js = js.replace(old, new, 1)
+          constant_anchor = "  const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;\n"
+          if "ASTEROID_PREVIEW_CONCURRENCY" not in js:
+              if constant_anchor not in js:
+                  raise SystemExit("missing preview constant anchor")
+              js = js.replace(
+                  constant_anchor,
+                  constant_anchor + "  const ASTEROID_PREVIEW_CONCURRENCY = 3;\n",
+                  1,
+              )
 
-          old = '''    handleAsteroidPreviewIntent(ev, root) {
-              const wrap = ev.target?.closest?.("[data-galaxy-ring-asteroid-wrap]");
-              if (!wrap || !root.contains(wrap) || wrap.dataset.harvestLocked === "1") return;
-              void this.loadAsteroidFlightPreview(wrap, root);
+          reset_anchor = '''    resetAsteroidPreviewCache() {
+              this._asteroidPreviewCache.clear();
+              this._asteroidPreviewInflight.clear();
             },
           '''
-          new = '''    handleAsteroidPreviewIntent(ev, root) {
-              const wrap = ev.target?.closest?.("[data-galaxy-ring-asteroid-wrap]");
-              if (!wrap || !root.contains(wrap) || wrap.dataset.harvestLocked === "1") return;
-              void this.loadAsteroidFlightPreview(wrap, root);
-            },
-
-            async preloadAsteroidFlightPreviews(root, scope = null) {
+          preload_method = '''    async preloadAsteroidFlightPreviews(root, scope = null) {
               const previewRoot = scope || root;
               const wraps = Array.from(
                 previewRoot?.querySelectorAll?.("[data-galaxy-ring-asteroid-wrap]") || []
@@ -72,66 +69,56 @@ jobs:
               );
               await Promise.allSettled(workers);
             },
-          '''
-          if old not in js:
-              raise SystemExit('missing preview handler anchor')
-          js = js.replace(old, new, 1)
 
-          old = '''    initAsteroidBoardToggle(root) {
-              const board = root?.querySelector?.("[data-galaxy-asteroid-board]");
-              if (!board) return;
-              let preferOpen = false;
-              try {
-                preferOpen = localStorage.getItem("gc_galaxy_asteroid_board_open") === "1";
-              } catch (_) {}
-              this.setAsteroidBoardExpanded(board, preferOpen);
+          '''
+          if "async preloadAsteroidFlightPreviews" not in js:
+              # Indentation in source is stable, but normalize the Python literal above.
+              reset_anchor = reset_anchor.replace("          ", "")
+              preload_method = preload_method.replace("          ", "")
+              if reset_anchor not in js:
+                  raise SystemExit("missing reset cache anchor")
+              js = js.replace(reset_anchor, preload_method + reset_anchor, 1)
+
+          init_anchor = '''      this.setAsteroidBoardExpanded(board, preferOpen);
             },
 
-            handleAsteroidBoardToggle(ev, root) {
-              const btn = ev.target.closest("[data-galaxy-asteroid-board-toggle]");
-              if (!btn || !root.contains(btn)) return;
-              ev.preventDefault();
-              const board = btn.closest("[data-galaxy-asteroid-board]");
-              if (!board) return;
-              const open = board.classList.contains("is-collapsed");
-              this.setAsteroidBoardExpanded(board, open);
-            },
-          '''
-          new = '''    initAsteroidBoardToggle(root) {
-              const board = root?.querySelector?.("[data-galaxy-asteroid-board]");
-              if (!board) return;
-              let preferOpen = false;
-              try {
-                preferOpen = localStorage.getItem("gc_galaxy_asteroid_board_open") === "1";
-              } catch (_) {}
-              this.setAsteroidBoardExpanded(board, preferOpen);
+            handleAsteroidBoardToggle'''.replace("          ", "")
+          init_replacement = '''      this.setAsteroidBoardExpanded(board, preferOpen);
               if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);
             },
 
-            handleAsteroidBoardToggle(ev, root) {
-              const btn = ev.target.closest("[data-galaxy-asteroid-board-toggle]");
-              if (!btn || !root.contains(btn)) return;
-              ev.preventDefault();
-              const board = btn.closest("[data-galaxy-asteroid-board]");
-              if (!board) return;
-              const open = board.classList.contains("is-collapsed");
+            handleAsteroidBoardToggle'''.replace("          ", "")
+          if "if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);" not in js:
+              if init_anchor not in js:
+                  raise SystemExit("missing init board anchor")
+              js = js.replace(init_anchor, init_replacement, 1)
+
+          toggle_anchor = '''      const open = board.classList.contains("is-collapsed");
+              this.setAsteroidBoardExpanded(board, open);
+            },
+
+            async handleRelocationClick'''.replace("          ", "")
+          toggle_replacement = '''      const open = board.classList.contains("is-collapsed");
               this.setAsteroidBoardExpanded(board, open);
               if (open) void this.preloadAsteroidFlightPreviews(root, board);
             },
-          '''
-          if old not in js:
-              raise SystemExit('missing board toggle anchor')
-          js = js.replace(old, new, 1)
-          js_path.write_text(js, encoding='utf-8')
 
-          board_path = Path('templates/partials/galaxy_asteroid_board.html')
-          board = board_path.read_text(encoding='utf-8')
-          link = '<link rel="stylesheet" href="{{ url_for(\'static\', filename=\'css/galaxy-asteroid-board.css\') }}">\n'
-          if 'css/galaxy-asteroid-board.css' not in board:
-              board = link + board
-          board_path.write_text(board, encoding='utf-8')
+            async handleRelocationClick'''.replace("          ", "")
+          if "if (open) void this.preloadAsteroidFlightPreviews(root, board);" not in js:
+              if toggle_anchor not in js:
+                  raise SystemExit("missing toggle board anchor")
+              js = js.replace(toggle_anchor, toggle_replacement, 1)
 
-          css = '''/* GC asteroid board UX — stable two-tier rows and fixed action column. */
+          js_path.write_text(js, encoding="utf-8")
+
+          board_path = Path("templates/partials/galaxy_asteroid_board.html")
+          board = board_path.read_text(encoding="utf-8")
+          stylesheet = "<link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/galaxy-asteroid-board.css') }}\">\n"
+          if "css/galaxy-asteroid-board.css" not in board:
+              board = stylesheet + board
+          board_path.write_text(board, encoding="utf-8")
+
+          css = """/* GC asteroid board UX — stable two-tier rows and fixed action column. */
           .galaxy-asteroid-board {
             container-type: inline-size;
           }
@@ -270,11 +257,12 @@ jobs:
               justify-content: flex-start;
             }
           }
-          '''
-          Path('static/css/galaxy-asteroid-board.css').write_text(css, encoding='utf-8')
+          """
+          css = "\n".join(line[10:] if line.startswith("          ") else line for line in css.splitlines()) + "\n"
+          Path("static/css/galaxy-asteroid-board.css").write_text(css, encoding="utf-8")
 
-          test_path = Path('tests/test_asteroid_value_preview.py')
-          tests = test_path.read_text(encoding='utf-8')
+          test_path = Path("tests/test_asteroid_value_preview.py")
+          tests = test_path.read_text(encoding="utf-8")
           addition = '''
 
           def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css():
@@ -292,8 +280,9 @@ jobs:
               assert ".galaxy-asteroid-board-row-meta" in css
               assert ".galaxy-asteroid-board-harvest-wrap" in css
           '''
-          if 'test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css' not in tests:
-              test_path.write_text(tests + addition, encoding='utf-8')
+          addition = "\n".join(line[10:] if line.startswith("          ") else line for line in addition.splitlines())
+          if "test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css" not in tests:
+              test_path.write_text(tests + addition + "\n", encoding="utf-8")
           PY
 
       - name: Remove one-shot workflow
