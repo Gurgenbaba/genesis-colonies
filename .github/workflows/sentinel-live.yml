@@ -2,6 +2,9 @@ name: Genesis Sentinel Live
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - diagnostic/mando-overview-500
 
 permissions:
   contents: read
