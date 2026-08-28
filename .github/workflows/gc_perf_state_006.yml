@@ -1,0 +1,38 @@
+name: GC State Probe Connection Codemod
+
+on:
+  push:
+    branches:
+      - fix/gc-perf-state-006
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Apply focused diet-probe connection patch
+        run: python scripts/gc_perf_state_006.py
+
+      - name: Commit generated source
+        shell: bash
+        run: |
+          if git diff --quiet -- game/live_state.py game/models.py game/ranking.py; then
+            echo "No generated change."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/live_state.py game/models.py game/ranking.py
+          git commit -m "perf: reuse diet probe DB connection"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
