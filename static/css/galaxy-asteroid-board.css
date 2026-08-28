@@ -3,6 +3,14 @@
   container-type: inline-size;
 }
 
+/* Genesis UI rule: asteroid surfaces are technical/square, never pill/rounded. */
+.galaxy-asteroid-board,
+.galaxy-asteroid-board *,
+.galaxy-asteroid-block,
+.galaxy-asteroid-block * {
+  border-radius: 0 !important;
+}
+
 .galaxy-asteroid-board-panel {
   padding: 8px 10px 10px;
 }
@@ -27,7 +35,6 @@
   min-height: 0 !important;
   padding: 8px 9px !important;
   border: 1px solid rgba(74, 174, 201, 0.22);
-  border-radius: 4px;
   background: linear-gradient(90deg, rgba(4, 19, 29, 0.82), rgba(3, 13, 22, 0.66));
 }
 
@@ -66,11 +73,33 @@
 }
 
 .galaxy-asteroid-board-loot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.92;
+  opacity: 0.96;
+}
+
+.galaxy-asteroid-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.galaxy-asteroid-resource-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  object-fit: contain;
+}
+
+.galaxy-asteroid-resource-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .galaxy-asteroid-board-slots,
@@ -81,7 +110,6 @@
   min-height: 24px;
   padding: 3px 7px;
   border: 1px solid rgba(92, 171, 198, 0.18);
-  border-radius: 3px;
   background: rgba(7, 25, 35, 0.72);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -97,10 +125,12 @@
 
 .galaxy-asteroid-board-fuel {
   justify-content: flex-end;
+  gap: 5px;
   min-width: 92px;
 }
 
-.galaxy-asteroid-board-fuel.is-blocked {
+.galaxy-asteroid-board-fuel.is-blocked,
+.galaxy-asteroid-board-fuel:has([data-galaxy-asteroid-flight-preview].is-blocked) {
   border-color: rgba(230, 99, 99, 0.48);
   background: rgba(75, 18, 24, 0.32);
 }
@@ -113,13 +143,24 @@
 .galaxy-asteroid-inline-fuel {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   min-height: 26px;
   padding: 4px 8px;
   border: 1px solid rgba(92, 171, 198, 0.2);
-  border-radius: 3px;
   background: rgba(7, 25, 35, 0.72);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.galaxy-asteroid-inline-fuel:has([data-galaxy-asteroid-flight-preview].is-blocked) {
+  border-color: rgba(230, 99, 99, 0.48);
+  background: rgba(75, 18, 24, 0.32);
+}
+
+.galaxy-asteroid-stats dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 @container (max-width: 690px) {
