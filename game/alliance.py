@@ -37,7 +37,15 @@ from .alliance_catalog import (
     tech_level,
     trade_coord_bonus_pct,
 )
-from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
+from .db import (
+    begin_write_transaction,
+    column_exists,
+    commit,
+    db,
+    rollback,
+    table_exists,
+    tables_exist,
+)
 from .planet_evolution.repository import get_context_planet
 
 VALID_DONATION_RESOURCES = frozenset({"metal", "crystal", "fuel_cells"})
@@ -70,7 +78,7 @@ def alliance_hub_schema_ready(conn) -> bool:
         "alliance_diplomacy",
         "alliance_diplomacy_requests",
     )
-    return all(table_exists(conn, t) for t in required)
+    return tables_exist(conn, required)
 
 
 def _normalize_role(role: str) -> str:
