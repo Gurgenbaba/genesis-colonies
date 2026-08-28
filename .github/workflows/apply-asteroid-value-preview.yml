@@ -1,0 +1,47 @@
+name: Apply asteroid value preview patch
+
+on:
+  push:
+    branches:
+      - feature/asteroid-value-preview
+    paths:
+      - scripts/_apply_asteroid_value_preview.py
+      - .github/workflows/apply-asteroid-value-preview.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/asteroid-value-preview
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply focused patch
+        run: python scripts/_apply_asteroid_value_preview.py
+      - name: Syntax check
+        run: |
+          python -m py_compile game/asteroids.py tests/test_asteroid_value_preview.py
+          node --check static/js/galaxy-quick-action.js
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Focused asteroid tests
+        run: python -m pytest tests/test_asteroid_value_preview.py tests/test_asteroids.py -q
+      - name: Commit generated implementation
+        run: |
+          rm scripts/_apply_asteroid_value_preview.py
+          rm .github/workflows/apply-asteroid-value-preview.yml
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: scale asteroid belts and preview harvest fuel"
+          git push origin HEAD:feature/asteroid-value-preview
