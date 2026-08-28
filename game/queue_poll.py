@@ -77,7 +77,13 @@ def player_has_due_queue_work(
     now: Optional[float] = None,
     planet_id: Optional[int] = None,
 ) -> bool:
-    """Read-only check: any build/research job past due for this player (optional: one planet)."""
+    """
+    Read-only check for due queue jobs; fleet movements are intentionally excluded.
+
+    Fleet due-state is owned by ``player_fleet_is_dirty()`` and must be checked
+    separately by poll orchestration. Keeping this helper queue-only avoids a second
+    ``fleet_movements`` probe on every game-state poll.
+    """
     owns_conn = conn is None
     if owns_conn:
         conn = db()
@@ -223,14 +229,6 @@ def player_has_due_queue_work(
                         (int(player_id), ts),
                     )
                 if cur.fetchone():
-                    return True
-        except Exception:
-            pass
-        try:
-            from .fleet import fleet_schema_ready
-
-            if fleet_schema_ready(conn):
-                if player_fleet_is_dirty(int(player_id), conn=conn, now=(now if now is not None else time.time())):
                     return True
         except Exception:
             pass
