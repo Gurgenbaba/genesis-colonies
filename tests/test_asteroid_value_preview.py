@@ -75,3 +75,19 @@ def test_galaxy_asteroid_fuel_preview_has_stable_reserved_layout_slot():
     assert "const fuelIcon = String.fromCodePoint(0x26fd);" in js
     assert 'line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`;' in js
     assert 'line = document.createElement("span")' not in js
+
+
+def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css():
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
+    board = (root / "templates/partials/galaxy_asteroid_board.html").read_text(encoding="utf-8")
+    css = (root / "static/css/galaxy-asteroid-board.css").read_text(encoding="utf-8")
+
+    assert "ASTEROID_PREVIEW_CONCURRENCY = 3" in js
+    assert "preloadAsteroidFlightPreviews" in js
+    assert "if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);" in js
+    assert "if (open) void this.preloadAsteroidFlightPreviews(root, board);" in js
+    assert "Promise.allSettled(workers)" in js
+    assert "css/galaxy-asteroid-board.css" in board
+    assert ".galaxy-asteroid-board-row-meta" in css
+    assert ".galaxy-asteroid-board-harvest-wrap" in css
