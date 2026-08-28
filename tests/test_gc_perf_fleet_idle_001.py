@@ -1,4 +1,4 @@
-"""GC-PERF-FLEET-IDLE-001 — queue polling must not duplicate fleet due probes."""
+"""GC-PERF-FLEET-IDLE-001/002 — keep idle Fleet polling cheap."""
 
 from __future__ import annotations
 
@@ -78,6 +78,40 @@ def _insert_due_outbound(conn, *, player_id: int, planet: dict, now: float) -> i
     return int(cur.lastrowid)
 
 
+def _set_due_phase(conn, movement_id: int, *, phase: str, now: float) -> None:
+    if phase == "outbound":
+        conn.execute(
+            """
+            UPDATE fleet_movements
+            SET status = 'outbound', arrival_at = ?, holding_until = NULL, return_at = NULL
+            WHERE id = ?;
+            """,
+            (now - 1.0, int(movement_id)),
+        )
+        return
+    if phase == "holding":
+        conn.execute(
+            """
+            UPDATE fleet_movements
+            SET status = 'holding', arrival_at = ?, holding_until = ?, return_at = NULL
+            WHERE id = ?;
+            """,
+            (now - 60.0, now - 1.0, int(movement_id)),
+        )
+        return
+    if phase == "returning":
+        conn.execute(
+            """
+            UPDATE fleet_movements
+            SET status = 'returning', holding_until = NULL, return_at = ?
+            WHERE id = ?;
+            """,
+            (now - 1.0, int(movement_id)),
+        )
+        return
+    raise AssertionError(f"unsupported phase: {phase}")
+
+
 def test_queue_due_probe_does_not_query_fleet_movements(fleet_idle_db):
     conn = db()
     try:
@@ -102,5 +136,33 @@ def test_queue_due_probe_does_not_query_fleet_movements(fleet_idle_db):
         assert queue_due is False
         assert not any("fleet_movements" in stmt for stmt in selects), selects
         assert player_fleet_is_dirty(uid, conn=conn, now=now) is True
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("phase", ["outbound", "holding", "returning"])
+def test_fleet_dirty_probe_detects_each_due_phase(fleet_idle_db, phase):
+    conn = db()
+    try:
+        uid, planet = _create_player_with_homeworld(conn)
+        now = time.time()
+        movement_id = _insert_due_outbound(conn, player_id=uid, planet=planet, now=now)
+        _set_due_phase(conn, movement_id, phase=phase, now=now)
+        conn.commit()
+
+        assert player_fleet_is_dirty(uid, conn=conn, now=now) is True
+    finally:
+        conn.close()
+
+
+def test_fleet_deadline_indexes_are_migrated(fleet_idle_db):
+    conn = db()
+    try:
+        rows = conn.execute("PRAGMA index_list('fleet_movements');").fetchall()
+        names = {str(row["name"]) for row in rows}
+        assert "idx_fleet_movements_player_arrival" in names
+        assert "idx_fleet_movements_player_holding" in names
+        assert "idx_fleet_movements_player_return" in names
+        assert "idx_fleet_movements_holding" in names
     finally:
         conn.close()
