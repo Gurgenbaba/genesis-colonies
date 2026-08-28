@@ -1473,12 +1473,12 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
             fleets = _fleet_probe_slice(uid, conn=conn)
 
         revision, unread = _notification_revision_for_probe(uid, conn=conn)
-        score_raw = get_player_score_cached(uid, read_only=True) or {
+        score_raw = get_player_score_cached(uid, read_only=True, conn=conn) or {
             "total": 0,
             "buildings": 0,
             "research": 0,
         }
-        rank, total_players = get_player_rank(uid)
+        rank, total_players = get_player_rank(uid, conn=conn)
         score = {
             "total": int(score_raw.get("total", 0) or 0),
             "buildings": int(score_raw.get("buildings", 0) or 0),

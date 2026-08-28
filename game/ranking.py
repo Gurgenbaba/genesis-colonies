@@ -1047,6 +1047,7 @@ def get_player_score_cached(
     force_recompute: bool = False,
     *,
     read_only: bool = False,
+    conn=None,
 ) -> Dict[str, int]:
     """
     Cached score read for HUD/header. Keys: total, buildings, research (+ fleet/defense when present).
@@ -1084,7 +1085,7 @@ def get_player_score_cached(
 
     if force_recompute:
         invalidate_player_score_cache(pid)
-        out = _to_legacy(refresh_player_score(pid))
+        out = _to_legacy(refresh_player_score(pid, conn=conn))
         _CACHE[pid] = (now, out)
         return out
 
@@ -1094,7 +1095,7 @@ def get_player_score_cached(
         if (now - ts) <= CACHE_TTL_SECONDS:
             return data
 
-    row = get_player_score_row(pid, conn=None)
+    row = get_player_score_row(pid, conn=conn)
     if not row:
         out = _to_legacy(_zero_scores())
     else:
