@@ -1,0 +1,75 @@
+name: Genesis Sentinel Live
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sentinel-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-sentinel:
+    name: production-read-only-sentinel
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GC_SENTINEL_BASE_URL: ${{ secrets.GC_SENTINEL_BASE_URL }}
+      GC_SENTINEL_USERNAME: ${{ secrets.GC_SENTINEL_USERNAME }}
+      GC_SENTINEL_PASSWORD: ${{ secrets.GC_SENTINEL_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt -r requirements-dev.txt
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Validate live Sentinel wiring
+        shell: bash
+        run: |
+          test -n "$GC_SENTINEL_BASE_URL"
+          test -n "$GC_SENTINEL_USERNAME"
+          test -n "$GC_SENTINEL_PASSWORD"
+          python -m py_compile scripts/browser_test_support.py scripts/browser_sentinel.py scripts/browser_sentinel_live.py scripts/browser_report.py
+          git diff --check
+
+      - name: Run production read-only browser journey
+        run: python scripts/browser_sentinel_live.py
+
+      - name: Evaluate production Sentinel gate
+        run: python scripts/browser_report.py artifacts/browser-live/report.json --fail-on high
+
+      - name: Upload production Sentinel evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-sentinel-live-${{ github.run_id }}
+          path: |
+            artifacts/browser-live/report.json
+            artifacts/browser-live/report.html
+            artifacts/browser-live/gate.json
+            artifacts/browser-live/screenshots/
+            artifacts/browser-live/dom/
+            artifacts/browser-live/findings/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload production failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-sentinel-live-traces-${{ github.run_id }}
+          path: artifacts/browser-live/traces/
+          if-no-files-found: warn
+          retention-days: 7

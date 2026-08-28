@@ -66,7 +66,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Gate a Genesis Sentinel report")
     parser.add_argument("report", nargs="?", default="artifacts/browser/report.json")
     parser.add_argument("--fail-on", choices=tuple(THRESHOLDS), default="high")
-    parser.add_argument("--output", default="artifacts/browser/gate.json")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Gate JSON path. Defaults to gate.json beside the input report.",
+    )
     return parser.parse_args()
 
 
@@ -79,7 +83,7 @@ def main() -> int:
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     gate = evaluate(report, args.fail_on)
-    output = Path(args.output)
+    output = Path(args.output) if args.output else report_path.with_name("gate.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(gate, indent=2, ensure_ascii=False), encoding="utf-8")
 
