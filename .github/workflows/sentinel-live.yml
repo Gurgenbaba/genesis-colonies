@@ -1,17 +1,6 @@
 name: Genesis Sentinel Live
 
 on:
-  push:
-    branches:
-      - feature/gc-sentinel-live-001
-    paths:
-      - .github/workflows/sentinel-live.yml
-      - scripts/browser_sentinel_live.py
-      - scripts/browser_sentinel.py
-      - scripts/browser_report.py
-      - scripts/browser_test_support.py
-      - requirements-dev.txt
-      - requirements-prod.txt
   workflow_dispatch:
 
 permissions:
