@@ -958,3 +958,92 @@ def test_galaxy_asteroid_board_template_contract():
     assert "invalidateGalaxyPjaxCache" in main_js.split("function applyActionState(json, reason)")[1].split(
         "function logStatusPollErrorOnce"
     )[0] or "invalidateGalaxyPjaxCache" in main_js.split("function applyActionState(json, reason)")[1][:2500]
+
+
+
+def test_mega_belt_player_share_is_capped_at_ten_percent(ast_db):
+    from game.asteroids import MEGA_BELT_PLAYER_SHARE, TIER_MEGA, mega_belt_player_share_state
+
+    uid = _player("MegaShare")
+    uid_other = _player("MegaOther")
+    _home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(conn=conn, galaxy=g, system=s, position=pos, asteroid_key="mega_belt", tier=TIER_MEGA, rng=random.Random(123))
+        assert ins["ok"]
+        initial = {k: int(ins["asteroid"][k]) for k in ("metal", "crystal", "fuel_cells")}
+        claim = try_claim_harvest(g, s, pos, player_id=uid, cargo_capacity=sum(initial.values()) * 2, conn=conn)
+        assert claim["status"] == "claimed"
+        expected = {k: int(initial[k] * MEGA_BELT_PLAYER_SHARE) for k in initial}
+        assert {k: int(claim["harvested"][k]) for k in expected} == expected
+        again = try_claim_harvest(g, s, pos, player_id=uid, cargo_capacity=sum(initial.values()) * 2, conn=conn)
+        assert again["status"] == "quota_exhausted"
+        assert sum(int(v or 0) for v in again["harvested"].values()) == 0
+        other = try_claim_harvest(g, s, pos, player_id=uid_other, cargo_capacity=sum(initial.values()) * 2, conn=conn)
+        assert other["status"] == "claimed"
+        assert {k: int(other["harvested"][k]) for k in expected} == expected
+        state = mega_belt_player_share_state(int(ins["asteroid"]["id"]), uid, conn=conn)
+        assert state["quota_exhausted"] is True
+        assert state["share_percent"] == pytest.approx(10.0, abs=0.01)
+        assert get_active_asteroid_at(g, s, pos, conn=conn) is not None
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_mega_belt_small_fleet_can_repeat_until_personal_share_is_full(ast_db):
+    from game.asteroids import TIER_MEGA, mega_belt_player_share_state
+
+    uid = _player("MegaSmall")
+    _home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(conn=conn, galaxy=g, system=s, position=pos, asteroid_key="mega_belt", tier=TIER_MEGA, rng=random.Random(321))
+        assert ins["ok"]
+        aid = int(ins["asteroid"]["id"])
+        quota_total = int(mega_belt_player_share_state(aid, uid, conn=conn)["player_remaining_total"])
+        assert quota_total > 10
+        tiny_capacity = max(1, quota_total // 4)
+        harvested_total = 0
+        claims = 0
+        while True:
+            result = try_claim_harvest(g, s, pos, player_id=uid, cargo_capacity=tiny_capacity, conn=conn)
+            if result["status"] == "quota_exhausted":
+                break
+            assert result["status"] == "claimed"
+            harvested_total += sum(int(v or 0) for v in result["harvested"].values())
+            claims += 1
+            assert claims < 10
+        assert claims >= 2
+        assert harvested_total == quota_total
+        state = mega_belt_player_share_state(aid, uid, conn=conn)
+        assert state["quota_exhausted"] is True
+        assert state["player_remaining_total"] == 0
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_asteroid_viewer_lifecycle_distinguishes_return_and_clears_stale_engagement():
+    from game.asteroids import enrich_asteroid_viewer_state
+
+    asteroid = {"id": 77, "tier": "mega"}
+    future = time.time() + 120
+    outbound = enrich_asteroid_viewer_state(asteroid, engaged_ids={77}, fleet_map={77: {"fleet_status": "outbound", "arrival_at": future, "engaged": True}})
+    assert outbound["viewer_en_route"] is True
+    assert outbound["viewer_returning"] is False
+    assert outbound["viewer_harvest_locked"] is True
+    returning = enrich_asteroid_viewer_state(asteroid, engaged_ids={77}, fleet_map={77: {"fleet_status": "returning", "arrival_at": future, "engaged": True}})
+    assert returning["viewer_en_route"] is False
+    assert returning["viewer_returning"] is True
+    assert returning["viewer_harvest_locked"] is True
+    completed = enrich_asteroid_viewer_state(asteroid, engaged_ids={77}, fleet_map={})
+    assert completed["viewer_has_engaged"] is True
+    assert completed["viewer_engaged"] is False
+    assert completed["viewer_en_route"] is False
+    assert completed["viewer_returning"] is False
+    assert completed["viewer_harvest_locked"] is False

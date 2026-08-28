@@ -9033,5 +9033,7 @@
   "pe_failure_smuggling_crackdown": "Akcja przeciw przemytowi",
   "pe_failure_corruption_scandal": "Skandal korupcyjny",
   "pe_failure_resource_depletion": "Wyczerpanie zasobów",
-  "pe_failure_quantum_instability": "Niestabilność kwantowa"
+  "pe_failure_quantum_instability": "Niestabilność kwantowa",
+  "galaxy_asteroid_mega_limit_reached": "Twój 10% udział w tym Mega Pasie został wyczerpany.",
+  "fleet_asteroid_report_quota_exhausted": "Twój 10% udział w Mega Pasie na %(coords)s został wyczerpany. Flota wraca pusta do %(origin)s."
 }

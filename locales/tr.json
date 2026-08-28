@@ -9033,5 +9033,7 @@
   "pe_failure_smuggling_crackdown": "Kaçakçılık operasyonu",
   "pe_failure_corruption_scandal": "Yolsuzluk skandalı",
   "pe_failure_resource_depletion": "Kaynak tükenmesi",
-  "pe_failure_quantum_instability": "Kuantum kararsızlığı"
+  "pe_failure_quantum_instability": "Kuantum kararsızlığı",
+  "galaxy_asteroid_mega_limit_reached": "Bu Mega Kuşak'taki %10 payın tükendi.",
+  "fleet_asteroid_report_quota_exhausted": "%(coords)s konumundaki Mega Kuşak'taki %10 payın tükendi. Filo %(origin)s konumuna boş dönüyor."
 }
