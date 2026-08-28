@@ -1,0 +1,316 @@
+name: Apply asteroid board UX pass
+
+on:
+  push:
+    branches:
+      - fix/asteroid-board-ux-preload
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/asteroid-board-ux-preload
+          fetch-depth: 0
+
+      - name: Apply asteroid board UX changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          js_path = Path('static/js/galaxy-quick-action.js')
+          js = js_path.read_text(encoding='utf-8')
+
+          old = '  const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;\n'
+          new = old + '  const ASTEROID_PREVIEW_CONCURRENCY = 3;\n'
+          if old not in js:
+              raise SystemExit('missing preview constant anchor')
+          js = js.replace(old, new, 1)
+
+          old = '''    handleAsteroidPreviewIntent(ev, root) {
+              const wrap = ev.target?.closest?.("[data-galaxy-ring-asteroid-wrap]");
+              if (!wrap || !root.contains(wrap) || wrap.dataset.harvestLocked === "1") return;
+              void this.loadAsteroidFlightPreview(wrap, root);
+            },
+          '''
+          new = '''    handleAsteroidPreviewIntent(ev, root) {
+              const wrap = ev.target?.closest?.("[data-galaxy-ring-asteroid-wrap]");
+              if (!wrap || !root.contains(wrap) || wrap.dataset.harvestLocked === "1") return;
+              void this.loadAsteroidFlightPreview(wrap, root);
+            },
+
+            async preloadAsteroidFlightPreviews(root, scope = null) {
+              const previewRoot = scope || root;
+              const wraps = Array.from(
+                previewRoot?.querySelectorAll?.("[data-galaxy-ring-asteroid-wrap]") || []
+              ).filter((wrap) => root.contains(wrap) && wrap.dataset.harvestLocked !== "1");
+              if (!wraps.length) return;
+
+              // Resolve the available fleet once, then reuse it for every board row.
+              // Requests are deliberately capped so opening the board cannot burst the server.
+              const available = await this.resolveAvailableReclaimersAsync(root);
+              if (available === null || available < 1) return;
+
+              let cursor = 0;
+              const worker = async () => {
+                while (cursor < wraps.length) {
+                  const wrap = wraps[cursor++];
+                  const needed = Math.max(0, parseInt(wrap.dataset.recyclerSlots || "0", 10) || 0);
+                  const sendCount = Math.min(available, needed);
+                  if (sendCount < 1) continue;
+                  await this.loadAsteroidFlightPreview(wrap, root, { sendCount });
+                }
+              };
+              const workers = Array.from(
+                { length: Math.min(ASTEROID_PREVIEW_CONCURRENCY, wraps.length) },
+                () => worker()
+              );
+              await Promise.allSettled(workers);
+            },
+          '''
+          if old not in js:
+              raise SystemExit('missing preview handler anchor')
+          js = js.replace(old, new, 1)
+
+          old = '''    initAsteroidBoardToggle(root) {
+              const board = root?.querySelector?.("[data-galaxy-asteroid-board]");
+              if (!board) return;
+              let preferOpen = false;
+              try {
+                preferOpen = localStorage.getItem("gc_galaxy_asteroid_board_open") === "1";
+              } catch (_) {}
+              this.setAsteroidBoardExpanded(board, preferOpen);
+            },
+
+            handleAsteroidBoardToggle(ev, root) {
+              const btn = ev.target.closest("[data-galaxy-asteroid-board-toggle]");
+              if (!btn || !root.contains(btn)) return;
+              ev.preventDefault();
+              const board = btn.closest("[data-galaxy-asteroid-board]");
+              if (!board) return;
+              const open = board.classList.contains("is-collapsed");
+              this.setAsteroidBoardExpanded(board, open);
+            },
+          '''
+          new = '''    initAsteroidBoardToggle(root) {
+              const board = root?.querySelector?.("[data-galaxy-asteroid-board]");
+              if (!board) return;
+              let preferOpen = false;
+              try {
+                preferOpen = localStorage.getItem("gc_galaxy_asteroid_board_open") === "1";
+              } catch (_) {}
+              this.setAsteroidBoardExpanded(board, preferOpen);
+              if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);
+            },
+
+            handleAsteroidBoardToggle(ev, root) {
+              const btn = ev.target.closest("[data-galaxy-asteroid-board-toggle]");
+              if (!btn || !root.contains(btn)) return;
+              ev.preventDefault();
+              const board = btn.closest("[data-galaxy-asteroid-board]");
+              if (!board) return;
+              const open = board.classList.contains("is-collapsed");
+              this.setAsteroidBoardExpanded(board, open);
+              if (open) void this.preloadAsteroidFlightPreviews(root, board);
+            },
+          '''
+          if old not in js:
+              raise SystemExit('missing board toggle anchor')
+          js = js.replace(old, new, 1)
+          js_path.write_text(js, encoding='utf-8')
+
+          board_path = Path('templates/partials/galaxy_asteroid_board.html')
+          board = board_path.read_text(encoding='utf-8')
+          link = '<link rel="stylesheet" href="{{ url_for(\'static\', filename=\'css/galaxy-asteroid-board.css\') }}">\n'
+          if 'css/galaxy-asteroid-board.css' not in board:
+              board = link + board
+          board_path.write_text(board, encoding='utf-8')
+
+          css = '''/* GC asteroid board UX — stable two-tier rows and fixed action column. */
+          .galaxy-asteroid-board {
+            container-type: inline-size;
+          }
+
+          .galaxy-asteroid-board-panel {
+            padding: 8px 10px 10px;
+          }
+
+          .galaxy-asteroid-board-subtitle,
+          .galaxy-asteroid-board-schedule {
+            margin: 2px 0 8px;
+            line-height: 1.35;
+          }
+
+          .galaxy-asteroid-board-list {
+            display: grid;
+            gap: 6px;
+            margin: 0;
+            padding: 0 2px 2px;
+          }
+
+          .galaxy-asteroid-board-row {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 5px;
+            min-height: 0 !important;
+            padding: 8px 9px !important;
+            border: 1px solid rgba(74, 174, 201, 0.22);
+            border-radius: 4px;
+            background: linear-gradient(90deg, rgba(4, 19, 29, 0.82), rgba(3, 13, 22, 0.66));
+          }
+
+          .galaxy-asteroid-board-row:hover {
+            border-color: rgba(91, 217, 235, 0.42);
+            background: linear-gradient(90deg, rgba(6, 26, 38, 0.92), rgba(3, 16, 26, 0.78));
+          }
+
+          .galaxy-asteroid-board-row-main {
+            display: flex !important;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+          }
+
+          .galaxy-asteroid-board-type {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 700;
+          }
+
+          .galaxy-asteroid-board-coords {
+            flex: 0 0 auto;
+            opacity: 0.72;
+            font-size: 0.9em;
+          }
+
+          .galaxy-asteroid-board-row-meta {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) auto auto minmax(170px, auto);
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+          }
+
+          .galaxy-asteroid-board-loot {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            opacity: 0.92;
+          }
+
+          .galaxy-asteroid-board-slots,
+          .galaxy-asteroid-board-ttl,
+          .galaxy-asteroid-board-fuel {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 3px 7px;
+            border: 1px solid rgba(92, 171, 198, 0.18);
+            border-radius: 3px;
+            background: rgba(7, 25, 35, 0.72);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+          }
+
+          .galaxy-asteroid-board-harvest-wrap {
+            display: grid !important;
+            grid-template-columns: minmax(92px, 1fr) auto;
+            align-items: center;
+            gap: 6px;
+            min-width: 170px;
+          }
+
+          .galaxy-asteroid-board-fuel {
+            justify-content: flex-end;
+            min-width: 92px;
+          }
+
+          .galaxy-asteroid-board-fuel.is-blocked {
+            border-color: rgba(230, 99, 99, 0.48);
+            background: rgba(75, 18, 24, 0.32);
+          }
+
+          .galaxy-asteroid-board-harvest {
+            min-width: 82px;
+            margin: 0 !important;
+          }
+
+          .galaxy-asteroid-inline-fuel {
+            display: inline-flex;
+            align-items: center;
+            min-height: 26px;
+            padding: 4px 8px;
+            border: 1px solid rgba(92, 171, 198, 0.2);
+            border-radius: 3px;
+            background: rgba(7, 25, 35, 0.72);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+          }
+
+          @container (max-width: 690px) {
+            .galaxy-asteroid-board-row-meta {
+              grid-template-columns: minmax(0, 1fr) auto auto;
+            }
+
+            .galaxy-asteroid-board-harvest-wrap {
+              grid-column: 1 / -1;
+              grid-template-columns: minmax(0, 1fr) auto;
+              min-width: 0;
+            }
+
+            .galaxy-asteroid-board-fuel {
+              justify-content: flex-start;
+            }
+          }
+          '''
+          Path('static/css/galaxy-asteroid-board.css').write_text(css, encoding='utf-8')
+
+          test_path = Path('tests/test_asteroid_value_preview.py')
+          tests = test_path.read_text(encoding='utf-8')
+          addition = '''
+
+          def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css():
+              root = Path(__file__).resolve().parents[1]
+              js = (root / "static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
+              board = (root / "templates/partials/galaxy_asteroid_board.html").read_text(encoding="utf-8")
+              css = (root / "static/css/galaxy-asteroid-board.css").read_text(encoding="utf-8")
+
+              assert "ASTEROID_PREVIEW_CONCURRENCY = 3" in js
+              assert "preloadAsteroidFlightPreviews" in js
+              assert "if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);" in js
+              assert "if (open) void this.preloadAsteroidFlightPreviews(root, board);" in js
+              assert "Promise.allSettled(workers)" in js
+              assert "css/galaxy-asteroid-board.css" in board
+              assert ".galaxy-asteroid-board-row-meta" in css
+              assert ".galaxy-asteroid-board-harvest-wrap" in css
+          '''
+          if 'test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css' not in tests:
+              test_path.write_text(tests + addition, encoding='utf-8')
+          PY
+
+      - name: Remove one-shot workflow
+        run: git rm .github/workflows/apply-asteroid-board-ux.yml
+
+      - name: Verify focused gate
+        shell: bash
+        run: |
+          node --check static/js/galaxy-quick-action.js
+          python -m pytest -q tests/test_asteroid_value_preview.py
+          python scripts/audit_visible_i18n.py --raw-only --diff-base origin/main --max-findings 50
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/js/galaxy-quick-action.js static/css/galaxy-asteroid-board.css templates/partials/galaxy_asteroid_board.html tests/test_asteroid_value_preview.py
+          git commit -m "fix: preload asteroid fuel and clean board layout"
+          git push origin HEAD:fix/asteroid-board-ux-preload
