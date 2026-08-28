@@ -40,6 +40,9 @@ def player_fleet_is_dirty(
     True when any fleet movement phase is past due but not yet transitioned (GC-557C).
 
     Used to force process_fleet_tick before returning stale outbound/returning state.
+    Each phase lives in its own EXISTS branch so SQLite can use the matching
+    (player_id, status, deadline) index instead of scanning all active rows behind
+    one OR predicate.
     """
     owns_conn = conn is None
     if owns_conn:
@@ -52,15 +55,23 @@ def player_fleet_is_dirty(
             return False
         row = conn.execute(
             """
-            SELECT 1 FROM fleet_movements
-            WHERE player_id = ? AND (
-                (status = 'outbound' AND arrival_at <= ?)
-                OR (status = 'holding' AND holding_until <= ?)
-                OR (status = 'returning' AND return_at <= ?)
+            SELECT 1
+            WHERE EXISTS (
+                SELECT 1 FROM fleet_movements
+                WHERE player_id = ? AND status = 'outbound' AND arrival_at <= ?
+                LIMIT 1
+            ) OR EXISTS (
+                SELECT 1 FROM fleet_movements
+                WHERE player_id = ? AND status = 'holding' AND holding_until <= ?
+                LIMIT 1
+            ) OR EXISTS (
+                SELECT 1 FROM fleet_movements
+                WHERE player_id = ? AND status = 'returning' AND return_at <= ?
+                LIMIT 1
             )
             LIMIT 1;
             """,
-            (int(player_id), ts, ts, ts),
+            (int(player_id), ts, int(player_id), ts, int(player_id), ts),
         ).fetchone()
         return row is not None
     except Exception:
