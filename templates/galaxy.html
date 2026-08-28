@@ -91,4 +91,5 @@
 {% block extra_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/galaxy-quick-action.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/galaxy-asteroid-resource-ui.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}

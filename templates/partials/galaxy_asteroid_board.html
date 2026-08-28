@@ -99,7 +99,18 @@
         </div>
         <div class="galaxy-asteroid-board-row-meta">
           <span class="galaxy-asteroid-board-loot gc-mono" title="{{ T('resource_metal', 'Ferronit') }} / {{ T('resource_crystal', 'Crytite') }} / {{ T('resource_fuel_cells', 'Brennzellen') }}">
-            {{ (entry.metal or 0)|fmt_int_compact }} / {{ (entry.crystal or 0)|fmt_int_compact }} / {{ (entry.fuel_cells or 0)|fmt_int_compact }}
+            <span class="galaxy-asteroid-resource">
+              <img class="galaxy-asteroid-resource-icon" src="{{ url_for('static', filename='img/res/Ferronit.webp') }}" alt="" aria-hidden="true">
+              <span class="galaxy-asteroid-resource-value">{{ (entry.metal or 0)|fmt_int_compact }}</span>
+            </span>
+            <span class="galaxy-asteroid-resource">
+              <img class="galaxy-asteroid-resource-icon" src="{{ url_for('static', filename='img/res/Crytite.webp') }}" alt="" aria-hidden="true">
+              <span class="galaxy-asteroid-resource-value">{{ (entry.crystal or 0)|fmt_int_compact }}</span>
+            </span>
+            <span class="galaxy-asteroid-resource">
+              <img class="galaxy-asteroid-resource-icon" src="{{ url_for('static', filename='img/res/Brennzellen.webp') }}" alt="" aria-hidden="true">
+              <span class="galaxy-asteroid-resource-value">{{ (entry.fuel_cells or 0)|fmt_int_compact }}</span>
+            </span>
           </span>
           {% if entry.recycler_slots_needed %}
           <span class="galaxy-asteroid-board-slots gc-mono" title="{{ T('galaxy_asteroid_reclaimers_needed', 'Harvest Reclaimer benötigt') }}">
@@ -119,8 +130,10 @@
                 data-target-position="{{ entry.position }}"
                 data-recycler-slots="{{ entry.recycler_slots_needed or 0 }}"
                 {% if harvest_locked %}data-harvest-locked="1"{% endif %}>
-            <span class="galaxy-asteroid-board-fuel gc-mono"
-                  data-galaxy-asteroid-flight-preview>⛽ —</span>
+            <span class="galaxy-asteroid-board-fuel gc-mono" aria-live="polite">
+              <img class="galaxy-asteroid-resource-icon" src="{{ url_for('static', filename='img/res/Brennzellen.webp') }}" alt="" aria-hidden="true">
+              <span data-galaxy-asteroid-flight-preview>—</span>
+            </span>
             <button type="button"
                     class="gc-btn gc-btn-sm gc-btn-outline galaxy-asteroid-board-harvest"
                     data-galaxy-ring-asteroid-recycle

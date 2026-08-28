@@ -63,18 +63,29 @@ def test_galaxy_asteroid_preview_uses_server_fleet_preview_and_no_client_fuel_ma
     assert "calculate_fuel_cost" not in js
 
 
-def test_galaxy_asteroid_fuel_preview_has_stable_reserved_layout_slot():
+def test_galaxy_asteroid_fuel_preview_uses_resource_artwork_without_layout_shift():
     root = Path(__file__).resolve().parents[1]
     js = (root / "static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
+    resource_js = (root / "static/js/galaxy-asteroid-resource-ui.js").read_text(encoding="utf-8")
+    galaxy = (root / "templates/galaxy.html").read_text(encoding="utf-8")
     board = (root / "templates/partials/galaxy_asteroid_board.html").read_text(encoding="utf-8")
     block = (root / "templates/partials/galaxy_asteroid_block.html").read_text(encoding="utf-8")
 
-    assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" in board
-    assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" in block
+    for template in (board, block):
+        assert "img/res/Brennzellen.webp" in template
+        assert "data-galaxy-asteroid-flight-preview>—</span>" in template
+        assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" not in template
+
+    assert "img/res/Ferronit.webp" in board
+    assert "img/res/Crytite.webp" in board
+    assert "img/res/Ferronit.webp" in block
+    assert "img/res/Crytite.webp" in block
     assert 'if (!line) return;' in js
     assert "const fuelIcon = String.fromCodePoint(0x26fd);" in js
-    assert 'line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`;' in js
     assert 'line = document.createElement("span")' not in js
+    assert "galaxy-asteroid-resource-ui.js" in galaxy
+    assert "legacyFuelGlyph = String.fromCodePoint(0x26fd)" in resource_js
+    assert "value.slice(legacyFuelGlyph.length + 1)" in resource_js
 
 
 def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css():
@@ -91,3 +102,7 @@ def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css()
     assert "css/galaxy-asteroid-board.css" in board
     assert ".galaxy-asteroid-board-row-meta" in css
     assert ".galaxy-asteroid-board-harvest-wrap" in css
+    assert ".galaxy-asteroid-resource-icon" in css
+    assert "border-radius: 0 !important;" in css
+    assert "border-radius: 3px" not in css
+    assert "border-radius: 4px" not in css

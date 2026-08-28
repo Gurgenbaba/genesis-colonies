@@ -1,46 +1,60 @@
-/* GC asteroid board UX — stable two-tier rows and fixed action column. */
+/* GC asteroid board UX — compact technical rows with stable action column. */
 .galaxy-asteroid-board {
   container-type: inline-size;
 }
 
+/* Genesis UI rule: asteroid surfaces are technical/square, never pill/rounded. */
+.galaxy-asteroid-board,
+.galaxy-asteroid-board *,
+.galaxy-asteroid-block,
+.galaxy-asteroid-block * {
+  border-radius: 0 !important;
+}
+
 .galaxy-asteroid-board-panel {
-  padding: 8px 10px 10px;
+  padding: 6px 8px 8px;
 }
 
 .galaxy-asteroid-board-subtitle,
 .galaxy-asteroid-board-schedule {
-  margin: 2px 0 8px;
-  line-height: 1.35;
+  margin: 1px 0 6px;
+  line-height: 1.25;
 }
 
 .galaxy-asteroid-board-list {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   margin: 0;
-  padding: 0 2px 2px;
+  padding: 0 1px 1px;
 }
 
 .galaxy-asteroid-board-row {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 5px;
+  grid-template-columns: minmax(210px, 0.78fr) minmax(0, 1.22fr);
+  align-items: center;
+  gap: 8px;
   min-height: 0 !important;
-  padding: 8px 9px !important;
-  border: 1px solid rgba(74, 174, 201, 0.22);
-  border-radius: 4px;
-  background: linear-gradient(90deg, rgba(4, 19, 29, 0.82), rgba(3, 13, 22, 0.66));
+  padding: 4px 6px !important;
+  border: 1px solid rgba(74, 174, 201, 0.2);
+  background: linear-gradient(90deg, rgba(4, 19, 29, 0.78), rgba(3, 13, 22, 0.58));
 }
 
 .galaxy-asteroid-board-row:hover {
-  border-color: rgba(91, 217, 235, 0.42);
-  background: linear-gradient(90deg, rgba(6, 26, 38, 0.92), rgba(3, 16, 26, 0.78));
+  border-color: rgba(91, 217, 235, 0.4);
+  background: linear-gradient(90deg, rgba(6, 26, 38, 0.88), rgba(3, 16, 26, 0.72));
 }
 
 .galaxy-asteroid-board-row-main {
   display: flex !important;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
+}
+
+.galaxy-asteroid-board-thumb {
+  width: 20px !important;
+  height: 20px !important;
+  flex: 0 0 20px !important;
 }
 
 .galaxy-asteroid-board-type {
@@ -48,29 +62,59 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
 .galaxy-asteroid-board-coords {
   flex: 0 0 auto;
   opacity: 0.72;
-  font-size: 0.9em;
+  font-size: 0.78rem;
+}
+
+.galaxy-asteroid-board-badge {
+  padding: 1px 4px !important;
+  font-size: 0.7rem !important;
+  line-height: 1.1 !important;
 }
 
 .galaxy-asteroid-board-row-meta {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto auto minmax(170px, auto);
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(148px, auto);
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .galaxy-asteroid-board-loot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.92;
+  opacity: 0.96;
+  font-size: 0.78rem;
+}
+
+.galaxy-asteroid-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.galaxy-asteroid-resource-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  object-fit: contain;
+}
+
+.galaxy-asteroid-resource-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .galaxy-asteroid-board-slots,
@@ -78,51 +122,81 @@
 .galaxy-asteroid-board-fuel {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 3px 7px;
-  border: 1px solid rgba(92, 171, 198, 0.18);
-  border-radius: 3px;
-  background: rgba(7, 25, 35, 0.72);
+  min-height: 20px;
+  padding: 1px 5px;
+  border: 1px solid rgba(92, 171, 198, 0.16);
+  background: rgba(7, 25, 35, 0.62);
   white-space: nowrap;
+  font-size: 0.75rem;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .galaxy-asteroid-board-harvest-wrap {
   display: grid !important;
-  grid-template-columns: minmax(92px, 1fr) auto;
+  grid-template-columns: minmax(74px, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  min-width: 170px;
+  gap: 4px;
+  min-width: 148px;
 }
 
 .galaxy-asteroid-board-fuel {
   justify-content: flex-end;
-  min-width: 92px;
+  gap: 4px;
+  min-width: 74px;
 }
 
-.galaxy-asteroid-board-fuel.is-blocked {
+.galaxy-asteroid-board-fuel.is-blocked,
+.galaxy-asteroid-board-fuel:has([data-galaxy-asteroid-flight-preview].is-blocked) {
   border-color: rgba(230, 99, 99, 0.48);
   background: rgba(75, 18, 24, 0.32);
 }
 
 .galaxy-asteroid-board-harvest {
-  min-width: 82px;
+  min-width: 70px;
+  min-height: 22px !important;
   margin: 0 !important;
+  padding: 2px 7px !important;
+  font-size: 0.75rem !important;
+  line-height: 1.1 !important;
 }
 
 .galaxy-asteroid-inline-fuel {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 4px 8px;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 6px;
   border: 1px solid rgba(92, 171, 198, 0.2);
-  border-radius: 3px;
-  background: rgba(7, 25, 35, 0.72);
+  background: rgba(7, 25, 35, 0.68);
   white-space: nowrap;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 690px) {
+.galaxy-asteroid-inline-fuel:has([data-galaxy-asteroid-flight-preview].is-blocked) {
+  border-color: rgba(230, 99, 99, 0.48);
+  background: rgba(75, 18, 24, 0.32);
+}
+
+.galaxy-asteroid-stats dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@container (max-width: 820px) {
+  .galaxy-asteroid-board-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .galaxy-asteroid-board-row-meta {
+    grid-template-columns: minmax(0, 1fr) auto auto minmax(148px, auto);
+  }
+}
+
+@container (max-width: 620px) {
   .galaxy-asteroid-board-row-meta {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
