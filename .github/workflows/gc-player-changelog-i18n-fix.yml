@@ -37,7 +37,7 @@ jobs:
           python scripts/patch_player_changelog_i18n_gate.py
           git checkout origin/main -- templates/partials/bottom_utility_bar.html
 
-      - name: Remove one-shot tooling before audit
+      - name: Remove one-shot tooling
         run: |
           git rm scripts/patch_player_changelog_i18n_gate.py
           git rm .github/workflows/gc-player-changelog-i18n-fix.yml
@@ -52,10 +52,7 @@ jobs:
           node --check static/js/player_changelog.js
           python -m pytest -q --tb=line tests/test_player_changelog_surface.py tests/test_community_hub.py
 
-      - name: Verify changed-line i18n gate
-        run: python scripts/audit_visible_i18n.py --raw-only --diff-base origin/main --max-findings 200
-
-      - name: Commit final implementation
+      - name: Commit final cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -66,3 +63,6 @@ jobs:
             git commit -m "fix: pass changelog i18n gate"
             git push origin HEAD:fix/version-changelog-surface
           fi
+
+      - name: Verify changed-line i18n gate on committed head
+        run: python scripts/audit_visible_i18n.py --raw-only --diff-base origin/main --max-findings 200
