@@ -121,125 +121,14 @@ _GERMAN_WORDS = {
     "kampf": "combat",
 }
 
-_FALLBACK_MILESTONES = [
-    {
-        "date": "2026-08-13",
-        "title": "v0.9.4 — Live Galaxy & Mega Belts",
-        "items": [
-            "Added rare server-wide Mega Belt asteroids with very large, storage-scaled resource pools and multi-fleet harvesting.",
-            "Added live Galaxy updates so harvested asteroid fields disappear without waiting for a page reload.",
-            "Improved asteroid cards with tier and remaining-pool information.",
-        ],
-    },
-    {
-        "date": "2026-08-05",
-        "title": "v0.9.3 — Command Initiation, World Boss & Vault",
-        "items": [
-            "Added Command Initiation onboarding, World Boss cinematics and the Secret Vault / ground-troop layer.",
-            "Improved building-stage interactions, Login Rewards, Battle Pass and Shop claim updates.",
-            "Hardened Planet Evolution, Story Ops, locale coverage and live state synchronization.",
-        ],
-    },
-    {
-        "date": "2026-08-04",
-        "title": "v0.9.2 — Knowledge, LiveOps & Colony Stage",
-        "items": [
-            "Expanded the Codex and player guidance across the major LiveOps systems.",
-            "Added the interactive colony building stage with inline upgrades and per-planet layouts.",
-            "Improved stage visuals, identity colors, layout persistence and Planet switching.",
-        ],
-    },
-    {
-        "date": "2026-08-01",
-        "title": "v0.9.1 — Effective Stats & Polyglot Story",
-        "items": [
-            "Made effective ship, defense and research bonuses visible throughout the interface.",
-            "Localized Story Ops and player patch notes across all supported game languages.",
-            "Improved Titan progress, Commander bonuses and Timekeeper completion updates.",
-        ],
-    },
-    {
-        "date": "2026-07-31",
-        "title": "v0.9 — LiveOps & World Events",
-        "items": [
-            "Introduced World Bosses, Titans, pirates, Login Rewards, Season Pass, Story Ops and Commander Classes.",
-            "Expanded Alliance, Shop, Identity, Fleet Logistics, Combat Reports and Collector systems.",
-            "Hardened live updates, queues, Planet switching and multiple World Boss / Tech Tree edge cases.",
-        ],
-    },
-    {
-        "date": "2026-06-30",
-        "title": "v0.8 — UX Polish & Alpha Hardening",
-        "items": [
-            "Expanded empire overview, records, referrals, galactic directives, diplomacy and messages.",
-            "Reworked navigation, building and research cards, mobile HUD and player profiles.",
-            "Reduced background refresh storms, database lock pressure and rendering overhead.",
-        ],
-    },
-    {
-        "date": "2026-06-15",
-        "title": "v0.7 — Command Map & Genesis 2.0",
-        "items": [
-            "Built the Command Map, regions, sectors, chokepoints, influence and expansion sites.",
-            "Added strategic worlds, dynamic colonization and expedition-world progression.",
-            "Moved Planet Evolution toward the central long-term progression role.",
-        ],
-    },
-    {
-        "date": "2026-06-10",
-        "title": "v0.6 — Social, Ranking & LiveOps",
-        "items": [
-            "Added Vote Center, Auction House, Inventory, Lootboxes, Chat, Support, Ranking and Hall of Fame systems.",
-            "Expanded player profiles, messages and social progression.",
-            "Improved ranking safety, chat updates and vote cooldown handling.",
-        ],
-    },
-    {
-        "date": "2026-06-05",
-        "title": "v0.5 — Combat & Defense",
-        "items": [
-            "Added planetary defenses, combat simulation, reports, debris, recycling and advanced espionage.",
-            "Integrated research and effect bonuses into battle resolution.",
-            "Fixed short-flight timers, coordinate navigation and combat-report consistency.",
-        ],
-    },
-    {
-        "date": "2026-06-01",
-        "title": "v0.4 — Galaxy & Fleet",
-        "items": [
-            "Added Galaxy navigation, Shipyard queues, Fleet missions, Expeditions, Logistics and Trader Hub.",
-            "Added fleet presets, tactical sending, fleet slots and planet landscapes.",
-            "Hardened colonization, logistics cargo rules and concurrent Fleet / queue operations.",
-        ],
-    },
-    {
-        "date": "2026-05-30",
-        "title": "v0.3 — Planet Scope & Colonies",
-        "items": [
-            "Added multi-colony Planet scope, colonization, Planet Evolution, Planet research and trade routes.",
-            "Added planet management and colony-aware overview information.",
-            "Made building, research and economy actions respect the active Planet consistently.",
-        ],
-    },
-    {
-        "date": "2026-05-27",
-        "title": "v0.2 — Economy Core",
-        "items": [
-            "Added authentication, resources, buildings, research, queues, ranking and the first SPA navigation layer.",
-            "Established the canonical effect and production systems plus the Brennzellen fuel depot.",
-            "Added idempotent actions and live queue / research updates.",
-        ],
-    },
-    {
-        "date": "2026-05-25",
-        "title": "v0.1 — Foundation",
-        "items": [
-            "Created the Flask game foundation, database migrations, persistence and Admin Control Center.",
-            "Added the first research queue, SPA shell, deployment pipeline and health checks.",
-            "Established automated tests and the project architecture documentation.",
-        ],
-    },
-]
+def _fallback_milestones() -> list[dict[str, Any]]:
+    path = Path(__file__).resolve().parent.parent / "data" / "player_changelog_fallback.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return []
+    return payload if isinstance(payload, list) else []
+
 
 
 def _cache_path() -> Path:
@@ -519,7 +408,7 @@ def build_changelog_payload_from_commits(commits: list[dict[str, Any]], *, sourc
 def _fallback_payload() -> dict[str, Any]:
     groups = []
     represented = 0
-    for milestone in _FALLBACK_MILESTONES:
+    for milestone in _fallback_milestones():
         entries = []
         for item in milestone["items"]:
             entries.append(

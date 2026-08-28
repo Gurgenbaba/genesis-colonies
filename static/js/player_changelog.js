@@ -140,6 +140,15 @@
   }
 
   document.addEventListener('click', (event) => {
+    const versionOpener = event.target.closest('.gc-bottom-util-version');
+    if (versionOpener) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      open();
+    }
+  }, true);
+
+  document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-gc-changelog-open]');
     if (opener) {
       event.preventDefault();

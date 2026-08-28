@@ -47,11 +47,12 @@ def test_payload_represents_every_non_merge_commit_and_collapses_merges():
     assert sum(len(group["entries"]) for group in payload["groups"]) == 2
 
 
-def test_bottom_version_is_dialog_button_not_news_link():
+def test_bottom_version_is_captured_by_changelog_controller():
     html = _read("templates/partials/bottom_utility_bar.html")
-    assert "data-gc-changelog-open" in html
-    version_block = html.split("gc-bottom-util-version", 1)[1]
-    assert "news_view" not in version_block
+    js = _read("static/js/player_changelog.js")
+    assert "gc-bottom-util-version" in html
+    assert "event.stopImmediatePropagation()" in js
+    assert "closest('.gc-bottom-util-version')" in js
 
 
 def test_shell_has_persistent_changelog_dialog_assets():
@@ -67,3 +68,13 @@ def test_community_changelog_opens_same_canonical_dialog():
     html = _read("templates/partials/special_panel.html")
     assert 'data-gc-changelog-open' in html
     assert 'data-special-window="changelog"' not in html
+
+
+def test_bundled_fallback_history_is_data_driven():
+    import json
+    payload = json.loads(_read("data/player_changelog_fallback.json"))
+    assert payload[0]["title"].startswith("v0.9.4")
+    assert payload[-1]["title"].startswith("v0.1")
+    backend = _read("game/player_changelog.py")
+    assert "_FALLBACK_MILESTONES =" not in backend
+    assert "player_changelog_fallback.json" in backend
