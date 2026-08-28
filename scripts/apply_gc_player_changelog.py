@@ -443,7 +443,7 @@ def humanize_commit(message: str) -> dict[str, Any] | None:
     category = _CATEGORY_BY_PREFIX.get(prefix, "Improvements")
     cleaned = _clean_text(core)
     area = _friendly_area(scope, cleaned or subject)
-    specific = _specific_player_summary(f"{scope} {cleaned}")
+    specific = None if technical else _specific_player_summary(f"{scope} {cleaned}")
     if specific:
         title = specific
         technical = False

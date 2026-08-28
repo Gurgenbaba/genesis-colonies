@@ -9033,5 +9033,16 @@
   "pe_failure_smuggling_crackdown": "Schmuggel-Razzia",
   "pe_failure_corruption_scandal": "Korruptionsskandal",
   "pe_failure_resource_depletion": "Ressourcenerschöpfung",
-  "pe_failure_quantum_instability": "Quanteninstabilität"
+  "pe_failure_quantum_instability": "Quanteninstabilität",
+  "changelog_loading": "Vollständige Entwicklungshistorie wird geladen…",
+  "changelog_load_error": "Der Changelog konnte nicht geladen werden.",
+  "changelog_commits": "Commits",
+  "changelog_technical_count": "technisch",
+  "changelog_merges_collapsed": "Merge-Commits zusammengefasst",
+  "changelog_full_title": "Vollständiger Entwicklungs-Changelog",
+  "changelog_full_intro": "Jede relevante Repository-Änderung, verständlich auf Englisch aufbereitet. Doppelte Merge-Commits werden zusammengefasst; technische Änderungen bleiben unter Alle Commits sichtbar.",
+  "changelog_search_placeholder": "Version, System oder Änderung suchen…",
+  "changelog_filter_label": "Changelog-Filter",
+  "changelog_filter_player": "Spieler-Änderungen",
+  "changelog_filter_all": "Alle Commits"
 }

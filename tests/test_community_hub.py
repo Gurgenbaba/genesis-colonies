@@ -21,9 +21,11 @@ def test_special_panel_has_community_hub_with_discord_link():
 
 def test_special_panel_community_menu_entries():
     html = _read("templates/partials/special_panel.html")
-    for key in ("rules", "changelog", "events"):
+    for key in ("rules", "events"):
         assert f'data-community-open="{key}"' in html
         assert f'data-special-window="{key}"' in html
+    assert 'data-gc-changelog-open' in html
+    assert 'data-special-window="changelog"' not in html
 
 
 def test_main_js_init_community_hub():
@@ -41,8 +43,9 @@ def test_bottom_utility_bar_special_window_targets():
         assert f'data-special-open-window="{target}"' in html
     panel = _read("templates/partials/special_panel.html")
     codex = _read("templates/partials/codex_panel.html")
-    for target in ("support", "my-tickets", "imprint", "rules", "changelog", "events"):
+    for target in ("support", "my-tickets", "imprint", "rules", "events"):
         assert f'data-special-window="{target}"' in panel
+    assert 'data-special-window="changelog"' not in panel
     assert 'data-special-window="codex"' in codex
 
 

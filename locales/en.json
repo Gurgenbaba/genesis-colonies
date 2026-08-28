@@ -9033,5 +9033,16 @@
   "pe_failure_smuggling_crackdown": "Smuggling crackdown",
   "pe_failure_corruption_scandal": "Corruption scandal",
   "pe_failure_resource_depletion": "Resource depletion",
-  "pe_failure_quantum_instability": "Quantum instability"
+  "pe_failure_quantum_instability": "Quantum instability",
+  "changelog_loading": "Loading complete development history…",
+  "changelog_load_error": "The changelog could not be loaded.",
+  "changelog_commits": "commits",
+  "changelog_technical_count": "technical",
+  "changelog_merges_collapsed": "merge commits collapsed",
+  "changelog_full_title": "Full Development Changelog",
+  "changelog_full_intro": "Every meaningful repository change, rewritten into readable English. Merge duplicates are collapsed; technical work remains available in the All commits view.",
+  "changelog_search_placeholder": "Search version, system or change…",
+  "changelog_filter_label": "Changelog filter",
+  "changelog_filter_player": "Player changes",
+  "changelog_filter_all": "All commits"
 }

@@ -9033,5 +9033,16 @@
   "pe_failure_smuggling_crackdown": "Kaçakçılık operasyonu",
   "pe_failure_corruption_scandal": "Yolsuzluk skandalı",
   "pe_failure_resource_depletion": "Kaynak tükenmesi",
-  "pe_failure_quantum_instability": "Kuantum kararsızlığı"
+  "pe_failure_quantum_instability": "Kuantum kararsızlığı",
+  "changelog_loading": "Tam geliştirme geçmişi yükleniyor…",
+  "changelog_load_error": "Değişiklik günlüğü yüklenemedi.",
+  "changelog_commits": "commit",
+  "changelog_technical_count": "teknik",
+  "changelog_merges_collapsed": "birleştirme commitleri toplandı",
+  "changelog_full_title": "Tam Geliştirme Değişiklik Günlüğü",
+  "changelog_full_intro": "Depodaki her önemli değişiklik anlaşılır İngilizce olarak yeniden yazılır. Yinelenen merge kayıtları birleştirilir; teknik çalışmalar Tüm commitler görünümünde kalır.",
+  "changelog_search_placeholder": "Sürüm, sistem veya değişiklik ara…",
+  "changelog_filter_label": "Değişiklik günlüğü filtresi",
+  "changelog_filter_player": "Oyuncu değişiklikleri",
+  "changelog_filter_all": "Tüm commitler"
 }

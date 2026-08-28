@@ -75,14 +75,14 @@
               title="{{ T('nav_meta', 'Meta-Navigation') }}">
         {{ T("nav_meta_short", "Meta") }}
       </button>
-      <a href="{{ _release.href | default(url_for('news_view')) }}"
-         class="gc-bottom-util-version gc-mono gc-nav-link"
-         data-pjax-link
-         title="{{ T('sidebar_version_title', 'Genesis Timeline & Patchnotes') }}">
+      <button type="button"
+              class="gc-bottom-util-version gc-mono gc-nav-link"
+              data-gc-changelog-open
+              title="{{ T('changelog_full_title', 'Full Development Changelog') }}">
         <span class="gc-bottom-util-version-label">{{ _release.label | default('Genesis') }}</span>
         <span class="gc-bottom-util-version-sep" aria-hidden="true">•</span>
         <span class="gc-bottom-util-version-stage">{{ T("release_stage_alpha", "Alpha") }}</span>
-      </a>
+      </button>
     </div>
   </div>
 </footer>

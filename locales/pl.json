@@ -9033,5 +9033,16 @@
   "pe_failure_smuggling_crackdown": "Akcja przeciw przemytowi",
   "pe_failure_corruption_scandal": "Skandal korupcyjny",
   "pe_failure_resource_depletion": "Wyczerpanie zasobów",
-  "pe_failure_quantum_instability": "Niestabilność kwantowa"
+  "pe_failure_quantum_instability": "Niestabilność kwantowa",
+  "changelog_loading": "Ładowanie pełnej historii rozwoju…",
+  "changelog_load_error": "Nie udało się wczytać changelogu.",
+  "changelog_commits": "commity",
+  "changelog_technical_count": "techniczne",
+  "changelog_merges_collapsed": "scalone commity merge",
+  "changelog_full_title": "Pełny changelog rozwoju",
+  "changelog_full_intro": "Każda istotna zmiana repozytorium jest opisana czytelnym angielskim. Duplikaty merge są scalane, a prace techniczne pozostają dostępne w widoku Wszystkie commity.",
+  "changelog_search_placeholder": "Szukaj wersji, systemu lub zmiany…",
+  "changelog_filter_label": "Filtr changelogu",
+  "changelog_filter_player": "Zmiany dla graczy",
+  "changelog_filter_all": "Wszystkie commity"
 }
