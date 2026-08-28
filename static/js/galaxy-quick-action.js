@@ -30,6 +30,8 @@
     _recycleArrivalReloadTimer: null,
     _unwatchRecycleArrivals: null,
     _asteroidHelpHome: null,
+    _asteroidPreviewCache: new Map(),
+    _asteroidPreviewInflight: new Map(),
 
     escapeHtml(value) {
       return String(value || "")
@@ -106,6 +108,149 @@
         return null;
       }
       return null;
+    },
+
+    formatAsteroidFlightDuration(seconds) {
+      const total = Math.max(0, parseInt(seconds || "0", 10) || 0);
+      if (total < 60) return `${total}s`;
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const secs = total % 60;
+      if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+      return `${minutes}:${String(secs).padStart(2, "0")}`;
+    },
+
+    asteroidPreviewKey(originPlanetId, g, s, p, sendCount) {
+      return `${originPlanetId}:${g}:${s}:${p}:${sendCount}`;
+    },
+
+    asteroidPreviewFromResponse(res) {
+      const payload = this.fleetPayload(res);
+      const candidates = [
+        payload?.preview,
+        payload?.data?.preview,
+        res?.preview,
+        res?.data?.preview,
+        res?.payload?.preview,
+      ];
+      return candidates.find((value) => value && typeof value === "object") || null;
+    },
+
+    renderAsteroidFlightPreview(wrap, preview, sendCount) {
+      if (!wrap || !preview) return;
+      const { formatNumber } = deps();
+      const fuelCost = Math.max(0, parseInt(preview.fuel_cost || "0", 10) || 0);
+      const fuelAvailable = Math.max(0, parseInt(preview.fuel_available || "0", 10) || 0);
+      const flightSeconds = Math.max(0, parseInt(preview.flight_seconds || "0", 10) || 0);
+      const count = Math.max(0, parseInt(sendCount || "0", 10) || 0);
+      const short = `⛽ ${formatNumber(fuelCost)} BZ · 🚀 ${formatNumber(count)} HR · ⏱ ${this.formatAsteroidFlightDuration(flightSeconds)}`;
+      const missing = Math.max(0, fuelCost - fuelAvailable);
+      const full = missing > 0
+        ? `${short} · ⚠ ${formatNumber(missing)} BZ`
+        : short;
+
+      const trigger = wrap.querySelector("[data-galaxy-ring-asteroid-recycle]");
+      if (trigger) {
+        trigger.title = full;
+        trigger.setAttribute("aria-description", full);
+      }
+
+      // Ring markers are intentionally tiny: keep their preview in the native
+      // tooltip. Board rows and the slot inspector get a compact visible line.
+      if (wrap.classList.contains("galaxy-ring-asteroid-wrap")) return;
+      let line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
+      if (!line) {
+        line = document.createElement("span");
+        line.className = "galaxy-asteroid-flight-preview hint gc-mono";
+        line.setAttribute("data-galaxy-asteroid-flight-preview", "");
+        if (trigger) wrap.insertBefore(line, trigger);
+        else wrap.appendChild(line);
+      }
+      line.textContent = full;
+      line.classList.toggle("is-blocked", missing > 0);
+    },
+
+    async loadAsteroidFlightPreview(wrap, root, { sendCount = null, force = false } = {}) {
+      if (!wrap) return null;
+      const { fetchGameAction } = deps();
+      if (!fetchGameAction) return null;
+
+      const g = parseInt(wrap.dataset.targetGalaxy || "0", 10);
+      const s = parseInt(wrap.dataset.targetSystem || "0", 10);
+      const p = parseInt(wrap.dataset.targetPosition || "0", 10);
+      const needed = Math.max(0, parseInt(wrap.dataset.recyclerSlots || "0", 10) || 0);
+      const originPlanetId = this.getOriginPlanetId(root);
+      if (!originPlanetId || !g || !s || !p || needed < 1) return null;
+
+      let count = sendCount === null ? null : Math.max(0, parseInt(sendCount || "0", 10) || 0);
+      if (count === null) {
+        const available = await this.resolveAvailableReclaimersAsync(root);
+        if (available === null) return null;
+        count = Math.min(available, needed);
+      }
+      if (count < 1) return null;
+
+      const key = this.asteroidPreviewKey(originPlanetId, g, s, p, count);
+      const now = Date.now();
+      const cached = this._asteroidPreviewCache.get(key);
+      if (!force && cached && now - cached.at < 15000) {
+        this.renderAsteroidFlightPreview(wrap, cached.preview, count);
+        return cached.preview;
+      }
+      if (!force && this._asteroidPreviewInflight.has(key)) {
+        const preview = await this._asteroidPreviewInflight.get(key);
+        if (preview) this.renderAsteroidFlightPreview(wrap, preview, count);
+        return preview;
+      }
+
+      const domPlanetId = deps().getDomPlanetId() || originPlanetId;
+      const request = (async () => {
+        try {
+          const res = await fetchGameAction("/api/fleet/preview", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              "X-Requested-With": "XMLHttpRequest",
+              ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+            },
+            body: JSON.stringify({
+              origin_planet_id: originPlanetId,
+              mission_type: "recycle",
+              target_galaxy: g,
+              target_system: s,
+              target_position: p,
+              ships: { harvest_reclaimer: count },
+              resources: {},
+              speed_percent: 100,
+            }),
+          });
+          const preview = this.asteroidPreviewFromResponse(res);
+          if (preview) {
+            this._asteroidPreviewCache.set(key, { at: Date.now(), preview });
+          }
+          return preview;
+        } catch (_) {
+          return null;
+        } finally {
+          this._asteroidPreviewInflight.delete(key);
+        }
+      })();
+      this._asteroidPreviewInflight.set(key, request);
+      const preview = await request;
+      if (preview) this.renderAsteroidFlightPreview(wrap, preview, count);
+      return preview;
+    },
+
+    handleAsteroidPreviewIntent(ev, root) {
+      const wrap = ev.target?.closest?.("[data-galaxy-ring-asteroid-wrap]");
+      if (!wrap || !root.contains(wrap) || wrap.dataset.harvestLocked === "1") return;
+      void this.loadAsteroidFlightPreview(wrap, root);
+    },
+
+    resetAsteroidPreviewCache() {
+      this._asteroidPreviewCache.clear();
+      this._asteroidPreviewInflight.clear();
     },
 
     /**
@@ -808,6 +953,16 @@
         return;
       }
 
+      const preview = await this.loadAsteroidFlightPreview(wrap, root, { sendCount });
+      if (preview) {
+        const fuelCost = Math.max(0, parseInt(preview.fuel_cost || "0", 10) || 0);
+        const fuelAvailable = Math.max(0, parseInt(preview.fuel_available || "0", 10) || 0);
+        if (fuelCost > fuelAvailable) {
+          this.notifyFleetError("not_enough_fuel", { preview }, null);
+          return;
+        }
+      }
+
       await this.runGuarded(btn, async () => {
         await this.postFleetSend(root, btn, {
           skipGuard: true,
@@ -976,6 +1131,7 @@
       const onAttackOutside = (ev) => this.handleAttackOutsideClick(ev);
       const onDebris = (ev) => this.handleDebrisRecycleClick(ev, root);
       const onAsteroid = (ev) => this.handleAsteroidRecycleClick(ev, root);
+      const onAsteroidPreview = (ev) => this.handleAsteroidPreviewIntent(ev, root);
       const onAsteroidHelp = (ev) => this.handleAsteroidHelpClick(ev);
       const onBoardToggle = (ev) => this.handleAsteroidBoardToggle(ev, root);
       const onRelocate = (ev) => this.handleRelocationClick(ev, root);
@@ -989,6 +1145,8 @@
       document.addEventListener("click", onAttackOutside);
       root.addEventListener("click", onDebris);
       root.addEventListener("click", onAsteroid);
+      root.addEventListener("pointerover", onAsteroidPreview);
+      root.addEventListener("focusin", onAsteroidPreview);
       root.addEventListener("click", onAsteroidHelp);
       document.addEventListener("click", onAsteroidHelp);
       root.addEventListener("click", onBoardToggle);
@@ -1004,6 +1162,8 @@
         document.removeEventListener("click", onAttackOutside);
         root.removeEventListener("click", onDebris);
         root.removeEventListener("click", onAsteroid);
+        root.removeEventListener("pointerover", onAsteroidPreview);
+        root.removeEventListener("focusin", onAsteroidPreview);
         root.removeEventListener("click", onAsteroidHelp);
         document.removeEventListener("click", onAsteroidHelp);
         root.removeEventListener("click", onBoardToggle);
@@ -1013,6 +1173,7 @@
         this.closeAttackMenu();
         this.closeAsteroidHelp();
         this.resetAttackPresetCache();
+        this.resetAsteroidPreviewCache();
       };
     },
   };

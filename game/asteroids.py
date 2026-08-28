@@ -10,6 +10,7 @@ import logging
 import math
 import random
 import time
+from statistics import median
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from .db import table_exists
@@ -41,6 +42,20 @@ TIER_MEGA = "mega"
 # Catalog: weighted types with resource split hints.
 # Each resource (metal / crystal / fuel_cells) rolls independently in this band.
 ASTEROID_RESOURCE_RANGE = (500_000, 5_000_000)
+
+# GC-AST-VALUE-01: Standard belts keep the catalog roll shape, but newly
+# spawned fields scale with the live universe's mine progression.  The
+# canonical production curve remains owned by game.production_formula; this
+# module only derives a dimensionless reward multiplier from it.
+STANDARD_BELT_TOP_N_MINES = 10
+STANDARD_BELT_MIN_REFERENCE_LEVEL = 30
+STANDARD_BELT_BASE_MULTIPLIER = 5.0
+STANDARD_BELT_PROGRESS_EXPONENT = 0.45
+STANDARD_BELT_MINE_BUILDING_BY_RESOURCE = {
+    "metal": "metal_mine",
+    "crystal": "crystal_mine",
+    "fuel_cells": "fuel_cell_plant",
+}
 
 ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
     "ferronite_rock": {
@@ -418,7 +433,12 @@ def estimate_reclaimer_slots_needed(
     return (total + cargo - 1) // cargo
 
 
-def _roll_loot(asteroid_key: str, *, rng: Optional[random.Random] = None) -> Dict[str, int]:
+def _roll_loot(
+    asteroid_key: str,
+    *,
+    rng: Optional[random.Random] = None,
+    conn=None,
+) -> Dict[str, int]:
     """Roll metal/crystal/fuel independently in the catalog resource band.
 
     Type ``split`` biases which resources land toward the high end of the band
@@ -432,6 +452,7 @@ def _roll_loot(asteroid_key: str, *, rng: Optional[random.Random] = None) -> Dic
         lo_i, hi_i = hi_i, lo_i
     split = dict(catalog.get("split") or {})
     equal = 1.0 / 3.0
+    scale_map = _standard_belt_scale_map(conn) if conn is not None else {}
     out: Dict[str, int] = {}
     for key in ("metal", "crystal", "fuel_cells"):
         share = float(split.get(key) or equal)
@@ -442,6 +463,11 @@ def _roll_loot(asteroid_key: str, *, rng: Optional[random.Random] = None) -> Dic
         span = hi_i - lo_i
         out[key] = int(lo_i + round(span * t))
         out[key] = max(lo_i, min(hi_i, out[key]))
+        if scale_map:
+            out[key] = max(
+                lo_i,
+                int(round(out[key] * float(scale_map.get(key, 1.0) or 1.0))),
+            )
     return out
 
 
@@ -461,6 +487,59 @@ def _top_n_building_levels(conn, building_type: str, *, valid: Iterable[str], n:
         (max(1, int(n)),),
     ).fetchall()
     return [int(r["lvl"] or 0) for r in rows]
+
+
+def _standard_belt_reference_level(conn, resource: str) -> int:
+    """Robust universe progression anchor for one standard-belt resource.
+
+    Top-N keeps the belt relevant to active progression, while the median
+    prevents one extreme account from inflating every public asteroid.  L30
+    is the minimum anchor so fresh universes still receive the intended
+    mid-game relevance floor.
+    """
+    minimum = int(STANDARD_BELT_MIN_REFERENCE_LEVEL)
+    if conn is None or not table_exists(conn, "planet_buildings"):
+        return minimum
+    building_type = STANDARD_BELT_MINE_BUILDING_BY_RESOURCE.get(str(resource))
+    if not building_type:
+        return minimum
+    levels = _top_n_building_levels(
+        conn,
+        building_type,
+        valid=STANDARD_BELT_MINE_BUILDING_BY_RESOURCE.values(),
+        n=STANDARD_BELT_TOP_N_MINES,
+    )
+    positive = [max(0, int(level)) for level in levels if int(level or 0) > 0]
+    if not positive:
+        return minimum
+    return max(minimum, int(round(float(median(positive)))))
+
+
+def _standard_belt_scale_map(conn) -> Dict[str, float]:
+    """Adaptive standard-belt multiplier derived from canonical mine output.
+
+    At the L30 floor a standard field is already 5x the legacy roll.  Beyond
+    that, progression follows the canonical mine curve sub-linearly so normal
+    belts stay valuable without overtaking storage-scaled Mega Belts.
+    """
+    from .production_formula import level_growth
+
+    out: Dict[str, float] = {}
+    floor_level = int(STANDARD_BELT_MIN_REFERENCE_LEVEL)
+    for resource in STANDARD_BELT_MINE_BUILDING_BY_RESOURCE:
+        reference_level = _standard_belt_reference_level(conn, resource)
+        floor_output = max(1.0, float(level_growth(resource, floor_level, 1.0)))
+        reference_output = max(
+            floor_output,
+            float(level_growth(resource, reference_level, 1.0)),
+        )
+        progression = max(1.0, reference_output / floor_output)
+        out[resource] = max(
+            1.0,
+            float(STANDARD_BELT_BASE_MULTIPLIER)
+            * (progression ** float(STANDARD_BELT_PROGRESS_EXPONENT)),
+        )
+    return out
 
 
 def _mega_belt_resource_pool(conn) -> Dict[str, int]:
@@ -823,7 +902,7 @@ def insert_asteroid(
         key = str(asteroid_key or _pick_weighted_key(rng=rng))
         if key not in ASTEROID_CATALOG:
             key = "mixed_belt"
-        loot = _roll_loot(key, rng=rng)
+        loot = _roll_loot(key, rng=rng, conn=conn)
     expires = ts + float(ttl_seconds)
     cur = conn.execute(
         """

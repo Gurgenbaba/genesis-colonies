@@ -49,6 +49,7 @@ Viewer hunt UX:
 - Send records `asteroid_engagements` + stamps `asteroid_id` on the movement.
 - Board/ring show **Unterwegs / En route** with ETA (not silent hide).
 - Harvest button disabled while own outbound fleet is flying.
+- Hover/focus on an available Harvest action loads the canonical fleet preview (fuel, HR count, flight time); click reuses that preview and blocks locally-visible fuel shortages before send.
 - Cap line shows global active vs visible board count; next-wave countdown in header + empty state.
 
 Expire-on-view: `expire_due_asteroids` runs from board build / system attach (debris parity). Countdown zero → Galaxy PJAX reload (`data-refresh-on-zero="galaxy"`).
@@ -59,12 +60,18 @@ Expire-on-view: `expire_due_asteroids` runs from board build / system attach (de
 
 | Key | Split bias (approx) | Per-resource range |
 |-----|---------------------|--------------------|
-| `ferronite_rock` | 70/25/5 M/C/F | 0.5M–5M each |
-| `crytite_shard` | 25/70/5 | 0.5M–5M each |
-| `fuel_ice` | 15/15/70 | 0.5M–5M each |
-| `mixed_belt` | 40/40/20 | 0.5M–5M each |
+| `ferronite_rock` | 70/25/5 M/C/F | base roll 0.5M–5M × adaptive multiplier |
+| `crytite_shard` | 25/70/5 | base roll 0.5M–5M × adaptive multiplier |
+| `fuel_ice` | 15/15/70 | base roll 0.5M–5M × adaptive multiplier |
+| `mixed_belt` | 40/40/20 | base roll 0.5M–5M × adaptive multiplier |
 
-Each resource rolls independently inside the band; catalog split only biases toward the high end for preferred resources. Total field ≈ 1.5M–15M (contested prize vs large expos, not empire-breaker).
+Each resource still rolls independently inside the 0.5M–5M base band; catalog split only biases toward the high end for preferred resources. **New standard fields are then multiplied server-side** by an adaptive progression factor.
+
+### Adaptive Standard Belts (GC-AST-VALUE-01)
+
+Standard belts use the median level of the universe's top 10 relevant mines (`metal_mine`, `crystal_mine`, `fuel_cell_plant`) with a minimum reference of **L30**. At the L30 floor the legacy roll is multiplied by **5×**. Above L30 the multiplier grows sub-linearly with the canonical `game.production_formula.level_growth()` curve (`progression^0.45`). There is no fixed late-game hard cap; a single extreme account cannot dominate the reference because the median is used.
+
+This scaling applies **only when a new standard asteroid is spawned**. Existing active fields keep their stored pool until claimed/expired. Mega Belts remain separately storage-scaled and are intentionally the jackpot tier.
 
 Cargo take = `min(fleet_cargo, pool)`; asteroid is fully claimed and removed even if leftover cargo capacity is insufficient (remainder lost).
 
