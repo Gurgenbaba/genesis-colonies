@@ -1,0 +1,38 @@
+name: GC Fleet Probe Codemod
+
+on:
+  push:
+    branches:
+      - fix/gc-perf-fleet-probe-003
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Apply focused Fleet probe patch
+        run: python scripts/gc_perf_fleet_probe_003.py
+
+      - name: Commit generated source
+        shell: bash
+        run: |
+          if git diff --quiet -- game/live_state.py; then
+            echo "No generated change."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/live_state.py
+          git commit -m "perf: slim Fleet diet probe"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
