@@ -1310,8 +1310,19 @@ def _fleet_fp_for_poll(fleets: Any) -> Any:
                     "status": item.get("status"),
                     "arrival_at": int(float(item.get("arrival_at") or 0)),
                     "return_at": int(float(item.get("return_at") or 0)),
+                    "holding_until": int(float(item.get("holding_until") or 0)),
                 }
             )
+    # Fingerprint identity must not depend on display/query ordering.
+    slim_items.sort(
+        key=lambda row: (
+            int(row.get("id") or 0),
+            str(row.get("status") or ""),
+            int(row.get("arrival_at") or 0),
+            int(row.get("return_at") or 0),
+            int(row.get("holding_until") or 0),
+        )
+    )
     return {
         "count": fleets.get("count") or fleets.get("active_fleet_count"),
         "items": slim_items,
@@ -1381,6 +1392,44 @@ def _notification_revision_for_probe(user_id: int, *, conn) -> tuple[str, int]:
     return f"{unread}:{latest_id}:{alert_key}", unread
 
 
+
+def _fleet_probe_slice(player_id: int, *, conn) -> Dict[str, Any]:
+    """Cheap active-Fleet structure for the diet poll fingerprint.
+
+    The full Fleet drawer needs planet names, parsed ship/resource JSON and derived
+    timer/progress fields. ``compute_poll_version`` only hashes movement identity,
+    phase and canonical phase deadlines, so the probe reads those columns directly
+    from ``fleet_movements`` and avoids the full HUD reconstruction path.
+    """
+    from game.fleet_defs import ACTIVE_FLEET_STATUSES
+
+    placeholders = ",".join("?" for _ in ACTIVE_FLEET_STATUSES)
+    rows = conn.execute(
+        f"""
+        SELECT id, status, arrival_at, return_at, holding_until
+        FROM fleet_movements
+        WHERE player_id = ? AND status IN ({placeholders})
+        ORDER BY id ASC;
+        """,
+        (int(player_id), *ACTIVE_FLEET_STATUSES),
+    ).fetchall()
+    items = [
+        {
+            "movement_id": int(row["id"]),
+            "status": str(row["status"] or ""),
+            "arrival_at": int(float(row["arrival_at"] or 0)),
+            "return_at": int(float(row["return_at"] or 0)),
+            "holding_until": int(float(row["holding_until"] or 0)),
+        }
+        for row in rows
+    ]
+    count = len(items)
+    return {
+        "count": count,
+        "active_fleet_count": count,
+        "items": items,
+    }
+
 def probe_poll_version(player_id: int, conn) -> Optional[int]:
     """
     GC-PERF-STATE-004: cheap HUD fingerprint matching ``compute_poll_version``.
@@ -1392,7 +1441,7 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
     try:
         uid = int(player_id)
         from game.buildings import get_build_queue_status_for_planet
-        from game.fleet import build_active_fleets_payload, fleet_schema_ready
+        from game.fleet import fleet_schema_ready
         from game.logic import _read_player_live_state_no_writes
         from game.models import get_player_rank, load_player
         from game.planet_evolution.repository import get_context_planet
@@ -1421,7 +1470,7 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
         )
         fleets: Dict[str, Any] = {}
         if fleet_schema_ready(conn):
-            fleets = active_fleets_poll_slice(build_active_fleets_payload(uid, conn=conn))
+            fleets = _fleet_probe_slice(uid, conn=conn)
 
         revision, unread = _notification_revision_for_probe(uid, conn=conn)
         score_raw = get_player_score_cached(uid, read_only=True) or {
