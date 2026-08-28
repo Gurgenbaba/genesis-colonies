@@ -1,3 +1,4 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/galaxy-asteroid-board.css') }}">
 {# GC-AST-UX-01 — Galaxy asteroid board: collapsed by default, expand for list #}
 {% set board = sys.active_asteroid_board if sys.active_asteroid_board is defined else [] %}
 {% set board_count = board|length if board else 0 %}
