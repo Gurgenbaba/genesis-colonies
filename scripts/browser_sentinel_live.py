@@ -11,9 +11,13 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
-from scripts import browser_sentinel as sentinel
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from scripts import browser_sentinel as sentinel  # noqa: E402
 
 _ALLOWED_HOSTS = {"genesis-colonies.com", "www.genesis-colonies.com"}
 
