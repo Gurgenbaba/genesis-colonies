@@ -373,6 +373,43 @@ def table_exists(conn: DbConn, table_name: str) -> bool:
     return cur.fetchone() is not None
 
 
+def tables_exist(conn: DbConn, table_names) -> bool:
+    """Check multiple table names with one backend-safe schema query.
+
+    This intentionally does not cache across requests or processes: callers keep
+    current schema visibility while hot paths avoid one round-trip per table.
+    """
+    names = tuple(
+        dict.fromkeys(
+            str(name).strip()
+            for name in (table_names or ())
+            if str(name or "").strip()
+        )
+    )
+    if not names:
+        return True
+
+    placeholders = ",".join("?" for _ in names)
+    if get_db_backend() == "postgres":
+        sql = f"""
+            SELECT table_name AS name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name IN ({placeholders});
+        """
+    else:
+        sql = f"""
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name IN ({placeholders});
+        """
+
+    rows = conn.execute(sql, names).fetchall()
+    found = {str(row["name"]) for row in rows}
+    return set(names).issubset(found)
+
+
 def index_exists(conn: DbConn, index_name: str) -> bool:
     if get_db_backend() == "postgres":
         from game.db_pg import postgres_index_exists

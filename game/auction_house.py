@@ -11,7 +11,14 @@ import random
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback
+from .db import (
+    begin_write_transaction,
+    commit,
+    db,
+    lock_planet_for_update,
+    rollback,
+    tables_exist,
+)
 from .inventory import grant_inventory_item, inventory_schema_ready
 from .inventory_catalog import ITEM_CATALOG, item_catalog_entry
 from .models import table_exists
@@ -62,10 +69,9 @@ START_PRICE_BY_RARITY: Dict[str, int] = {
 
 
 def auction_schema_ready(conn) -> bool:
-    return (
-        table_exists(conn, "lootbox_inventory")
-        and table_exists(conn, "auction_house_listings")
-        and table_exists(conn, "auction_house_bids")
+    return tables_exist(
+        conn,
+        ("lootbox_inventory", "auction_house_listings", "auction_house_bids"),
     )
 
 

@@ -15,7 +15,7 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from game.db import table_exists
+from game.db import table_exists, tables_exist
 from game.inventory import (
     build_roll_preview,
     consume_inventory_item,
@@ -135,11 +135,14 @@ ITEM_REWARD_VALUE: Dict[str, int] = {
 # --- Schema / helpers ----------------------------------------------------------
 
 def case_battles_schema_ready(conn) -> bool:
-    return bool(
-        table_exists(conn, "case_battles")
-        and table_exists(conn, "case_battle_players")
-        and table_exists(conn, "case_battle_rolls")
-        and table_exists(conn, "case_battle_settlements")
+    return tables_exist(
+        conn,
+        (
+            "case_battles",
+            "case_battle_players",
+            "case_battle_rolls",
+            "case_battle_settlements",
+        ),
     )
 
 
