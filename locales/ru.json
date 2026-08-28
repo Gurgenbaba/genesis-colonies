@@ -9033,5 +9033,7 @@
   "pe_failure_smuggling_crackdown": "Борьба с контрабандой",
   "pe_failure_corruption_scandal": "Коррупционный скандал",
   "pe_failure_resource_depletion": "Истощение ресурсов",
-  "pe_failure_quantum_instability": "Квантовая нестабильность"
+  "pe_failure_quantum_instability": "Квантовая нестабильность",
+  "galaxy_asteroid_mega_limit_reached": "Ваша доля 10% в этом мегапоясе исчерпана.",
+  "fleet_asteroid_report_quota_exhausted": "Ваша доля 10% в мегапоясе %(coords)s исчерпана. Флот возвращается в %(origin)s без добычи."
 }

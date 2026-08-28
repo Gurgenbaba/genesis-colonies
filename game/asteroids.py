@@ -124,6 +124,10 @@ MEGA_BELT_SPAWN_RUNTIME_KEY = "mega_asteroid_belt_last_spawn_at"
 MEGA_BELT_TOP_N_STORAGE = 10
 MEGA_BELT_STORAGE_FRACTION = 0.02
 MEGA_BELT_MIN_POOL_PER_RESOURCE = 5_000_000
+# Each player may harvest at most 10% of the original mega-belt pool.
+# The cap is per resource so ten fully equipped players can cleanly split a belt,
+# while smaller fleets may make repeated trips until their own share is exhausted.
+MEGA_BELT_PLAYER_SHARE = 0.10
 
 MEGA_BELT_STORAGE_BUILDING_BY_RESOURCE = {
     "metal": "metal_storage",
@@ -310,23 +314,144 @@ def enrich_asteroid_viewer_state(
     out = dict(asteroid)
     aid = int(out.get("id") or 0)
     fleet = dict(fleet_map.get(aid) or {})
-    engaged = bool(aid and (aid in engaged_ids or fleet.get("engaged")))
-    status = str(fleet.get("fleet_status") or "")
+    status = str(fleet.get("fleet_status") or "").strip().lower()
     arrival = fleet.get("arrival_at")
     try:
         arrival_f = float(arrival) if arrival is not None else None
     except (TypeError, ValueError):
         arrival_f = None
-    ts = float(now if now is not None else _now())
-    # Consistent "Unterwegs": any outbound hunt, including ETA still in the future.
-    en_route = bool(status == "outbound")
-    if not en_route and engaged and arrival_f is not None and arrival_f > ts:
-        en_route = True
-    out["viewer_engaged"] = engaged
-    out["viewer_fleet_status"] = status if engaged else ""
-    out["viewer_arrival_at"] = arrival_f
+    active_fleet = bool(fleet.get("engaged") and status in ("outbound", "returning"))
+    en_route = bool(active_fleet and status == "outbound")
+    returning = bool(active_fleet and status == "returning")
+    # Durable engagement history must never masquerade as a live flight.
+    out["viewer_has_engaged"] = bool(aid and (aid in engaged_ids or active_fleet))
+    out["viewer_engaged"] = active_fleet
+    out["viewer_fleet_status"] = status if active_fleet else ""
+    out["viewer_arrival_at"] = arrival_f if active_fleet else None
     out["viewer_en_route"] = en_route
-    out["viewer_harvest_locked"] = en_route
+    out["viewer_returning"] = returning
+    out["viewer_harvest_locked"] = active_fleet
+    return out
+
+
+
+def mega_belt_player_share_state(
+    asteroid_id: int,
+    player_id: int,
+    *,
+    conn,
+    row: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Return the canonical per-player 10% Mega Belt entitlement.
+
+    The original spawn pool is reconstructed as current remaining resources
+    plus the append-only claim ledger, so repeated small-fleet trips remain
+    exact without a second mutable source of truth.
+    """
+    zero = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    aid = int(asteroid_id or 0)
+    pid = int(player_id or 0)
+    empty = {
+        "original_pool": dict(zero),
+        "player_claimed": dict(zero),
+        "player_quota": dict(zero),
+        "player_remaining": dict(zero),
+        "player_remaining_total": 0,
+        "share_percent": 0.0,
+        "quota_exhausted": False,
+    }
+    if aid <= 0 or pid <= 0 or not table_exists(conn, "asteroid_field_claims"):
+        return empty
+    source = row
+    if source is None:
+        source = conn.execute(
+            "SELECT * FROM asteroid_fields WHERE id = ? LIMIT 1;", (aid,)
+        ).fetchone()
+    if not source:
+        return empty
+    try:
+        tier = str(source["tier"] or TIER_STANDARD)
+    except (KeyError, IndexError, TypeError):
+        tier = TIER_STANDARD
+    if tier != TIER_MEGA:
+        return empty
+
+    all_claims = conn.execute(
+        """
+        SELECT COALESCE(SUM(metal), 0) AS metal,
+               COALESCE(SUM(crystal), 0) AS crystal,
+               COALESCE(SUM(fuel_cells), 0) AS fuel_cells
+        FROM asteroid_field_claims WHERE asteroid_id = ?;
+        """,
+        (aid,),
+    ).fetchone()
+    own_claims = conn.execute(
+        """
+        SELECT COALESCE(SUM(metal), 0) AS metal,
+               COALESCE(SUM(crystal), 0) AS crystal,
+               COALESCE(SUM(fuel_cells), 0) AS fuel_cells
+        FROM asteroid_field_claims WHERE asteroid_id = ? AND player_id = ?;
+        """,
+        (aid, pid),
+    ).fetchone()
+    current = {
+        "metal": max(0, int(source["metal"] or 0)),
+        "crystal": max(0, int(source["crystal"] or 0)),
+        "fuel_cells": max(0, int(source["fuel_cells"] or 0)),
+    }
+    claimed_all = {key: max(0, int(all_claims[key] or 0)) for key in zero}
+    claimed_own = {key: max(0, int(own_claims[key] or 0)) for key in zero}
+    original = {key: current[key] + claimed_all[key] for key in zero}
+    quota = {
+        key: max(1, int(math.floor(original[key] * MEGA_BELT_PLAYER_SHARE)))
+        if original[key] > 0
+        else 0
+        for key in zero
+    }
+    remaining = {key: max(0, quota[key] - claimed_own[key]) for key in zero}
+    original_total = sum(original.values())
+    claimed_total = sum(claimed_own.values())
+    remaining_total = sum(remaining.values())
+    share_percent = (
+        min(MEGA_BELT_PLAYER_SHARE * 100.0, (claimed_total / original_total) * 100.0)
+        if original_total > 0
+        else 0.0
+    )
+    return {
+        "original_pool": original,
+        "player_claimed": claimed_own,
+        "player_quota": quota,
+        "player_remaining": remaining,
+        "player_remaining_total": remaining_total,
+        "share_percent": share_percent,
+        "quota_exhausted": remaining_total <= 0,
+    }
+
+
+def enrich_mega_belt_player_state(
+    asteroid: Mapping[str, Any],
+    *,
+    player_id: Optional[int],
+    conn,
+) -> Dict[str, Any]:
+    out = dict(asteroid)
+    if str(out.get("tier") or TIER_STANDARD) != TIER_MEGA or not player_id:
+        return out
+    state = mega_belt_player_share_state(
+        int(out.get("id") or 0), int(player_id), conn=conn, row=out
+    )
+    remaining = dict(state.get("player_remaining") or {})
+    out["viewer_mega_share_percent"] = float(state.get("share_percent") or 0.0)
+    out["viewer_mega_quota_exhausted"] = bool(state.get("quota_exhausted"))
+    out["viewer_mega_quota_remaining"] = int(state.get("player_remaining_total") or 0)
+    out["viewer_harvest_locked"] = bool(
+        out.get("viewer_harvest_locked") or state.get("quota_exhausted")
+    )
+    out["recycler_slots_needed"] = estimate_reclaimer_slots_needed(
+        int(remaining.get("metal") or 0),
+        int(remaining.get("crystal") or 0),
+        int(remaining.get("fuel_cells") or 0),
+    )
     return out
 
 
@@ -358,7 +483,11 @@ def build_asteroid_board_entries(
         enriched = enrich_asteroid_viewer_state(
             row, engaged_ids=engaged_ids, fleet_map=fleet_map, now=ts
         )
-        # Keep engaged hunts visible with en-route state (no silent vanish).
+        if viewer_player_id is not None and int(viewer_player_id) > 0:
+            enriched = enrich_mega_belt_player_state(
+                enriched, player_id=int(viewer_player_id), conn=conn
+            )
+        # Keep active hunts visible with their exact flight phase.
         g = int(enriched["galaxy"])
         s = int(enriched["system"])
         p = int(enriched["position"])
@@ -368,7 +497,7 @@ def build_asteroid_board_entries(
         claim_count = 0
         if enriched.get("tier") == TIER_MEGA and table_exists(conn, "asteroid_field_claims"):
             row_ct = conn.execute(
-                "SELECT COUNT(*) AS n FROM asteroid_field_claims WHERE asteroid_id = ?;",
+                "SELECT COUNT(DISTINCT player_id) AS n FROM asteroid_field_claims WHERE asteroid_id = ?;",
                 (int(enriched["id"]),),
             ).fetchone()
             claim_count = int(row_ct["n"] or 0) if row_ct else 0
@@ -402,12 +531,16 @@ def build_asteroid_board_entries(
                 "viewer_fleet_status": str(enriched.get("viewer_fleet_status") or ""),
                 "viewer_arrival_at": enriched.get("viewer_arrival_at"),
                 "viewer_en_route": bool(enriched.get("viewer_en_route")),
+                "viewer_returning": bool(enriched.get("viewer_returning")),
+                "viewer_mega_share_percent": float(enriched.get("viewer_mega_share_percent") or 0.0),
+                "viewer_mega_quota_exhausted": bool(enriched.get("viewer_mega_quota_exhausted")),
+                "viewer_mega_quota_remaining": int(enriched.get("viewer_mega_quota_remaining") or 0),
                 "viewer_harvest_locked": bool(enriched.get("viewer_harvest_locked")),
             }
         )
     entries.sort(
         key=lambda e: (
-            0 if e.get("viewer_en_route") else 1 if e.get("viewer_engaged") else 2,
+            0 if e.get("viewer_en_route") else 1 if e.get("viewer_returning") else 2,
             int(e["expires_at"]),
             int(e["galaxy"]),
             int(e["system"]),
@@ -709,6 +842,10 @@ def get_asteroids_for_system(
             fleet_map=fleet_map,
             now=ts,
         )
+        if viewer_player_id is not None and int(viewer_player_id) > 0:
+            payload = enrich_mega_belt_player_state(
+                payload, player_id=int(viewer_player_id), conn=conn
+            )
         out[int(payload["position"])] = payload
     return out
 
@@ -1364,9 +1501,30 @@ def try_claim_harvest(
         tier = str(row["tier"] or TIER_STANDARD)
     except (KeyError, IndexError):
         tier = TIER_STANDARD
-    harvested = _split_load(pool, int(cargo_capacity))
-
     if tier == TIER_MEGA:
+        share = mega_belt_player_share_state(aid, int(player_id), conn=conn, row=row)
+        if share.get("quota_exhausted"):
+            return {
+                "status": "quota_exhausted",
+                "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0},
+                "asteroid_id": aid,
+                "asteroid_key": str(row["asteroid_key"] or ""),
+                "player_share": share,
+            }
+        allowance = dict(share.get("player_remaining") or {})
+        eligible_pool = {
+            key: min(int(pool[key]), max(0, int(allowance.get(key) or 0)))
+            for key in ("metal", "crystal", "fuel_cells")
+        }
+        harvested = _split_load(eligible_pool, int(cargo_capacity))
+        if sum(int(v or 0) for v in harvested.values()) <= 0:
+            return {
+                "status": "quota_exhausted",
+                "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0},
+                "asteroid_id": aid,
+                "asteroid_key": str(row["asteroid_key"] or ""),
+                "player_share": share,
+            }
         return _claim_mega_harvest(
             conn,
             row=row,
@@ -1377,6 +1535,7 @@ def try_claim_harvest(
             ts=ts,
         )
 
+    harvested = _split_load(pool, int(cargo_capacity))
     cur = conn.execute(
         """
         UPDATE asteroid_fields
@@ -1507,6 +1666,7 @@ def _claim_mega_harvest(
     asteroid["fuel_cells"] = remaining["fuel_cells"]
     asteroid["total"] = remaining_total
     asteroid["status"] = STATUS_CLAIMED if remaining_total <= 0 else STATUS_ACTIVE
+    player_share = mega_belt_player_share_state(aid, int(player_id), conn=conn)
     return {
         "status": "claimed",
         "harvested": harvested,
@@ -1514,5 +1674,6 @@ def _claim_mega_harvest(
         "asteroid_key": asteroid.get("asteroid_key"),
         "pool": pool,
         "remaining_pool": remaining,
+        "player_share": player_share,
         "asteroid": asteroid,
     }

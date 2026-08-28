@@ -4967,11 +4967,20 @@ def _format_asteroid_report(
     collected: Mapping[str, Any],
     missed: bool = False,
     expired: bool = False,
+    quota_exhausted: bool = False,
     locale: str | None = None,
     remaining_pool: Mapping[str, Any] | None = None,
 ) -> str:
     from .i18n import tr
 
+    if quota_exhausted:
+        return tr(
+            "fleet_asteroid_report_quota_exhausted",
+            "Your 10% share of the Mega Belt at %(coords)s is exhausted. Fleet returning empty to %(origin)s.",
+            locale=locale,
+            coords=coords,
+            origin=origin_name,
+        )
     if expired:
         return tr(
             "fleet_asteroid_report_expired",
@@ -5326,6 +5335,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         asteroid_missed = False
         asteroid_harvested = False
         asteroid_expired = False
+        asteroid_quota_exhausted = False
         asteroid_meta: Dict[str, Any] = {}
         prev_resources = movement.get("resources") or {}
         if not isinstance(prev_resources, Mapping):
@@ -5393,6 +5403,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 # Explicit asteroid hunt — never fall through to combat/world-boss debris.
                 if status == "missed":
                     asteroid_missed = True
+                elif status == "quota_exhausted":
+                    asteroid_quota_exhausted = True
                 else:
                     asteroid_expired = True
                 asteroid_meta = {
@@ -5434,7 +5446,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
         orow = cur.fetchone()
         origin_name = str(orow["name"] if orow else "")
-        if not (asteroid_harvested or asteroid_missed or asteroid_expired):
+        if not (asteroid_harvested or asteroid_missed or asteroid_expired or asteroid_quota_exhausted):
             try:
                 from .stellar_forge import (
                     SALVAGE_FORGE_CORE_CHANCE_MAX,
@@ -5458,13 +5470,14 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                         grant_forge_cores(player_id, 1, conn=conn, now=now)
             except Exception:
                 logger.exception("stellar_forge salvage hook failed movement_id=%s", movement_id)
-        if asteroid_harvested or asteroid_missed or asteroid_expired:
+        if asteroid_harvested or asteroid_missed or asteroid_expired or asteroid_quota_exhausted:
             body = _format_asteroid_report(
                 coords=coords,
                 origin_name=origin_name,
                 collected=collected,
                 missed=asteroid_missed,
                 expired=asteroid_expired,
+                quota_exhausted=asteroid_quota_exhausted,
                 locale=sender_locale,
                 remaining_pool=asteroid_meta.get("remaining_pool"),
             )
@@ -5497,6 +5510,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             "asteroid_missed": asteroid_missed,
             "asteroid_harvested": asteroid_harvested,
             "asteroid_expired": asteroid_expired,
+            "asteroid_quota_exhausted": asteroid_quota_exhausted,
             **({"asteroid": asteroid_meta} if asteroid_meta else {}),
         }
         transport_res = notify_transport(
@@ -5507,7 +5521,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             locale=sender_locale,
             conn=conn,
         )
-        if asteroid_harvested or asteroid_missed or asteroid_expired:
+        if asteroid_harvested or asteroid_missed or asteroid_expired or asteroid_quota_exhausted:
             try:
                 from .chronicle_entries import (
                     ENTRY_TYPE_ASTEROID,

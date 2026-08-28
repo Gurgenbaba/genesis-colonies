@@ -9033,5 +9033,7 @@
   "pe_failure_smuggling_crackdown": "Repressão ao contrabando",
   "pe_failure_corruption_scandal": "Escândalo de corrupção",
   "pe_failure_resource_depletion": "Esgotamento de recursos",
-  "pe_failure_quantum_instability": "Instabilidade quântica"
+  "pe_failure_quantum_instability": "Instabilidade quântica",
+  "galaxy_asteroid_mega_limit_reached": "A tua quota de 10% deste Mega Belt foi esgotada.",
+  "fleet_asteroid_report_quota_exhausted": "A tua quota de 10% do Mega Belt em %(coords)s foi esgotada. A frota regressa vazia a %(origin)s."
 }

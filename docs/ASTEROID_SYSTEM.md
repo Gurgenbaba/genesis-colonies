@@ -180,3 +180,7 @@ Boss hat Vorrang; Asteroid braucht freien klassischen Slot.
 **Asteroiden — Timed Harvest**
 
 Galaxy-Gürtel, Recycle-Mission, First-Arrival Claim. Nur Ressourcen-Loot. Board zeigt En-route und Wave-Timer.
+
+## Mega Belt Fair-Share
+
+Mega Belts use a server-authoritative **10% maximum share per player** based on the original spawn pool, enforced per resource. Large Harvest Reclaimer fleets can collect the remaining personal share in one trip; smaller fleets may repeat trips until the same 10% cap is reached. Outbound and returning are distinct live fleet states; historical engagement never keeps a completed flight visually locked.

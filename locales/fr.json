@@ -9033,5 +9033,7 @@
   "pe_failure_smuggling_crackdown": "Répression de la contrebande",
   "pe_failure_corruption_scandal": "Scandale de corruption",
   "pe_failure_resource_depletion": "Épuisement des ressources",
-  "pe_failure_quantum_instability": "Instabilité quantique"
+  "pe_failure_quantum_instability": "Instabilité quantique",
+  "galaxy_asteroid_mega_limit_reached": "Votre part de 10 % de cette ceinture méga est épuisée.",
+  "fleet_asteroid_report_quota_exhausted": "Votre part de 10 % de la ceinture méga en %(coords)s est épuisée. La flotte revient à vide vers %(origin)s."
 }
