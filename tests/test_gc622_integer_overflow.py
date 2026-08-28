@@ -350,3 +350,32 @@ class TestGC622Serialization:
         conn.close()
         assert int(row["metal"]) == over
         assert int(row["metal"]) > INT32_MAX
+
+
+# GC-INT64-RESOURCE-BIND-001 — Python sqlite3 binds Python int as SQLite
+# INTEGER before column affinity is considered. Resource columns are REAL, so
+# balances above signed INT64 must be bound as float rather than clamped.
+def test_resource_save_above_sqlite_int64_binds_as_real(gc622_db):
+    amount = 10**20  # safely above SQLite signed INT64 max (~9.22e18)
+    conn = db()
+    uid = _player(conn=conn)
+    planet = dict(get_homeworld(player_id=uid, conn=conn))
+    pid = int(planet["id"])
+
+    # Reproduce the failing late-game shape: gameplay math can turn a REAL
+    # balance into a Python int before save_planet writes the row back.
+    planet["metal"] = amount
+    planet["crystal"] = amount // 2
+    planet["fuel_cells"] = amount // 4
+
+    save_planet(planet, conn=conn)
+    conn.commit()
+    row = conn.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;",
+        (pid,),
+    ).fetchone()
+    conn.close()
+
+    assert float(row["metal"]) == pytest.approx(float(amount))
+    assert float(row["crystal"]) == pytest.approx(float(amount // 2))
+    assert float(row["fuel_cells"]) == pytest.approx(float(amount // 4))
