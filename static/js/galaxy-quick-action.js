@@ -155,18 +155,13 @@
         trigger.setAttribute("aria-description", full);
       }
 
-      // Ring markers are intentionally tiny: keep their preview in the native
-      // tooltip. Board rows and the slot inspector get a compact visible line.
+      // Ring markers stay tooltip-only. Board/inspector slots are present from
+      // first paint so preview updates can never cause a layout shift.
       if (wrap.classList.contains("galaxy-ring-asteroid-wrap")) return;
-      let line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
-      if (!line) {
-        line = document.createElement("span");
-        line.className = "galaxy-asteroid-flight-preview hint gc-mono";
-        line.setAttribute("data-galaxy-asteroid-flight-preview", "");
-        if (trigger) wrap.insertBefore(line, trigger);
-        else wrap.appendChild(line);
-      }
-      line.textContent = full;
+      const line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
+      if (!line) return;
+      const fuelIcon = String.fromCodePoint(0x26fd);
+      line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`; // i18n-ok: language-neutral fuel glyph and formatted number
       line.classList.toggle("is-blocked", missing > 0);
     },
 

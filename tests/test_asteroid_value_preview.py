@@ -61,3 +61,17 @@ def test_galaxy_asteroid_preview_uses_server_fleet_preview_and_no_client_fuel_ma
     assert "preview.fuel_available" in js
     assert 'mission_type: "recycle"' in js
     assert "calculate_fuel_cost" not in js
+
+
+def test_galaxy_asteroid_fuel_preview_has_stable_reserved_layout_slot():
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
+    board = (root / "templates/partials/galaxy_asteroid_board.html").read_text(encoding="utf-8")
+    block = (root / "templates/partials/galaxy_asteroid_block.html").read_text(encoding="utf-8")
+
+    assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" in board
+    assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" in block
+    assert 'if (!line) return;' in js
+    assert "const fuelIcon = String.fromCodePoint(0x26fd);" in js
+    assert 'line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`;' in js
+    assert 'line = document.createElement("span")' not in js
