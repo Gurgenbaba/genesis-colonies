@@ -143,11 +143,11 @@
       const fuelAvailable = Math.max(0, parseInt(preview.fuel_available || "0", 10) || 0);
       const flightSeconds = Math.max(0, parseInt(preview.flight_seconds || "0", 10) || 0);
       const count = Math.max(0, parseInt(sendCount || "0", 10) || 0);
-      const details = `⛽ ${formatNumber(fuelCost)} BZ · 🚀 ${formatNumber(count)} HR · ⏱ ${this.formatAsteroidFlightDuration(flightSeconds)}`;
+      const short = `⛽ ${formatNumber(fuelCost)} BZ · 🚀 ${formatNumber(count)} HR · ⏱ ${this.formatAsteroidFlightDuration(flightSeconds)}`;
       const missing = Math.max(0, fuelCost - fuelAvailable);
       const full = missing > 0
-        ? `${details} · ⚠ ${formatNumber(missing)} BZ`
-        : details;
+        ? `${short} · ⚠ ${formatNumber(missing)} BZ`
+        : short;
 
       const trigger = wrap.querySelector("[data-galaxy-ring-asteroid-recycle]");
       if (trigger) {
@@ -160,7 +160,8 @@
       if (wrap.classList.contains("galaxy-ring-asteroid-wrap")) return;
       const line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
       if (!line) return;
-      line.textContent = `⛽ ${formatNumber(fuelCost)} BZ${missing > 0 ? " ⚠" : ""}`;
+      const fuelIcon = String.fromCodePoint(0x26fd);
+      line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`;
       line.classList.toggle("is-blocked", missing > 0);
     },
 

@@ -69,8 +69,9 @@ def test_galaxy_asteroid_fuel_preview_has_stable_reserved_layout_slot():
     board = (root / "templates/partials/galaxy_asteroid_board.html").read_text(encoding="utf-8")
     block = (root / "templates/partials/galaxy_asteroid_block.html").read_text(encoding="utf-8")
 
-    assert "data-galaxy-asteroid-flight-preview>⛽ — BZ</span>" in board
-    assert "data-galaxy-asteroid-flight-preview>⛽ — BZ</span>" in block
+    assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" in board
+    assert "data-galaxy-asteroid-flight-preview>⛽ —</span>" in block
     assert 'if (!line) return;' in js
-    assert 'line.textContent = `⛽ ${formatNumber(fuelCost)} BZ${missing > 0 ? " ⚠" : ""}`;' in js
+    assert "const fuelIcon = String.fromCodePoint(0x26fd);" in js
+    assert 'line.textContent = `${fuelIcon} ${formatNumber(fuelCost)}${missing > 0 ? " ⚠" : ""}`;' in js
     assert 'line = document.createElement("span")' not in js
