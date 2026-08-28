@@ -22,26 +22,23 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           js_path = Path("static/js/galaxy-quick-action.js")
           js = js_path.read_text(encoding="utf-8")
 
-          constant_anchor = "  const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;\n"
+          constant = "  const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;\n"
           if "ASTEROID_PREVIEW_CONCURRENCY" not in js:
-              if constant_anchor not in js:
-                  raise SystemExit("missing preview constant anchor")
-              js = js.replace(
-                  constant_anchor,
-                  constant_anchor + "  const ASTEROID_PREVIEW_CONCURRENCY = 3;\n",
-                  1,
-              )
+              if constant not in js:
+                  raise SystemExit("missing preview constant")
+              js = js.replace(constant, constant + "  const ASTEROID_PREVIEW_CONCURRENCY = 3;\n", 1)
 
-          reset_anchor = '''    resetAsteroidPreviewCache() {
-              this._asteroidPreviewCache.clear();
-              this._asteroidPreviewInflight.clear();
-            },
-          '''
-          preload_method = '''    async preloadAsteroidFlightPreviews(root, scope = null) {
+          if "async preloadAsteroidFlightPreviews" not in js:
+              marker = "    resetAsteroidPreviewCache() {"
+              pos = js.find(marker)
+              if pos < 0:
+                  raise SystemExit("missing reset cache marker")
+              method = '''    async preloadAsteroidFlightPreviews(root, scope = null) {
               const previewRoot = scope || root;
               const wraps = Array.from(
                 previewRoot?.querySelectorAll?.("[data-galaxy-ring-asteroid-wrap]") || []
@@ -71,43 +68,21 @@ jobs:
             },
 
           '''
-          if "async preloadAsteroidFlightPreviews" not in js:
-              # Indentation in source is stable, but normalize the Python literal above.
-              reset_anchor = reset_anchor.replace("          ", "")
-              preload_method = preload_method.replace("          ", "")
-              if reset_anchor not in js:
-                  raise SystemExit("missing reset cache anchor")
-              js = js.replace(reset_anchor, preload_method + reset_anchor, 1)
+              js = js[:pos] + method + js[pos:]
 
-          init_anchor = '''      this.setAsteroidBoardExpanded(board, preferOpen);
-            },
+          init_line = "      this.setAsteroidBoardExpanded(board, preferOpen);\n"
+          init_preload = "      if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);\n"
+          if init_preload not in js:
+              if init_line not in js:
+                  raise SystemExit("missing init board line")
+              js = js.replace(init_line, init_line + init_preload, 1)
 
-            handleAsteroidBoardToggle'''.replace("          ", "")
-          init_replacement = '''      this.setAsteroidBoardExpanded(board, preferOpen);
-              if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);
-            },
-
-            handleAsteroidBoardToggle'''.replace("          ", "")
-          if "if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);" not in js:
-              if init_anchor not in js:
-                  raise SystemExit("missing init board anchor")
-              js = js.replace(init_anchor, init_replacement, 1)
-
-          toggle_anchor = '''      const open = board.classList.contains("is-collapsed");
-              this.setAsteroidBoardExpanded(board, open);
-            },
-
-            async handleRelocationClick'''.replace("          ", "")
-          toggle_replacement = '''      const open = board.classList.contains("is-collapsed");
-              this.setAsteroidBoardExpanded(board, open);
-              if (open) void this.preloadAsteroidFlightPreviews(root, board);
-            },
-
-            async handleRelocationClick'''.replace("          ", "")
-          if "if (open) void this.preloadAsteroidFlightPreviews(root, board);" not in js:
-              if toggle_anchor not in js:
-                  raise SystemExit("missing toggle board anchor")
-              js = js.replace(toggle_anchor, toggle_replacement, 1)
+          toggle_line = "      this.setAsteroidBoardExpanded(board, open);\n"
+          toggle_preload = "      if (open) void this.preloadAsteroidFlightPreviews(root, board);\n"
+          if toggle_preload not in js:
+              if toggle_line not in js:
+                  raise SystemExit("missing toggle board line")
+              js = js.replace(toggle_line, toggle_line + toggle_preload, 1)
 
           js_path.write_text(js, encoding="utf-8")
 
@@ -118,7 +93,8 @@ jobs:
               board = stylesheet + board
           board_path.write_text(board, encoding="utf-8")
 
-          css = """/* GC asteroid board UX — stable two-tier rows and fixed action column. */
+          css = dedent("""\
+          /* GC asteroid board UX — stable two-tier rows and fixed action column. */
           .galaxy-asteroid-board {
             container-type: inline-size;
           }
@@ -257,13 +233,12 @@ jobs:
               justify-content: flex-start;
             }
           }
-          """
-          css = "\n".join(line[10:] if line.startswith("          ") else line for line in css.splitlines()) + "\n"
+          """)
           Path("static/css/galaxy-asteroid-board.css").write_text(css, encoding="utf-8")
 
           test_path = Path("tests/test_asteroid_value_preview.py")
           tests = test_path.read_text(encoding="utf-8")
-          addition = '''
+          addition = dedent('''
 
           def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css():
               root = Path(__file__).resolve().parents[1]
@@ -279,10 +254,9 @@ jobs:
               assert "css/galaxy-asteroid-board.css" in board
               assert ".galaxy-asteroid-board-row-meta" in css
               assert ".galaxy-asteroid-board-harvest-wrap" in css
-          '''
-          addition = "\n".join(line[10:] if line.startswith("          ") else line for line in addition.splitlines())
+          ''')
           if "test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css" not in tests:
-              test_path.write_text(tests + addition + "\n", encoding="utf-8")
+              test_path.write_text(tests + addition, encoding="utf-8")
           PY
 
       - name: Remove one-shot workflow
