@@ -1,0 +1,66 @@
+name: GC Player Changelog final i18n cleanup
+
+on:
+  push:
+    branches:
+      - fix/version-changelog-surface
+    paths:
+      - .github/workflows/gc-player-changelog-i18n-fix.yml
+      - scripts/patch_player_changelog_i18n_gate.py
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/version-changelog-surface
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+
+      - name: Apply i18n cleanup
+        run: python scripts/patch_player_changelog_i18n_gate.py
+
+      - name: Remove one-shot tooling before audit
+        run: |
+          git rm scripts/patch_player_changelog_i18n_gate.py
+          git rm .github/workflows/gc-player-changelog-i18n-fix.yml
+
+      - name: Syntax and focused tests
+        env:
+          APP_ENV: development
+          GC_SKIP_MIGRATION_CHECK: "1"
+          SECRET_KEY: ci-player-changelog-secret-key-32chars
+        run: |
+          python -m py_compile game/player_changelog.py tests/test_player_changelog_surface.py
+          node --check static/js/player_changelog.js
+          python -m pytest -q --tb=line tests/test_player_changelog_surface.py tests/test_community_hub.py
+
+      - name: Verify changed-line i18n gate
+        run: python scripts/audit_visible_i18n.py --raw-only --diff-base origin/main --max-findings 200
+
+      - name: Commit final implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "fix: pass changelog i18n gate"
+            git push origin HEAD:fix/version-changelog-surface
+          fi
