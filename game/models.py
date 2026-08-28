@@ -1346,10 +1346,14 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
             WHERE id = ?;
             """,
             (
-                planet["metal"],
-                planet["crystal"],
-                planet.get("fuel_cells", 0),
-                planet.get("last_update", time.time()),
+                # Resource columns use SQLite REAL. Bind explicitly as float so
+                # Python's sqlite3 adapter does not try to coerce late-game
+                # balances above signed INT64 into SQLite INTEGER first.
+                # Do not clamp: existing overflow balances remain intact.
+                float(planet["metal"]),
+                float(planet["crystal"]),
+                float(planet.get("fuel_cells", 0)),
+                float(planet.get("last_update", time.time())),
                 int(planet.get("energy_total", 0)),
                 int(planet.get("energy_used", 0)),
                 int(planet["id"]),
