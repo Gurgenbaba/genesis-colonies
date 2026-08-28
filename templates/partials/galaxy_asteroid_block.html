@@ -50,6 +50,8 @@
     <div><dt>{{ T('galaxy_asteroid_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono" data-countdown-at="{{ asteroid.expires_at|int }}" data-countdown-format="eta" data-refresh-on-zero="galaxy">—</dd></div>
     {% endif %}
   </dl>
+  <span class="galaxy-asteroid-inline-fuel gc-mono"
+        data-galaxy-asteroid-flight-preview>⛽ — BZ</span>
   <button type="button"
           class="gc-btn gc-btn-sm {% if harvest_locked %}gc-btn-outline{% else %}gc-btn-primary{% endif %} galaxy-asteroid-harvest-btn"
           data-galaxy-ring-asteroid-recycle

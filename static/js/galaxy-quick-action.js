@@ -143,11 +143,11 @@
       const fuelAvailable = Math.max(0, parseInt(preview.fuel_available || "0", 10) || 0);
       const flightSeconds = Math.max(0, parseInt(preview.flight_seconds || "0", 10) || 0);
       const count = Math.max(0, parseInt(sendCount || "0", 10) || 0);
-      const short = `⛽ ${formatNumber(fuelCost)} BZ · 🚀 ${formatNumber(count)} HR · ⏱ ${this.formatAsteroidFlightDuration(flightSeconds)}`;
+      const details = `⛽ ${formatNumber(fuelCost)} BZ · 🚀 ${formatNumber(count)} HR · ⏱ ${this.formatAsteroidFlightDuration(flightSeconds)}`;
       const missing = Math.max(0, fuelCost - fuelAvailable);
       const full = missing > 0
-        ? `${short} · ⚠ ${formatNumber(missing)} BZ`
-        : short;
+        ? `${details} · ⚠ ${formatNumber(missing)} BZ`
+        : details;
 
       const trigger = wrap.querySelector("[data-galaxy-ring-asteroid-recycle]");
       if (trigger) {
@@ -155,18 +155,12 @@
         trigger.setAttribute("aria-description", full);
       }
 
-      // Ring markers are intentionally tiny: keep their preview in the native
-      // tooltip. Board rows and the slot inspector get a compact visible line.
+      // Ring markers stay tooltip-only. Board/inspector slots are present from
+      // first paint so preview updates can never cause a layout shift.
       if (wrap.classList.contains("galaxy-ring-asteroid-wrap")) return;
-      let line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
-      if (!line) {
-        line = document.createElement("span");
-        line.className = "galaxy-asteroid-flight-preview hint gc-mono";
-        line.setAttribute("data-galaxy-asteroid-flight-preview", "");
-        if (trigger) wrap.insertBefore(line, trigger);
-        else wrap.appendChild(line);
-      }
-      line.textContent = full;
+      const line = wrap.querySelector("[data-galaxy-asteroid-flight-preview]");
+      if (!line) return;
+      line.textContent = `⛽ ${formatNumber(fuelCost)} BZ${missing > 0 ? " ⚠" : ""}`;
       line.classList.toggle("is-blocked", missing > 0);
     },
 
