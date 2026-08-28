@@ -61,13 +61,6 @@ def main() -> None:
         "case battles bulk schema guard",
     )
 
-    replace_once(
-        ".github/workflows/ci.yml",
-        '''            tests/test_gc_perf_fleet_idle_001.py tests/test_gc_perf_state_006.py tests/test_gc_perf_state_007.py \\\n''',
-        '''            tests/test_gc_perf_fleet_idle_001.py tests/test_gc_perf_state_006.py tests/test_gc_perf_state_007.py tests/test_gc_perf_state_008.py \\\n''',
-        "state 008 smoke gate",
-    )
-
 
 if __name__ == "__main__":
     main()
