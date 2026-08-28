@@ -483,33 +483,14 @@ def nav_badges_for_game_state(
     directive_count = count_claimable_directives(uid, conn=conn)
     wb_active = False
     wb_count = 0
-    try:
-        from game.world_boss import list_active_events
-
-        active_events = list_active_events(conn=conn, limit=10)
-        wb_count = len(active_events)
-        wb_active = wb_count > 0
-    except Exception:
-        wb_active = False
-        wb_count = 0
 
     login_available = False
     bp_claimable = 0
     story_attention = 0
-    server_event_count = 0
     try:
-        from game.server_events import list_active_events as list_server_events
-        from game.server_events import schema_ready as server_events_ready
+        from game.login_rewards import login_reward_available_for_nav
 
-        if server_events_ready(conn):
-            server_event_count = len(list_server_events(now=None, conn=conn))
-    except Exception:
-        server_event_count = 0
-    try:
-        from game.login_rewards import serialize_for_client as lr_serialize
-
-        lr = lr_serialize(uid, conn=conn)
-        login_available = bool(lr.get("ready") and lr.get("available"))
+        login_available = bool(login_reward_available_for_nav(uid, conn=conn))
     except Exception:
         login_available = False
     if isinstance(battle_pass, dict):
@@ -545,8 +526,41 @@ def nav_badges_for_game_state(
     try:
         from game.overview_page import build_overview_live_events
 
-        live_events_count = len(build_overview_live_events(user_id=uid, conn=conn))
+        live_event_rows = [
+            row
+            for row in build_overview_live_events(user_id=uid, conn=conn)
+            if isinstance(row, dict)
+        ]
+        live_events_count = len(live_event_rows)
+        wb_count = sum(
+            1 for row in live_event_rows if str(row.get("kind") or "") == "world_boss"
+        )
+        # Overview intentionally caps World Boss cards at five. Only when that cap
+        # is saturated do we need the dedicated badge's historical up-to-10 count.
+        if wb_count >= 5:
+            from game.world_boss import list_active_events
+
+            wb_count = len(list_active_events(conn=conn, limit=10))
+        wb_active = wb_count > 0
     except Exception:
+        # Preserve the old degraded fallback without penalizing the normal path.
+        server_event_count = 0
+        try:
+            from game.world_boss import list_active_events
+
+            wb_count = len(list_active_events(conn=conn, limit=10))
+            wb_active = wb_count > 0
+        except Exception:
+            wb_count = 0
+            wb_active = False
+        try:
+            from game.server_events import list_active_events as list_server_events
+            from game.server_events import schema_ready as server_events_ready
+
+            if server_events_ready(conn):
+                server_event_count = len(list_server_events(now=None, conn=conn))
+        except Exception:
+            server_event_count = 0
         live_events_count = server_event_count + wb_count
 
     alliance_count = 0

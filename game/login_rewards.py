@@ -314,6 +314,35 @@ def claim_status(progress: Mapping[str, Any], *, now: Optional[float] = None) ->
     }
 
 
+def login_reward_available_for_nav(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> bool:
+    """Read-only Login Rewards attention bit for high-frequency shell polling.
+
+    Mirrors ``ensure_progress`` + ``claim_status`` availability without creating or
+    resetting progress rows. The actual Login Rewards page/claim path remains the
+    owner of lifecycle writes.
+    """
+    if int(player_id or 0) <= 0 or not schema_ready(conn):
+        return False
+
+    ts = float(now if now is not None else time.time())
+    row = _fetch_progress(int(player_id), conn=conn)
+    if not row:
+        # ``ensure_progress`` would create day-0 progress and day 1 is claimable.
+        return True
+
+    progress = _row_to_progress(row)
+    last = progress.get("last_claim_day_bucket")
+    if last is not None and day_bucket(ts) > int(last) + 1:
+        # ``ensure_progress`` would reset the missed streak, making day 1 claimable.
+        return True
+    return bool(claim_status(progress, now=ts).get("available"))
+
+
 def _grant_day_rewards(
     player_id: int,
     entry: Mapping[str, Any],
