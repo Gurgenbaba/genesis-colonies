@@ -1,0 +1,45 @@
+name: Apply INT64 Resource Hotfix
+
+on:
+  push:
+    branches:
+      - fix/gc-int64-resource-bind-001
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-int64-resource-hotfix
+  cancel-in-progress: true
+
+jobs:
+  apply-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply exact hotfix
+        run: python scripts/apply_gc_int64_resource_hotfix.py
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Focused regression gate
+        run: |
+          python -m py_compile game/models.py tests/test_gc622_integer_overflow.py
+          python -m pytest tests/test_gc622_integer_overflow.py -q
+          git diff --check
+      - name: Commit verified hotfix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game/models.py tests/test_gc622_integer_overflow.py
+          git diff --cached --quiet && exit 1
+          git commit -m 'fix: bind late-game resource balances as SQLite REAL'
+          git push origin HEAD:fix/gc-int64-resource-bind-001
