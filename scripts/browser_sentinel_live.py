@@ -49,6 +49,8 @@ def main() -> int:
         "artifacts/browser-live",
         "--fail-on",
         "none",
+        "--route",
+        "/overview",
     ]
     return sentinel.main()
 
