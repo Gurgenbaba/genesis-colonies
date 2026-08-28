@@ -1,7 +1,8 @@
-"""GC-PERF-FLEET-IDLE-001/002 — keep idle Fleet polling cheap."""
+"""GC-PERF-FLEET-IDLE-001/002/003 — keep idle Fleet polling cheap."""
 
 from __future__ import annotations
 
+import inspect
 import json
 import time
 import uuid
@@ -11,6 +12,13 @@ import pytest
 import game.db as dbmod
 import game.models as models
 from game.db import db
+from game.fleet import build_active_fleets_payload
+from game.live_state import (
+    _fleet_fp_for_poll,
+    _fleet_probe_slice,
+    active_fleets_poll_slice,
+    probe_poll_version,
+)
 from game.models import create_user, ensure_player_and_homeworld, get_homeworld, init_db
 from game.queue_poll import player_fleet_is_dirty, player_has_due_queue_work
 
@@ -166,3 +174,78 @@ def test_fleet_deadline_indexes_are_migrated(fleet_idle_db):
         assert "idx_fleet_movements_holding" in names
     finally:
         conn.close()
+
+
+def test_fleet_probe_slice_matches_full_hud_fingerprint_without_joins(fleet_idle_db):
+    conn = db()
+    try:
+        uid, planet = _create_player_with_homeworld(conn)
+        now = time.time()
+        movement_id = _insert_due_outbound(conn, player_id=uid, planet=planet, now=now)
+        conn.execute(
+            "UPDATE fleet_movements SET arrival_at = ?, updated_at = ? WHERE id = ?;",
+            (now + 300.0, now, movement_id),
+        )
+        conn.commit()
+
+        full = active_fleets_poll_slice(build_active_fleets_payload(uid, conn=conn))
+        expected_fp = _fleet_fp_for_poll(full)
+
+        selects: list[str] = []
+
+        def trace(stmt: str) -> None:
+            normalized = stmt.strip().lower()
+            if normalized.startswith("select") and "fleet_movements" in normalized:
+                selects.append(normalized)
+
+        conn.set_trace_callback(trace)
+        try:
+            probe = _fleet_probe_slice(uid, conn=conn)
+        finally:
+            conn.set_trace_callback(None)
+
+        assert _fleet_fp_for_poll(probe) == expected_fp
+        assert len(selects) == 1, selects
+        assert " join " not in selects[0]
+        assert "ships_json" not in selects[0]
+        assert "resources_json" not in selects[0]
+        assert "origin_planet_id" not in selects[0]
+        assert "target_planet_id" not in selects[0]
+    finally:
+        conn.close()
+
+
+def test_fleet_poll_fingerprint_tracks_holding_deadline(fleet_idle_db):
+    conn = db()
+    try:
+        uid, planet = _create_player_with_homeworld(conn)
+        now = time.time()
+        movement_id = _insert_due_outbound(conn, player_id=uid, planet=planet, now=now)
+        conn.execute(
+            """
+            UPDATE fleet_movements
+            SET status = 'holding', arrival_at = ?, holding_until = ?, return_at = NULL
+            WHERE id = ?;
+            """,
+            (now - 60.0, now + 120.0, movement_id),
+        )
+        conn.commit()
+
+        first = _fleet_fp_for_poll(_fleet_probe_slice(uid, conn=conn))
+        conn.execute(
+            "UPDATE fleet_movements SET holding_until = ? WHERE id = ?;",
+            (now + 240.0, movement_id),
+        )
+        conn.commit()
+        second = _fleet_fp_for_poll(_fleet_probe_slice(uid, conn=conn))
+
+        assert first != second
+        assert first["items"][0]["holding_until"] != second["items"][0]["holding_until"]
+    finally:
+        conn.close()
+
+
+def test_probe_poll_version_no_longer_builds_full_fleet_hud():
+    source = inspect.getsource(probe_poll_version)
+    assert "_fleet_probe_slice" in source
+    assert "build_active_fleets_payload" not in source
