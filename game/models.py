@@ -2088,10 +2088,10 @@ def get_ranking_rows(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     return _ranking_rows(limit=limit, offset=offset)
 
 
-def get_player_rank(player_id: int) -> Tuple[Optional[int], int]:
+def get_player_rank(player_id: int, conn=None) -> Tuple[Optional[int], int]:
     from .ranking import get_player_rank as _ranking_rank
 
-    return _ranking_rank(int(player_id))
+    return _ranking_rank(int(player_id), conn=conn)
 
 
 # ----------------------------------------------------------------------
