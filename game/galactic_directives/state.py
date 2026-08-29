@@ -6,15 +6,7 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional
 
-from ..db import (
-    begin_write_transaction,
-    commit,
-    db,
-    in_transaction,
-    is_integrity_error,
-    rollback,
-    tables_exist,
-)
+from ..db import begin_write_transaction, commit, db, in_transaction, is_integrity_error, rollback
 from ..galaxy import get_galaxy_max
 from .definitions import (
     get_directive_definition,
@@ -221,46 +213,31 @@ def count_pending_government_votes(
     conn: sqlite3.Connection,
     now: Optional[int] = None,
 ) -> int:
-    """Count open, unvoted directive cycles in galaxies where the player owns a colony.
-
-    Nav hot path: one bulk schema read plus one scalar count query. The feature-level
-    ``get_player_vote_galaxies()`` helper intentionally remains unchanged for callers
-    that need the actual galaxy list.
     """
-    required_tables = (
-        "gd_directive_definitions",
-        "gd_cycles",
-        "gd_votes",
-        "planets",
-    )
-    try:
-        if not tables_exist(conn, required_tables):
-            return 0
-    except Exception:
+    Open directive vote cycles in the player's galaxies where they have not voted yet.
+    Used by nav badges (GC-702) — server-only, no frontend time math.
+    """
+    if not schema_ready(conn=conn):
         return 0
-
     ts = int(now if now is not None else time.time())
+    galaxies = get_player_vote_galaxies(player_id, conn=conn)
+    if not galaxies:
+        return 0
+    placeholders = ",".join("?" * len(galaxies))
     row = conn.execute(
-        """
+        f"""
         SELECT COUNT(*) AS c
         FROM gd_cycles c
-        WHERE c.status = 'vote_open'
+        WHERE c.galaxy IN ({placeholders})
+          AND c.status = 'vote_open'
           AND c.vote_start_at <= ?
           AND c.vote_end_at >= ?
-          AND EXISTS (
-            SELECT 1
-            FROM planets p
-            WHERE p.player_id = ?
-              AND p.galaxy = c.galaxy
-          )
           AND NOT EXISTS (
-            SELECT 1
-            FROM gd_votes v
-            WHERE v.cycle_id = c.id
-              AND v.player_id = ?
+            SELECT 1 FROM gd_votes v
+            WHERE v.cycle_id = c.id AND v.player_id = ?
           );
         """,
-        (ts, ts, int(player_id), int(player_id)),
+        (*galaxies, ts, ts, int(player_id)),
     ).fetchone()
     return int(row["c"] or 0) if row else 0
 

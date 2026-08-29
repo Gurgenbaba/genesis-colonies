@@ -14,9 +14,7 @@ from .generator import (
     STATUS_ACTIVE,
     STATUS_CLAIMED,
     STATUS_COMPLETED,
-    daily_period_key,
     ensure_player_directives,
-    weekly_period_key,
 )
 
 
@@ -200,26 +198,5 @@ def get_imperial_directives_summary(
 
 
 def count_claimable_directives(player_id: int, *, conn: sqlite3.Connection) -> int:
-    """Read-only nav attention count for current daily/weekly directives."""
-    pid = int(player_id)
-    if pid <= 0:
-        return 0
-    if not directives_schema_ready(conn):
-        return 0
-
-    row = conn.execute(
-        """
-        SELECT COUNT(*) AS claimable_count
-        FROM player_directives
-        WHERE player_id = ?
-          AND status = ?
-          AND (
-                (cadence = 'daily' AND period_key = ?)
-             OR (cadence = 'weekly' AND period_key = ?)
-          );
-        """,
-        (pid, STATUS_COMPLETED, daily_period_key(), weekly_period_key()),
-    ).fetchone()
-    if not row:
-        return 0
-    return int(row["claimable_count"] or 0)
+    summary = get_imperial_directives_summary(player_id, conn=conn)
+    return int(summary.get("claimable_count") or 0)

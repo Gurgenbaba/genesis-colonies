@@ -6,7 +6,7 @@ import json
 import sqlite3
 from typing import Any, Dict, List, Mapping, Optional
 
-from ..db import tables_exist
+from ..db import table_exists
 
 DAILY_DIRECTIVE_COUNT = 3
 WEEKLY_DIRECTIVE_COUNT = 1
@@ -53,7 +53,7 @@ _JSON_COLS = ("filters_json",)
 
 
 def directives_schema_ready(conn) -> bool:
-    return tables_exist(conn, ("directive_definitions", "player_directives"))
+    return table_exists(conn, "directive_definitions") and table_exists(conn, "player_directives")
 
 
 def _json_loads(raw: Any, default: Any) -> Any:
