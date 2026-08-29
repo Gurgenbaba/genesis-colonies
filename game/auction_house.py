@@ -107,6 +107,8 @@ def count_auction_nav_attention(player_id: int, *, conn=None) -> int:
     Nav badge count: outbid lots + new active listings since last visit.
 
     Never-visited players get attention for any active listing (discoverability).
+    The Diet/nav path intentionally returns only scalar counts and performs one
+    data SELECT after the schema readiness checks.
     """
     own = conn is None
     if own:
@@ -120,62 +122,79 @@ def count_auction_nav_attention(player_id: int, *, conn=None) -> int:
         now_i = int(time.time())
         cur = conn.cursor()
 
-        cur.execute(
-            """
-            SELECT COUNT(DISTINCT l.id) AS c
-            FROM auction_house_listings l
-            WHERE l.status = 'active'
-              AND l.ends_at > ?
-              AND l.current_bidder_id IS NOT NULL
-              AND l.current_bidder_id != ?
-              AND EXISTS (
-                SELECT 1 FROM auction_house_bids b
-                WHERE b.listing_id = l.id AND b.player_id = ?
-              );
-            """,
-            (now_i, pid, pid),
-        )
-        outbid = int(cur.fetchone()["c"] or 0)
-
-        last_visited = None
         if auction_visits_schema_ready(conn):
             cur.execute(
                 """
-                SELECT last_visited_at FROM auction_house_player_visits
-                WHERE player_id = ? LIMIT 1;
+                WITH visit AS (
+                    SELECT last_visited_at
+                    FROM auction_house_player_visits
+                    WHERE player_id = ?
+                    LIMIT 1
+                )
+                SELECT
+                    (
+                        SELECT COUNT(*)
+                        FROM auction_house_listings l
+                        WHERE l.status = 'active'
+                          AND l.ends_at > ?
+                          AND l.current_bidder_id IS NOT NULL
+                          AND l.current_bidder_id != ?
+                          AND EXISTS (
+                              SELECT 1
+                              FROM auction_house_bids b
+                              WHERE b.listing_id = l.id
+                                AND b.player_id = ?
+                          )
+                    ) AS outbid,
+                    (
+                        SELECT COUNT(*)
+                        FROM auction_house_listings n
+                        WHERE n.status = 'active'
+                          AND n.ends_at > ?
+                          AND (
+                              NOT EXISTS (SELECT 1 FROM visit)
+                              OR n.created_at > COALESCE(
+                                  (SELECT last_visited_at FROM visit LIMIT 1),
+                                  0
+                              )
+                          )
+                    ) AS new_listings;
                 """,
-                (pid,),
+                (pid, now_i, pid, pid, now_i),
             )
-            vrow = cur.fetchone()
-            if vrow is not None:
-                last_visited = int(vrow["last_visited_at"] or 0)
-
-        if last_visited is None:
-            cur.execute(
-                """
-                SELECT COUNT(*) AS c FROM auction_house_listings
-                WHERE status = 'active' AND ends_at > ?;
-                """,
-                (now_i,),
-            )
-            new_listings = int(cur.fetchone()["c"] or 0)
         else:
             cur.execute(
                 """
-                SELECT COUNT(*) AS c FROM auction_house_listings
-                WHERE status = 'active'
-                  AND ends_at > ?
-                  AND created_at > ?;
+                SELECT
+                    (
+                        SELECT COUNT(*)
+                        FROM auction_house_listings l
+                        WHERE l.status = 'active'
+                          AND l.ends_at > ?
+                          AND l.current_bidder_id IS NOT NULL
+                          AND l.current_bidder_id != ?
+                          AND EXISTS (
+                              SELECT 1
+                              FROM auction_house_bids b
+                              WHERE b.listing_id = l.id
+                                AND b.player_id = ?
+                          )
+                    ) AS outbid,
+                    (
+                        SELECT COUNT(*)
+                        FROM auction_house_listings n
+                        WHERE n.status = 'active'
+                          AND n.ends_at > ?
+                    ) AS new_listings;
                 """,
-                (now_i, last_visited),
+                (now_i, pid, pid, now_i),
             )
-            new_listings = int(cur.fetchone()["c"] or 0)
 
-        return outbid + new_listings
+        row = cur.fetchone()
+        return int(row["outbid"] or 0) + int(row["new_listings"] or 0)
     finally:
         if own and conn is not None:
             conn.close()
-
 
 def resolve_inventory_key(box_key: str) -> Optional[str]:
     key = str(box_key or "").strip()
