@@ -19,36 +19,18 @@ def patch_main_js() -> None:
     p = ROOT / "static/main.js"
     text = p.read_text(encoding="utf-8")
 
-    ship_anchor = '["fleet-send-form", "planetId"],'
-    if '["fleet-page", "planetId"],' not in text:
-        if text.count(ship_anchor) != 1:
-            raise SystemExit(f"static/main.js: fleet-send-form scope anchor count={text.count(ship_anchor)}")
-        text = text.replace(
-            ship_anchor,
-            '["fleet-page", "planetId"],\n        ["fleet-send-form", "planetId"],',
-            1,
-        )
-
-    # Keep every Fleet/Logistics navigation surface pinned to the planet that the
-    # switcher currently represents. This includes desktop, mobile drawer and
-    # bottom navigation because they all use data-nav-module.
+    # GC-FLT-SCOPE-001: bind Fleet's own page scope and every Fleet/Logistics
+    # navigation surface to the same planet the canonical planet switcher just
+    # selected. Insert directly after the stable function declaration instead of
+    # depending on internal tuple/list implementation details.
     if "GC-FLT-SCOPE-001 nav scope" not in text:
         marker = "const syncScopedPlanetIds = (pid) => {"
-        idx = text.find(marker)
-        if idx < 0:
-            raise SystemExit("static/main.js: syncScopedPlanetIds not found")
-        next_fn = text.find("\n  const ", idx + len(marker))
-        if next_fn < 0:
-            next_fn = text.find("\n  function ", idx + len(marker))
-        if next_fn < 0:
-            raise SystemExit("static/main.js: could not bound syncScopedPlanetIds")
-        block = text[idx:next_fn]
-        close = block.rfind("\n  };")
-        if close < 0:
-            raise SystemExit("static/main.js: syncScopedPlanetIds closing anchor not found")
-        insert_at = idx + close
-        addition = '''\n\n    // GC-FLT-SCOPE-001 nav scope: Fleet must never lose the selected origin planet.\n    document\n      .querySelectorAll('a[data-nav-module="fleet"], a[data-nav-module="logistics"]')\n      .forEach((link) => {\n        const href = String(link.getAttribute("href") || "").trim();\n        if (!href) return;\n        try {\n          const scoped = new URL(href, window.location.origin);\n          scoped.searchParams.set("planet_id", String(pid));\n          link.setAttribute("href", `${scoped.pathname}${scoped.search}${scoped.hash}`);\n        } catch (_) {}\n      });'''
-        text = text[:insert_at] + addition + text[insert_at:]
+        if text.count(marker) != 1:
+            raise SystemExit(
+                f"static/main.js: syncScopedPlanetIds marker count={text.count(marker)}"
+            )
+        addition = '''const syncScopedPlanetIds = (pid) => {\n    // GC-FLT-SCOPE-001 nav scope: Fleet must never lose the selected origin planet.\n    const fleetPage = document.querySelector("[data-fleet-page]");\n    if (fleetPage) fleetPage.dataset.planetId = String(pid);\n\n    document\n      .querySelectorAll('a[data-nav-module="fleet"], a[data-nav-module="logistics"]')\n      .forEach((link) => {\n        const href = String(link.getAttribute("href") || "").trim();\n        if (!href) return;\n        try {\n          const scoped = new URL(href, window.location.origin);\n          scoped.searchParams.set("planet_id", String(pid));\n          link.setAttribute("href", `${scoped.pathname}${scoped.search}${scoped.hash}`);\n        } catch (_) {}\n      });'''
+        text = text.replace(marker, addition, 1)
 
     # A Fleet page cannot safely morph from a server-rendered no-ships planet to
     # another planet: ship cards/forms may not exist in the DOM at all. Once the
@@ -57,10 +39,10 @@ def patch_main_js() -> None:
         fn_start = text.find("const switchPlanetFast = async (planetId) => {")
         if fn_start < 0:
             raise SystemExit("static/main.js: switchPlanetFast not found")
-        fn_end = text.find("\n  };", fn_start)
-        if fn_end < 0:
-            raise SystemExit("static/main.js: switchPlanetFast end not found")
-        block = text[fn_start:fn_end]
+        # Limit the regex search to a generous local window; the match itself is
+        # anchored on the canonical token guard + applyLiveState success sequence.
+        block_end = min(len(text), fn_start + 14000)
+        block = text[fn_start:block_end]
         pattern = re.compile(
             r'(if \(token !== _planetSwitchToken\) return false;\s*'
             r'if \(res\?\.state\) \{\s*await applyLiveState\(res\.state\);\s*\})'
@@ -70,7 +52,7 @@ def patch_main_js() -> None:
             raise SystemExit("static/main.js: successful switch/applyLiveState anchor not found")
         replacement = match.group(1) + '''\n\n      // GC-FLT-SCOPE-001 Fleet SSR rebuild: changing planet while Fleet is open\n      // must rebuild ship cards/empty state from the newly committed planet.\n      if (document.querySelector("[data-fleet-page]")) {\n        const scopedFleetUrl = new URL(window.location.href);\n        scopedFleetUrl.searchParams.set("planet_id", String(pid));\n        window.location.assign(scopedFleetUrl.toString());\n        return true;\n      }'''
         block = block[: match.start()] + replacement + block[match.end() :]
-        text = text[:fn_start] + block + text[fn_end:]
+        text = text[:fn_start] + block + text[block_end:]
 
     p.write_text(text, encoding="utf-8")
 
@@ -138,7 +120,7 @@ def patch_app() -> None:
 
 def write_tests() -> None:
     p = ROOT / "tests/test_gc_flt_scope_001.py"
-    p.write_text('''from __future__ import annotations\n\nfrom pathlib import Path\n\n\nROOT = Path(__file__).resolve().parent.parent\n\n\ndef test_planet_switch_updates_fleet_page_scope_and_rebuilds_ssr():\n    source = (ROOT / "static/main.js").read_text(encoding="utf-8")\n    start = source.index("const syncScopedPlanetIds = (pid) => {")\n    scope = source[start : start + 2600]\n    assert '["fleet-page", "planetId"],' in scope\n    assert 'a[data-nav-module="fleet"], a[data-nav-module="logistics"]' in scope\n\n    switch_start = source.index("const switchPlanetFast = async (planetId) => {")\n    switch_block = source[switch_start : switch_start + 9000]\n    assert "GC-FLT-SCOPE-001 Fleet SSR rebuild" in switch_block\n    assert 'document.querySelector("[data-fleet-page]")' in switch_block\n    assert 'scopedFleetUrl.searchParams.set("planet_id", String(pid))' in switch_block\n    assert "window.location.assign(scopedFleetUrl.toString())" in switch_block\n\n\ndef test_fleet_navigation_links_are_server_scoped_to_active_planet():\n    sidebar = (ROOT / "templates/partials/sidebar.html").read_text(encoding="utf-8")\n    base = (ROOT / "templates/base.html").read_text(encoding="utf-8")\n    assert "HEADER_ACTIVE_PLANET.planet_id" in sidebar\n    assert "url_for('fleet_view', planet_id=_fleet_nav_planet_id)" in sidebar\n    assert "HEADER_ACTIVE_PLANET.planet_id" in base\n    assert "url_for('fleet_view', planet_id=_fleet_nav_planet_id)" in base\n    assert "url_for('fleet_view', mode='collect', planet_id=_fleet_nav_planet_id)" in base\n\n\ndef test_legacy_logistics_redirect_preserves_planet_scope():\n    source = (ROOT / "app.py").read_text(encoding="utf-8")\n    start = source.index("def logistics_view():")\n    block = source[start : start + 1300]\n    assert 'request.args.get("planet_id")' in block\n    assert 'redirect_args["planet_id"] = requested_planet_id' in block\n    assert 'redirect(url_for("fleet_view", **redirect_args))' in block\n''', encoding="utf-8")
+    p.write_text('''from __future__ import annotations\n\nfrom pathlib import Path\n\n\nROOT = Path(__file__).resolve().parent.parent\n\n\ndef test_planet_switch_updates_fleet_page_scope_and_rebuilds_ssr():\n    source = (ROOT / "static/main.js").read_text(encoding="utf-8")\n    start = source.index("const syncScopedPlanetIds = (pid) => {")\n    scope = source[start : start + 3200]\n    assert 'const fleetPage = document.querySelector("[data-fleet-page]")' in scope\n    assert "fleetPage.dataset.planetId = String(pid)" in scope\n    assert 'a[data-nav-module="fleet"], a[data-nav-module="logistics"]' in scope\n    assert 'scoped.searchParams.set("planet_id", String(pid))' in scope\n\n    switch_start = source.index("const switchPlanetFast = async (planetId) => {")\n    switch_block = source[switch_start : switch_start + 14000]\n    assert "GC-FLT-SCOPE-001 Fleet SSR rebuild" in switch_block\n    assert 'document.querySelector("[data-fleet-page]")' in switch_block\n    assert 'scopedFleetUrl.searchParams.set("planet_id", String(pid))' in switch_block\n    assert "window.location.assign(scopedFleetUrl.toString())" in switch_block\n\n\ndef test_fleet_navigation_links_are_server_scoped_to_active_planet():\n    sidebar = (ROOT / "templates/partials/sidebar.html").read_text(encoding="utf-8")\n    base = (ROOT / "templates/base.html").read_text(encoding="utf-8")\n    assert "HEADER_ACTIVE_PLANET.planet_id" in sidebar\n    assert "url_for('fleet_view', planet_id=_fleet_nav_planet_id)" in sidebar\n    assert "HEADER_ACTIVE_PLANET.planet_id" in base\n    assert "url_for('fleet_view', planet_id=_fleet_nav_planet_id)" in base\n    assert "url_for('fleet_view', mode='collect', planet_id=_fleet_nav_planet_id)" in base\n\n\ndef test_legacy_logistics_redirect_preserves_planet_scope():\n    source = (ROOT / "app.py").read_text(encoding="utf-8")\n    start = source.index("def logistics_view():")\n    block = source[start : start + 1500]\n    assert 'request.args.get("planet_id")' in block\n    assert 'redirect_args["planet_id"] = requested_planet_id' in block\n    assert 'redirect(url_for("fleet_view", **redirect_args))' in block\n''', encoding="utf-8")
 
 
 def patch_ci() -> None:
