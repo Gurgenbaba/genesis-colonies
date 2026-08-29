@@ -197,3 +197,53 @@
 .planet-evolution-page .pe-research-next-blockers li::marker {
   color: var(--gc-primary);
 }
+
+/* GC-PE-UX-04 — concrete next actions show concrete gameplay evidence. */
+.planet-evolution-page .pe-goal-context {
+  margin-top: 0.42rem;
+}
+
+.planet-evolution-page .pe-goal-context--impact .pe-impact-contract {
+  margin: 0;
+}
+
+.planet-evolution-page .pe-goal-supply-evidence {
+  padding: 0.62rem 0.7rem;
+  border: 1px solid rgba(var(--gc-id-rgb), 0.28);
+  border-left: 2px solid var(--gc-primary);
+  background: rgba(3, 15, 25, 0.48);
+}
+
+.planet-evolution-page .pe-goal-supply-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.planet-evolution-page .pe-goal-supply-head strong {
+  min-width: 0;
+  color: var(--gc-primary);
+}
+
+.planet-evolution-page .pe-goal-supply-meter {
+  height: 5px;
+  margin-top: 0.42rem;
+  overflow: hidden;
+  border: 1px solid rgba(var(--gc-id-rgb), 0.24);
+  background: rgba(2, 11, 18, 0.72);
+}
+
+.planet-evolution-page .pe-goal-supply-meter > span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--gc-primary);
+}
+
+.planet-evolution-page .pe-goal-supply-values {
+  margin: 0.32rem 0 0;
+  color: var(--gc-text-muted, #a9bdc9);
+  font-size: 0.76rem;
+  text-align: right;
+}

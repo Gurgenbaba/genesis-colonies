@@ -929,6 +929,22 @@
           {% if action.priority == 'establishment' and action.milestone_building_label_key %}
           <p class="pe-goal-establishment hint">{{ T("pe_establishment_next_building", "Als Nächstes auf dieser Kolonie: %(building)s (Stufe %(level)s) — unter Gebäude bauen", building=T(action.milestone_building_label_key, ""), level=(action.milestone_building_level or 1)|int) }}</p>
           {% endif %}
+          {% if action.priority == 'research' and action.impact %}
+          <div class="pe-goal-context pe-goal-context--impact">
+            {{ pe_impact_contract(action.impact, true) }}
+          </div>
+          {% elif action.priority == 'economy' and action.deficit %}
+          <div class="pe-goal-context pe-goal-supply-evidence" title="{{ T('pe_warn_import_deficit', 'Import reicht nicht') }}">
+            <div class="pe-goal-supply-head">
+              <strong>{{ T(action.deficit.label_key, pe_humanize_key(action.deficit.resource_key)) }}</strong>
+              <span class="gc-mono">{{ action.deficit.pct|int }}%</span>
+            </div>
+            <div class="pe-goal-supply-meter" aria-hidden="true">
+              <span style="width: {{ action.deficit.pct|int }}%"></span>
+            </div>
+            <p class="pe-goal-supply-values gc-mono">{{ action.deficit.received|int }} / {{ action.deficit.required|int }}</p>
+          </div>
+          {% elif action.priority == 'explore' %}
           <button type="button"
                   class="pe-goal-benefits-btn pe-info-trigger"
                   aria-expanded="false"
@@ -943,6 +959,7 @@
               <li>{{ T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.') }}</li>
             </ul>
           </div>
+          {% endif %}
           {% if prog.milestones %}
           <p class="pe-goal-unlock gc-mono">{{ T("pe_at_level", "Ab Stufe") }} {{ prog.milestones[0].level }} · {{ T(prog.milestones[0].label_key, "Neue Möglichkeit") }}</p>
           {% endif %}

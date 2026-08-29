@@ -579,7 +579,7 @@ def _next_action(
     eligible_specs: List[str],
     research_ux: Dict[str, Any],
     warnings: List[Dict[str, Any]],
-    mechanics: Dict[str, Any],
+    economy: Dict[str, Any],
     establishment: Optional[Dict[str, Any]] = None,
     expansion_unlock: Optional[Dict[str, Any]] = None,
     xp_remaining: int = 0,
@@ -748,6 +748,7 @@ def _next_action(
         extra: Dict[str, Any] = {
             "tech_key": tech_key,
             "tech_label_key": first.get("label_key"),
+            "impact": first.get("impact") or {"rows": [], "scopes": []},
         }
         if reward_xp > 0:
             extra["reward_xp"] = reward_xp
@@ -792,7 +793,7 @@ def _next_action(
             **extra,
         )
 
-    deficits = mechanics.get("import_deficits") or []
+    deficits = economy.get("deficits") or []
     if deficits:
         return _cta(
             priority="economy",
@@ -802,6 +803,7 @@ def _next_action(
             cta_target="economy",
             cta_action="focus_section",
             cta_highlight="pe-section-economy",
+            deficit=dict(deficits[0]),
         )
 
     if any(w.get("key") == "stability" for w in warnings):
@@ -1167,7 +1169,7 @@ def build_dashboard_extras(
             eligible_specs=eligible,
             research_ux=research_ux,
             warnings=warnings,
-            mechanics=mechanics,
+            economy=economy,
             establishment=establishment,
             expansion_unlock=expansion_unlock,
             xp_remaining=xp_remaining,
