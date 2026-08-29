@@ -18,7 +18,8 @@ watchPatterns = [
 ]
 
 [deploy]
-healthcheckPath = "/health"
+# GC-PROD-AVAIL-001: deploy/liveness gate must not depend on DB lock availability.
+healthcheckPath = "/healthz"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10

@@ -49,12 +49,14 @@ if not ok:
     print('[GC] WARNING: edge-tts missing — Story Ops will not have Killian neural voice.')
 "
 
-WORKERS="${GUNICORN_WORKERS:-1}"
+# GC-PROD-AVAIL-001: keep a second web worker available while one worker is
+# blocked in a synchronous SQLite wait. SQLite remains the single writer of
+# record; this is HTTP availability headroom, not extra background workers.
+WORKERS="${GUNICORN_WORKERS:-2}"
 # GC-AST-LIVE: gevent worker class lets long-lived WS connections (galaxy
-# live push) coexist with normal HTTP requests on a single gunicorn worker
-# without pinning a worker slot per socket. Flip to "sync" for emergency
-# rollback without a redeploy — the WS route/client both degrade gracefully
-# (client falls back to existing polling) if unreachable.
+# live push) coexist with normal HTTP requests without pinning a worker slot
+# per socket. Flip to "sync" for emergency rollback without a redeploy — the
+# WS route/client both degrade gracefully (client falls back to polling).
 WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gevent}"
 
 # GC-PERF-PROD-002: run the maintenance bag in a sibling OS process so gunicorn
