@@ -41,7 +41,7 @@ jobs:
           node --check static/main.js
           python -m pytest -q --tb=line tests/test_gc_flt_scope_001.py
           git diff --check
-      - name: Commit generated patch
+      - name: Commit generated product patch
         shell: bash
         run: |
           if git diff --quiet; then
@@ -50,6 +50,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.py static/main.js templates/base.html templates/fleet.html templates/partials/sidebar.html tests/test_gc_flt_scope_001.py .github/workflows/ci.yml
+          git add app.py static/main.js templates/base.html templates/fleet.html templates/partials/sidebar.html tests/test_gc_flt_scope_001.py
           git commit -m 'fix: keep Fleet scoped to selected planet'
           git push origin HEAD:gc-flt-scope-001
