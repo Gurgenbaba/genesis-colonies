@@ -104,6 +104,27 @@ def test_idle_research_surfaces_next_locked_tech_requirements():
     assert "pe-research-next-blockers" in css
 
 
+
+def test_goal_card_uses_contextual_evidence_before_concrete_actions():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
+    css = (root / "static" / "css" / "planet_evolution_clarity.css").read_text(encoding="utf-8")
+
+    assert "action.priority == 'research' and action.impact" in template
+    assert "pe_impact_contract(action.impact, true)" in template
+    assert "action.priority == 'economy' and action.deficit" in template
+    assert "action.deficit.received|int" in template
+    assert "action.deficit.required|int" in template
+    assert "action.deficit.pct|int" in template
+    assert "action.priority == 'explore'" in template
+    explore_guard = template.index("{% elif action.priority == 'explore' %}")
+    benefits = template.index("pe-goal-benefits-btn", explore_guard)
+    assert benefits > explore_guard
+    assert "pe-goal-supply-meter" in css
+
+
 def test_impact_locale_contract_has_exact_parity():
     from pathlib import Path
     import json

@@ -58,7 +58,7 @@ def test_next_action_event_includes_cta_fields():
         eligible_specs=[],
         research_ux={"recommended": [], "queue_has_room": True, "active": []},
         warnings=[],
-        mechanics={"import_deficits": []},
+        economy={"deficits": []},
     )
     assert action["priority"] == "event"
     assert action["cta_action"] == "focus_tab"
@@ -74,18 +74,49 @@ def test_next_action_research_highlights_tech_card():
         active_event=None,
         eligible_specs=[],
         research_ux={
-            "recommended": [{"tech_key": "industry_t1_automation", "label_key": "pe_industry_t1_automation"}],
+            "recommended": [{
+                "tech_key": "industry_t1_automation",
+                "label_key": "pe_industry_t1_automation",
+                "impact": {"current": 0, "after": 1, "rows": [{"label_key": "pe_impact_effect_research_speed", "value": "+15%"}], "scopes": ["pe_impact_scope_research"]},
+            }],
             "queue_has_room": True,
             "active": [],
         },
         warnings=[],
-        mechanics={"import_deficits": []},
+        economy={"deficits": []},
     )
     assert action["priority"] == "research"
     assert action["cta_action"] == "focus_tab"
     assert action["cta_target"] == "research"
     assert action["cta_highlight"] == "pe-research-card-industry_t1_automation"
     assert action["tech_key"] == "industry_t1_automation"
+    assert action["impact"]["current"] == 0
+    assert action["impact"]["after"] == 1
+    assert action["impact"]["rows"][0]["value"] == "+15%"
+
+
+def test_next_action_economy_uses_normalized_deficit_evidence():
+    deficit = {
+        "resource_key": "refined_ferronit",
+        "label_key": "resource_refined_ferronit",
+        "received": 30.0,
+        "required": 100.0,
+        "pct": 30,
+        "status": "critical",
+    }
+    action = _next_action(
+        planet={"specialization_key": "forge_world"},
+        level=12,
+        active_event=None,
+        eligible_specs=[],
+        research_ux={"recommended": [], "queue_has_room": True, "active": []},
+        warnings=[],
+        economy={"deficits": [deficit]},
+    )
+    assert action["priority"] == "economy"
+    assert action["cta_target"] == "economy"
+    assert action["deficit"] == deficit
+    assert action["deficit"]["pct"] == 30
 
 
 def test_next_action_specialization_focuses_picker():
@@ -96,7 +127,7 @@ def test_next_action_specialization_focuses_picker():
         eligible_specs=["forge_world"],
         research_ux={"recommended": [], "queue_has_room": True, "active": []},
         warnings=[],
-        mechanics={"import_deficits": []},
+        economy={"deficits": []},
     )
     assert action["priority"] == "specialization"
     assert action["cta_action"] == "focus_section"
