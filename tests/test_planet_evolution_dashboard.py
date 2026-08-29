@@ -134,7 +134,7 @@ def test_next_action_specialization_focuses_picker():
     assert action["cta_highlight"] == "pe-spec-picker"
 
 
-def test_trait_effect_lines_from_definitions():
+def test_trait_effect_lines_from_definitions(evo_db):
     reload_definitions()
     tdef = get_trait("ferronit_rich_crust")
     assert tdef
@@ -147,7 +147,7 @@ def test_trait_effect_lines_from_definitions():
     assert affinity["affinity_key"] == "industry"
 
 
-def test_trait_effect_lines_include_blocks():
+def test_trait_effect_lines_include_blocks(evo_db):
     reload_definitions()
     tdef = get_trait("high_gravity")
     lines = trait_effect_lines(tdef)
