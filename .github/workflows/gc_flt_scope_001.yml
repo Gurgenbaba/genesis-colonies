@@ -20,17 +20,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Inspect exact current Fleet scope paths
-        shell: bash
-        run: |
-          echo '=== syncScopedPlanetIds ==='
-          sed -n '1468,1520p' static/main.js
-          echo '=== applyLiveState planet-switch handling ==='
-          sed -n '15225,15290p' static/main.js
-          echo '=== Fleet state refresh ==='
-          sed -n '27980,28190p' static/main.js
-          echo '=== planet switch action ==='
-          sed -n '33680,33840p' static/main.js
       - name: Apply focused Fleet planet-scope patch
         run: python scripts/gc_flt_scope_001.py
       - name: Syntax and focused regression gate
@@ -48,6 +37,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.py static/main.js templates/base.html templates/partials/sidebar.html tests/test_gc_flt_scope_001.py .github/workflows/ci.yml
+          git add app.py static/main.js templates/base.html templates/fleet.html templates/partials/sidebar.html tests/test_gc_flt_scope_001.py .github/workflows/ci.yml
           git commit -m 'fix: keep Fleet scoped to selected planet'
           git push origin HEAD:gc-flt-scope-001
