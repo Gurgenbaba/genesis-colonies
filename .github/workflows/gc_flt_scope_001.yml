@@ -1,0 +1,42 @@
+name: GC FLT Scope 001 Apply
+
+on:
+  push:
+    branches: [gc-flt-scope-001]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gc-flt-scope-001
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply focused Fleet planet-scope patch
+        run: python scripts/gc_flt_scope_001.py
+      - name: Syntax and focused regression gate
+        run: |
+          python -m py_compile app.py scripts/gc_flt_scope_001.py tests/test_gc_flt_scope_001.py
+          node --check static/main.js
+          python -m pytest -q --tb=line tests/test_gc_flt_scope_001.py
+          git diff --check
+      - name: Commit generated patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No generated changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py static/main.js templates/base.html templates/partials/sidebar.html tests/test_gc_flt_scope_001.py .github/workflows/ci.yml
+          git commit -m 'fix: keep Fleet scoped to selected planet'
+          git push origin HEAD:gc-flt-scope-001
