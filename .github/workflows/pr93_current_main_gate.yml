@@ -78,6 +78,12 @@ jobs:
 
           git diff --check
 
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements.txt -r requirements-dev.txt
+
       - name: Focused changelog verification
         shell: bash
         run: |
