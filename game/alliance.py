@@ -98,21 +98,52 @@ def can_manage_applications(role: str) -> bool:
 
 
 def count_alliance_nav_attention(player_id: int, *, conn=None) -> int:
-    """Nav badge count: outbound pending app (1) or inbound apps for officers."""
+    """Return the minimal Alliance attention count used by the nav badge."""
     own = conn is None
     if own:
         conn = db()
     try:
         if not alliance_hub_schema_ready(conn):
             return 0
+
         pid = int(player_id)
-        membership = get_player_alliance(pid, conn=conn)
-        if not membership:
-            return 1 if _player_pending_application(pid, conn) else 0
-        if not can_manage_applications(membership.get("role")):
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT alliance_id, role
+            FROM alliance_members
+            WHERE player_id = ?
+            LIMIT 1;
+            """,
+            (pid,),
+        )
+        membership = cur.fetchone()
+
+        if membership is None:
+            cur.execute(
+                """
+                SELECT 1 AS pending
+                FROM alliance_applications
+                WHERE player_id = ? AND status = 'pending'
+                LIMIT 1;
+                """,
+                (pid,),
+            )
+            return 1 if cur.fetchone() is not None else 0
+
+        if not can_manage_applications(membership["role"]):
             return 0
-        aid = int(membership["alliance_id"])
-        return len(_pending_applications(aid, conn))
+
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c
+            FROM alliance_applications
+            WHERE alliance_id = ? AND status = 'pending';
+            """,
+            (int(membership["alliance_id"]),),
+        )
+        row = cur.fetchone()
+        return int(row["c"] or 0) if row is not None else 0
     finally:
         if own:
             conn.close()
