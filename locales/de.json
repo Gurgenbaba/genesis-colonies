@@ -9035,5 +9035,16 @@
   "pe_failure_resource_depletion": "Ressourcenerschöpfung",
   "pe_failure_quantum_instability": "Quanteninstabilität",
   "galaxy_asteroid_mega_limit_reached": "Dein 10%-Anteil an diesem Mega-Belt ist ausgeschöpft.",
-  "fleet_asteroid_report_quota_exhausted": "Dein 10%-Anteil am Mega-Belt bei %(coords)s ist ausgeschöpft. Die Flotte kehrt leer nach %(origin)s zurück."
+  "fleet_asteroid_report_quota_exhausted": "Dein 10%-Anteil am Mega-Belt bei %(coords)s ist ausgeschöpft. Die Flotte kehrt leer nach %(origin)s zurück.",
+  "changelog_filter_all": "Alle Commits",
+  "changelog_loading": "Vollständige Entwicklungshistorie wird geladen…",
+  "changelog_commits": "Commits",
+  "changelog_full_title": "Vollständiger Entwicklungs-Changelog",
+  "changelog_filter_player": "Spieler-Änderungen",
+  "changelog_technical_count": "technisch",
+  "changelog_load_error": "Der Changelog konnte nicht geladen werden.",
+  "changelog_merges_collapsed": "Merge-Commits zusammengefasst",
+  "changelog_full_intro": "Jede relevante Repository-Änderung, verständlich auf Englisch aufbereitet. Doppelte Merge-Commits werden zusammengefasst; technische Änderungen bleiben unter Alle Commits sichtbar.",
+  "changelog_filter_label": "Changelog-Filter",
+  "changelog_search_placeholder": "Version, System oder Änderung suchen…"
 }

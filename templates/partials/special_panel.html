@@ -63,7 +63,7 @@
                 role="menuitem">{{ T('community_menu_rules', 'Regeln lesen') }}</button>
         <button type="button"
                 class="gc-community-hub-menu-item"
-                data-community-open="changelog"
+                data-gc-changelog-open
                 role="menuitem">{{ T('community_menu_changelog', 'Changelog') }}</button>
         <button type="button"
                 class="gc-community-hub-menu-item"
@@ -215,25 +215,6 @@
     </div>
   </aside>
 
-  <aside class="gc-special-window" data-special-window="changelog" hidden>
-    <header class="gc-special-head">
-      <span class="gc-special-title">{{ T('community_changelog_title', 'Changelog') }}</span>
-      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="changelog" aria-label="{{ T('close', 'Schließen') }}">✕</button>
-    </header>
-    <div class="gc-special-window-content">
-      <p class="gc-special-intro">{{ T('community_changelog_intro', 'Aktuelle Patchnotes findest du ingame unter News — und parallel im Discord-Ankündigungskanal.') }}</p>
-      <div class="gc-special-actions" style="display:flex;flex-wrap:wrap;gap:0.4rem;">
-        <a href="{{ url_for('news_view') }}"
-           class="gc-btn gc-btn-primary gc-btn-sm"
-           data-pjax-link
-           data-special-window-close="changelog">{{ T('community_changelog_open_news', 'Genesis Timeline öffnen') }}</a>
-        <a href="https://discord.gg/CYP8qWE7VM"
-           class="gc-btn gc-btn-outline gc-btn-sm"
-           target="_blank"
-           rel="noopener noreferrer">{{ T('community_menu_discord', 'Discord beitreten') }}</a>
-      </div>
-    </div>
-  </aside>
 
   <aside class="gc-special-window" data-special-window="events" hidden>
     <header class="gc-special-head">

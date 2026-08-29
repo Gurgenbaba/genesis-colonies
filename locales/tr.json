@@ -9035,5 +9035,16 @@
   "pe_failure_resource_depletion": "Kaynak tükenmesi",
   "pe_failure_quantum_instability": "Kuantum kararsızlığı",
   "galaxy_asteroid_mega_limit_reached": "Bu Mega Kuşak'taki %10 payın tükendi.",
-  "fleet_asteroid_report_quota_exhausted": "%(coords)s konumundaki Mega Kuşak'taki %10 payın tükendi. Filo %(origin)s konumuna boş dönüyor."
+  "fleet_asteroid_report_quota_exhausted": "%(coords)s konumundaki Mega Kuşak'taki %10 payın tükendi. Filo %(origin)s konumuna boş dönüyor.",
+  "changelog_filter_all": "Tüm commitler",
+  "changelog_loading": "Tam geliştirme geçmişi yükleniyor…",
+  "changelog_commits": "commit",
+  "changelog_full_title": "Tam Geliştirme Değişiklik Günlüğü",
+  "changelog_filter_player": "Oyuncu değişiklikleri",
+  "changelog_technical_count": "teknik",
+  "changelog_load_error": "Değişiklik günlüğü yüklenemedi.",
+  "changelog_merges_collapsed": "birleştirme commitleri toplandı",
+  "changelog_full_intro": "Depodaki her önemli değişiklik anlaşılır İngilizce olarak yeniden yazılır. Yinelenen merge kayıtları birleştirilir; teknik çalışmalar Tüm commitler görünümünde kalır.",
+  "changelog_filter_label": "Değişiklik günlüğü filtresi",
+  "changelog_search_placeholder": "Sürüm, sistem veya değişiklik ara…"
 }
