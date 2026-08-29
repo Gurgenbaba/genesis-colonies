@@ -97,8 +97,6 @@
 
     <div class="fleet-ogame-send" data-fleet-mode-panel="send"{% if fleet_mode != 'send' %} hidden{% endif %}>
 
-      {# GC-FLT-SCOPE-001: both states stay mounted so a planet-gated live refresh can
-         heal zero-ships -> ships without requiring stale SSR markup to grow nodes. #}
       <section class="gc-panel fleet-panel fleet-no-ships-panel" aria-live="polite"{% if fleet_ctx.has_ships %} hidden{% endif %}>
         <p class="fleet-empty">{{ T("fleet_no_ships_hint") }}</p>
         <a href="{{ url_for('shipyard_view') }}" class="gc-nav-link gc-btn gc-btn-primary">{{ T("fleet_go_shipyard_btn") }}</a>
