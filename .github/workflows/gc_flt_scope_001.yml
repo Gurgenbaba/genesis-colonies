@@ -20,13 +20,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Inspect current planet-switch and Fleet scope client
+      - name: Inspect exact current Fleet scope paths
         shell: bash
         run: |
-          echo '=== planet switch symbols ==='
-          grep -n -E 'planet.?switch|switchPlanet|planets/active|active_planet_id|activePlanetId|planetId' static/main.js | head -n 220 || true
-          echo '=== Fleet scope symbols ==='
-          grep -n -E 'fleet-page|fleet-send-form|api/fleet/state|data-nav-module=.fleet|data-nav-module=.logistics' static/main.js | head -n 220 || true
+          echo '=== syncScopedPlanetIds ==='
+          sed -n '1468,1520p' static/main.js
+          echo '=== applyLiveState planet-switch handling ==='
+          sed -n '15225,15290p' static/main.js
+          echo '=== Fleet state refresh ==='
+          sed -n '27980,28190p' static/main.js
+          echo '=== planet switch action ==='
+          sed -n '33680,33840p' static/main.js
       - name: Apply focused Fleet planet-scope patch
         run: python scripts/gc_flt_scope_001.py
       - name: Syntax and focused regression gate
