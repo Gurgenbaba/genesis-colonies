@@ -38,8 +38,9 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin ux/pe-goal-context
-          git show FETCH_HEAD:scripts/_tmp_apply_pe_ux04.py > /tmp/apply_pe_ux04.py
-          python /tmp/apply_pe_ux04.py
+          git show FETCH_HEAD:scripts/_tmp_apply_pe_ux04.py > scripts/_tmp_apply_pe_ux04_runtime.py
+          python scripts/_tmp_apply_pe_ux04_runtime.py
+          rm scripts/_tmp_apply_pe_ux04_runtime.py
           git diff --check
       - name: Focused Planet Evolution verification
         shell: bash
