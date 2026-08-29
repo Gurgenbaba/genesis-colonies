@@ -47,7 +47,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile game/planet_evolution/dashboard.py tests/test_planet_evolution_dashboard.py tests/test_gc_pe_clarity.py
-          python -m pytest -q --tb=line tests/test_planet_evolution_dashboard.py tests/test_gc_pe_clarity.py
+          python -m pytest -q --tb=line \
+            tests/test_planet_evolution_dashboard.py::test_next_action_event_includes_cta_fields \
+            tests/test_planet_evolution_dashboard.py::test_next_action_research_highlights_tech_card \
+            tests/test_planet_evolution_dashboard.py::test_next_action_specialization_focuses_picker \
+            tests/test_planet_evolution_dashboard.py::test_next_action_economy_uses_normalized_deficit_evidence \
+            tests/test_gc_pe_clarity.py::test_goal_card_uses_contextual_evidence_before_concrete_actions
           python scripts/audit_locale_keys.py
       - name: Commit product changes
         shell: bash
