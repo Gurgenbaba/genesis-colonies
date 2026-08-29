@@ -49,10 +49,21 @@ if not ok:
     print('[GC] WARNING: edge-tts missing — Story Ops will not have Killian neural voice.')
 "
 
-# GC-PROD-AVAIL-001: keep a second web worker available while one worker is
-# blocked in a synchronous SQLite wait. SQLite remains the single writer of
-# record; this is HTTP availability headroom, not extra background workers.
+# GC-PROD-AVAIL-001/002: keep a second web worker available while one worker
+# is blocked in a synchronous SQLite wait. Railway may still carry a legacy
+# GUNICORN_WORKERS=1 variable, so production clamps the effective value to 2.
+# Higher explicit values remain supported.
 WORKERS="${GUNICORN_WORKERS:-2}"
+case "${WORKERS}" in
+  ''|*[!0-9]*)
+    echo "[GC] Invalid GUNICORN_WORKERS=${WORKERS}; forcing workers=2 for availability."
+    WORKERS=2
+    ;;
+esac
+if [ "${WORKERS}" -lt 2 ]; then
+  echo "[GC] GUNICORN_WORKERS=${WORKERS} is below production availability floor; forcing workers=2."
+  WORKERS=2
+fi
 # GC-AST-LIVE: gevent worker class lets long-lived WS connections (galaxy
 # live push) coexist with normal HTTP requests without pinning a worker slot
 # per socket. Flip to "sync" for emergency rollback without a redeploy — the
