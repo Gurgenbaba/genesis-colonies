@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Install focused test dependency
+        run: python -m pip install pytest
       - name: Apply focused Fleet planet-scope patch
         run: python scripts/gc_flt_scope_001.py
       - name: Syntax and focused regression gate
