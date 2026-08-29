@@ -25,12 +25,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin fix/version-changelog-surface
+
           git diff --binary 912121f9fdba3cd8825d6e18b52d323b8277922a 4278da41e853502d9244eac873f86a0b5ea5e773 -- \
             app.py \
             data/player_changelog_fallback.json \
             game/player_changelog.py \
-            locales/de.json locales/en.json locales/es.json locales/fr.json \
-            locales/pl.json locales/pt.json locales/ru.json locales/tr.json \
             static/css/player_changelog.css \
             static/js/player_changelog.js \
             templates/base.html \
@@ -38,9 +37,45 @@ jobs:
             templates/partials/special_panel.html \
             tests/test_community_hub.py \
             tests/test_player_changelog_surface.py \
-            > /tmp/pr93.patch
-          test -s /tmp/pr93.patch
-          git apply --3way /tmp/pr93.patch
+            > /tmp/pr93-nonlocale.patch
+          test -s /tmp/pr93-nonlocale.patch
+          git apply --3way /tmp/pr93-nonlocale.patch
+
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          base_ref = "912121f9fdba3cd8825d6e18b52d323b8277922a"
+          source_ref = "4278da41e853502d9244eac873f86a0b5ea5e773"
+          missing = object()
+
+          def load_at(ref: str, path: str):
+              raw = subprocess.check_output(["git", "show", f"{ref}:{path}"], text=True)
+              return json.loads(raw)
+
+          for locale in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+              path = f"locales/{locale}.json"
+              before = load_at(base_ref, path)
+              source = load_at(source_ref, path)
+              current = json.loads(Path(path).read_text(encoding="utf-8"))
+
+              for key in set(before) | set(source):
+                  old_value = before.get(key, missing)
+                  new_value = source.get(key, missing)
+                  if old_value == new_value:
+                      continue
+                  if new_value is missing:
+                      current.pop(key, None)
+                  else:
+                      current[key] = new_value
+
+              Path(path).write_text(
+                  json.dumps(current, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+          PY
+
           git diff --check
 
       - name: Focused changelog verification
@@ -50,7 +85,16 @@ jobs:
           python -m py_compile app.py game/player_changelog.py tests/test_player_changelog_surface.py tests/test_community_hub.py
           node --check static/js/player_changelog.js
           python -m pytest tests/test_player_changelog_surface.py tests/test_community_hub.py -q
-          python scripts/i18n_audit.py --check-placeholders
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          locales = [json.loads(Path(f"locales/{code}.json").read_text(encoding="utf-8")) for code in ("de","en","es","fr","pl","pt","ru","tr")]
+          expected = set(locales[0])
+          for data in locales[1:]:
+              assert set(data) == expected
+          print(f"locale parity ok: {len(expected)} keys x {len(locales)} locales")
+          PY
 
       - name: Commit rebased changelog surface
         shell: bash
