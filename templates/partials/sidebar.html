@@ -1,4 +1,5 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
+{% set _fleet_nav_planet_id = (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else none) %}
 {% set _shell = NAV_SHELL | default('desktop') %}
 {% if _shell == 'mobile-drawer-left' %}
   {% set _nav_id = 'gc-mnav-sidebar-nav' %}
@@ -151,7 +152,7 @@
          {% if not module_in_section(_sn, 'shipyard', 'military') %}hidden{% endif %}>
         {{ T("nav_shipyard") }}
       </a>
-      <a href="{{ url_for('fleet_view') }}"
+      <a href="{{ url_for('fleet_view', planet_id=_fleet_nav_planet_id) if _fleet_nav_planet_id else url_for('fleet_view') }}"
          data-nav-module="fleet"
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'fleet', 'military') %}hidden{% endif %}>

@@ -42,6 +42,7 @@
 {% set fleet_mode_raw = request.args.get('mode', 'send')|lower %}
 {% set fleet_mode = fleet_mode_raw if fleet_mode_raw in ('send', 'collect', 'distribute') else 'send' %}
 {% set fleet_logistics_mode = fleet_mode if fleet_mode in ('collect', 'distribute') else 'collect' %}
+{% set _fleet_scope_pid = fleet_ctx.planet_id if fleet_ctx.planet_id is defined else none %}
 {% set _fleet_lcp = namespace(done=false) %}
 
 <div class="gc-page fleet-page" id="fleet-page"
@@ -73,17 +74,17 @@
   </header>
 
   <nav class="gc-page-tabs gc-page-tabs--cols-3 fleet-mode-tabs" role="tablist" aria-label="{{ T('fleet_title') }}">
-    <a href="{{ url_for('fleet_view') }}"
+    <a href="{{ url_for('fleet_view', planet_id=_fleet_scope_pid) if _fleet_scope_pid else url_for('fleet_view') }}"
        class="gc-page-tab fleet-mode-tab{% if fleet_mode == 'send' %} active{% endif %}"
        data-fleet-mode-tab="send"
        role="tab"
        aria-selected="{{ 'true' if fleet_mode == 'send' else 'false' }}">{{ T("fleet_mode_send") }}</a>
-    <a href="{{ url_for('fleet_view') }}?mode=collect"
+    <a href="{{ url_for('fleet_view', mode='collect', planet_id=_fleet_scope_pid) if _fleet_scope_pid else url_for('fleet_view', mode='collect') }}"
        class="gc-page-tab fleet-mode-tab{% if fleet_mode == 'collect' %} active{% endif %}"
        data-fleet-mode-tab="collect"
        role="tab"
        aria-selected="{{ 'true' if fleet_mode == 'collect' else 'false' }}">{{ T("fleet_logistics_collect") }}</a>
-    <a href="{{ url_for('fleet_view') }}?mode=distribute"
+    <a href="{{ url_for('fleet_view', mode='distribute', planet_id=_fleet_scope_pid) if _fleet_scope_pid else url_for('fleet_view', mode='distribute') }}"
        class="gc-page-tab fleet-mode-tab{% if fleet_mode == 'distribute' %} active{% endif %}"
        data-fleet-mode-tab="distribute"
        role="tab"
@@ -96,14 +97,15 @@
 
     <div class="fleet-ogame-send" data-fleet-mode-panel="send"{% if fleet_mode != 'send' %} hidden{% endif %}>
 
-      {% if not fleet_ctx.has_ships %}
-      <section class="gc-panel fleet-panel fleet-no-ships-panel" aria-live="polite">
+      {# GC-FLT-SCOPE-001: both states stay mounted so a planet-gated live refresh can
+         heal zero-ships -> ships without requiring stale SSR markup to grow nodes. #}
+      <section class="gc-panel fleet-panel fleet-no-ships-panel" aria-live="polite"{% if fleet_ctx.has_ships %} hidden{% endif %}>
         <p class="fleet-empty">{{ T("fleet_no_ships_hint") }}</p>
         <a href="{{ url_for('shipyard_view') }}" class="gc-nav-link gc-btn gc-btn-primary">{{ T("fleet_go_shipyard_btn") }}</a>
       </section>
-      {% else %}
 
-      <form id="fleet-send-form" class="fleet-send-form" method="post" action="#" data-no-pjax novalidate>
+      <div data-fleet-ships-content{% if not fleet_ctx.has_ships %} hidden{% endif %}>
+      <form id="fleet-send-form" class="fleet-send-form" method="post" action="#" data-no-pjax novalidate{% if not fleet_ctx.has_ships %} hidden{% endif %}>
 
         <section class="gc-panel fleet-panel fleet-mission-control-panel fleet-send-panel fleet-ogame-top" aria-labelledby="fleet-mission-control-title">
           <div class="fleet-target-block fleet-ogame-targets" data-fleet-target-block>
@@ -580,7 +582,7 @@
           </div>
         </section>
 
-      {% endif %}
+      </div>
     </div>
 
     <div class="fleet-ogame-logistics" data-fleet-mode-panel="logistics"{% if fleet_mode not in ('collect', 'distribute') %} hidden{% endif %}>
