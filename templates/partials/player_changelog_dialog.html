@@ -1,0 +1,36 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/player_changelog.css') }}?v={{ GC_ASSET_VERSION }}">
+
+<dialog class="gc-player-changelog" data-gc-changelog-dialog
+        data-label-loading="{{ T('changelog_loading', 'Loading complete development history…') }}"
+        data-label-error="{{ T('changelog_load_error', 'The changelog could not be loaded.') }}"
+        data-label-commits="{{ T('changelog_commits', 'commits') }}"
+        data-label-technical="{{ T('changelog_technical_count', 'technical') }}"
+        data-label-merges="{{ T('changelog_merges_collapsed', 'merge commits collapsed') }}"
+        aria-labelledby="gc-player-changelog-title">
+  <section class="gc-player-changelog-shell">
+    <header class="gc-player-changelog-head">
+      <div>
+        <span class="gc-player-changelog-eyebrow">{{ T('changelog_full_title', 'Full Development Changelog') }}</span>
+        <h2 id="gc-player-changelog-title">{{ T('changelog_full_title', 'Full Development Changelog') }}</h2>
+        <p>{{ T('changelog_full_intro', 'Every meaningful repository change, rewritten into readable English. Merge duplicates are collapsed; technical work remains available in the All commits view.') }}</p>
+      </div>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-gc-changelog-close aria-label="{{ T('close', 'Close') }}">✕</button>
+    </header>
+
+    <div class="gc-player-changelog-controls">
+      <label class="gc-player-changelog-search">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" data-gc-changelog-search placeholder="{{ T('changelog_search_placeholder', 'Search version, system or change…') }}" autocomplete="off">
+      </label>
+      <div class="gc-player-changelog-filters" role="group" aria-label="{{ T('changelog_filter_label', 'Changelog filter') }}">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-xs is-active" data-gc-changelog-mode="player">{{ T('changelog_filter_player', 'Player changes') }}</button>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-gc-changelog-mode="all">{{ T('changelog_filter_all', 'All commits') }}</button>
+      </div>
+    </div>
+
+    <div class="gc-player-changelog-meta gc-mono" data-gc-changelog-meta></div>
+    <div class="gc-player-changelog-status" data-gc-changelog-status aria-live="polite">{{ T('changelog_loading', 'Loading complete development history…') }}</div>
+    <div class="gc-player-changelog-list" data-gc-changelog-list></div>
+  </section>
+</dialog>
+<script src="{{ url_for('static', filename='js/player_changelog.js') }}?v={{ GC_ASSET_VERSION }}" defer></script>

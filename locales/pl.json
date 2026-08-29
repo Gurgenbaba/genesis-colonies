@@ -9035,5 +9035,16 @@
   "pe_failure_resource_depletion": "Wyczerpanie zasobów",
   "pe_failure_quantum_instability": "Niestabilność kwantowa",
   "galaxy_asteroid_mega_limit_reached": "Twój 10% udział w tym Mega Pasie został wyczerpany.",
-  "fleet_asteroid_report_quota_exhausted": "Twój 10% udział w Mega Pasie na %(coords)s został wyczerpany. Flota wraca pusta do %(origin)s."
+  "fleet_asteroid_report_quota_exhausted": "Twój 10% udział w Mega Pasie na %(coords)s został wyczerpany. Flota wraca pusta do %(origin)s.",
+  "changelog_filter_all": "Wszystkie commity",
+  "changelog_loading": "Ładowanie pełnej historii rozwoju…",
+  "changelog_commits": "commity",
+  "changelog_full_title": "Pełny changelog rozwoju",
+  "changelog_filter_player": "Zmiany dla graczy",
+  "changelog_technical_count": "techniczne",
+  "changelog_load_error": "Nie udało się wczytać changelogu.",
+  "changelog_merges_collapsed": "scalone commity merge",
+  "changelog_full_intro": "Każda istotna zmiana repozytorium jest opisana czytelnym angielskim. Duplikaty merge są scalane, a prace techniczne pozostają dostępne w widoku Wszystkie commity.",
+  "changelog_filter_label": "Filtr changelogu",
+  "changelog_search_placeholder": "Szukaj wersji, systemu lub zmiany…"
 }

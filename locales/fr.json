@@ -9035,5 +9035,16 @@
   "pe_failure_resource_depletion": "Épuisement des ressources",
   "pe_failure_quantum_instability": "Instabilité quantique",
   "galaxy_asteroid_mega_limit_reached": "Votre part de 10 % de cette ceinture méga est épuisée.",
-  "fleet_asteroid_report_quota_exhausted": "Votre part de 10 % de la ceinture méga en %(coords)s est épuisée. La flotte revient à vide vers %(origin)s."
+  "fleet_asteroid_report_quota_exhausted": "Votre part de 10 % de la ceinture méga en %(coords)s est épuisée. La flotte revient à vide vers %(origin)s.",
+  "changelog_filter_all": "Tous les commits",
+  "changelog_loading": "Chargement de l’historique complet du développement…",
+  "changelog_commits": "commits",
+  "changelog_full_title": "Changelog complet du développement",
+  "changelog_filter_player": "Changements joueurs",
+  "changelog_technical_count": "techniques",
+  "changelog_load_error": "Le changelog n’a pas pu être chargé.",
+  "changelog_merges_collapsed": "commits de fusion regroupés",
+  "changelog_full_intro": "Chaque changement important du dépôt est reformulé en anglais lisible. Les doublons de fusion sont regroupés et le travail technique reste disponible dans Tous les commits.",
+  "changelog_filter_label": "Filtre du changelog",
+  "changelog_search_placeholder": "Rechercher une version, un système ou un changement…"
 }
