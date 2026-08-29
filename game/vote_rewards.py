@@ -16,7 +16,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .auction_house import is_event_box, resolve_inventory_key
-from .db import column_exists, db, table_exists
+from .db import column_exists, db, table_columns, table_exists, tables_exist
 from .inventory import grant_inventory_item, inventory_schema_ready
 from .inventory_catalog import container_image_path, item_catalog_entry
 
@@ -725,14 +725,91 @@ def count_pending_vote_rewards(user_id: int, *, conn) -> int:
 
 
 def count_vote_center_attention(user_id: int, *, conn, now: Optional[int] = None) -> int:
-    """
-    Nav-badge helper: voteable providers plus unclaimed pending rewards.
+    """Diet-safe Vote Center badge: voteable providers + pending rewards.
 
-    Returning inactive players see attention when cooldowns expired and/or rewards await claim.
+    The full Vote Center keeps the detailed per-provider serializers. The high-frequency
+    nav path reads schema compatibility once, then resolves all enabled provider cooldowns
+    from one bulk query instead of repeating latest-vote/schema probes per provider.
     """
-    return count_voteable_providers(user_id, conn=conn, now=now) + count_pending_vote_rewards(
-        user_id, conn=conn
+    uid = int(user_id)
+    if uid <= 0:
+        return 0
+    if not tables_exist(conn, ("vote_rewards", "vote_providers")):
+        return 0
+
+    reward_columns = table_columns(conn, "vote_rewards")
+    has_channel = "vote_channel" in reward_columns
+    has_next_at = "provider_next_vote_at" in reward_columns
+    channel_filter = (
+        " AND COALESCE(vote_channel, 'player') = 'player'" if has_channel else ""
     )
+    next_at_select = (
+        "provider_next_vote_at" if has_next_at else "NULL AS provider_next_vote_at"
+    )
+    ts = int(now if now is not None else time.time())
+
+    rows = conn.execute(
+        f"""
+        WITH latest_ranked AS (
+            SELECT provider, voted_at, {next_at_select},
+                   ROW_NUMBER() OVER (
+                       PARTITION BY provider
+                       ORDER BY voted_at DESC
+                   ) AS rn
+            FROM vote_rewards
+            WHERE user_id = ?{channel_filter}
+        ),
+        pending AS (
+            SELECT COUNT(*) AS c
+            FROM vote_rewards
+            WHERE user_id = ? AND status = 'pending'
+        ),
+        providers AS (
+            SELECT provider_key, cooldown_sec, sort_order
+            FROM vote_providers
+            WHERE enabled = 1
+        )
+        SELECT p.provider_key, p.cooldown_sec,
+               l.voted_at, l.provider_next_vote_at,
+               pending.c AS pending_count
+        FROM pending
+        LEFT JOIN providers p ON 1 = 1
+        LEFT JOIN latest_ranked l
+          ON l.provider = p.provider_key AND l.rn = 1
+        ORDER BY p.sort_order ASC, p.provider_key ASC;
+        """,
+        (uid, uid),
+    ).fetchall()
+
+    pending_count = int(rows[0]["pending_count"] or 0) if rows else 0
+    voteable = 0
+    for row in rows:
+        provider_key = str(row["provider_key"] or "")
+        if not provider_key:
+            continue
+        canonical = VOTE_PROVIDERS.get(provider_key) or {}
+        cooldown_sec = int(
+            canonical.get("cooldown_seconds")
+            or row["cooldown_sec"]
+            or VOTE_COOLDOWN_SEC
+        )
+        voted_at = row["voted_at"]
+        if voted_at is None:
+            voteable += 1
+            continue
+
+        next_at = 0
+        next_at_raw = row["provider_next_vote_at"]
+        if next_at_raw is not None:
+            try:
+                next_at = int(next_at_raw)
+            except (TypeError, ValueError):
+                next_at = 0
+        vote_end = next_at if next_at > 0 else int(voted_at) + cooldown_sec
+        if vote_end <= ts:
+            voteable += 1
+
+    return int(voteable + pending_count)
 
 
 def get_vote_center_state(user_id: int, *, conn) -> Dict[str, Any]:
