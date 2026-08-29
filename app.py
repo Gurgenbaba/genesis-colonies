@@ -2860,7 +2860,17 @@ def logistics_view():
     mode = (request.args.get("mode") or "collect").strip().lower()
     if mode not in ("collect", "distribute"):
         mode = "collect"
-    return redirect(f"{url_for('fleet_view')}?mode={mode}")
+
+    # GC-FLT-SCOPE-001: preserve the planet-scoped navigation/cache key. The
+    # canonical active planet remains server-owned and is not mutated by this GET.
+    redirect_args: Dict[str, Any] = {"mode": mode}
+    try:
+        requested_planet_id = int(request.args.get("planet_id") or 0)
+    except (TypeError, ValueError):
+        requested_planet_id = 0
+    if requested_planet_id > 0:
+        redirect_args["planet_id"] = requested_planet_id
+    return redirect(url_for("fleet_view", **redirect_args))
 
 
 @app.route("/fleet")

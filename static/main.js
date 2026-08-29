@@ -1505,6 +1505,22 @@
     document.querySelectorAll(".overview-wrapper[data-planet-id]").forEach((el) => {
       el.dataset.planetId = String(pid);
     });
+
+    // GC-FLT-SCOPE-001 nav href scope: make Fleet/Logistics soft-nav cache keys
+    // colony-specific. The server still owns/validates the canonical active planet.
+    document
+      .querySelectorAll(
+        'a[data-nav-module="fleet"], a[data-nav-module="logistics"], a[data-fleet-mode-tab]'
+      )
+      .forEach((link) => {
+        const href = String(link.getAttribute("href") || "").trim();
+        if (!href) return;
+        try {
+          const scoped = new URL(href, window.location.origin);
+          scoped.searchParams.set("planet_id", String(pid));
+          link.setAttribute("href", `${scoped.pathname}${scoped.search}${scoped.hash}`);
+        } catch (_) {}
+      });
   }
 
   let _activeRefreshFlightResolve = null;
@@ -28037,8 +28053,10 @@
         const totalShips = Object.values(state.ships).reduce((a, b) => a + (Number(b) || 0), 0);
         rt.data.has_ships = totalShips > 0;
         const noShipsPanel = page.querySelector(".fleet-no-ships-panel");
+        const shipsContent = page.querySelector("[data-fleet-ships-content]");
         const sendForm = page.querySelector("#fleet-send-form");
         if (noShipsPanel) noShipsPanel.hidden = totalShips > 0;
+        if (shipsContent) shipsContent.hidden = totalShips <= 0;
         if (sendForm) sendForm.hidden = totalShips <= 0;
         page.querySelectorAll(".fleet-ship-row").forEach((row) => {
           const key = row.getAttribute("data-ship-key");

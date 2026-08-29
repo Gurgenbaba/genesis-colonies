@@ -62,6 +62,7 @@
 {% set _legal_guest = request.endpoint == 'legal_view' and not (_auth_user and _auth_user.id) %}
 {% set SIMPLE_LAYOUT = _legal_guest or request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
 {% set _fleet_mode = request.args.get('mode', 'send')|lower %}
+{% set _fleet_nav_planet_id = (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else none) %}
 {% set _fleet_logistics_active = request.endpoint == 'fleet_view' and _fleet_mode in ('collect', 'distribute') %}
 {% set WIP_ENDPOINTS = [] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
@@ -578,7 +579,7 @@
       <span class="gc-bottom-nav-label">{{ T("nav_messages", "Nachrichten") }}</span>
       <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
     </a>
-    <a href="{{ url_for('fleet_view') }}"
+    <a href="{{ url_for('fleet_view', planet_id=_fleet_nav_planet_id) if _fleet_nav_planet_id else url_for('fleet_view') }}"
        data-nav-module="fleet"
        class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' and not _fleet_logistics_active %}active{% endif %}"
        {% if 'fleet' not in _mb %}hidden{% endif %}>
@@ -593,7 +594,7 @@
       <span class="gc-bottom-nav-icon" aria-hidden="true">🛡</span>
       <span class="gc-bottom-nav-label">{{ T("nav_defense") }}</span>
     </a>
-    <a href="{{ url_for('fleet_view') }}?mode=collect"
+    <a href="{{ url_for('fleet_view', mode='collect', planet_id=_fleet_nav_planet_id) if _fleet_nav_planet_id else url_for('fleet_view', mode='collect') }}"
        data-nav-module="logistics"
        class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if _fleet_logistics_active %}active{% endif %}"
        {% if 'logistics' not in _mb %}hidden{% endif %}>
