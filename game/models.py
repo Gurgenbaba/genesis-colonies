@@ -1,5 +1,7 @@
 import logging
+import os
 import sqlite3
+import threading
 import time
 import hashlib
 import math
@@ -805,36 +807,122 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
 # PLAYER (Game Objects)
 # ======================================================================
 
+# Presence / last_seen consumers use minute–day thresholds (HUD online=5m,
+# ranking inactive=3d, shop/pirates hours+). Persist cadence stays 30s so
+# ONLINE_WINDOW_SEC (5m) stays accurate without writing on every poll.
+PRESENCE_TOUCH_INTERVAL_SEC = max(
+    5, int(os.environ.get("GC_PRESENCE_TOUCH_INTERVAL_SEC", "30") or 30)
+)
+
+_PRESENCE_LOCAL_LOCK = threading.Lock()
+_PRESENCE_LOCAL_UNTIL: Dict[int, int] = {}
+
+
+def _presence_touch_interval_sec() -> int:
+    raw = os.environ.get("GC_PRESENCE_TOUCH_INTERVAL_SEC", "").strip()
+    if raw:
+        try:
+            return max(5, int(float(raw)))
+        except (TypeError, ValueError):
+            pass
+    return max(5, int(PRESENCE_TOUCH_INTERVAL_SEC))
+
+
+def _presence_local_fresh(player_id: int, *, now: int) -> bool:
+    """Process-local suppress only; DB last_seen remains authority after restart."""
+    with _PRESENCE_LOCAL_LOCK:
+        return int(_PRESENCE_LOCAL_UNTIL.get(int(player_id)) or 0) > int(now)
+
+
+def _presence_local_mark(player_id: int, *, now: int, interval: int) -> None:
+    pid = int(player_id)
+    with _PRESENCE_LOCAL_LOCK:
+        _PRESENCE_LOCAL_UNTIL[pid] = int(now) + int(interval)
+        if len(_PRESENCE_LOCAL_UNTIL) > 4096:
+            stale = [k for k, v in _PRESENCE_LOCAL_UNTIL.items() if int(v) <= int(now)]
+            for k in stale[:2048]:
+                _PRESENCE_LOCAL_UNTIL.pop(k, None)
+
+
+def clear_presence_local_for_tests(player_id: Optional[int] = None) -> None:
+    """Test helper: drop process-local presence suppression."""
+    with _PRESENCE_LOCAL_LOCK:
+        if player_id is None:
+            _PRESENCE_LOCAL_UNTIL.clear()
+        else:
+            _PRESENCE_LOCAL_UNTIL.pop(int(player_id), None)
+
+
 def touch_player_online(player_id: int) -> None:
-    """Mark player online; throttled to at most once per 30s to reduce write contention.
+    """Mark player online; throttled to at most once per PRESENCE_TOUCH_INTERVAL_SEC.
 
     GC-2619: this is the single canonical "a real authenticated request just
     happened" signal (called from `require_login`/`require_admin`/
-    `require_login_api`). Whenever it actually fires (i.e. the throttle
-    allowed a write), also give a returning human instant full control back
-    if their account is currently on the inactive-autoplay sticky roster —
+    `require_login_api`). Whenever a write TX runs, also give a returning
+    human instant full control back if their account is on the
+    inactive-autoplay sticky roster —
     see `inactive_autoplay.release_active_player_from_roster` for why this
     can't just be inferred from `last_seen` alone (autoplay writes that same
     column for its own "online" presence, GC-2617).
 
     GC-PERF-LOCK-001: SQLITE_BUSY after retries is swallowed (request continues).
-    Roster release runs even when the throttled ``last_seen`` UPDATE writes 0
-    rows, so humans regain control without waiting for the next 30s touch.
+    Roster release still runs when ``last_seen`` is fresh **if** the player is
+    on the sticky roster (read-only check first).
+
+    GC-PROD-SQLITE-STALL-001A.2: skip ``BEGIN IMMEDIATE`` entirely when
+    ``last_seen`` is within the interval **and** the player is not on the
+    autoplay roster. A WHERE-only UPDATE still acquires the SQLite writer lock;
+    that was the remaining ~1 write / poll after queue-finish deferral.
+
+    Process-local suppression may skip the DB peek for active pollers; dormant
+    autoplay membership uses day-scale ``last_seen`` thresholds, so an actively
+    requesting player is not rostered. After process restart the DB path is
+    cold and correct.
     """
     if not player_id:
         return
-    now = _now_ts()
-    touch_before = now - 30
+    now = int(_now_ts())
     pid = int(player_id)
+    interval = _presence_touch_interval_sec()
+    touch_before = now - interval
+
+    if _presence_local_fresh(pid, now=now):
+        return
+
     conn = db()
     try:
+        # Read-only peek — do not acquire the writer lock just to no-op.
+        row = conn.execute(
+            "SELECT last_seen FROM players WHERE id = ? LIMIT 1;",
+            (pid,),
+        ).fetchone()
+        last_seen = int(row["last_seen"] or 0) if row else 0
+        need_last_seen = last_seen < touch_before
+
+        need_roster = False
+        try:
+            from .inactive_autoplay import player_on_inactive_autoplay_roster
+
+            need_roster = bool(player_on_inactive_autoplay_roster(pid, conn=conn))
+        except Exception:
+            # Fail open: if roster probe fails, keep prior write-path behaviour.
+            need_roster = True
+            logger.warning(
+                "player_on_inactive_autoplay_roster probe failed player=%s",
+                pid,
+                exc_info=True,
+            )
+
+        if not need_last_seen and not need_roster:
+            _presence_local_mark(pid, now=now, interval=interval)
+            return
+
         begin_write_transaction(conn)
         cur = conn.cursor()
         cur.execute(
             "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
             (now, pid, touch_before),
         )
-        touched = cur.rowcount > 0
         try:
             from .inactive_autoplay import release_active_player_from_roster
 
@@ -844,9 +932,7 @@ def touch_player_online(player_id: int) -> None:
                 "release_active_player_from_roster failed player=%s", pid
             )
         commit(conn)
-        if not touched:
-            # Throttle skipped last_seen write; release above still ran in-TX.
-            pass
+        _presence_local_mark(pid, now=now, interval=interval)
     except Exception as exc:
         try:
             rollback(conn)

@@ -35,7 +35,8 @@ HTTP endpoints `POST /api/internal/cron/*` remain for manual/force runs (`GC_INT
 | Replicas | **1** | Volume + SQLite single-writer |
 | Serverless / scale-to-zero | **Off** | Game + embedded cron must stay warm |
 | `GUNICORN_WORKERS` | **1** (SQLite) | Multi-worker not used on SQLite production |
-| `GUNICORN_WORKER_CLASS` | **gevent** (default) | GC-AST-LIVE: lets WS galaxy-push connections coexist with HTTP on the single worker. Set to `sync` for emergency rollback — WS route/client both degrade gracefully, no redeploy of app code needed |
+| `GUNICORN_WORKER_CLASS` | **gthread** (default) | GC-PROD-SQLITE-STALL-001: sync sqlite must not freeze the whole HTTP process. Galaxy live WS push is **off** under gthread (`ws_long_lived_safe`); client uses existing polling. Set `gevent` only if you intentionally want live WS push and accept event-loop stall risk |
+| `GUNICORN_THREADS` | **4** (with gthread) | Entrypoint passes `--threads`; never use threads=1 as a fake gthread |
 | Separate ranking worker service | **Do not create** | Volume is service-bound |
 
 ---
@@ -69,7 +70,8 @@ Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `
 | `GC_DB_BACKEND` | `sqlite` until cutover |
 | `GC_DB_PATH` | `/data/game.db` |
 | `GUNICORN_WORKERS` | `1` |
-| `GUNICORN_WORKER_CLASS` | `gevent` (default; `sync` for rollback) |
+| `GUNICORN_WORKER_CLASS` | `gthread` (default; `gevent` only if live WS push required) |
+| `GUNICORN_THREADS` | `4` (gthread) |
 | `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` |
 | `GC_EMBEDDED_CRON` | unset or `1` (default on in production) |
 | `GC_EMBEDDED_CRON_SEC` | unset → `60` |

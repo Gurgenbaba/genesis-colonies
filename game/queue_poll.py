@@ -3,18 +3,30 @@ Throttled queue-finish policy for high-frequency polling (game-state).
 
 Avoids BEGIN IMMEDIATE on every /api/game-state tick while still finishing due jobs
 within a bounded interval.
+
+GC-PROD-SQLITE-STALL-001A:
+- Queue finishes are deferred only when ``QUEUE_TICK_KEY`` heartbeat is fresh
+  (not fleet/maintenance).
+- Due finishes use ``try_claim_poll_due_finish`` (claim BEFORE finish) so parallel
+  polls for the same player cannot stampede into ``finish_player_due_work``.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import threading
 import time
-from typing import Optional
+import uuid
+from typing import Dict, Optional, Tuple
 
-from .db import db
+from .db import begin_write_transaction, commit, db, in_transaction, rollback
 
 # Minimum seconds between queue-finish passes triggered by game-state polling.
 POLL_FINISH_INTERVAL_SEC = float(os.environ.get("GC_POLL_FINISH_INTERVAL_SEC", "25"))
+
+# Due-finish single-flight lease TTL (claim before expensive finish).
+POLL_DUE_CLAIM_SEC = float(os.environ.get("GC_POLL_DUE_CLAIM_SEC", "5"))
 
 # Sub-second tolerance so jobs with 1s duration are not stuck between float ticks.
 DUE_TIME_EPSILON_SEC = float(os.environ.get("GC_DUE_TIME_EPSILON_SEC", "0.05"))
@@ -22,6 +34,10 @@ DUE_TIME_EPSILON_SEC = float(os.environ.get("GC_DUE_TIME_EPSILON_SEC", "0.05"))
 # Align finish/due detection with UI remaining = int(finish_at - now):
 # when remaining displays as 0, the job is treated as due (≤ ~1s early).
 DISPLAY_DUE_WINDOW_SEC = float(os.environ.get("GC_DISPLAY_DUE_WINDOW_SEC", "1.0"))
+
+# Process-local suppression: avoids writer herds on lease CAS inside one process.
+_LOCAL_CLAIM_LOCK = threading.Lock()
+_LOCAL_CLAIMS: Dict[int, float] = {}
 
 
 def due_cutoff_ts(now: Optional[float] = None) -> float:
@@ -253,6 +269,151 @@ def _lease_key(player_id: int) -> str:
     return f"queue_finish_poll:{int(player_id)}"
 
 
+def _claim_key(player_id: int) -> str:
+    return f"queue_finish_poll_claim:{int(player_id)}"
+
+
+def _poll_due_claim_sec() -> float:
+    raw = os.environ.get("GC_POLL_DUE_CLAIM_SEC", "").strip()
+    if raw:
+        try:
+            return max(0.5, float(raw))
+        except (TypeError, ValueError):
+            pass
+    return max(0.5, float(POLL_DUE_CLAIM_SEC))
+
+
+def _parse_claim_until(raw: Optional[str]) -> float:
+    if not raw:
+        return 0.0
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return float(data.get("until") or 0)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _process_local_try_claim(player_id: int, lease_sec: float, *, now: float) -> bool:
+    """Cheap same-process suppression — no DB. Losers never touch SQLite."""
+    pid = int(player_id)
+    with _LOCAL_CLAIM_LOCK:
+        until = float(_LOCAL_CLAIMS.get(pid) or 0.0)
+        if until > now:
+            return False
+        _LOCAL_CLAIMS[pid] = now + float(lease_sec)
+        if len(_LOCAL_CLAIMS) > 512:
+            stale = [k for k, v in _LOCAL_CLAIMS.items() if float(v) <= now]
+            for k in stale[:256]:
+                _LOCAL_CLAIMS.pop(k, None)
+        return True
+
+
+def _persisted_claim_active(player_id: int, conn, *, now: float) -> bool:
+    from .runtime_state import get_runtime_value
+
+    raw = get_runtime_value(_claim_key(player_id), conn=conn)
+    return _parse_claim_until(raw) > now
+
+
+def try_claim_poll_due_finish(
+    player_id: int,
+    conn=None,
+    *,
+    lease_sec: Optional[float] = None,
+    now: Optional[float] = None,
+) -> bool:
+    """
+    Single-flight claim for poll due-finish (GC-PROD-SQLITE-STALL-001A).
+
+    Call BEFORE ``finish_player_due_work``. Exactly one winner per player window.
+
+    Design (two-step):
+    1. Process-local suppression — losers return False with zero DB I/O.
+    2. Cross-process lease on ``runtime_state`` — read-only peek first; only a
+       contender that still looks free opens ``BEGIN IMMEDIATE`` and CAS-sets
+       ``until``. Losers after peek never write; losers after lock wait re-check
+       and roll back without finishing queues.
+
+    TTL ensures a crashed winner cannot block a player forever.
+    """
+    pid = int(player_id)
+    now_f = float(now if now is not None else time.time())
+    ttl = float(lease_sec if lease_sec is not None else _poll_due_claim_sec())
+
+    if not _process_local_try_claim(pid, ttl, now=now_f):
+        return False
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = db()
+
+    from .runtime_state import ensure_runtime_state_table, set_runtime_value
+
+    try:
+        # Read-only peek — do not BEGIN just to discover an active lease.
+        if _persisted_claim_active(pid, conn, now=now_f):
+            return False
+
+        nested = in_transaction(conn)
+        if not nested:
+            begin_write_transaction(conn)
+        try:
+            ensure_runtime_state_table(conn)
+            if _persisted_claim_active(pid, conn, now=time.time()):
+                if not nested:
+                    rollback(conn)
+                return False
+            payload = {
+                "until": now_f + ttl,
+                "token": uuid.uuid4().hex[:12],
+                "claimed_at": now_f,
+            }
+            set_runtime_value(
+                _claim_key(pid), json.dumps(payload, ensure_ascii=False), conn=conn
+            )
+            if not nested:
+                commit(conn)
+            return True
+        except Exception:
+            if not nested:
+                try:
+                    rollback(conn)
+                except Exception:
+                    pass
+            raise
+    finally:
+        if owns_conn and conn is not None:
+            conn.close()
+
+
+def clear_poll_due_claim_for_tests(player_id: int, conn=None) -> None:
+    """Test helper: drop process-local + persisted claim for one player."""
+    pid = int(player_id)
+    with _LOCAL_CLAIM_LOCK:
+        _LOCAL_CLAIMS.pop(pid, None)
+    from .runtime_state import ensure_runtime_state_table
+
+    owns = conn is None
+    if owns:
+        conn = db()
+    try:
+        ensure_runtime_state_table(conn)
+        if not in_transaction(conn):
+            begin_write_transaction(conn)
+            conn.execute("DELETE FROM runtime_state WHERE key = ?;", (_claim_key(pid),))
+            commit(conn)
+        else:
+            conn.execute("DELETE FROM runtime_state WHERE key = ?;", (_claim_key(pid),))
+    finally:
+        if owns and conn is not None:
+            conn.close()
+
+
 def seconds_until_poll_finish_allowed(player_id: int, conn=None) -> float:
     """Read-only: seconds remaining until poll may trigger queue finish (0 = allowed now)."""
     from .runtime_state import get_runtime_value
@@ -276,10 +437,10 @@ def should_run_queue_finish_for_poll(
     planet_id: Optional[int] = None,
 ) -> bool:
     """
-    True when game-state polling may run finish_due_work_once.
+    True when game-state polling may *attempt* a due/interval finish.
 
-    - Always when due queue work exists on the scoped planet (force_due=True).
-    - Otherwise only after POLL_FINISH_INTERVAL_SEC since last recorded poll finish.
+    Does not claim the single-flight lease — callers must use
+    ``try_claim_poll_due_finish`` before ``finish_player_due_work``.
     """
     if force_due and player_has_due_queue_work(
         player_id,
@@ -288,6 +449,43 @@ def should_run_queue_finish_for_poll(
     ):
         return True
     return seconds_until_poll_finish_allowed(player_id, conn=conn) <= 0.0
+
+
+def should_poll_attempt_queue_finish(
+    player_id: int,
+    conn=None,
+    *,
+    now: Optional[float] = None,
+    planet_id: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """
+    Decide whether the poll path may run queue finish (before claim).
+
+    Returns (allowed, reason).
+    Queue health uses ``is_queue_tick_heartbeat_fresh`` only — never fleet/maintenance.
+    """
+    from game.config import is_game_worker_primary
+    from .runtime_state import is_queue_tick_heartbeat_fresh
+
+    now_f = float(now if now is not None else time.time())
+    queue_due = player_has_due_queue_work(
+        player_id, conn=conn, now=now_f, planet_id=planet_id
+    )
+    has_pending = player_has_pending_queue_work(
+        player_id, conn=conn, planet_id=planet_id
+    )
+
+    if is_game_worker_primary():
+        if not queue_due:
+            return False, "no_queue_due"
+        if is_queue_tick_heartbeat_fresh(conn=conn, now=now_f):
+            return False, "queue_tick_fresh_defer"
+        return True, "safety_net_due"
+    if queue_due:
+        return True, "due"
+    if has_pending and seconds_until_poll_finish_allowed(player_id, conn=conn) <= 0.0:
+        return True, "interval"
+    return False, "throttled"
 
 
 def record_poll_queue_finish(player_id: int, conn=None) -> None:

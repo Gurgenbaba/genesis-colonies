@@ -1467,10 +1467,11 @@ def test_touch_player_online_releases_roster_member(autoplay_db):
     (not just the standalone helper).
     """
     from game.inactive_autoplay import ROSTER_KEY, get_roster_snapshot, set_inactive_autoplay_enabled
-    from game.models import touch_player_online
+    from game.models import clear_presence_local_for_tests, touch_player_online
     from game.runtime_state import set_runtime_value
 
     uid = _register_user()
+    clear_presence_local_for_tests()
     conn = db()
     try:
         begin_write_transaction(conn)
@@ -1498,7 +1499,7 @@ def test_touch_player_online_releases_roster_member(autoplay_db):
 def test_touch_player_online_releases_even_when_throttled(autoplay_db):
     """GC-PERF-LOCK-001: roster handback must not wait for the 30s last_seen throttle."""
     from game.inactive_autoplay import ROSTER_KEY, get_roster_snapshot, set_inactive_autoplay_enabled
-    from game.models import touch_player_online
+    from game.models import clear_presence_local_for_tests, touch_player_online
     from game.runtime_state import set_runtime_value
 
     uid = _register_user()
@@ -1518,6 +1519,7 @@ def test_touch_player_online_releases_even_when_throttled(autoplay_db):
         commit(conn)
     finally:
         conn.close()
+    clear_presence_local_for_tests(uid)
 
     touch_player_online(uid)
 
@@ -1533,8 +1535,18 @@ def test_touch_player_online_swallows_sqlite_lock(autoplay_db, monkeypatch):
     """GC-PERF-LOCK-001: SQLITE_BUSY must not raise out of touch_player_online."""
     import sqlite3
 
-    from game.db import begin_write_transaction as real_begin
-    from game.models import touch_player_online
+    from game.models import clear_presence_local_for_tests, touch_player_online
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        _seed_dormant(conn, uid, days_inactive=0.0)
+        conn.execute("UPDATE players SET last_seen = 0 WHERE id = ?;", (uid,))
+        commit(conn)
+    finally:
+        conn.close()
+    clear_presence_local_for_tests(uid)
 
     calls = {"n": 0}
 
@@ -1543,7 +1555,7 @@ def test_touch_player_online_swallows_sqlite_lock(autoplay_db, monkeypatch):
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr("game.models.begin_write_transaction", boom_begin)
-    touch_player_online(1)  # must not raise
+    touch_player_online(uid)  # must not raise
     assert calls["n"] >= 1
 
 

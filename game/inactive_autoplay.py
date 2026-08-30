@@ -1190,6 +1190,16 @@ def get_roster_snapshot(*, conn=None) -> List[Dict[str, Any]]:
     return _load_roster(conn=conn)
 
 
+def player_on_inactive_autoplay_roster(player_id: int, *, conn=None) -> bool:
+    """Read-only: True when this account is on the sticky autoplay roster (GC-2619)."""
+    if not is_inactive_autoplay_enabled(conn=conn):
+        return False
+    pid = int(player_id)
+    if pid <= 0:
+        return False
+    return any(int(item.get("player_id") or 0) == pid for item in _load_roster(conn=conn))
+
+
 def get_last_worker_run(*, conn=None) -> Dict[str, Any]:
     """Public accessor for the last `run_inactive_autoplay_tick` snapshot (GC-2608)."""
     data = _load_json(WORKER_LAST_KEY, conn=conn)

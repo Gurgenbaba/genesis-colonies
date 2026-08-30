@@ -96,47 +96,50 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         (GC-PERF-AUTOPLAY-001 inactive_autoplay) so HTTP writers are not blocked
         for the entire multi-player economy pass.
         """
-        if _over_budget():
-            _worker_log(f"post-maint skip={name} budget_sec={budget_sec}")
+        from .tx_context import tx_context
+
+        with tx_context(sub_owner="fleet_post_maintenance", stage=str(name)):
+            if _over_budget():
+                _worker_log(f"post-maint skip={name} budget_sec={budget_sec}")
+                try:
+                    begin_write_transaction(conn)
+                    try:
+                        _record_stage_skip(conn, name)
+                        commit(conn)
+                    except Exception:
+                        rollback(conn)
+                        raise
+                except Exception:
+                    logger.exception(
+                        "post fleet maintenance skip-streak failed source=%s stage=%s", source, name
+                    )
+                return
+            stage_t0 = time.perf_counter()
             try:
-                begin_write_transaction(conn)
-                try:
-                    _record_stage_skip(conn, name)
-                    commit(conn)
-                except Exception:
-                    rollback(conn)
-                    raise
-            except Exception:
-                logger.exception(
-                    "post fleet maintenance skip-streak failed source=%s stage=%s", source, name
-                )
-            return
-        stage_t0 = time.perf_counter()
-        try:
-            if not manage_tx:
-                fn()
-                begin_write_transaction(conn)
-                try:
-                    _record_stage_success(conn, name)
-                    commit(conn)
-                except Exception:
-                    rollback(conn)
-                    raise
-            else:
-                begin_write_transaction(conn)
-                try:
+                if not manage_tx:
                     fn()
-                    _record_stage_success(conn, name)
-                    commit(conn)
-                except Exception:
-                    rollback(conn)
-                    raise
-            hold_ms = (time.perf_counter() - stage_t0) * 1000.0
-            _worker_log(
-                f"post-maint stage={name} hold_ms={hold_ms:.0f} manage_tx={int(manage_tx)}"
-            )
-        except Exception:
-            logger.exception("post fleet maintenance stage failed source=%s stage=%s", source, name)
+                    begin_write_transaction(conn)
+                    try:
+                        _record_stage_success(conn, name)
+                        commit(conn)
+                    except Exception:
+                        rollback(conn)
+                        raise
+                else:
+                    begin_write_transaction(conn)
+                    try:
+                        fn()
+                        _record_stage_success(conn, name)
+                        commit(conn)
+                    except Exception:
+                        rollback(conn)
+                        raise
+                hold_ms = (time.perf_counter() - stage_t0) * 1000.0
+                _worker_log(
+                    f"post-maint stage={name} hold_ms={hold_ms:.0f} manage_tx={int(manage_tx)}"
+                )
+            except Exception:
+                logger.exception("post fleet maintenance stage failed source=%s stage=%s", source, name)
 
     try:
         def _hof() -> None:
@@ -256,8 +259,8 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
             if debris_expired:
                 _worker_log(f"debris expired={debris_expired}")
 
-        _run_stage("hof", _hof)
-        _run_stage("combat_bots", _combat_bots)
+        _run_stage("hof", _hof, manage_tx=False)
+        _run_stage("combat_bots", _combat_bots, manage_tx=False)
         # Materialize scheduled LiveOps windows before WB/asteroid ticks read factors.
         _run_stage("liveops_schedules", _liveops_schedules)
         _run_stage("world_boss", _world_boss)
@@ -425,6 +428,47 @@ def get_fleet_worker_status(conn=None) -> Dict[str, Any]:
     }
 
 
+def get_fleet_worker_fresh_max_age_sec() -> float:
+    """GC-PROD-SQLITE-STALL-001A: fleet heartbeat freshness window (default 2× interval)."""
+    raw = os.environ.get("GC_FLEET_WORKER_FRESH_SEC", "").strip()
+    if not raw:
+        return max(10.0, float(FLEET_WORKER_INTERVAL_SEC) * 2.0)
+    try:
+        return max(5.0, float(raw))
+    except (TypeError, ValueError):
+        return max(10.0, float(FLEET_WORKER_INTERVAL_SEC) * 2.0)
+
+
+def is_fleet_worker_heartbeat_fresh(
+    conn=None,
+    *,
+    now: Optional[float] = None,
+    max_age_sec: Optional[float] = None,
+) -> bool:
+    """
+    True when the last successful fleet_worker run is recent.
+
+    Independent of queue-tick health. Missing/stale ⇒ poll may run a
+    player-scoped ``process_fleet_tick`` safety-net.
+    """
+    data = _load_last_run_record(conn=conn)
+    if not data:
+        return False
+    if not data.get("ok"):
+        return False
+    try:
+        last_at = float(data.get("at") or 0)
+    except (TypeError, ValueError):
+        return False
+    if last_at <= 0:
+        return False
+    age_limit = float(
+        max_age_sec if max_age_sec is not None else get_fleet_worker_fresh_max_age_sec()
+    )
+    now_f = float(now if now is not None else time.time())
+    return (now_f - last_at) <= age_limit
+
+
 def run_fleet_worker(
     *,
     source: str = "cron",
@@ -445,14 +489,16 @@ def run_fleet_worker(
             auto_attack: Dict[str, Any] = {}
             try:
                 from .world_boss import tick_world_boss_auto_attacks
+                from .tx_context import tx_context
 
-                begin_write_transaction(conn)
-                try:
-                    auto_attack = tick_world_boss_auto_attacks(conn=conn)
-                    commit(conn)
-                except Exception:
-                    rollback(conn)
-                    raise
+                with tx_context(sub_owner="world_boss_auto"):
+                    begin_write_transaction(conn)
+                    try:
+                        auto_attack = tick_world_boss_auto_attacks(conn=conn)
+                        commit(conn)
+                    except Exception:
+                        rollback(conn)
+                        raise
                 if int(auto_attack.get("fired") or 0) > 0 or int(auto_attack.get("stopped") or 0) > 0:
                     _worker_log(
                         f"world-boss auto (idle-skip) fired={auto_attack.get('fired')} "
@@ -511,9 +557,12 @@ def run_fleet_worker(
 
         if persist:
             try:
-                begin_write_transaction(conn)
-                record_fleet_worker_result(result, source=source, conn=conn)
-                commit(conn)
+                from .tx_context import tx_context
+
+                with tx_context(sub_owner="fleet_worker_result_persist"):
+                    begin_write_transaction(conn)
+                    record_fleet_worker_result(result, source=source, conn=conn)
+                    commit(conn)
             except Exception:
                 try:
                     rollback(conn)
@@ -543,9 +592,12 @@ def run_fleet_worker(
         }
         if persist:
             try:
-                begin_write_transaction(conn)
-                record_fleet_worker_result(result, source=source, conn=conn)
-                commit(conn)
+                from .tx_context import tx_context
+
+                with tx_context(sub_owner="fleet_worker_result_persist"):
+                    begin_write_transaction(conn)
+                    record_fleet_worker_result(result, source=source, conn=conn)
+                    commit(conn)
             except Exception:
                 try:
                     rollback(conn)
