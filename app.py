@@ -1421,7 +1421,16 @@ def _load_page_live_context(
                         user_id,
                         src,
                     )
+                    # Postgres aborts the whole TX on error; without rollback every
+                    # later read on this conn raises InFailedSqlTransaction → HTTP 500.
+                    try:
+                        from game.db import rollback as _rollback_conn
+
+                        _rollback_conn(conn)
+                    except Exception:
+                        pass
                     try_visit = False
+                    wrote_live = False
 
             if wrote_live or try_visit:
                 commit(conn)

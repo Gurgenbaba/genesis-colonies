@@ -1191,13 +1191,15 @@ def list_lobby_battles(*, conn, viewer_id: Optional[int] = None, limit: int = LO
 def list_my_battles(user_id: int, *, conn, limit: int = HISTORY_LIMIT) -> List[Dict[str, Any]]:
     if not case_battles_schema_ready(conn):
         return []
+    # PG requires ORDER BY exprs in SELECT for DISTINCT; GROUP BY is portable.
     rows = conn.execute(
         """
-        SELECT DISTINCT b.id
+        SELECT b.id
         FROM case_battles b
         JOIN case_battle_players p ON p.battle_id = b.id
         WHERE p.user_id = ?
-        ORDER BY COALESCE(b.finished_at, b.started_at, b.created_at) DESC
+        GROUP BY b.id
+        ORDER BY MAX(COALESCE(b.finished_at, b.started_at, b.created_at)) DESC
         LIMIT ?;
         """,
         (int(user_id), int(limit),),
