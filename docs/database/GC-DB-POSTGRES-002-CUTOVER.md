@@ -16,8 +16,9 @@
 | No live switch in this ticket | Runbook + config matrix only |
 | No Railway mutation here | Operators execute later under explicit approvals |
 | SQLite volume retained | Keep `/data` mounted through acceptance window |
-| Dual-process switch | Web (gunicorn) + maintenance sidecar share one container env — they switch together |
-| Case-B rollback | After Postgres accepts live player writes, pointing back at old SQLite is **unsafe** |
+| Dual-process switch | Web (gunicorn) + maintenance sidecar share one container env — they switch backend together |
+| Write-Open Gate | ★ explicit milestone **after** read-only PG smoke; until then **zero** PG mutations (no sidecar, no cron, no smoke writes) |
+| Case-B rollback | After **any** write to the final imported Postgres target, pointing back at old SQLite is **unsafe** — not only “live player writes” |
 
 Prerequisite evidence (001, not re-proven here):
 
@@ -120,7 +121,7 @@ Silent fallback does **not** exist: `GC_DB_BACKEND=postgres` without a usable po
 | Process | How it runs today | Cutover note |
 |---------|-------------------|--------------|
 | Gunicorn web | Same container | Reads `GC_DB_BACKEND` / `DATABASE_URL` at boot |
-| Maintenance sidecar | Same container, same env | Must see Postgres on same deploy restart |
+| Maintenance sidecar | Same container, same env | Switches backend with web, but **stays off** until ★ Write-Open Gate |
 | Railway Postgres plugin | Separate data service | Provisioned before import; not switched by app vars alone |
 | Dedicated `run_game_worker` | **Not** in current prod topology | Do not introduce on cutover day |
 
@@ -141,7 +142,9 @@ There is **one** Railway web service. Variable change + redeploy/restart applies
 | Volume `/data` | **mounted** |
 | Proof | `GET /health` → `checks.database.backend == "sqlite"` |
 
-#### FUTURE POSTGRES (after approved switch)
+#### FUTURE POSTGRES — first boot (backend switch, **Write-Open Gate not yet passed**)
+
+Traffic still held. **No async writers.** Final imported PG must stay mutation-free.
 
 | Variable | Value |
 |----------|-------|
@@ -150,12 +153,22 @@ There is **one** Railway web service. Variable change + redeploy/restart applies
 | `GC_ALLOW_POSTGRES_PROD` | `1` |
 | `GC_DB_PATH` | keep `/data/game.db` (volume retained; not authoritative) |
 | Pool knobs | defaults unless ops tunes under load |
-| `GUNICORN_*` | keep `gthread` / `1` / `4` for first acceptance window |
-| `GC_MAINTENANCE_WORKER` | `1` (re-enable after pre-switch smoke) |
+| `GUNICORN_*` | keep `gthread` / `1` / `4` |
+| `GC_MAINTENANCE_WORKER` | **`0`** — sidecar **off** until Write-Open Gate |
+| `GC_EMBEDDED_CRON` | **`0`** — no in-process bag |
 | Volume `/data` | **still mounted** (backups, probes, rollback artifacts) |
-| Proof | `/health` → `backend == "postgres"`; config errors empty; no SQLite file opened as game DB |
+| Proof | `/health` → `backend == "postgres"`; config errors empty; logs show **no** `[maintenance-worker] started` |
 
-#### ROLLBACK SQLITE (only Case A — before live PG writes, or after proven zero PG gameplay writes)
+#### FUTURE POSTGRES — after ★ Write-Open Gate (controlled writes allowed)
+
+| Variable | Value |
+|----------|-------|
+| (same as first boot) | … |
+| `GC_MAINTENANCE_WORKER` | `1` — re-enable sidecar |
+| `GC_EMBEDDED_CRON` | `0` (sidecar owns bag) |
+| Traffic | controlled test identity first, then ★ reopen players |
+
+#### ROLLBACK SQLITE (Case A only — **before any write** to final imported Postgres)
 
 | Variable | Value |
 |----------|-------|
@@ -166,7 +179,7 @@ There is **one** Railway web service. Variable change + redeploy/restart applies
 | Redeploy/restart | required |
 | Proof | `/health` → `backend == "sqlite"`; integrity of restored file |
 
-**Case B** (Postgres already took live writes): do **not** use this matrix as a data rollback. See §5.
+**Case B** (Postgres already took **any** write after final import — sidecar tick, cron, smoke mutation, or player action): do **not** use this matrix as a data rollback. See §5.
 
 ---
 
@@ -187,7 +200,7 @@ There is **one** Railway web service. Variable change + redeploy/restart applies
 9. Freeze smoke checklist (§2 PRE-SWITCH SMOKE) and abort thresholds (§4).  
 10. ★ Explicit go/no-go for entering WRITE FREEZE.
 
-**Abort thresholds (pre-switch):** any failed integrity check; import row mismatch > 0; skipped application table; sequence behind MAX; `/health` not postgres during PG smoke; any P0 gameplay smoke failure; unexplained error spike.
+**Abort thresholds (pre-switch):** any failed integrity check; import row mismatch > 0; skipped application table; sequence behind MAX; `/health` not postgres during read-only smoke; any unexpected PG mutation during read-only phase; unexplained error spike.
 
 ### WRITE FREEZE
 
@@ -256,32 +269,50 @@ Require:
 
 Abort on any mismatch.
 
-### PRE-SWITCH SMOKE (writes still frozen)
+### PRE-SWITCH SMOKE (read-only — **no PG mutations**)
 
-Run app **against Postgres** while public writes remain frozen (temporary process or staging URL — **not** opening players yet):
+Run production web process against the **final imported** Postgres target while traffic remains held and **all writers remain off** (`GC_MAINTENANCE_WORKER=0`, `GC_EMBEDDED_CRON=0`, no internal cron POSTs).
+
+**Hard rule:** this phase is **read-only**. Do **not**:
+
+- start the maintenance sidecar or embedded cron
+- fire `POST /api/internal/cron/*`
+- force queue/fleet maintenance ticks
+- run building/research/shipyard actions, fleet sends, or any other gameplay mutation
+- open player traffic
 
 | Check | Expect |
 |-------|--------|
 | `/healthz` | alive |
 | `/health` | ok, `checks.database.backend=postgres`, config errors empty |
+| Logs | entrypoint migrate ok; **no** `[maintenance-worker] started` |
 | Login / session | ok (controlled identity) |
 | Overview | 200 |
-| `/api/game-state` | ok |
-| Buildings / Research / Shipyard | render |
-| Fleet / Galaxy | render |
-| Ranking / Alliance | render |
-| World Boss / HoF | render |
-| Queue + fleet maintenance bag (single forced tick if needed) | ok, no crash |
+| `/api/game-state` | ok (read) |
+| Buildings / Research / Shipyard | render (GET only) |
+| Fleet / Galaxy | render (GET only) |
+| Ranking / Alliance | render (GET only) |
+| World Boss / HoF | render (GET only) |
 
-★ Only after **all** green: approve SWITCH.
+Abort on any unexpected PG `INSERT`/`UPDATE`/`DELETE` during smoke (query logs or row-count spot checks on hot tables if needed).
+
+★ Only after **all** read-only checks green: approve **Write-Open Gate** (§2 WRITE OPEN).
 
 ### SWITCH (design only here — see §3)
 
-Minimal env change + restart. Do not execute in this ticket.
+Minimal env change + restart with sidecar/cron **still off**. Do not execute in this ticket.
+
+### WRITE OPEN (after read-only smoke only)
+
+1. ★ Explicit operator approval — this closes Case A (SQLite rollback) permanently for this cutover attempt unless PG is wiped and re-imported from `cutover-final.db`.  
+2. Set `GC_MAINTENANCE_WORKER=1` (sidecar on); keep `GC_EMBEDDED_CRON=0`.  
+3. Redeploy/restart; confirm `[maintenance-worker] started` and heartbeat age OK.  
+4. Run **controlled mutations** on a test identity only (building/research action, queue observation, fleet read-after-sidecar-tick if needed).  
+5. ★ Only after controlled mutations green: reopen player traffic / lift public maintenance.
 
 ### POST-SWITCH (see §4)
 
-Timed observation; controlled test identity for mutations; then ★ lift freeze / reopen traffic.
+Timed observation after Write-Open Gate; then ★ declare acceptance at T+60.
 
 ---
 
@@ -298,9 +329,10 @@ On the **web** Railway service (single service topology):
 | Set | `GC_ALLOW_POSTGRES_PROD=1` |
 | Keep | `GC_DB_PATH=/data/game.db` |
 | Keep | `GUNICORN_WORKER_CLASS=gthread`, `GUNICORN_WORKERS=1`, `GUNICORN_THREADS=4` |
-| Restore after freeze | `GC_MAINTENANCE_WORKER=1` (sidecar on) |
+| **Keep off until Write-Open Gate** | `GC_MAINTENANCE_WORKER=0`, `GC_EMBEDDED_CRON=0` |
+| After ★ Write-Open Gate | `GC_MAINTENANCE_WORKER=1` (sidecar on); traffic still held until controlled mutations pass |
 
-Atomic from operator view: save variables → redeploy/restart **one** web service → entrypoint migrates → gunicorn + sidecar boot on Postgres.
+Atomic from operator view: save PG backend variables → redeploy/restart **one** web service → entrypoint migrates → gunicorn boots on Postgres **without** sidecar → read-only smoke → ★ Write-Open Gate → enable sidecar → controlled mutations → reopen traffic.
 
 ### Startup proof (must capture)
 
@@ -314,7 +346,9 @@ Require:
 - HTTP 200 on both (after warm start)  
 - `checks.database.backend` === `"postgres"`  
 - `checks.config.errors` empty (proves allow-flag accepted)  
-- Railway logs: entrypoint migrate ok; `[maintenance-worker] started` when sidecar enabled  
+- Railway logs: entrypoint migrate ok  
+- During read-only phase: **no** `[maintenance-worker] started`  
+- After Write-Open Gate only: `[maintenance-worker] started` + heartbeat OK  
 - **No** log line implying SQLite game DB open as backend  
 
 ### Prove SQLite fallback did NOT occur
@@ -334,9 +368,9 @@ Require:
 
 | Checkpoint | Actions |
 |------------|---------|
-| **T+0** | `/healthz`, `/health` backend=postgres; login; game-state; logs clean |
-| **T+5m** | Galaxy, fleet, queues, ranking; worker heartbeat age OK |
-| **T+15m** | Alliance, world boss, HoF; controlled building/research action on **test** identity |
+| **T+0** | Clock starts at ★ Write-Open Gate (not at backend env flip). `/healthz`, `/health` backend=postgres; login; game-state; logs clean |
+| **T+5m** | Galaxy, fleet, queues, ranking; sidecar heartbeat age OK |
+| **T+15m** | Alliance, world boss, HoF; controlled building/research action on **test** identity (post Write-Open only) |
 | **T+30m** | Error rate, pool timeouts, deadlock search in logs; no worker crash loop |
 | **T+60m** | ★ Go/no-go to declare acceptance; keep SQLite volume |
 
@@ -367,9 +401,11 @@ On FAIL before declaring acceptance: enter emergency maintenance; follow §5.
 
 ## 5. Rollback
 
-### Case A — Failure **before** Postgres accepts live player writes
+### Case A — Failure **before Write-Open Gate** (zero PG mutations on final import)
 
-Safe: SQLite remains (or is restored as) authoritative.
+Safe **only** while the final imported Postgres target has received **no writes at all** — including sidecar/maintenance ticks, internal cron POSTs, smoke mutations, or player actions. Any such write makes SQLite potentially stale; treat as Case B.
+
+Safe rollback path: SQLite remains (or is restored from `cutover-final.db`) authoritative.
 
 1. Maintenance / traffic hold.  
 2. Set CURRENT SQLITE matrix (`GC_DB_BACKEND=sqlite`, clear allow flag, keep `GC_DB_PATH`).  
@@ -379,9 +415,9 @@ Safe: SQLite remains (or is restored as) authoritative.
 6. Re-enable maintenance worker.  
 7. ★ Reopen traffic.
 
-### Case B — Failure **after** Postgres has accepted live writes
+### Case B — Failure **after Write-Open Gate** or after **any** PG write on final import
 
-**Do not** point the app back at the old SQLite file and reopen. That loses or diverges writes.
+**Do not** point the app back at the old SQLite file and reopen. That loses or diverges writes — even if “only” a maintenance bag tick or smoke mutation ran before players returned.
 
 1. ★ Emergency maintenance / write freeze immediately.  
 2. Keep `GC_DB_BACKEND=postgres` (or stay down) until reconciliation plan exists.  
@@ -417,7 +453,7 @@ Commit only aggregate/sanitized evidence (counts, pass/fail, durations). Local r
 
 ### 2. Exact future PG configuration
 
-`GC_DB_BACKEND=postgres`, `DATABASE_URL=postgresql://…`, `GC_ALLOW_POSTGRES_PROD=1`, keep `GC_DB_PATH` + volume, same gunicorn topology, sidecar on after smoke.
+`GC_DB_BACKEND=postgres`, `DATABASE_URL=postgresql://…`, `GC_ALLOW_POSTGRES_PROD=1`, keep `GC_DB_PATH` + volume, same gunicorn topology; **sidecar off** until ★ Write-Open Gate after read-only smoke.
 
 ### 3. Web/worker switch matrix
 
@@ -425,7 +461,7 @@ One Railway web service; gunicorn + maintenance sidecar share env; switch = vari
 
 ### 4. Cutover procedure
 
-PRE-CUTOVER → WRITE FREEZE → FINAL SNAPSHOT → POSTGRES PREP → FINAL IMPORT → PRE-SWITCH SMOKE → SWITCH → POST-SWITCH (§2–§4).
+PRE-CUTOVER → WRITE FREEZE → FINAL SNAPSHOT → POSTGRES PREP → FINAL IMPORT → SWITCH (sidecar off) → PRE-SWITCH SMOKE (read-only) → ★ WRITE OPEN → controlled mutations → reopen traffic → POST-SWITCH (§2–§4).
 
 ### 5. Write-freeze procedure
 
@@ -445,9 +481,11 @@ curl -sS https://www.genesis-colonies.de/health
 
 Plus sqlite3 PRAGMA/SHA256 on snapshot; importer report; controlled UI smoke.
 
-### 8. Post-switch smoke checklist
+### 8. Smoke checklists
 
-healthz/health, login, game-state, overview, buildings, research, shipyard, fleet, galaxy, ranking, alliance, world boss, HoF, queue/fleet maintenance, test-identity mutations.
+**Pre-switch (read-only):** healthz/health, login, game-state reads, overview/buildings/research/shipyard/fleet/galaxy/ranking/alliance/world boss/HoF renders — **no** maintenance ticks, **no** mutations.
+
+**After Write-Open Gate:** sidecar heartbeat, controlled test-identity mutations, queue/fleet observation.
 
 ### 9. Monitoring thresholds
 
@@ -455,28 +493,32 @@ T+0/5/15/30/60; FAIL on health not postgres, 5xx spike, pool/deadlock storms, cr
 
 ### 10. Rollback procedure
 
-Case A → SQLite matrix + optional file restore. Case B → freeze, PG backup, reconcile; **no** naive SQLite re-point (§5).
+Case A → SQLite matrix + optional file restore (**only before Write-Open Gate / zero PG writes**). Case B → freeze, PG backup, reconcile; **no** naive SQLite re-point (§5).
 
 ### 11. Estimated maintenance window
 
-| Phase | Estimate |
-|-------|----------|
+**Planning estimate only.** Do not treat these numbers as committed SLA until the full Railway Postgres path (provision → migrate → import → read-only smoke → Write-Open → sidecar → controlled mutations) has been **timed once end-to-end** on a disposable Railway-like rehearsal.
+
+| Phase | Planning estimate |
+|-------|-------------------|
 | Announce + freeze + snapshot | 15–30 min |
 | Migrate + import (~427k rows class) | 15–45 min (network-bound) |
-| Pre-switch smoke | 20–40 min |
-| Switch + T+60 observation | 60 min |
-| **Player-visible freeze (until reopen)** | **≈ 60–120 min** (buffer for abort) |
+| Backend switch + read-only smoke | 20–40 min |
+| Write-Open + controlled mutations + T+60 observation | 60+ min |
+| **Player-visible freeze (until reopen)** | **≈ 60–120 min** (buffer for abort; **revise after rehearsal**) |
 
 ### 12. Steps requiring explicit human approval (★)
 
 1. Enter write freeze / public maintenance  
 2. Provision/use production Postgres + handle secrets  
 3. Approve final import target wipe  
-4. Approve production env switch (`GC_DB_BACKEND` / `DATABASE_URL` / `GC_ALLOW_POSTGRES_PROD`)  
-5. Lift freeze / reopen traffic  
-6. Declare T+60 acceptance  
-7. Any Case B reconciliation strategy  
-8. Any future delete/detach of SQLite volume (forbidden in initial acceptance; separate ticket)
+4. Approve production env switch (`GC_DB_BACKEND` / `DATABASE_URL` / `GC_ALLOW_POSTGRES_PROD`) with sidecar/cron **off**  
+5. Approve **Write-Open Gate** (closes Case A rollback for this attempt)  
+6. Re-enable sidecar + controlled test mutations  
+7. Lift freeze / reopen player traffic  
+8. Declare T+60 acceptance  
+9. Any Case B reconciliation strategy  
+10. Any future delete/detach of SQLite volume (forbidden in initial acceptance; separate ticket)
 
 ---
 
