@@ -63,30 +63,19 @@ Siehe `game.config.get_perf_budgets()` / [ARCHITECTURE.md](ARCHITECTURE.md). Bas
 | GC-PERF-AUTO-007B | Evidence-driven cuts (page_context double-count fixed) | 🔄 partial — more after live spikes |
 | GC-PERF-FEEL-001 | Shell background WebP weight | ✅ |
 
-## Ticket-Serie B — Postgres Cutover (offen)
+## Ticket-Serie B — Postgres Cutover
 
-Reihenfolge verbindlich:
+Live cutover 2026-08-31: Postgres authoritative in production. Runbook: [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
 
-```text
-Schema-Port
-→ Postgres-Parität
-→ Datenimporter
-→ Railway-Staging
-→ Lasttest
-→ Backup + Wartungsfenster
-→ Production-Cutover
-→ Beobachtung
-→ main.js wirklich extrahieren (GC-PERF-JS-002)
-```
+**Next:** PostgreSQL hotpath highspeed — [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md) (first code slice **001A Galaxy Bulk**).
 
 | Ticket | Inhalt | Status |
 |--------|--------|--------|
 | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** | PostgreSQL-Schema & Migration Parity | ✅ |
 | **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A–F (SQLite); PG opt-in |
-| **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** | SQLite→Postgres Importer + Invarianten (Script+Doc; kein Cutover) | 🔄 |
-| **GC-PERF-PG-STAGING-001** | Railway Staging + Worker + Smoke | 📋 |
-| **GC-PERF-PG-BASELINE-001** | SQLite vs PG Staging Metriken | 📋 |
-| **GC-PERF-PG-CUTOVER-001** | Wartungsfenster, Import, Rollback-Plan | 📋 |
+| **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** / cutover import | SQLite→Postgres Importer + Live Cutover | ✅ live |
+| **[GC-PG-HIGHSPEED-001](GC_PG_HIGHSPEED_001.md)** | PG hotpath highspeed umbrella (001A Galaxy first) | 📋 |
+| **GC-PERF-WRITE-MIN-001** | Materialize-on-mutation / rate boundaries | 📋 after 001A–C |
 | **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | ✅ shipyard + defense page binders; page-scoped script load |
 | **GC-PERF-OVERVIEW-TTFB-001** | `g.gc_fleet_hud` / `g.gc_world_boss_*` stash for inject_globals | ✅ |
 | **GC-PERF-EFFECT-CACHE-001** | EffectResolver request-scoped Cache | ✅ |
