@@ -20,7 +20,7 @@
 | Diet-State / Poll-Delta | ✅ Client `?since=` + default-on (**GC-PERF-LIVE-001**); server early-exit (**GC-PERF-STATE-004**) |
 | Lazy-Persistierung / Cache / Lasttest-Tool | ✅ Basis |
 | PostgreSQL-Schema (alle Tabellen/Migrationen) | ✅ **GC-PERF-PG-SCHEMA-001** |
-| Backend-Parität auf leerer PG-DB | ✅ A–F SQLite (**GC-PERF-PG-PARITY-001**); PG Staging wenn URL gesetzt |
+| Backend-Parität auf leerer PG-DB | ✅ **GC-PERF-PG-PARITY-001** (SQLite + PG Staging; live cutover 2026-08-31) |
 | SQLite→Postgres Datenimport | 🔄 Script+Spec (**GC-PERF-PG-MIGRATE-001**) — kein Cutover |
 | Railway Staging + Smoke + Baseline | ❌ |
 | Production-Cutover | ❌ |
@@ -72,7 +72,7 @@ Live cutover 2026-08-31: Postgres authoritative in production. Runbook: [GC-DB-P
 | Ticket | Inhalt | Status |
 |--------|--------|--------|
 | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** | PostgreSQL-Schema & Migration Parity | ✅ |
-| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A–F (SQLite); PG opt-in |
+| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität (kritische Systeme) | ✅ live Postgres |
 | **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** / cutover import | SQLite→Postgres Importer + Live Cutover | ✅ live |
 | **[GC-PG-HIGHSPEED-001](GC_PG_HIGHSPEED_001.md)** | PG hotpath highspeed umbrella (001A Galaxy first) | 📋 |
 | **GC-PERF-WRITE-MIN-001** | Materialize-on-mutation / rate boundaries | 📋 after 001A–C |

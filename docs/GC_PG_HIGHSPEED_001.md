@@ -14,7 +14,7 @@ Genesis Colonies on PostgreSQL must perform **at least as well as** the previous
 - **No disabling features** as a permanent performance solution (incident soft-off only, time-boxed).
 - Optimization principle: remove unnecessary **roundtrips**, **writes**, **connection churn**, and **lock contention**. Do **not** weaken transactional correctness for real mutations.
 
-> PostgreSQL removed the wrong bottleneck (global SQLite writer lock). Event-driven / lazy state removes the remaining unnecessary work.
+> PostgreSQL removed the global SQLite writer bottleneck. Event-driven / lazy state removes the remaining unnecessary work.
 
 ---
 
@@ -170,6 +170,24 @@ ONE request connection
 
 Prefer **several clear bulk queries** over one unmaintainable mega-JOIN. **Zero writes** on Galaxy GET.
 
+### Write-free Galaxy GET (required for 001A)
+
+Today `get_debris_for_system()` calls `expire_due_debris_fields(...)` on the **read** path and can physically `DELETE` expired debris during a Galaxy GET. That conflicts with **semantics frozen** + **acquisition-only change** + `writes=0`.
+
+**001A rule:**
+
+```text
+Visible debris semantics unchanged
+  → expired fields are filtered out of the response (not shown)
+  → NO physical DELETE / expire mutation on Galaxy GET
+
+Physical cleanup
+  → only the existing maintenance debris stage
+     (fleet_worker post-maint → expire_due_debris_fields)
+```
+
+Players must still **not see** expired debris on Galaxy. Persistence cleanup stays on the worker — Galaxy does not become a second expire owner.
+
 ### Semantics frozen
 
 Galaxy must still show the same facts as today (no gameplay change):
@@ -178,11 +196,11 @@ Galaxy must still show the same facts as today (no gameplay change):
 - Activity / inactivity presentation  
 - Alliance  
 - Protection / attackability gates already in response  
-- Expedition / POI / pirate / debris fields as currently composed  
+- Expedition / POI / pirate / debris fields as currently **visible** (expired hidden; no read-path DELETE)  
 - Fleet / spy / action affordances already in response  
 - Existing i18n / UI payload keys  
 
-Only **data acquisition** is batched.
+Only **data acquisition** is batched (plus the debris read/expire split above so GET is write-free).
 
 ### Test gates (001A)
 
@@ -195,7 +213,8 @@ Postgres path: PASS (when GC_TEST_POSTGRES_URL / dual path available)
 SQL statements:     required < 100   (stretch < 50)
 DB connection opens: required <= 3   (target 1)
 Writes on Galaxy GET: 0
-Repeated per-planet owner/alliance queries: 0
+  including: no expire_due_debris_fields / DELETE from get_debris_for_system
+Repeated per-planet owner/alliance/score/protection/pirate-profile queries: 0
 
 No: LockNotAvailable · InFailedSqlTransaction · deadlock · pool exhaustion
 ```
@@ -209,6 +228,7 @@ Fixtures / cases:
 - inactive player  
 - protected player  
 - denser populated system  
+- system with **expired** debris row still in DB → GET hides it, row remains until maint expire  
 
 Example assertions:
 
@@ -222,13 +242,16 @@ assert write_count == 0
 
 1. Start from `list_system` + callers; pass `conn` everywhere; kill orphan `db()` / `get_galaxy_max()` without conn on this path.  
 2. Prefetch maps once per request; slot loop becomes pure CPU.  
-3. Reuse existing owners (`alliance.are_players_allied` → batch variant **in alliance owner** if needed — no duplicate alliance truth).  
-4. Keep Regel 19: extend owner, delete replaced per-slot query helpers if unused.  
-5. Measure with existing request perf (`sql_count` / `db_connection_open_count`) — do not invent a second metrics stack.
+3. Primary N+1 hotspots to collapse: per-slot pirate AI profile, noob protection, planet score, and other slot enrichers — these dominate the ~500 queries.  
+4. `get_debris_for_system`: stop calling `expire_due_debris_fields` on GET; filter `expires_at <= now` (or equivalent) in the SELECT / Python. Maint worker remains sole physical expire owner.  
+5. Reuse existing owners (`alliance.are_players_allied` → batch variant **in alliance owner** if needed — no duplicate alliance truth).  
+6. Keep Regel 19: extend owner, delete replaced per-slot query helpers if unused.  
+7. Measure with existing request perf (`sql_count` / `db_connection_open_count`) — do not invent a second metrics stack.
 
 ### Done when
 
 - [ ] Gates above green on SQLite CI path; PG when URL set  
+- [ ] Galaxy GET write_count == 0 (debris expire only on maint)  
 - [ ] Production Admin spike: Galaxy SQL &lt;100, opens ≈1–3, p95 trending &lt;1s  
 - [ ] No feature / response regression called out in Galaxy contract tests  
 
