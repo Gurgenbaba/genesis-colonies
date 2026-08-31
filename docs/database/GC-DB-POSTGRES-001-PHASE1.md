@@ -162,11 +162,11 @@ Preferred rollback before reopen: do not switch; SQLite remains authoritative. N
 
 ---
 
-## 9. PR preparation status
+## 9. Status (closed)
 
-Hardening changes were committed and pushed on `audit/gc-db-postgres-001-phase1`. Production-derived databases/raw artifacts and local Phase-1 helper scripts remain outside the commit.
+Hardening merged via **PR #127** → `main` @ `7af2cd2b`. Production-derived databases/raw artifacts and local Phase-1 helper scripts remain outside Git.
 
-**Ready for Hardening PR review.** This PR is readiness/hardening only — **no Railway cutover, no production DB switch, no volume removal**.
+**GC-DB-POSTGRES-001 closed.** Next: [GC-DB-POSTGRES-002-CUTOVER.md](GC-DB-POSTGRES-002-CUTOVER.md) (preparation/rehearsal only — **no** automatic Railway cutover).
 
 ---
 
