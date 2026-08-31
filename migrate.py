@@ -274,14 +274,18 @@ def _contains_explicit_transaction(statements: List[str]) -> bool:
     """
     Prüft, ob Migration selbst BEGIN/COMMIT/ROLLBACK nutzt.
     Wenn ja, machen wir KEIN eigenes BEGIN.
+
+    Word-boundary match only — column names like ``forge_cores_committed``
+    must not suppress the migrate wrapper transaction (PG SAVEPOINT needs it).
     """
+    import re
+
     text = "\n".join(statements).upper()
-    # BEGIN, BEGIN IMMEDIATE, BEGIN TRANSACTION etc.
-    if "BEGIN" in text:
-        return True
-    if "COMMIT" in text or "ROLLBACK" in text:
-        return True
-    return False
+    return bool(
+        re.search(r"\bBEGIN\b", text)
+        or re.search(r"\bCOMMIT\b", text)
+        or re.search(r"\bROLLBACK\b", text)
+    )
 
 
 # ----------------------------------------

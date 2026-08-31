@@ -7,7 +7,7 @@ import sqlite3
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
+from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback, table_exists
 from ..mine_evolution import roman_numeral
 from ..models import db, get_planet_buildings
 from .formulas import (
@@ -33,11 +33,7 @@ from .formulas import (
 
 def schema_ready(conn: sqlite3.Connection) -> bool:
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planet_shipyard_ascension' LIMIT 1;"
-        )
-        return cur.fetchone() is not None
+        return table_exists(conn, "planet_shipyard_ascension")
     except Exception:
         return False
 
@@ -162,7 +158,7 @@ def grant_forge_cores(player_id: int, amount: int, *, conn: sqlite3.Connection, 
         INSERT INTO player_forge_cores (player_id, forge_cores, updated_at)
         VALUES (?, ?, ?)
         ON CONFLICT(player_id) DO UPDATE SET
-            forge_cores = forge_cores + excluded.forge_cores,
+            forge_cores = player_forge_cores.forge_cores + excluded.forge_cores,
             updated_at = excluded.updated_at;
         """,
         (int(player_id), amt, ts),

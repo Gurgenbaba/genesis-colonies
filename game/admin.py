@@ -90,12 +90,11 @@ def _parse_float(raw: Any, default: Optional[float] = None) -> Optional[float]:
 
 
 def _table_exists(cur: sqlite3.Cursor, name: str) -> bool:
+    # Owner: game.db.table_exists (PG-safe). Never query sqlite_master on Postgres.
     try:
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;",
-            (name,),
-        )
-        return cur.fetchone() is not None
+        from .db import table_exists
+
+        return table_exists(cur.connection, name)
     except Exception:
         return False
 

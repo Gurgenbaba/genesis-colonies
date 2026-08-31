@@ -6,7 +6,7 @@ import sqlite3
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
+from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback, table_exists
 from ..models import db, get_build_queue_rows, get_planet_buildings, try_spend_resources_conn
 from .formulas import (
     EVOLVABLE_MINES,
@@ -20,11 +20,7 @@ from .formulas import (
 
 def schema_ready(conn: sqlite3.Connection) -> bool:
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planet_mine_evolution' LIMIT 1;"
-        )
-        return cur.fetchone() is not None
+        return table_exists(conn, "planet_mine_evolution")
     except Exception:
         return False
 

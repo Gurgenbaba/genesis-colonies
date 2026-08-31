@@ -338,18 +338,18 @@ def _normalize_payload(data: Optional[dict]) -> Dict[str, int]:
 def _total_score_sql(conn) -> str:
     parts = []
     if column_exists(conn, "player_scores", "score_resources"):
-        parts.append("COALESCE(ps.score_resources, 0)")
+        parts.append("COALESCE(ps.score_resources, '0')")
     parts.extend(
         [
-            "COALESCE(ps.score_buildings, 0)",
-            "COALESCE(ps.score_research, 0)",
+            "COALESCE(ps.score_buildings, '0')",
+            "COALESCE(ps.score_research, '0')",
         ]
     )
     if column_exists(conn, "player_scores", "score_fleet"):
-        parts.append("COALESCE(ps.score_fleet, 0)")
-        parts.append("COALESCE(ps.score_defense, 0)")
+        parts.append("COALESCE(ps.score_fleet, '0')")
+        parts.append("COALESCE(ps.score_defense, '0')")
     if column_exists(conn, "player_scores", "score_planet_evolution"):
-        parts.append("COALESCE(ps.score_planet_evolution, 0)")
+        parts.append("COALESCE(ps.score_planet_evolution, '0')")
     return "(" + " + ".join(parts) + ")"
 
 
@@ -633,7 +633,7 @@ def ensure_player_score_row(player_id: int, conn=None) -> None:
         cur.execute(
             """
             INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
-            VALUES (?, 0, 0, 0, ?)
+            VALUES (?, '0', '0', '0', ?)
             ON CONFLICT(player_id) DO NOTHING;
             """,
             (int(player_id), int(time.time())),
@@ -647,19 +647,19 @@ def ensure_player_score_row(player_id: int, conn=None) -> None:
 
 def _resources_score_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_resources"):
-        return "COALESCE(ps.score_resources, 0) AS score_resources"
+        return "COALESCE(ps.score_resources, '0') AS score_resources"
     return "0 AS score_resources"
 
 
 def _fleet_defense_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_fleet"):
-        return "COALESCE(ps.score_fleet, 0) AS score_fleet, COALESCE(ps.score_defense, 0) AS score_defense"
+        return "COALESCE(ps.score_fleet, '0') AS score_fleet, COALESCE(ps.score_defense, '0') AS score_defense"
     return "0 AS score_fleet, 0 AS score_defense"
 
 
 def _evolution_score_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_planet_evolution"):
-        return "COALESCE(ps.score_planet_evolution, 0) AS score_planet_evolution"
+        return "COALESCE(ps.score_planet_evolution, '0') AS score_planet_evolution"
     return "0 AS score_planet_evolution"
 
 
@@ -715,8 +715,8 @@ def is_player_id_inactive(player_id: int, *, conn, now: Optional[int] = None) ->
 def _combat_ranking_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_combat"):
         return (
-            "COALESCE(ps.score_combat, 0) AS score_combat, "
-            "COALESCE(ps.score_destroyed, 0) AS score_destroyed"
+            "COALESCE(ps.score_combat, '0') AS score_combat, "
+            "COALESCE(ps.score_destroyed, '0') AS score_destroyed"
         )
     return "0 AS score_combat, 0 AS score_destroyed"
 
@@ -733,10 +733,10 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
         SELECT
             p.id AS player_id,
             p.name AS commander_name,
-            COALESCE(ps.score_total, 0) AS score_total,
+            COALESCE(ps.score_total, '0') AS score_total,
             {resources_sel},
-            COALESCE(ps.score_buildings, 0) AS score_buildings,
-            COALESCE(ps.score_research, 0) AS score_research,
+            COALESCE(ps.score_buildings, '0') AS score_buildings,
+            COALESCE(ps.score_research, '0') AS score_research,
             {extra},
             {evo},
             {combat_sel}
@@ -1360,7 +1360,7 @@ def get_sorted_alliance_ranking_entries(
                 a.tag AS alliance_tag,
                 a.name AS alliance_name,
                 COUNT(am.player_id) AS member_count,
-                COALESCE(SUM(COALESCE(ps.score_total, 0)), 0) AS alliance_score
+                COALESCE(SUM(CAST(COALESCE(ps.score_total, '0') AS NUMERIC)), 0) AS alliance_score
             FROM alliances a
             INNER JOIN alliance_members am ON am.alliance_id = a.id
             LEFT JOIN player_scores ps ON ps.player_id = am.player_id
@@ -1438,7 +1438,7 @@ def get_player_alliance_ranking_snapshot(
             """
             SELECT
                 COUNT(am.player_id) AS member_count,
-                COALESCE(SUM(COALESCE(ps.score_total, 0)), 0) AS alliance_score
+                COALESCE(SUM(CAST(COALESCE(ps.score_total, '0') AS NUMERIC)), 0) AS alliance_score
             FROM alliance_members am
             LEFT JOIN player_scores ps ON ps.player_id = am.player_id
             WHERE am.alliance_id = ?
@@ -1454,7 +1454,7 @@ def get_player_alliance_ranking_snapshot(
             FROM (
                 SELECT
                     a.id AS alliance_id,
-                    COALESCE(SUM(COALESCE(ps.score_total, 0)), 0) AS alliance_score
+                    COALESCE(SUM(CAST(COALESCE(ps.score_total, '0') AS NUMERIC)), 0) AS alliance_score
                 FROM alliances a
                 INNER JOIN alliance_members am ON am.alliance_id = a.id
                 LEFT JOIN player_scores ps ON ps.player_id = am.player_id
@@ -1510,10 +1510,10 @@ def _get_sorted_ranking_entries_enriched_sql(
         SELECT
             p.id AS player_id,
             p.name AS commander_name,
-            COALESCE(ps.score_total, 0) AS score_total,
+            COALESCE(ps.score_total, '0') AS score_total,
             {resources_sel},
-            COALESCE(ps.score_buildings, 0) AS score_buildings,
-            COALESCE(ps.score_research, 0) AS score_research,
+            COALESCE(ps.score_buildings, '0') AS score_buildings,
+            COALESCE(ps.score_research, '0') AS score_research,
             {extra},
             {evo},
             {combat_sel},
@@ -1531,8 +1531,8 @@ def _get_sorted_ranking_entries_enriched_sql(
               AND u.username IN ('gc_combat_bot_alpha', 'gc_combat_bot_beta')
         )
         ORDER BY {total_expr} DESC,
-                 COALESCE(ps.score_buildings, 0) DESC,
-                 COALESCE(ps.score_research, 0) DESC,
+                 COALESCE(ps.score_buildings, '0') DESC,
+                 COALESCE(ps.score_research, '0') DESC,
                  p.id ASC
         LIMIT ? OFFSET ?
         """,
@@ -1615,8 +1615,8 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
     cur.execute(
         f"""
         SELECT {total_expr} AS eff_total,
-               COALESCE(ps.score_buildings, 0) AS score_buildings,
-               COALESCE(ps.score_research, 0) AS score_research
+               COALESCE(ps.score_buildings, '0') AS score_buildings,
+               COALESCE(ps.score_research, '0') AS score_research
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
         WHERE p.id = ?
@@ -1639,9 +1639,9 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
         WHERE ({total_expr} > ?)
-           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, 0) > ?)
-           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) > ?)
-           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) = ?
+           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, '0') > ?)
+           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, '0') = ? AND COALESCE(ps.score_research, '0') > ?)
+           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, '0') = ? AND COALESCE(ps.score_research, '0') = ?
                AND p.id < ?)
         """,
         (
@@ -1761,9 +1761,9 @@ def get_player_category_ranks(
         SELECT COUNT(*) AS better
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
-        WHERE COALESCE(ps.score_buildings, 0) > ?
-           OR (COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) > ?)
-           OR (COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) = ? AND p.id < ?)
+        WHERE COALESCE(ps.score_buildings, '0') > ?
+           OR (COALESCE(ps.score_buildings, '0') = ? AND COALESCE(ps.score_research, '0') > ?)
+           OR (COALESCE(ps.score_buildings, '0') = ? AND COALESCE(ps.score_research, '0') = ? AND p.id < ?)
         """,
         (my_build, my_build, my_res, my_build, my_res, int(player_id)),
     )
@@ -1774,9 +1774,9 @@ def get_player_category_ranks(
         SELECT COUNT(*) AS better
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
-        WHERE COALESCE(ps.score_research, 0) > ?
-           OR (COALESCE(ps.score_research, 0) = ? AND COALESCE(ps.score_buildings, 0) > ?)
-           OR (COALESCE(ps.score_research, 0) = ? AND COALESCE(ps.score_buildings, 0) = ? AND p.id < ?)
+        WHERE COALESCE(ps.score_research, '0') > ?
+           OR (COALESCE(ps.score_research, '0') = ? AND COALESCE(ps.score_buildings, '0') > ?)
+           OR (COALESCE(ps.score_research, '0') = ? AND COALESCE(ps.score_buildings, '0') = ? AND p.id < ?)
         """,
         (my_res, my_res, my_build, my_res, my_build, int(player_id)),
     )
@@ -1788,9 +1788,9 @@ def get_player_category_ranks(
             SELECT COUNT(*) AS better
             FROM players p
             LEFT JOIN player_scores ps ON ps.player_id = p.id
-            WHERE COALESCE(ps.score_fleet, 0) > ?
-               OR (COALESCE(ps.score_fleet, 0) = ? AND COALESCE(ps.score_buildings, 0) > ?)
-               OR (COALESCE(ps.score_fleet, 0) = ? AND COALESCE(ps.score_buildings, 0) = ? AND p.id < ?)
+            WHERE COALESCE(ps.score_fleet, '0') > ?
+               OR (COALESCE(ps.score_fleet, '0') = ? AND COALESCE(ps.score_buildings, '0') > ?)
+               OR (COALESCE(ps.score_fleet, '0') = ? AND COALESCE(ps.score_buildings, '0') = ? AND p.id < ?)
             """,
             (my_fleet, my_fleet, my_build, my_fleet, my_build, int(player_id)),
         )
@@ -2128,7 +2128,7 @@ def read_player_scores(
                 {_fleet_defense_select(conn)},
                 {_evolution_score_select(conn)},
                 {_combat_ranking_select(conn)},
-                {("COALESCE(ps.score_destroyed_raw, 0) AS score_destroyed_raw" if column_exists(conn, "player_scores", "score_destroyed_raw") else "0 AS score_destroyed_raw")}
+                {("COALESCE(ps.score_destroyed_raw, '0') AS score_destroyed_raw" if column_exists(conn, "player_scores", "score_destroyed_raw") else "0 AS score_destroyed_raw")}
             FROM players p
             LEFT JOIN player_scores ps ON ps.player_id = p.id
             WHERE p.id = ?
@@ -2320,7 +2320,7 @@ def _all_score_rows_exact(conn) -> List[Dict[str, Any]]:
     evolution_sel = _evolution_score_select(conn)
     combat_sel = _combat_ranking_select(conn)
     destroyed_raw_sel = (
-        "COALESCE(ps.score_destroyed_raw, 0) AS score_destroyed_raw"
+        "COALESCE(ps.score_destroyed_raw, '0') AS score_destroyed_raw"
         if column_exists(conn, "player_scores", "score_destroyed_raw")
         else "0 AS score_destroyed_raw"
     )

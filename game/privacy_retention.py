@@ -73,11 +73,10 @@ def run_privacy_retention_purge(
         admin_del_cut = ts - admin_audit_delete_days() * 86400
 
         if table_exists(c, "shop_payment_events"):
-            # Prefer processed_at; fall back if schema differs
-            cols = {
-                str(r[1])
-                for r in c.execute("PRAGMA table_info(shop_payment_events);").fetchall()
-            }
+            # Prefer processed_at; fall back if schema differs (table_columns — PG-safe).
+            from .db import table_columns
+
+            cols = table_columns(c, "shop_payment_events")
             ts_col = "processed_at" if "processed_at" in cols else (
                 "created_at" if "created_at" in cols else None
             )

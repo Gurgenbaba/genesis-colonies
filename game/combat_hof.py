@@ -41,23 +41,29 @@ def _debris_total(debris: Mapping[str, Any]) -> int:
 
 
 def _sort_order_sql(sort: str) -> str:
+    # Portable JSON path extract (messages owner) — SQLite json_extract / PG jsonb ->>.
+    from .messages import _json_text_path_sql
+
+    def _num(col: str, key: str) -> str:
+        return f"COALESCE(CAST({_json_text_path_sql(col, key)} AS REAL), 0)"
+
     if sort == HOF_SORT_DEBRIS:
-        return """
+        return f"""
         ORDER BY
           (
-            COALESCE(json_extract(debris_json, '$.metal'), 0)
-            + COALESCE(json_extract(debris_json, '$.crystal'), 0)
+            {_num('debris_json', 'metal')}
+            + {_num('debris_json', 'crystal')}
           ) DESC,
           created_at DESC,
           id DESC
         """
     if sort == HOF_SORT_LOOT:
-        return """
+        return f"""
         ORDER BY
           (
-            COALESCE(json_extract(loot_json, '$.metal'), 0)
-            + COALESCE(json_extract(loot_json, '$.crystal'), 0)
-            + COALESCE(json_extract(loot_json, '$.fuel_cells'), 0)
+            {_num('loot_json', 'metal')}
+            + {_num('loot_json', 'crystal')}
+            + {_num('loot_json', 'fuel_cells')}
           ) DESC,
           created_at DESC,
           id DESC
@@ -217,21 +223,26 @@ def backfill_combat_hof(*, limit: int | None = None, conn) -> Dict[str, Any]:
     if not messages_ready(conn):
         return {"ok": False, "error": "messages_schema_missing", "inserted": 0}
 
+    from .messages import _json_text_path_sql
+
     cur = conn.cursor()
     cur.execute(f"SELECT fleet_id FROM {COMBAT_HOF_TABLE};")
     existing_fleet_ids = {int(row["fleet_id"]) for row in cur.fetchall()}
 
+    fleet_sql = _json_text_path_sql("metadata_json", "fleet_id")
+    phase_sql = _json_text_path_sql("metadata_json", "report_phase")
+    perspective_sql = _json_text_path_sql("metadata_json", "perspective")
     cur.execute(
-        """
+        f"""
         SELECT id, metadata_json, created_at
         FROM player_messages
         WHERE category = 'combat'
           AND (deleted_at IS NULL OR deleted_at = 0)
-          AND json_extract(metadata_json, '$.fleet_id') IS NOT NULL
-          AND json_extract(metadata_json, '$.report_phase') IS NULL
+          AND {fleet_sql} IS NOT NULL
+          AND {phase_sql} IS NULL
         ORDER BY
-          CAST(json_extract(metadata_json, '$.fleet_id') AS INTEGER) ASC,
-          CASE WHEN json_extract(metadata_json, '$.perspective') = 'attacker' THEN 0 ELSE 1 END ASC,
+          CAST({fleet_sql} AS INTEGER) ASC,
+          CASE WHEN {perspective_sql} = 'attacker' THEN 0 ELSE 1 END ASC,
           created_at ASC,
           id ASC;
         """
@@ -315,18 +326,22 @@ def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
     except (TypeError, ValueError):
         last_id = 0
 
+    from .messages import _json_text_path_sql
+
     cur = conn.cursor()
     # Avoid full-table HoF preload (was O(hof rows) under the writer lock).
     # record_hof_battle uses INSERT OR IGNORE on fleet_id UNIQUE.
+    fleet_sql = _json_text_path_sql("metadata_json", "fleet_id")
+    phase_sql = _json_text_path_sql("metadata_json", "report_phase")
     cur.execute(
-        """
+        f"""
         SELECT id, metadata_json, created_at
         FROM player_messages
         WHERE category = 'combat'
           AND id > ?
           AND (deleted_at IS NULL OR deleted_at = 0)
-          AND json_extract(metadata_json, '$.fleet_id') IS NOT NULL
-          AND json_extract(metadata_json, '$.report_phase') IS NULL
+          AND {fleet_sql} IS NOT NULL
+          AND {phase_sql} IS NULL
         ORDER BY id ASC
         LIMIT ?;
         """,

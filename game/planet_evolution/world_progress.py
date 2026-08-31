@@ -148,7 +148,7 @@ def record_world_expedition_progress(
         INSERT INTO world_progress (player_id, world_key, expedition_count, last_expedition_at)
         VALUES (?, ?, 1, ?)
         ON CONFLICT(player_id, world_key) DO UPDATE SET
-            expedition_count = expedition_count + 1,
+            expedition_count = world_progress.expedition_count + 1,
             last_expedition_at = excluded.last_expedition_at;
         """,
         (int(player_id), wk, ts),

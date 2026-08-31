@@ -572,8 +572,8 @@ def record_expedition_daily_value(
         INSERT INTO expedition_daily_value (player_id, day_bucket, expo_value_total, expedition_count, updated_at)
         VALUES (?, ?, ?, 1, ?)
         ON CONFLICT(player_id, day_bucket) DO UPDATE SET
-            expo_value_total = expo_value_total + excluded.expo_value_total,
-            expedition_count = expedition_count + 1,
+            expo_value_total = expedition_daily_value.expo_value_total + excluded.expo_value_total,
+            expedition_count = expedition_daily_value.expedition_count + 1,
             updated_at = excluded.updated_at;
         """,
         (pid, int(bucket), value, now),
