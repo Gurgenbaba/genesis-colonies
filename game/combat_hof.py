@@ -295,7 +295,13 @@ HOF_SYNC_INTERVAL_SEC = 300
 
 
 def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
-    """Import new combat inbox reports since last sync (no combat re-sim)."""
+    """Import new combat inbox reports since last sync (no combat re-sim).
+
+    GC-PROD-SQLITE-STALL-001B: expensive message scans run **outside** a write
+    lock when the caller is not already in a transaction. Mutations use a short
+    ``BEGIN IMMEDIATE`` only for inserts / cursor advance / prune.
+    """
+    from .db import begin_write_transaction, commit, in_transaction, rollback
     from .messages import _table_ready as messages_ready
     from .runtime_state import get_runtime_value, set_runtime_value
 
@@ -310,9 +316,8 @@ def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
         last_id = 0
 
     cur = conn.cursor()
-    cur.execute(f"SELECT fleet_id FROM {COMBAT_HOF_TABLE};")
-    existing_fleet_ids = {int(row["fleet_id"]) for row in cur.fetchall()}
-
+    # Avoid full-table HoF preload (was O(hof rows) under the writer lock).
+    # record_hof_battle uses INSERT OR IGNORE on fleet_id UNIQUE.
     cur.execute(
         """
         SELECT id, metadata_json, created_at
@@ -327,13 +332,12 @@ def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
         """,
         (int(last_id), max(1, min(int(limit), 200))),
     )
+    rows = list(cur.fetchall())
 
-    inserted = 0
-    skipped_existing = 0
+    candidates: List[Dict[str, Any]] = []
     skipped_invalid = 0
     max_id = last_id
-
-    for row in cur.fetchall():
+    for row in rows:
         max_id = max(max_id, int(row["id"]))
         meta = _json_loads(row["metadata_json"])
         try:
@@ -341,21 +345,57 @@ def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
         except (TypeError, ValueError):
             skipped_invalid += 1
             continue
-        if fleet_id in existing_fleet_ids:
-            skipped_existing += 1
-            continue
         payload = _hof_payload_from_combat_metadata(meta)
         if payload is None:
             skipped_invalid += 1
             continue
-        created_at = int(row["created_at"] or 0) or None
-        if record_hof_battle(**payload, created_at=created_at, conn=conn, prune=False):
-            inserted += 1
-            existing_fleet_ids.add(fleet_id)
+        candidates.append(
+            {
+                "fleet_id": fleet_id,
+                "payload": payload,
+                "created_at": int(row["created_at"] or 0) or None,
+            }
+        )
 
-    pruned = prune_hof_entries_beyond_top(conn=conn) if inserted else 0
-    if max_id > last_id:
-        set_runtime_value(HOF_SYNC_RUNTIME_KEY, str(int(max_id)), conn=conn)
+    if not candidates and max_id <= last_id:
+        return {
+            "ok": True,
+            "inserted": 0,
+            "skipped_existing": 0,
+            "skipped_invalid": skipped_invalid,
+            "pruned": 0,
+            "last_message_id": max_id,
+        }
+
+    own_tx = not in_transaction(conn)
+    if own_tx:
+        begin_write_transaction(conn)
+    inserted = 0
+    skipped_existing = 0
+    pruned = 0
+    try:
+        for item in candidates:
+            if record_hof_battle(
+                **item["payload"],
+                created_at=item["created_at"],
+                conn=conn,
+                prune=False,
+            ):
+                inserted += 1
+            else:
+                skipped_existing += 1
+        pruned = prune_hof_entries_beyond_top(conn=conn) if inserted else 0
+        if max_id > last_id:
+            set_runtime_value(HOF_SYNC_RUNTIME_KEY, str(int(max_id)), conn=conn)
+        if own_tx:
+            commit(conn)
+    except Exception:
+        if own_tx:
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+        raise
 
     return {
         "ok": True,
@@ -369,6 +409,7 @@ def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
 
 def maybe_sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
     """Throttled HoF catch-up for reports missed by live record_hof_battle."""
+    from .db import begin_write_transaction, commit, in_transaction, rollback
     from .runtime_state import get_runtime_value, set_runtime_value
 
     now = time.time()
@@ -380,7 +421,21 @@ def maybe_sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any
     if last_at > 0 and (now - last_at) < float(HOF_SYNC_INTERVAL_SEC):
         return {"ok": True, "skipped": "interval", "inserted": 0}
     result = sync_combat_hof_incremental(conn=conn, limit=limit)
-    set_runtime_value(throttle_key, str(int(now)), conn=conn)
+    # Persist throttle outside the sync write TX when possible (own short TX).
+    own_tx = not in_transaction(conn)
+    if own_tx:
+        begin_write_transaction(conn)
+    try:
+        set_runtime_value(throttle_key, str(int(now)), conn=conn)
+        if own_tx:
+            commit(conn)
+    except Exception:
+        if own_tx:
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+        raise
     return result
 
 

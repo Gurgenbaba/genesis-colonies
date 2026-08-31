@@ -57,14 +57,33 @@ def test_client_runtime_config_env_override(monkeypatch):
     assert get_client_runtime_config()["poll_idle_ms"] == 12000
 
 
-def test_docker_entrypoint_defaults_to_one_worker():
+def test_docker_entrypoint_defaults_gthread_availability():
     from pathlib import Path
 
     text = (Path(__file__).resolve().parent.parent / "scripts" / "docker-entrypoint.sh").read_text(
         encoding="utf-8"
     )
     assert 'WORKERS="${GUNICORN_WORKERS:-1}"' in text
-    assert 'gunicorn -w "${WORKERS}"' in text
+    assert 'WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gthread}"' in text
+    assert 'THREADS="${GUNICORN_THREADS:-4}"' in text
+    assert '--threads ${THREADS}' in text or '--threads "${THREADS}"' in text
+    assert 'gunicorn -k "${WORKER_CLASS}" -w "${WORKERS}"' in text
+
+
+def test_ws_long_lived_safe_false_under_gthread(monkeypatch):
+    monkeypatch.setenv("GUNICORN_WORKER_CLASS", "gthread")
+    import app as app_mod
+
+    app_mod.app.config.pop("GC_WS_LONG_LIVED_SAFE", None)
+    assert app_mod.ws_long_lived_safe() is False
+
+
+def test_ws_long_lived_safe_true_under_gevent(monkeypatch):
+    monkeypatch.setenv("GUNICORN_WORKER_CLASS", "gevent")
+    import app as app_mod
+
+    app_mod.app.config.pop("GC_WS_LONG_LIVED_SAFE", None)
+    assert app_mod.ws_long_lived_safe() is True
 
 
 def test_base_template_injects_client_config():

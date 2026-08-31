@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Any, Dict, Optional
 
@@ -186,3 +187,49 @@ def get_queue_tick_status(conn=None) -> Dict[str, Any]:
         "batches": int(data.get("batches") or 0),
         "players_processed": int(data.get("players_processed") or 0),
     }
+
+
+def get_queue_tick_fresh_max_age_sec() -> float:
+    """
+    GC-PROD-SQLITE-STALL-001A: max age for QUEUE_TICK_KEY to count as healthy.
+
+    Default 45s ≈ 2× typical ``run_game_worker`` interval (15s).
+    Must NOT be derived from fleet_worker / maintenance heartbeats.
+    """
+    raw = os.environ.get("GC_QUEUE_TICK_FRESH_SEC", "").strip()
+    if not raw:
+        return 45.0
+    try:
+        return max(5.0, float(raw))
+    except (TypeError, ValueError):
+        return 45.0
+
+
+def is_queue_tick_heartbeat_fresh(
+    conn=None,
+    *,
+    now: Optional[float] = None,
+    max_age_sec: Optional[float] = None,
+) -> bool:
+    """
+    True only when ``execute_queue_tick`` / ``record_queue_tick_result`` left a
+    recent successful ``QUEUE_TICK_KEY`` stamp.
+
+    Missing or stale heartbeat ⇒ poll safety-net must remain responsible for
+    queue finishes. Fleet/maintenance liveness must never be used here.
+    """
+    status = get_queue_tick_status(conn=conn)
+    at = status.get("last_tick_at")
+    if at is None:
+        return False
+    if status.get("ok") is False:
+        return False
+    try:
+        last_at = float(at)
+    except (TypeError, ValueError):
+        return False
+    if last_at <= 0:
+        return False
+    age_limit = float(max_age_sec if max_age_sec is not None else get_queue_tick_fresh_max_age_sec())
+    now_f = float(now if now is not None else time.time())
+    return (now_f - last_at) <= age_limit

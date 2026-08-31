@@ -130,20 +130,24 @@ def read_player_live_state_for_poll(
     """
     Game-state polling path: throttled queue finish, no rank/score seeding writes.
 
-    - Finishes due queue work player-wide when due or on poll interval.
-    - Skips rank recalculation on poll (recalc_ranks=False).
-    - May still persist resource accrual when idle time warrants it.
+    GC-PROD-SQLITE-STALL-001A:
+    - Queue finish only when queue-tick heartbeat is missing/stale (never fleet/maint).
+    - Single-flight ``try_claim_poll_due_finish`` before ``finish_player_due_work``.
+    - Fleet dirty deferred when fleet-worker heartbeat is fresh; else player-scoped tick.
+    - ``update_scores=True`` kept on safety-net finish: marks score dirty only
+      (GC-SCORE-PERF-001); ``False`` would skip invalidation — do not flip without tests.
     """
     from .db import begin_write_transaction, in_transaction
     from .models import db as _db, load_player, rollback
     from .queue_engine import finish_player_due_work
     from .queue_poll import (
         player_fleet_is_dirty,
-        player_has_due_queue_work,
-        player_has_pending_queue_work,
         record_poll_queue_finish,
-        seconds_until_poll_finish_allowed,
+        should_poll_attempt_queue_finish,
+        try_claim_poll_due_finish,
     )
+    from .fleet_worker import is_fleet_worker_heartbeat_fresh
+    from game.config import get_resource_persist_interval_sec
 
     uid = int(player_id)
     own_conn = conn is None
@@ -163,27 +167,44 @@ def read_player_live_state_for_poll(
         now = time.time()
         last_raw = planet.get("last_update")
         last = float(last_raw) if last_raw is not None else now
-        from game.config import get_resource_persist_interval_sec, is_game_worker_primary
 
         persist_resources = (now - last) >= float(get_resource_persist_interval_sec())
 
         fleet_dirty = player_fleet_is_dirty(uid, conn=conn, now=now)
-        has_due = player_has_due_queue_work(uid, conn=conn, now=now) or fleet_dirty
-        has_pending = player_has_pending_queue_work(uid, conn=conn)
+        attempt_queue, _queue_reason = should_poll_attempt_queue_finish(
+            uid, conn=conn, now=now, planet_id=None
+        )
+        should_finish_queues = False
+        if attempt_queue:
+            should_finish_queues = bool(try_claim_poll_due_finish(uid, conn=conn, now=now))
 
-        if is_game_worker_primary():
-            # Worker owns cadence; poll only finishes when work is actually due.
-            should_finish = bool(has_due)
-        else:
-            should_finish = has_due or (
-                has_pending and seconds_until_poll_finish_allowed(uid, conn=conn) <= 0.0
-            )
-        need_write = bool(should_finish or persist_resources or fleet_dirty)
+        should_finish_fleet = False
+        if fleet_dirty and not should_finish_queues:
+            if not is_fleet_worker_heartbeat_fresh(conn=conn, now=now):
+                should_finish_fleet = True
+        elif fleet_dirty and should_finish_queues:
+            should_finish_fleet = False
+
+        # When both queue + fleet work are deferred to healthy workers, keep the
+        # diet poll write-free (no resource-persist IMMEDIATE either).
+        from game.config import is_game_worker_primary
+        from .runtime_state import is_queue_tick_heartbeat_fresh
+
+        if (
+            is_game_worker_primary()
+            and is_queue_tick_heartbeat_fresh(conn=conn, now=now)
+            and (not fleet_dirty or is_fleet_worker_heartbeat_fresh(conn=conn, now=now))
+        ):
+            persist_resources = False
+
+        should_finish = bool(should_finish_queues or should_finish_fleet)
+        need_write = bool(should_finish or persist_resources)
 
         try:
             if need_write:
-                if should_finish:
+                if should_finish_queues:
                     finish_t0 = time.perf_counter()
+                    # Keep update_scores=True: applies mark_player_score_dirty only.
                     finish_result = finish_player_due_work(
                         uid,
                         conn,
@@ -215,6 +236,17 @@ def read_player_live_state_for_poll(
                     from .live_state import mark_request_live_refreshed
 
                     mark_request_live_refreshed()
+                elif should_finish_fleet:
+                    from .fleet import process_fleet_tick
+
+                    process_fleet_tick(
+                        player_id=uid,
+                        conn=conn,
+                        manage_transaction=True,
+                    )
+                    from .live_state import mark_request_live_refreshed
+
+                    mark_request_live_refreshed()
 
                 if not in_transaction(conn):
                     begin_write_transaction(conn)
@@ -243,8 +275,6 @@ def read_player_live_state_for_poll(
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                     _read_player_live_state_no_writes(uid, conn, player, planet)
                 )
-                # Idle poll already proved no due work — let HUD skip_finish stick
-                # (coerce_skip_finish ignores the kwarg until refreshed).
                 from .live_state import mark_request_live_refreshed
 
                 mark_request_live_refreshed()
@@ -257,7 +287,6 @@ def read_player_live_state_for_poll(
             player_view["energy_total"] = int(energy_total)
             player_view["energy_used"] = int(energy_used)
 
-            # Persist-only path (no finish): due check already ran; HUD must not re-finish.
             if not should_finish:
                 from .live_state import mark_request_live_refreshed
 

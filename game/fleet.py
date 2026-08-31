@@ -6938,6 +6938,63 @@ def _run_one_movement_short_tx(
     fail_missions: Optional[Set[str]] = None,
 ) -> Tuple[bool, Optional[str]]:
     """BEGIN → handle one movement → COMMIT. Returns (handled, error_message)."""
+    from .tx_context import tx_context
+
+    mid = int(movement_id)
+    status = str(expect_status)
+    phase = {
+        "outbound": "arrival",
+        "holding": "holding",
+        "returning": "return",
+    }.get(status, "other")
+    mission = ""
+    player_id = None
+    try:
+        peek = _load_movement_row(conn, mid)
+        if peek:
+            mission = str(peek.get("mission_type") or "")
+            player_id = int(peek.get("player_id") or 0) or None
+            if status == "outbound":
+                if mission in ("attack", "spy"):
+                    phase = "combat"
+                elif mission == "expedition":
+                    phase = "expedition"
+                elif mission in ("transport", "deploy", "collect", "recycle", "colonize"):
+                    phase = "transport/deploy"
+                elif mission == "hold":
+                    phase = "holding"
+    except Exception:
+        pass
+
+    with tx_context(
+        sub_owner="fleet_movement",
+        movement_id=mid,
+        player_id=player_id,
+        mission=mission or None,
+        movement_status=status,
+        phase=phase,
+    ):
+        return _run_one_movement_short_tx_body(
+            conn,
+            movement_id=mid,
+            expect_status=status,
+            handler=handler,
+            now=now,
+            fail_fn=fail_fn,
+            fail_missions=fail_missions,
+        )
+
+
+def _run_one_movement_short_tx_body(
+    conn,
+    *,
+    movement_id: int,
+    expect_status: str,
+    handler,
+    now: float,
+    fail_fn=None,
+    fail_missions: Optional[Set[str]] = None,
+) -> Tuple[bool, Optional[str]]:
     mid = int(movement_id)
     try:
         begin_write_transaction(conn)
@@ -7001,7 +7058,41 @@ def _process_fleet_tick_short_tx(
     now: float,
     result: Dict[str, Any],
 ) -> None:
-    """GC-PERF-LOCK-001: one short write TX per due movement."""
+    """GC-PERF-LOCK-001: one short write TX per due movement.
+
+    GC-PROD-SQLITE-STALL-001B RUN BUDGET: stop *starting* further movements when
+    ``GC_FLEET_WORKER_MAX_MOVEMENTS`` or ``GC_FLEET_WORKER_MAX_MS`` is hit.
+    An in-flight movement is always finished; remainder stays due for the next tick.
+    """
+    import os
+    import time as _time
+
+    max_movements = int(os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", "50") or 50)
+    max_movements = max(1, max_movements)
+    try:
+        max_ms = float(os.environ.get("GC_FLEET_WORKER_MAX_MS", "800") or 800)
+    except (TypeError, ValueError):
+        max_ms = 800.0
+    max_ms = max(50.0, max_ms)
+
+    run_t0 = _time.perf_counter()
+    started = 0
+    deferred = 0
+    result.setdefault("budget", {})
+    result["budget"] = {
+        "max_movements": max_movements,
+        "max_ms": max_ms,
+        "started": 0,
+        "deferred": 0,
+        "hit_limit": False,
+    }
+
+    def _budget_exhausted() -> bool:
+        if started >= max_movements:
+            return True
+        elapsed_ms = (_time.perf_counter() - run_t0) * 1000.0
+        return elapsed_ms >= max_ms
+
     # Snapshot IDs without holding a write lock across the whole set.
     outbound_ids = _fleet_due_ids(
         conn, status="outbound", time_col="arrival_at", now=now, player_id=player_id
@@ -7013,47 +7104,53 @@ def _process_fleet_tick_short_tx(
         conn, status="returning", time_col="return_at", now=now, player_id=player_id
     )
 
-    for mid in outbound_ids:
-        handled, err = _run_one_movement_short_tx(
-            conn,
-            movement_id=mid,
-            expect_status="outbound",
-            handler=_handle_arrival,
-            now=now,
-            fail_fn=_fail_outbound_movement,
-            fail_missions={"attack", "expedition"},
-        )
-        if handled:
-            result["processed_arrivals"] += 1
-        if err:
-            result["errors"].append(err)
+    def _run_batch(ids, *, expect_status, handler, counter_key, fail_fn=None, fail_missions=None):
+        nonlocal started, deferred
+        for mid in ids:
+            if _budget_exhausted():
+                deferred += 1
+                continue
+            started += 1
+            handled, err = _run_one_movement_short_tx(
+                conn,
+                movement_id=mid,
+                expect_status=expect_status,
+                handler=handler,
+                now=now,
+                fail_fn=fail_fn,
+                fail_missions=fail_missions,
+            )
+            if handled:
+                result[counter_key] = int(result.get(counter_key) or 0) + 1
+            if err:
+                result["errors"].append(err)
 
-    for mid in holding_ids:
-        handled, err = _run_one_movement_short_tx(
-            conn,
-            movement_id=mid,
-            expect_status="holding",
-            handler=_handle_holding_end,
-            now=now,
-        )
-        if handled:
-            result["processed_holding"] += 1
-        if err:
-            result["errors"].append(err)
+    _run_batch(
+        outbound_ids,
+        expect_status="outbound",
+        handler=_handle_arrival,
+        counter_key="processed_arrivals",
+        fail_fn=_fail_outbound_movement,
+        fail_missions={"attack", "expedition"},
+    )
+    _run_batch(
+        holding_ids,
+        expect_status="holding",
+        handler=_handle_holding_end,
+        counter_key="processed_holding",
+    )
+    _run_batch(
+        returning_ids,
+        expect_status="returning",
+        handler=_handle_return,
+        counter_key="processed_returns",
+        fail_fn=_fail_returning_movement,
+    )
 
-    for mid in returning_ids:
-        handled, err = _run_one_movement_short_tx(
-            conn,
-            movement_id=mid,
-            expect_status="returning",
-            handler=_handle_return,
-            now=now,
-            fail_fn=_fail_returning_movement,
-        )
-        if handled:
-            result["processed_returns"] += 1
-        if err:
-            result["errors"].append(err)
+    result["budget"]["started"] = started
+    result["budget"]["deferred"] = deferred
+    result["budget"]["hit_limit"] = deferred > 0
+    result["budget"]["elapsed_ms"] = round((_time.perf_counter() - run_t0) * 1000.0, 2)
 
 
 def mass_expedition_available_slots(player_id: int, *, conn) -> int:

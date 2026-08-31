@@ -1257,11 +1257,29 @@ def maybe_run_next_scheduled_scenario(*, conn, now: float | None = None) -> Dict
         return {"ok": True, "skipped": "scenario_cooldown", "cooldown_seconds": _cooldown_remaining(conn=conn, now=ts)}
 
     key = resolve_next_scenario_key(conn=conn)
-    result = run_combat_balance_scenario(key, conn=conn, skip_cooldown=False)
-    set_runtime_value(RUNTIME_KEY_SCHEDULER_LAST, str(int(ts)), conn=conn)
-    if result.get("ok"):
-        advance_scenario_index(conn=conn)
-    return result
+    from .db import begin_write_transaction, commit, in_transaction, rollback
+
+    # GC-PROD-SQLITE-STALL-001B: when post-maint calls us with manage_tx=False,
+    # own a single short write TX for the scenario instead of riding an outer
+    # mega-IMMEDIATE that also covered unrelated pre-reads.
+    own_tx = not in_transaction(conn)
+    if own_tx:
+        begin_write_transaction(conn)
+    try:
+        result = run_combat_balance_scenario(key, conn=conn, skip_cooldown=False)
+        set_runtime_value(RUNTIME_KEY_SCHEDULER_LAST, str(int(ts)), conn=conn)
+        if result.get("ok"):
+            advance_scenario_index(conn=conn)
+        if own_tx:
+            commit(conn)
+        return result
+    except Exception:
+        if own_tx:
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+        raise
 
 
 def run_combat_balance_scenario(

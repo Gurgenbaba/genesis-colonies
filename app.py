@@ -121,19 +121,17 @@ def ws_long_lived_safe() -> bool:
 
     Explicit override (set in the local __main__ dev-server block below,
     based on the actual threaded= flag Werkzeug is running with) always
-    wins. Otherwise — i.e. under gunicorn — this mirrors
-    scripts/docker-entrypoint.sh's own GUNICORN_WORKER_CLASS default
-    exactly: only gevent/eventlet workers multiplex connections via
-    greenlets, so only those are safe. sync/gthread (e.g. after a manual
-    rollback) would pin the single worker for as long as a galaxy tab
-    stays open, so default to "unsafe" for anything else — the client
-    already degrades to polling with no live push, which beats freezing
-    the whole site.
+    wins. Otherwise — i.e. under gunicorn — only gevent/eventlet workers
+    multiplex connections via greenlets, so only those are safe for galaxy
+    live push. Default production worker is gthread (GC-PROD-SQLITE-STALL-001)
+    so this returns False and the WS route refuses the socket; the client
+    already degrades to existing polling. That beats freezing /healthz when
+    sync sqlite3 blocks a single gevent loop.
     """
     override = app.config.get("GC_WS_LONG_LIVED_SAFE")
     if override is not None:
         return bool(override)
-    worker_class = os.environ.get("GUNICORN_WORKER_CLASS", "gevent").strip().lower()
+    worker_class = os.environ.get("GUNICORN_WORKER_CLASS", "gthread").strip().lower()
     return worker_class in ("gevent", "eventlet")
 
 

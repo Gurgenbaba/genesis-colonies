@@ -50,12 +50,14 @@ if not ok:
 "
 
 WORKERS="${GUNICORN_WORKERS:-1}"
-# GC-AST-LIVE: gevent worker class lets long-lived WS connections (galaxy
-# live push) coexist with normal HTTP requests on a single gunicorn worker
-# without pinning a worker slot per socket. Flip to "sync" for emergency
-# rollback without a redeploy — the WS route/client both degrade gracefully
-# (client falls back to existing polling) if unreachable.
-WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gevent}"
+# GC-PROD-SQLITE-STALL-001: HTTP availability must not depend on a single gevent
+# event loop. Default to gthread so sync sqlite3 work cannot freeze /healthz.
+# Galaxy live WS push is gevent/eventlet-only (see app.ws_long_lived_safe);
+# under gthread the route refuses long-lived sockets and the client already
+# degrades to existing galaxy polling — Availability > optional live push.
+# Emergency rollback: GUNICORN_WORKER_CLASS=gevent (WS push returns) or sync.
+WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gthread}"
+THREADS="${GUNICORN_THREADS:-4}"
 
 # GC-PERF-PROD-002: run the maintenance bag in a sibling OS process so gunicorn
 # does not share GIL/CPU with Soft-On autoplay/pirate ticks. Opt out with
@@ -82,7 +84,19 @@ else
   echo "[GC] Maintenance sidecar off (GC_MAINTENANCE_WORKER=${MAINT_WORKER}); embedded cron may run in-process."
 fi
 
-echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS}, worker_class=${WORKER_CLASS})..."
-exec gunicorn -k "${WORKER_CLASS}" -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 \
+GUNICORN_EXTRA=""
+case "${WORKER_CLASS}" in
+  gthread|sync)
+    # Never fake gthread with threads=1 — that serializes like sync under load.
+    if [ -z "${THREADS}" ] || [ "${THREADS}" -lt 2 ] 2>/dev/null; then
+      THREADS=4
+    fi
+    GUNICORN_EXTRA="--threads ${THREADS}"
+    ;;
+esac
+
+echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS}, worker_class=${WORKER_CLASS}, threads=${THREADS})..."
+# shellcheck disable=SC2086
+exec gunicorn -k "${WORKER_CLASS}" -w "${WORKERS}" ${GUNICORN_EXTRA} -b "0.0.0.0:${PORT}" --timeout 120 \
   --access-logfile - --error-logfile - --log-level info \
   app:app
