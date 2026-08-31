@@ -446,7 +446,15 @@ def close_pool() -> None:
             _POOL = None
 
 
+# Schema is immutable mid-process after migrate; cache cuts PG information_schema chatter.
+_PG_TABLE_EXISTS_CACHE: dict[str, bool] = {}
+
+
 def postgres_table_exists(conn: PgConnection, table_name: str) -> bool:
+    key = str(table_name)
+    cached = _PG_TABLE_EXISTS_CACHE.get(key)
+    if cached is not None:
+        return cached
     cur = conn.execute(
         """
         SELECT 1
@@ -454,9 +462,11 @@ def postgres_table_exists(conn: PgConnection, table_name: str) -> bool:
         WHERE table_schema = 'public' AND table_name = ?
         LIMIT 1;
         """,
-        (str(table_name),),
+        (key,),
     )
-    return cur.fetchone() is not None
+    found = cur.fetchone() is not None
+    _PG_TABLE_EXISTS_CACHE[key] = found
+    return found
 
 
 def postgres_index_exists(conn: PgConnection, index_name: str) -> bool:

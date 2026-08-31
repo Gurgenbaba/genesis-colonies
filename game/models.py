@@ -918,6 +918,14 @@ def touch_player_online(player_id: int) -> None:
             return
 
         begin_write_transaction(conn)
+        # Presence must not wait on long player-row locks (PG lock_timeout).
+        try:
+            from .db import get_db_backend
+
+            if get_db_backend() == "postgres":
+                conn.execute("SET LOCAL lock_timeout = '250ms'")
+        except Exception:
+            pass
         cur = conn.cursor()
         cur.execute(
             "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
