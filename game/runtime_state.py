@@ -59,29 +59,69 @@ def get_runtime_value(key: str, conn=None) -> Optional[str]:
 
 
 def set_runtime_value(key: str, value: str, conn=None) -> None:
+    """Upsert a runtime metric.
+
+    On a shared connection, uses a SAVEPOINT so Postgres deadlocks / unique
+    conflicts do not abort the caller's larger transaction (page-load TX).
+    Deadlocks are retried once, then swallowed after logging (metrics only).
+    """
     own = conn is None
     if own:
         conn = db()
+    sp = "gc_runtime_state_upsert"
+    last_exc: Optional[BaseException] = None
     try:
         ensure_runtime_state_table(conn)
         if own and not in_transaction(conn):
             begin_write_transaction(conn)
-        conn.execute(
-            """
-            INSERT INTO runtime_state (key, value, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(key) DO UPDATE SET
-                value = excluded.value,
-                updated_at = excluded.updated_at;
-            """,
-            (str(key), str(value), float(time.time())),
-        )
-        if own:
-            commit(conn)
-    except Exception:
-        if own:
-            rollback(conn)
-        raise
+        for attempt in range(2):
+            try:
+                if not own:
+                    conn.execute(f"SAVEPOINT {sp}")
+                conn.execute(
+                    """
+                    INSERT INTO runtime_state (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = excluded.updated_at;
+                    """,
+                    (str(key), str(value), float(time.time())),
+                )
+                if not own:
+                    conn.execute(f"RELEASE SAVEPOINT {sp}")
+                if own:
+                    commit(conn)
+                return
+            except Exception as exc:
+                last_exc = exc
+                if not own:
+                    try:
+                        conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                        conn.execute(f"RELEASE SAVEPOINT {sp}")
+                    except Exception:
+                        try:
+                            rollback(conn)
+                        except Exception:
+                            pass
+                elif own:
+                    rollback(conn)
+                msg = str(exc).lower()
+                is_deadlock = "deadlock" in msg
+                if is_deadlock and attempt == 0:
+                    time.sleep(0.05)
+                    if own and not in_transaction(conn):
+                        begin_write_transaction(conn)
+                    continue
+                if is_deadlock:
+                    logger.warning(
+                        "runtime_state upsert skipped after deadlock key=%s",
+                        key,
+                    )
+                    return
+                raise
+        if last_exc is not None:
+            raise last_exc
     finally:
         if own and conn is not None:
             conn.close()
