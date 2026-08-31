@@ -35,8 +35,18 @@ class GalaxyCoordinateError(ValueError):
     """Invalid or unavailable galaxy coordinates."""
 
 
+_GALAXY_MAX_CACHE: Tuple[float, int] = (0.0, 1)
+_GALAXY_MAX_TTL_SEC = 60.0
+
+
 def get_galaxy_max(conn: Optional[sqlite3.Connection] = None) -> int:
     """Playable galaxies from game settings (admin: galaxy_count)."""
+    global _GALAXY_MAX_CACHE
+    cached_at, cached_val = _GALAXY_MAX_CACHE
+    now = time.time()
+    if cached_val >= 1 and (now - cached_at) <= _GALAXY_MAX_TTL_SEC:
+        return int(cached_val)
+
     own = conn is None
     if own:
         conn = db()
@@ -45,9 +55,11 @@ def get_galaxy_max(conn: Optional[sqlite3.Connection] = None) -> int:
 
         settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
         raw = settings.get("galaxy_count", "1")
-        return max(1, min(20, int(raw)))
+        value = max(1, min(20, int(raw)))
+        _GALAXY_MAX_CACHE = (now, value)
+        return value
     except Exception:
-        return 1
+        return int(cached_val) if cached_val >= 1 else 1
     finally:
         if own and conn is not None:
             conn.close()
@@ -840,11 +852,11 @@ def list_system(
     Return exactly 15 slot entries for the given system (positions 1–15).
     Single query for occupied planets in that system.
     """
-    validate_coordinates(galaxy, system, POSITION_MIN)
-
     own = conn is None
     if own:
         conn = db()
+
+    validate_coordinates(galaxy, system, POSITION_MIN, conn=conn)
 
     from .alliance import are_players_allied
 

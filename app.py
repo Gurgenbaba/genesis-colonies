@@ -1409,20 +1409,65 @@ def _load_page_live_context(
 
             try_visit = (not use_planet_switch_live_path) and should_record_page_visit(src)
             if try_visit:
+                visit_recorded = False
                 try:
-                    maybe_record_page_visit_from_request(
-                        user_id,
-                        conn=conn,
-                        finish_source=src,
+                    from game.db import get_db_backend as _get_db_backend
+
+                    use_sp = _get_db_backend() == "postgres"
+                    if use_sp:
+                        try:
+                            conn.execute("SAVEPOINT gc_initiation_visit")
+                        except Exception:
+                            # Outer TX already aborted (e.g. lock timeout upstream).
+                            try:
+                                from game.db import rollback as _rollback_conn
+
+                                _rollback_conn(conn)
+                            except Exception:
+                                pass
+                            try_visit = False
+                            wrote_live = False
+                            use_sp = False
+                    if try_visit:
+                        maybe_record_page_visit_from_request(
+                            user_id,
+                            conn=conn,
+                            finish_source=src,
+                        )
+                        visit_recorded = True
+                        if use_sp:
+                            try:
+                                conn.execute("RELEASE SAVEPOINT gc_initiation_visit")
+                            except Exception:
+                                pass
+                except Exception as visit_exc:
+                    is_abort = "InFailedSqlTransaction" in type(visit_exc).__name__ or (
+                        "current transaction is aborted" in str(visit_exc).lower()
                     )
-                except Exception:
-                    logger.exception(
-                        "initiation page visit failed user_id=%s source=%s",
-                        user_id,
-                        src,
-                    )
-                    # Postgres aborts the whole TX on error; without rollback every
-                    # later read on this conn raises InFailedSqlTransaction → HTTP 500.
+                    if is_abort:
+                        logger.warning(
+                            "initiation page visit skipped (aborted TX) user_id=%s source=%s",
+                            user_id,
+                            src,
+                        )
+                    else:
+                        logger.exception(
+                            "initiation page visit failed user_id=%s source=%s",
+                            user_id,
+                            src,
+                        )
+                    try:
+                        from game.db import get_db_backend as _get_db_backend2
+
+                        if _get_db_backend2() == "postgres":
+                            try:
+                                conn.execute(
+                                    "ROLLBACK TO SAVEPOINT gc_initiation_visit"
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                     try:
                         from game.db import rollback as _rollback_conn
 
@@ -1431,6 +1476,8 @@ def _load_page_live_context(
                         pass
                     try_visit = False
                     wrote_live = False
+                if not visit_recorded:
+                    try_visit = False
 
             if wrote_live or try_visit:
                 commit(conn)

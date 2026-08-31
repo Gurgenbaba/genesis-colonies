@@ -62,9 +62,29 @@ def _is_sqlite_lock_error(exc: BaseException) -> bool:
     return "locked" in msg or "busy" in msg
 
 
+def is_db_lock_error(exc: BaseException) -> bool:
+    """True for SQLite busy/locked or Postgres lock_timeout / deadlock.
+
+    Presence touches and similar best-effort writes should soft-skip these
+    instead of blocking the request for the full ``GC_PG_LOCK_TIMEOUT``.
+    """
+    if _is_sqlite_lock_error(exc):
+        return True
+    name = type(exc).__name__
+    if name in ("LockNotAvailable", "DeadlockDetected"):
+        return True
+    msg = str(exc).lower()
+    return (
+        "lock timeout" in msg
+        or "deadlock detected" in msg
+        or "could not serialize access" in msg
+        or "canceling statement due to lock timeout" in msg
+    )
+
+
 def is_sqlite_lock_error(exc: BaseException) -> bool:
-    """Public alias for SQLITE_BUSY / database is locked detection."""
-    return _is_sqlite_lock_error(exc)
+    """Public alias — includes Postgres lock timeout/deadlock (dual-backend)."""
+    return is_db_lock_error(exc)
 
 
 def format_sqlite_lock_startup_help() -> str:
