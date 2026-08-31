@@ -666,7 +666,7 @@ def list_bot_roster(*, conn) -> List[Dict[str, Any]]:
         score_total = 0
         try:
             scor = conn.execute(
-                "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
+                "SELECT COALESCE(score_total, '0') AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
                 (player_id,),
             ).fetchone()
             score_total = int((scor or {"s": 0})["s"] or 0)

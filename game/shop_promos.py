@@ -453,7 +453,7 @@ def _buyer_score_total(player_id: int, *, conn) -> int:
     if not table_exists(conn, "player_scores"):
         return 0
     row = conn.execute(
-        "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
+        "SELECT COALESCE(score_total, '0') AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
         (int(player_id),),
     ).fetchone()
     return int(row["s"] or 0) if row else 0

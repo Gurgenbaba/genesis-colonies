@@ -130,7 +130,7 @@ def _player_score_total(player_id: int, *, conn) -> int:
         return 0
     cur = conn.cursor()
     cur.execute(
-        "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
+        "SELECT COALESCE(score_total, '0') AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
         (int(player_id),),
     )
     row = cur.fetchone()
