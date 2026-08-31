@@ -112,6 +112,8 @@ def test_nav_liveops_sources_are_not_double_loaded_on_normal_path(state_007_db, 
     conn = db()
     try:
         uid = _player(conn)
+        # Deterministic: cold factor cache must not hide a second list_active_events.
+        server_events._FACTOR_CACHE = (0.0, {})
         calls = {"server": 0, "world_boss": 0}
         original_server = server_events.list_active_events
         original_world_boss = world_boss.list_active_events

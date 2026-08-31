@@ -480,7 +480,9 @@ def nav_badges_for_game_state(
     referral_count = count_claimable_referral_rewards(uid, conn=conn, read_only=True)
     from game.directives.service import count_claimable_directives
 
-    directive_count = count_claimable_directives(uid, conn=conn)
+    # Diet nav path: never ensure/generate directives (avoids EffectResolver →
+    # server_events.list_active_events and keeps liveops sources single-loaded).
+    directive_count = count_claimable_directives(uid, conn=conn, read_only=True)
     wb_active = False
     wb_count = 0
 
