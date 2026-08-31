@@ -532,10 +532,18 @@ def get_db_identity(conn: Optional[DbConn] = None) -> str:
         top_score = 0
         if table_exists(conn, "player_scores"):
             cur = conn.cursor()
-            cur.execute("SELECT COALESCE(MAX(score_total), 0) AS top FROM player_scores;")
-            row = cur.fetchone()
-            if row:
-                top_score = int(row["top"] or 0)
+            # score_total is TEXT (big-score); prefer Python int max for precision.
+            cur.execute("SELECT score_total FROM player_scores;")
+            for srow in cur.fetchall():
+                raw = srow["score_total"] if srow is not None else None
+                if raw is None:
+                    continue
+                try:
+                    val = int(str(raw).strip() or "0")
+                except (TypeError, ValueError):
+                    continue
+                if val > top_score:
+                    top_score = val
         path_part = str(resolve_db_path()) if get_db_backend() == "sqlite" else "postgres"
         return (
             f"backend={get_db_backend()} path={path_part} "
@@ -547,16 +555,34 @@ def get_db_identity(conn: Optional[DbConn] = None) -> str:
 
 
 def gather_score_stats(conn: DbConn) -> dict[str, int]:
-    """Aggregate player_scores snapshot for worker before/after logs."""
+    """Aggregate player_scores snapshot for worker before/after logs.
+
+    ``score_total`` is TEXT (big-score). Positive-count uses NUMERIC cast so
+    PostgreSQL accepts the predicate. ``top_score`` is computed in Python as
+    ``int`` so values beyond float64/int64 stay exact on both backends.
+    """
     if not table_exists(conn, "player_scores"):
         return {"scores_rows": 0, "scores_positive": 0, "top_score": 0}
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS cnt FROM player_scores;")
     rows = int(cur.fetchone()["cnt"] or 0)
-    cur.execute("SELECT COUNT(*) AS cnt FROM player_scores WHERE COALESCE(score_total, 0) > 0;")
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM player_scores "
+        "WHERE COALESCE(CAST(score_total AS NUMERIC), 0) > 0;"
+    )
     positive = int(cur.fetchone()["cnt"] or 0)
-    cur.execute("SELECT COALESCE(MAX(score_total), 0) AS top FROM player_scores;")
-    top = int(cur.fetchone()["top"] or 0)
+    cur.execute("SELECT score_total FROM player_scores;")
+    top = 0
+    for row in cur.fetchall():
+        raw = row["score_total"] if row is not None else None
+        if raw is None:
+            continue
+        try:
+            val = int(str(raw).strip() or "0")
+        except (TypeError, ValueError):
+            continue
+        if val > top:
+            top = val
     return {"scores_rows": rows, "scores_positive": positive, "top_score": top}
 
 

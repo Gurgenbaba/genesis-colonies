@@ -1815,8 +1815,8 @@ def get_player_category_ranks(
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores
-            WHERE COALESCE(score_defense, 0) > ?
-               OR (COALESCE(score_defense, 0) = ? AND player_id < ?)
+            WHERE CAST(COALESCE(score_defense, '0') AS NUMERIC) > ?
+               OR (CAST(COALESCE(score_defense, '0') AS NUMERIC) = ? AND player_id < ?)
             """,
             (my_def, my_def, int(player_id)),
         )
@@ -1826,8 +1826,8 @@ def get_player_category_ranks(
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores
-            WHERE COALESCE(score_combat, 0) > ?
-               OR (COALESCE(score_combat, 0) = ? AND player_id < ?)
+            WHERE CAST(COALESCE(score_combat, '0') AS NUMERIC) > ?
+               OR (CAST(COALESCE(score_combat, '0') AS NUMERIC) = ? AND player_id < ?)
             """,
             (my_combat, my_combat, int(player_id)),
         )
@@ -1837,8 +1837,8 @@ def get_player_category_ranks(
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores
-            WHERE COALESCE(score_destroyed, 0) > ?
-               OR (COALESCE(score_destroyed, 0) = ? AND player_id < ?)
+            WHERE CAST(COALESCE(score_destroyed, '0') AS NUMERIC) > ?
+               OR (CAST(COALESCE(score_destroyed, '0') AS NUMERIC) = ? AND player_id < ?)
             """,
             (my_destroyed, my_destroyed, int(player_id)),
         )
@@ -1859,9 +1859,15 @@ def get_player_category_ranks(
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores
-            WHERE (COALESCE(score_combat, 0) + COALESCE(score_destroyed, 0)) > ?
+            WHERE (
+                    CAST(COALESCE(score_combat, '0') AS NUMERIC)
+                    + CAST(COALESCE(score_destroyed, '0') AS NUMERIC)
+                  ) > ?
                OR (
-                    (COALESCE(score_combat, 0) + COALESCE(score_destroyed, 0)) = ?
+                    (
+                      CAST(COALESCE(score_combat, '0') AS NUMERIC)
+                      + CAST(COALESCE(score_destroyed, '0') AS NUMERIC)
+                    ) = ?
                     AND player_id < ?
                   )
             """,
@@ -1875,9 +1881,15 @@ def get_player_category_ranks(
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores
-            WHERE (COALESCE(score_fleet, 0) + COALESCE(score_defense, 0)) > ?
+            WHERE (
+                    CAST(COALESCE(score_fleet, '0') AS NUMERIC)
+                    + CAST(COALESCE(score_defense, '0') AS NUMERIC)
+                  ) > ?
                OR (
-                    (COALESCE(score_fleet, 0) + COALESCE(score_defense, 0)) = ?
+                    (
+                      CAST(COALESCE(score_fleet, '0') AS NUMERIC)
+                      + CAST(COALESCE(score_defense, '0') AS NUMERIC)
+                    ) = ?
                     AND player_id < ?
                   )
             """,
@@ -1889,8 +1901,8 @@ def get_player_category_ranks(
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores
-            WHERE COALESCE(score_planet_evolution, 0) > ?
-               OR (COALESCE(score_planet_evolution, 0) = ? AND player_id < ?)
+            WHERE CAST(COALESCE(score_planet_evolution, '0') AS NUMERIC) > ?
+               OR (CAST(COALESCE(score_planet_evolution, '0') AS NUMERIC) = ? AND player_id < ?)
             """,
             (my_evo, my_evo, int(player_id)),
         )

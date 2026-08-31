@@ -1586,7 +1586,7 @@ def execute_instant_attack(
         """
         UPDATE world_boss_events
         SET phase_index = ?, fleet_stacks_json = ?, status = ?,
-            defeated_at = CASE WHEN ? THEN ? ELSE defeated_at END,
+            defeated_at = CASE WHEN ? = 1 THEN ? ELSE defeated_at END,
             updated_at = ?
         WHERE id = ?;
         """,
@@ -2490,7 +2490,7 @@ def resolve_attack_arrival(
         """
         UPDATE world_boss_events
         SET current_hp = ?, phase_index = ?, fleet_stacks_json = ?,
-            status = ?, defeated_at = CASE WHEN ? THEN ? ELSE defeated_at END,
+            status = ?, defeated_at = CASE WHEN ? = 1 THEN ? ELSE defeated_at END,
             updated_at = ?
         WHERE id = ? AND status = ?;
         """,

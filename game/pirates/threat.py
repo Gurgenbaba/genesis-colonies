@@ -57,8 +57,7 @@ def recompute_player_threat(player_id: int, *, conn) -> Dict[str, Any]:
 
     cur = conn.execute(
         """
-        SELECT score_total, score_fleet, score_defense,
-               COALESCE(score_destroyed, 0) AS score_destroyed
+        SELECT score_total, score_fleet, score_defense, score_destroyed
         FROM player_scores WHERE player_id = ? LIMIT 1;
         """,
         (pid,),

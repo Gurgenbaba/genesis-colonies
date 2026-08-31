@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -147,8 +148,8 @@ def record_codex_route_visit(player_id: int, route: str, *, conn: sqlite3.Connec
             return
         c.execute(
             "INSERT INTO player_unlocks (user_id, unlock_key, source_item_key, created_at) "
-            "VALUES (?, ?, ?, datetime('now'))",
-            (int(player_id), key, "codex"),
+            "VALUES (?, ?, ?, ?)",
+            (int(player_id), key, "codex", float(time.time())),
         )
         if own:
             c.commit()
