@@ -50,7 +50,7 @@ def append_history(
             INSERT INTO planet_legacy_tags (planet_id, tag_key, count, first_at, last_at)
             VALUES (?, ?, 1, ?, ?)
             ON CONFLICT(planet_id, tag_key) DO UPDATE SET
-                count = count + 1,
+                count = planet_legacy_tags.count + 1,
                 last_at = excluded.last_at;
             """,
             (int(planet_id), str(history_tag), ts, ts),

@@ -226,7 +226,7 @@ def record_lifetime_acquired(user_id: int, item_key: str, amount: int, *, conn) 
             user_id, item_key, lifetime_acquired, lifetime_redeemed, updated_at
         ) VALUES (?, ?, ?, 0, ?)
         ON CONFLICT(user_id, item_key) DO UPDATE SET
-            lifetime_acquired = lifetime_acquired + excluded.lifetime_acquired,
+            lifetime_acquired = collector_lifetime_stats.lifetime_acquired + excluded.lifetime_acquired,
             updated_at = excluded.updated_at;
         """,
         (int(user_id), key, amt, now),
@@ -248,7 +248,7 @@ def record_lifetime_redeemed(user_id: int, item_key: str, amount: int, *, conn) 
             user_id, item_key, lifetime_acquired, lifetime_redeemed, updated_at
         ) VALUES (?, ?, 0, ?, ?)
         ON CONFLICT(user_id, item_key) DO UPDATE SET
-            lifetime_redeemed = lifetime_redeemed + excluded.lifetime_redeemed,
+            lifetime_redeemed = collector_lifetime_stats.lifetime_redeemed + excluded.lifetime_redeemed,
             updated_at = excluded.updated_at;
         """,
         (int(user_id), key, amt, now),

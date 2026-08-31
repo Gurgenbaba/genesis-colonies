@@ -154,9 +154,95 @@ def core_schema_ready(conn: Any) -> bool:
 
 
 # Columns that store signed 64-bit values. SQLite INTEGER is i64; Postgres INTEGER is i32.
+# Expanded GC-DB-POSTGRES-001 Phase 1 from production-copy overflow scan.
 _POSTGRES_I64_COLUMNS: List[tuple[str, str]] = [
     ("planets", "dna_seed"),
+    ("players", "banned_until"),
+    ("bans", "banned_until"),
+    ("build_queue", "cost_metal"),
+    ("build_queue", "cost_crystal"),
+    ("research_queue", "cost_metal"),
+    ("research_queue", "cost_crystal"),
+    ("planet_ships", "amount"),
+    ("shipyard_queue", "amount"),
+    ("shipyard_queue", "cost_metal"),
+    ("shipyard_queue", "cost_crystal"),
+    ("planet_defense", "amount"),
+    ("chronicle_entries", "score_value"),
+    ("directive_progress", "delta"),
+    ("expedition_daily_value", "expo_value_total"),
+    ("expedition_daily_recorded", "expo_value"),
+    ("pirate_intel", "resources_score"),
+    ("pirate_intel", "fleet_score"),
+    ("pirate_intel", "defense_score"),
+    ("pirate_bot_state", "seed"),
+    ("troop_queue", "cost_metal"),
+    ("troop_queue", "cost_crystal"),
+    ("planet_shipyard_ascension", "hull_mass_progress"),
 ]
+
+_INT32_MAX = 2147483647
+_INT32_MIN = -2147483648
+
+
+def scan_sqlite_int32_overflow_columns(sqlite_conn: Any) -> List[tuple[str, str, int, int]]:
+    """Return (table, column, min, max) for INTEGER columns outside Postgres int4."""
+    tables = [
+        str(r[0])
+        for r in sqlite_conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY 1"
+        )
+    ]
+    hits: List[tuple[str, str, int, int]] = []
+    for table in tables:
+        cols = sqlite_conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+        for col in cols:
+            name = str(col[1] if not hasattr(col, "keys") else col["name"])
+            ctype = str(col[2] if not hasattr(col, "keys") else col["type"] or "").upper()
+            if "INT" not in ctype and ctype not in ("", "NUMERIC"):
+                # SQLite affinity: bare INTEGER / INT*; also scan untyped numeric storage
+                continue
+            if ctype and "INT" not in ctype and ctype != "NUMERIC":
+                continue
+            try:
+                row = sqlite_conn.execute(
+                    f'SELECT MAX("{name}"), MIN("{name}") FROM "{table}" '
+                    f'WHERE typeof("{name}") = \'integer\''
+                ).fetchone()
+            except Exception:
+                continue
+            if not row or row[0] is None:
+                continue
+            mx, mn = int(row[0]), int(row[1])
+            if mx > _INT32_MAX or mn < _INT32_MIN:
+                hits.append((table, name, mn, mx))
+    return hits
+
+
+def ensure_postgres_i64_columns_from_sqlite(
+    pg_conn: Any, sqlite_conn: Any
+) -> List[str]:
+    """
+    Widen static i64 list plus any INTEGER columns that overflow int4 in the
+    SQLite source (production-copy import rehearsal).
+    """
+    from game.db import get_db_backend
+
+    if get_db_backend() != "postgres":
+        return []
+    discovered = {
+        (t, c) for t, c, _mn, _mx in scan_sqlite_int32_overflow_columns(sqlite_conn)
+    }
+    # Temporarily extend the static list for this call.
+    extra = sorted(discovered - set(_POSTGRES_I64_COLUMNS))
+    if extra:
+        _POSTGRES_I64_COLUMNS.extend(extra)
+    try:
+        return ensure_postgres_i64_columns(pg_conn)
+    finally:
+        # Keep discovered columns in the module list for subsequent init_db calls
+        # in the same process (idempotent ALTER).
+        pass
 
 
 def ensure_postgres_i64_columns(conn: Any) -> List[str]:

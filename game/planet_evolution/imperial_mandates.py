@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sqlite3
 
+from ..db import column_exists, table_exists
 from ..models import get_homeworld, get_planets_by_player
 from .expansion_gates import get_homeworld_level
 
@@ -46,21 +47,16 @@ def legacy_expansion_slots_unlocked(homeworld_level: int) -> int:
 
 
 def _column_ready(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    # Owner: game.db.column_exists (PG-safe). Never PRAGMA/sqlite_master on Postgres.
     try:
-        rows = conn.execute(f"PRAGMA table_info({table});").fetchall()
+        return column_exists(conn, table, column)
     except Exception:
         return False
-    names = {str(r["name"] if hasattr(r, "keys") else r[1]) for r in rows}
-    return column in names
 
 
 def _table_ready(conn: sqlite3.Connection, table: str) -> bool:
     try:
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;",
-            (table,),
-        ).fetchone()
-        return row is not None
+        return table_exists(conn, table)
     except Exception:
         return False
 

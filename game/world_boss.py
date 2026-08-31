@@ -2686,10 +2686,10 @@ def _upsert_contribution(
                 last_attack_at, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(event_id, player_id) DO UPDATE SET
-                damage = damage + excluded.damage,
-                waves = waves + excluded.waves,
-                alliance_xp = alliance_xp + excluded.alliance_xp,
-                alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+                damage = world_boss_contributions.damage + excluded.damage,
+                waves = world_boss_contributions.waves + excluded.waves,
+                alliance_xp = world_boss_contributions.alliance_xp + excluded.alliance_xp,
+                alliance_id = COALESCE(excluded.alliance_id, world_boss_contributions.alliance_id),
                 updated_at = excluded.updated_at;
             """,
             (
@@ -2712,9 +2712,9 @@ def _upsert_contribution(
             last_attack_at, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(event_id, player_id) DO UPDATE SET
-            damage = damage + excluded.damage,
-            waves = waves + excluded.waves,
-            alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+            damage = world_boss_contributions.damage + excluded.damage,
+            waves = world_boss_contributions.waves + excluded.waves,
+            alliance_id = COALESCE(excluded.alliance_id, world_boss_contributions.alliance_id),
             updated_at = excluded.updated_at;
         """,
         (
@@ -2793,7 +2793,7 @@ def list_alliance_contributions(
         FROM world_boss_contributions c
         LEFT JOIN alliances a ON a.id = c.alliance_id
         WHERE c.event_id = ? AND c.alliance_id IS NOT NULL
-        GROUP BY c.alliance_id
+        GROUP BY c.alliance_id, a.tag, a.name
         ORDER BY damage DESC
         LIMIT ?;
         """,

@@ -438,7 +438,7 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
                    COALESCE(p.last_seen, 0) AS last_seen,
                    COALESCE(SUM(d.amount), 0) AS donation_points,
                    COALESCE(SUM(d.xp_granted), 0) AS xp_contribution,
-                   COALESCE(ps.score_total, 0) AS total_score,
+                   COALESCE(ps.score_total, '0') AS total_score,
                    hw.id AS homeworld_id,
                    hw.name AS homeworld_name,
                    hw.galaxy AS homeworld_galaxy,

@@ -339,11 +339,24 @@ def reset_domain_catalog() -> List[Dict[str, str]]:
 
 def discover_inventory_tables(conn: sqlite3.Connection) -> Set[str]:
     """Return existing tables that store player item ownership (must be preserved)."""
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;")
+    from game.db import get_db_backend
+
     found: Set[str] = set()
-    for row in cur.fetchall():
-        name = str(row[0] or "")
+    if get_db_backend() == "postgres":
+        rows = conn.execute(
+            """
+            SELECT table_name AS name
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;"
+        ).fetchall()
+    for row in rows:
+        name = str((row["name"] if hasattr(row, "keys") else row[0]) or "")
         lower = name.lower()
         if name in PRESERVED_TABLES:
             found.add(name)

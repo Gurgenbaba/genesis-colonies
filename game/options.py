@@ -1644,12 +1644,11 @@ def execute_account_deletion(player_id: int, *, conn) -> None:
     token = secrets.token_hex(8)
     cur = conn.cursor()
 
-    # Clear registration IP when column exists.
+    # Clear registration IP when column exists (game.db.table_columns — PG-safe).
+    from .db import table_columns
+
     try:
-        cols = {
-            str(r[1])
-            for r in cur.execute("PRAGMA table_info(users);").fetchall()
-        }
+        cols = table_columns(conn, "users")
     except Exception:
         cols = set()
     if "registration_ip" in cols:

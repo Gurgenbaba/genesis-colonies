@@ -27,6 +27,7 @@ import sqlite3
 import sys
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 from urllib.parse import urlparse
@@ -280,6 +281,65 @@ def _pg_table_columns(pg: Any, table: str) -> list[str]:
     return out
 
 
+def _pg_column_types(pg: Any, table: str) -> dict[str, str]:
+    rows = pg.execute(
+        """
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = %s
+        ORDER BY ordinal_position;
+        """,
+        (table,),
+    ).fetchall()
+    out: dict[str, str] = {}
+    for r in rows:
+        if isinstance(r, dict):
+            out[str(r["column_name"])] = str(r["data_type"]).lower()
+        else:
+            out[str(r[0])] = str(r[1]).lower()
+    return out
+
+
+def _coerce_for_postgres(value: Any, data_type: str) -> Any:
+    """Coerce SQLite affinity quirks into Postgres-compatible scalars.
+
+    Production snapshot stores some REAL epoch columns as datetime strings
+    (e.g. player_unlocks.created_at). Convert those to unix epoch floats.
+    """
+    if value is None:
+        return None
+    dt = (data_type or "").lower()
+    if isinstance(value, str) and dt in (
+        "double precision",
+        "real",
+        "numeric",
+        "integer",
+        "bigint",
+        "smallint",
+    ):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text) if dt in ("double precision", "real", "numeric") else int(float(text))
+        except ValueError:
+            pass
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%d",
+        ):
+            try:
+                parsed = datetime.strptime(text, fmt)
+                epoch = parsed.timestamp()
+                return epoch if dt in ("double precision", "real", "numeric") else int(epoch)
+            except ValueError:
+                continue
+    return value
+
+
 def _pg_row_count(pg: Any, table: str) -> int:
     row = pg.execute(f"SELECT COUNT(*) AS c FROM {_quote_ident(table)};").fetchone()
     if row is None:
@@ -318,7 +378,8 @@ def copy_table(
         return stat
 
     src_cols = sqlite_table_columns(sqlite_conn, table)
-    dst_cols = set(_pg_table_columns(pg, table))
+    pg_types = _pg_column_types(pg, table)
+    dst_cols = set(pg_types)
     cols = [c for c in src_cols if c in dst_cols]
     if not cols:
         stat.skipped = True
@@ -334,16 +395,31 @@ def copy_table(
 
     src_rows = sqlite_conn.execute(select_sql).fetchall()
     copied = 0
+    coerced = 0
     for batch in _chunked(src_rows, batch_size):
-        params = [tuple(row[c] for c in cols) for row in batch]
+        params = []
+        for row in batch:
+            tup = []
+            for c in cols:
+                raw = row[c]
+                new = _coerce_for_postgres(raw, pg_types.get(c, ""))
+                if new is not raw:
+                    coerced += 1
+                tup.append(new)
+            params.append(tuple(tup))
         pg.cursor().executemany(insert_sql, params)
         copied += len(params)
     pg.commit()
     stat.copied = copied
     stat.postgres_rows = _pg_row_count(pg, table)
+    notes: list[str] = []
     missing_dst = [c for c in src_cols if c not in dst_cols]
     if missing_dst:
-        stat.note = f"omitted columns not on PG: {', '.join(missing_dst)}"
+        notes.append(f"omitted columns not on PG: {', '.join(missing_dst)}")
+    if coerced:
+        notes.append(f"coerced_values={coerced}")
+    if notes:
+        stat.note = "; ".join(notes)
     return stat
 
 
@@ -462,6 +538,14 @@ def run_import(
                 )
                 return report
 
+        # SQLite INTEGER is i64; Postgres INTEGER is i32 — widen before copy.
+        from game.schema_bootstrap import ensure_postgres_i64_columns_from_sqlite
+
+        widened = ensure_postgres_i64_columns_from_sqlite(pg, sqlite_conn)
+        if widened:
+            pg.commit()
+            print(f"[pg_import] widened {len(widened)} column(s) to BIGINT")
+
         # Optional safety net for residual FK quirks (needs privilege on some hosts).
         replication_role_set = False
         try:
@@ -476,9 +560,12 @@ def run_import(
 
         try:
             for table in order:
-                stat = copy_table(
-                    sqlite_conn, pg, table, batch_size=batch_size
-                )
+                try:
+                    stat = copy_table(
+                        sqlite_conn, pg, table, batch_size=batch_size
+                    )
+                except Exception as exc:
+                    raise RuntimeError(f"copy_table({table}) failed: {exc}") from exc
                 report.stats.append(stat)
                 if not stat.skipped and stat.sqlite_rows != stat.postgres_rows:
                     if not stat.note:

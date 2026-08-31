@@ -290,7 +290,7 @@ def _add_daily_wager(
         INSERT INTO space_lottery_daily_game (player_id, day_bucket, game, wagered_sec)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(player_id, day_bucket, game) DO UPDATE SET
-            wagered_sec = wagered_sec + excluded.wagered_sec;
+            wagered_sec = space_lottery_daily_game.wagered_sec + excluded.wagered_sec;
         """,
         (int(player_id), bucket, g, amt),
     )
@@ -767,8 +767,8 @@ def buy_tombola_tickets(
         INSERT INTO space_lottery_tickets (week_id, player_id, ticket_count, spent_sec, updated_at)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(week_id, player_id) DO UPDATE SET
-            ticket_count = ticket_count + excluded.ticket_count,
-            spent_sec = spent_sec + excluded.spent_sec,
+            ticket_count = space_lottery_tickets.ticket_count + excluded.ticket_count,
+            spent_sec = space_lottery_tickets.spent_sec + excluded.spent_sec,
             updated_at = excluded.updated_at;
         """,
         (wid, int(player_id), n, cost, now),
