@@ -209,6 +209,13 @@ def test_world_boss_source_uses_equals_one_predicate():
     source = (ROOT / "game" / "world_boss.py").read_text(encoding="utf-8")
     assert "CASE WHEN ? = 1 THEN ? ELSE defeated_at END" in source
     assert source.count("CASE WHEN ? THEN ? ELSE defeated_at END") == 0
+    assert "WHEN ? = 1 THEN ? ELSE resonance_initiator_player_id END" in source
+    assert "WHEN ? = 1 THEN ? ELSE finisher_player_id END" in source
+    assert "COALESCE(excluded.alliance_id, alliance_id)" not in source
+    assert "COALESCE(excluded.alliance_id, world_boss_contributions.alliance_id)" in source or (
+        "world_boss_contributions.alliance_id" in source
+        and "excluded.alliance_id" in source
+    )
 
 
 @requires_postgres

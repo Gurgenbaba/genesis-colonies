@@ -1330,9 +1330,9 @@ def _advance_world_boss_raid_after_hit(
             SET resonance_points = ?,
                 resonance_ends_at = ?,
                 resonance_initiator_player_id = CASE
-                    WHEN ? THEN ? ELSE resonance_initiator_player_id END,
+                    WHEN ? = 1 THEN ? ELSE resonance_initiator_player_id END,
                 finisher_player_id = CASE
-                    WHEN ? THEN ? ELSE finisher_player_id END,
+                    WHEN ? = 1 THEN ? ELSE finisher_player_id END,
                 updated_at = ?
             WHERE id = ?;
             """,
@@ -2302,7 +2302,10 @@ def note_attack_dispatched(
         ) VALUES (?, ?, ?, 0, 0, ?, ?, ?)
         ON CONFLICT(event_id, player_id) DO UPDATE SET
             last_attack_at = excluded.last_attack_at,
-            alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+            alliance_id = COALESCE(
+                excluded.alliance_id,
+                world_boss_contributions.alliance_id
+            ),
             updated_at = excluded.updated_at;
         """,
         (
@@ -3550,7 +3553,10 @@ def set_world_boss_auto_attack(
             auto_attack_enabled, auto_attack_ships_json, auto_attack_planet_id
         ) VALUES (?, ?, ?, 0, 0, NULL, ?, ?, 1, ?, ?)
         ON CONFLICT(event_id, player_id) DO UPDATE SET
-            alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+            alliance_id = COALESCE(
+                excluded.alliance_id,
+                world_boss_contributions.alliance_id
+            ),
             auto_attack_enabled = 1,
             auto_attack_ships_json = excluded.auto_attack_ships_json,
             auto_attack_planet_id = excluded.auto_attack_planet_id,
