@@ -105,11 +105,13 @@ Disable embedded cron only if you intentionally use an external HTTP scheduler: 
 
 ---
 
-## Postgres / scaling (later — not planned)
+## Postgres / scaling
 
-**Produktentscheidung:** Produktion bleibt auf **SQLite**. Siehe [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md).
+**Current production:** still **SQLite** (`GC_DB_BACKEND=sqlite`, volume `/data`).  
+Technical readiness (hardening on `main`): [GC-DB-POSTGRES-001-PHASE1.md](database/GC-DB-POSTGRES-001-PHASE1.md).  
+**Cutover runbook (preparation only — do not execute without ★ approvals):** [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
 
-Optionaler PG-Code-Pfad existiert in [GC_PERF_CORE.md](GC_PERF_CORE.md), ist aber **kein Cutover-Ziel**. Until further notice: Replicas = 1, workers = 1.
+Until cutover is explicitly approved and executed: Replicas = 1, workers = 1, `GC_ALLOW_POSTGRES_PROD` unset.
 
 **GC-PERF-PROD-002:** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and sets `GC_EMBEDDED_CRON=0` on gunicorn so Soft-On ticks do not share the web GIL. Opt out: `GC_MAINTENANCE_WORKER=0` (legacy in-process `[embedded-cron]`).
 
