@@ -197,6 +197,27 @@ def get_imperial_directives_summary(
     }
 
 
-def count_claimable_directives(player_id: int, *, conn: sqlite3.Connection) -> int:
-    summary = get_imperial_directives_summary(player_id, conn=conn)
+def count_claimable_directives(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+    read_only: bool = False,
+) -> int:
+    """Nav-badge helper: set read_only=True to avoid ensure/generate during diet polls."""
+    pid = int(player_id)
+    if pid <= 0:
+        return 0
+    if read_only:
+        if not directives_schema_ready(conn):
+            return 0
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n
+            FROM player_directives
+            WHERE player_id = ? AND status = ?;
+            """,
+            (pid, STATUS_COMPLETED),
+        ).fetchone()
+        return int((row["n"] if row else 0) or 0)
+    summary = get_imperial_directives_summary(pid, conn=conn)
     return int(summary.get("claimable_count") or 0)
