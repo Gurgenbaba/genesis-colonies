@@ -5,7 +5,7 @@
 > **Branch:** `audit/gc-db-postgres-001-phase1`  
 > **Date:** 2026-08-31  
 > **Production mutation/cutover:** none  
-> **Production read access:** SQLite snapshot creation only (read-only /tmp copy; no Railway config/data mutation)
+> **Production read access:** SQLite snapshot creation only (read-only `/tmp` copy; no Railway config/data mutation)
 
 ---
 
@@ -29,8 +29,8 @@ This is **not** a Railway cutover.
 
 | Item | Value |
 |------|-------|
-| Master (never modified) | `C:\Users\gurge\Desktop\GC-POSTGRES-PHASE1\gc-prod-snapshot-20260831-110452.db` |
-| Working copy (import source) | `C:\Users\gurge\Desktop\GC-POSTGRES-PHASE1\gc-prod-working-copy.db` |
+| Master (never modified) | local offline snapshot `gc-prod-snapshot-20260831-110452.db` (outside repo) |
+| Working copy (import source) | local `gc-prod-working-copy.db` (outside repo) |
 | SHA256 (master = working) | `89EA276CA714D7209E719E3F442A23D5D5BC5A034F653EC183712144CC6D097B` |
 | PRAGMA quick_check / integrity_check | ok / ok |
 | Total SQLite tables | **193** |
@@ -103,8 +103,9 @@ Disposable PG: Docker `gc-pg-phase1` → `gc_phase1_prod` @ `127.0.0.1:5433` (no
 
 ## 4. Functional smoke (imported PG)
 
-Isolated disposable identity for mutations. Pages + `/api/game-state` + queue/fleet heartbeats + HoF list/sync: **ok**.  
-Artifact: `artifacts/pg_phase1/prod_smoke.json`.
+Isolated disposable identity for mutations. Pages + `/api/game-state` + queue/fleet heartbeats + HoF list/sync: **ok**.
+
+Local-only evidence was produced under the Phase-1 audit workspace and intentionally excluded from Git because it is derived from production-copy testing.
 
 ---
 
@@ -123,8 +124,6 @@ Artifact: `artifacts/pg_phase1/prod_smoke.json`.
 | healthz p50 / p95 / p99 / max | 33.8 / 39.8 / 49.6 / 52.9 ms |
 | Pool exhaustion / deadlocks / DB correctness errors | none observed |
 
-Artifact: `artifacts/pg_phase1/prod_load_linux_gthread.json` (`ok: true`).
-
 Windows Waitress threads=4 remains a supplemental host probe only.
 
 ---
@@ -142,7 +141,7 @@ Re-run after all Real-Data fixes; **not** earlier-session results. Each block in
 | E Evolution | PASS |
 | F Race/restart | PASS |
 
-Artifact: `artifacts/pg_phase1/prod_parity_af_final.txt`.
+Detailed local-only parity output was intentionally excluded from Git.
 
 ---
 
@@ -165,12 +164,9 @@ Preferred rollback before reopen: do not switch; SQLite remains authoritative. N
 
 ## 9. PR preparation status
 
-**Not yet PR-ready to push/merge.** Next human/agent step:
+Hardening changes were committed and pushed on `audit/gc-db-postgres-001-phase1`. Production-derived databases/raw artifacts and local Phase-1 helper scripts remain outside the commit.
 
-1. Commit intended source/test/doc changes only  
-2. Review `artifacts/` — **exclude** `*.db`, raw import dumps, anything with production-derived sensitive payload from Git  
-3. Keep JSON summaries that contain only aggregates/counts  
-4. Open Hardening PR — **no Railway cutover**
+**Ready for Hardening PR review.** This PR is readiness/hardening only — **no Railway cutover, no production DB switch, no volume removal**.
 
 ---
 
