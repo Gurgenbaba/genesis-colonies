@@ -7986,31 +7986,29 @@ def api_hall_of_fame():
 @app.route("/world-boss")
 @require_login
 def world_boss_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
-        "world_boss"
-    )
-    if player_view is None:
-        return redirect(url_for("login"))
-
     from game.world_boss import build_world_boss_payload
 
     player_id = _current_player_id()
     conn = db()
     wb_payload = None
     try:
-        # PostgreSQL GET hotpath: payload composition is read-only. Auto attacks
-        # are server-owned by the fleet worker / explicit POST mutations.
+        ctx = _load_page_live_context(finish_source="world_boss", conn=conn, close_conn=False)
+        if ctx is None:
+            return redirect(url_for("login"))
+
+        # PostgreSQL GET hotpath: one request-owned connection. Payload composition
+        # stays read-only; auto attacks remain worker / explicit POST mutations.
         wb_payload = build_world_boss_payload(player_id, conn=conn)
     finally:
         conn.close()
 
     return render_template(
         "world_boss.html",
-        player=player_view,
-        buildings=buildings,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
+        player=ctx["player_view"],
+        buildings=ctx["buildings"],
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
         world_boss_payload=wb_payload,
     )
 
