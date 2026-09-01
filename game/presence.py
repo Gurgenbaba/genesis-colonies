@@ -31,13 +31,55 @@ from .db import (
 logger = logging.getLogger(__name__)
 
 
+def _release_roster_optional(conn, player_id: int) -> None:  # noqa: ANN001
+    """Release inactive-autoplay ownership without poisoning presence writes.
+
+    PostgreSQL aborts the transaction after a failed statement. Scope this
+    optional side effect to a SAVEPOINT so a runtime-state failure cannot roll
+    back an already-successful ``players.last_seen`` update. SQLite keeps the
+    established fail-open behavior. No foreign transaction is committed or
+    blanket-rolled back here.
+    """
+    from .inactive_autoplay import release_active_player_from_roster
+
+    if get_db_backend() != "postgres":
+        try:
+            release_active_player_from_roster(int(player_id), conn=conn)
+        except Exception:
+            logger.warning(
+                "release_active_player_from_roster failed player=%s",
+                int(player_id),
+                exc_info=True,
+            )
+        return
+
+    savepoint = "gc_presence_roster"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        release_active_player_from_roster(int(player_id), conn=conn)
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    except Exception:
+        try:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        except Exception:
+            # If SAVEPOINT recovery itself fails, propagate: committing an
+            # unknown/aborted transaction would be unsafe.
+            raise
+        logger.warning(
+            "release_active_player_from_roster failed player=%s — presence preserved",
+            int(player_id),
+            exc_info=True,
+        )
+
+
 def touch_player_online(player_id: int) -> None:
     """Mark a real authenticated player online without nested DB checkouts.
 
     Presence remains best-effort. Successful writes keep the existing
-    ``players.last_seen`` cadence and release a returning human from inactive
-    autoplay in the same short transaction. PostgreSQL lock contention is a
-    soft skip; no retry/pool/timeout defaults are changed.
+    ``players.last_seen`` cadence and attempt inactive-autoplay handback in the
+    same short transaction. PostgreSQL lock contention is a soft skip; no
+    retry/pool/timeout defaults are changed.
     """
     if not player_id:
         return
@@ -69,8 +111,8 @@ def touch_player_online(player_id: int) -> None:
 
             need_roster = bool(player_on_inactive_autoplay_roster(pid, conn=conn))
         except Exception:
-            # Preserve prior fail-open behavior: if we cannot prove the player
-            # is off the roster, run the normal short write slice.
+            # Fail open: if we cannot prove the player is off the roster, run
+            # the normal short write slice and isolate handback separately.
             need_roster = True
             logger.warning(
                 "player_on_inactive_autoplay_roster probe failed player=%s",
@@ -92,9 +134,7 @@ def touch_player_online(player_id: int) -> None:
             (now, pid, touch_before),
         )
 
-        from .inactive_autoplay import release_active_player_from_roster
-
-        release_active_player_from_roster(pid, conn=conn)
+        _release_roster_optional(conn, pid)
         commit(conn)
         models._presence_local_mark(pid, now=now, interval=interval)
     except Exception as exc:
