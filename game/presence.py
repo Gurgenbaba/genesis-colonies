@@ -80,11 +80,12 @@ def touch_player_online(player_id: int) -> None:
     if models._presence_local_fresh(pid, now=now):
         return
 
+    backend = get_db_backend()
     conn = db()
     try:
         # On PostgreSQL this SELECT only touches player_presence. A gameplay
         # transaction may hold the players row without stalling auth presence.
-        last_seen = get_presence_last_seen(conn, pid)
+        last_seen = get_presence_last_seen(conn, pid, backend=backend)
         need_last_seen = last_seen < touch_before
 
         need_roster = False
@@ -105,10 +106,16 @@ def touch_player_online(player_id: int) -> None:
             return
 
         begin_write_transaction(conn)
-        if get_db_backend() == "postgres":
+        if backend == "postgres":
             conn.execute("SET LOCAL lock_timeout = '250ms'")
 
-        touch_presence(conn, pid, now=now, touch_before=touch_before)
+        touch_presence(
+            conn,
+            pid,
+            now=now,
+            touch_before=touch_before,
+            backend=backend,
+        )
         _release_roster_optional(conn, pid)
         commit(conn)
         models._presence_local_mark(pid, now=now, interval=interval)
