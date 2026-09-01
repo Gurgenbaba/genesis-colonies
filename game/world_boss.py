@@ -3202,7 +3202,7 @@ def build_world_boss_payload(
     conn,
     event_id: Optional[int] = None,
     now: Optional[float] = None,
-    flush_auto: bool = True,
+    flush_auto: bool = False,
 ) -> Dict[str, Any]:
     ts = float(now if now is not None else _now())
     empty = {
@@ -3222,7 +3222,9 @@ def build_world_boss_payload(
     if not world_boss_schema_ready(conn):
         return empty
 
-    # Opportunistic auto-fire so "Auto aktiv + CD frei" works without waiting on fleet_worker.
+    # Read payloads stay mutation-free by default. Auto-fire is owned by
+    # fleet_worker/tick_world_boss_auto_attacks; flush_auto=True is an
+    # explicit mutation opt-in for narrow internal/test callers only.
     flushed_attacks: List[Dict[str, Any]] = []
     if flush_auto and player_id is not None:
         try:
