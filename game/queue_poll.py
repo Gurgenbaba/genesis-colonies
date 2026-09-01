@@ -379,12 +379,17 @@ def try_claim_poll_due_finish(
             if not nested:
                 commit(conn)
             return True
-        except Exception:
+        except Exception as claim_exc:
             if not nested:
                 try:
                     rollback(conn)
                 except Exception:
                     pass
+            from .db import is_db_lock_error
+
+            # Claim is single-flight coordination only — never 500 a page/poll.
+            if is_db_lock_error(claim_exc):
+                return False
             raise
     finally:
         if owns_conn and conn is not None:

@@ -54,3 +54,32 @@ def test_galaxy_view_asteroid_ensure_soft_skips_on_lock():
     assert "ensure_asteroids_present(conn=conn)" in block
     assert "is_db_lock_error(asteroid_exc)" in block
     assert "galaxy asteroid ensure skipped (database locked)" in block
+
+
+def test_poll_due_claim_soft_skips_db_lock():
+    source = (ROOT / "game" / "queue_poll.py").read_text(encoding="utf-8")
+    block = source.split("def try_claim_poll_due_finish(")[1].split(
+        "\ndef clear_poll_due_claim_for_tests(", 1
+    )[0]
+    assert "is_db_lock_error(claim_exc)" in block
+    assert "return False" in block
+
+
+def test_runtime_state_upsert_soft_skips_lock():
+    source = (ROOT / "game" / "runtime_state.py").read_text(encoding="utf-8")
+    block = source.split("def set_runtime_value(")[1].split("\ndef record_queue_tick_result(", 1)[0]
+    assert "is_db_lock_error(exc)" in block
+    assert "runtime_state upsert skipped (lock)" in block
+
+
+def test_resolve_directive_cycle_pg_safe_primary_since_case():
+    """PG rejects WHEN ? IS NOT NULL with NULL binds (IndeterminateDatatype $3)."""
+    source = (ROOT / "game" / "galactic_directives" / "voting.py").read_text(
+        encoding="utf-8"
+    )
+    block = source.split("def resolve_directive_cycle(")[1].split(
+        "\ndef _refresh_galaxy_personality_from_history(", 1
+    )[0]
+    assert "CASE WHEN ? = 1 THEN ?" in block
+    assert "CASE WHEN ? IS NOT NULL THEN ?" not in block
+    assert "1 if primary else 0" in block

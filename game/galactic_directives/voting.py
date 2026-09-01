@@ -468,12 +468,14 @@ def resolve_directive_cycle(
                 int(cycle["id"]),
             ),
         )
+        # PG: bare `WHEN ? IS NOT NULL` with a NULL bind → IndeterminateDatatype ($3).
+        # Use an explicit 0/1 flag so the parameter type is never ambiguous.
         conn.execute(
             """
             UPDATE gd_galaxy_state
             SET primary_directive = ?,
                 secondary_directive = ?,
-                primary_since = CASE WHEN ? IS NOT NULL THEN ? ELSE primary_since END,
+                primary_since = CASE WHEN ? = 1 THEN ? ELSE primary_since END,
                 consecutive_primary_wins = ?,
                 cooldown_directive = ?,
                 cooldown_until_ym = ?,
@@ -484,7 +486,7 @@ def resolve_directive_cycle(
             (
                 primary or FALLBACK_PRIMARY,
                 secondary,
-                primary,
+                1 if primary else 0,
                 ts,
                 int(consecutive),
                 cooldown_directive,
