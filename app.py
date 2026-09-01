@@ -2872,17 +2872,20 @@ def defense_view():
     ssr = current_ssr_perf()
 
     data_t0 = time.perf_counter()
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
-        finish_ssr_perf(response_bytes=0)
-        return redirect(url_for("login"))
-
-    from game.defense_page import build_defense_page_context
-    from game.planet_evolution.repository import get_context_planet
-
     conn = db()
     try:
-        planet = get_context_planet(int(session.get("user_id") or 0), conn=conn)
+        ctx = _load_page_live_context(finish_source="defense", conn=conn, close_conn=False)
+        if ctx is None:
+            finish_ssr_perf(response_bytes=0)
+            return redirect(url_for("login"))
+
+        from game.defense_page import build_defense_page_context
+        from game.live_state import get_request_context_planet
+
+        player_view = ctx["player_view"]
+        planet = ctx.get("planet")
+        if not planet:
+            planet = get_request_context_planet(int(session.get("user_id") or 0), conn=conn)
         defense_ctx = build_defense_page_context(
             int(session.get("user_id") or 0),
             planet,
@@ -2899,9 +2902,9 @@ def defense_view():
         "defense.html",
         player=player_view,
         defense=defense_ctx,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
     )
     if ssr is not None:
         ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
