@@ -5,6 +5,10 @@ on:
     branches:
       - perf/pg-172-no-legacy-presence
 
+concurrency:
+  group: gc-pg-172-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -28,7 +32,9 @@ jobs:
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
       - name: Apply canonical presence cutover
-        run: python scripts/apply_gc_pg_172_no_legacy_presence.py
+        run: |
+          python scripts/fix_gc_pg_172_apply.py
+          python scripts/apply_gc_pg_172_no_legacy_presence.py
       - name: Run presence regression suite
         run: |
           python -m pytest -q \
@@ -44,6 +50,7 @@ jobs:
       - name: Commit validated production patch
         run: |
           rm scripts/apply_gc_pg_172_no_legacy_presence.py
+          rm scripts/fix_gc_pg_172_apply.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
@@ -53,6 +60,6 @@ jobs:
             tests/test_gc_pg_165_presence_critical_readers.py \
             tests/test_gc_pg_166_presence_secondary.py \
             tests/test_gc_pg_172_no_legacy_presence_write.py \
-            scripts/apply_gc_pg_172_no_legacy_presence.py
+            scripts/apply_gc_pg_172_no_legacy_presence.py scripts/fix_gc_pg_172_apply.py
           git commit -m 'perf(pg): remove players last_seen compatibility mirror'
           git push origin HEAD:perf/pg-172-no-legacy-presence
