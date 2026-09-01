@@ -1,0 +1,42 @@
+name: TEMP Presence Apply 164
+on:
+  push:
+    branches: [perf/pg-presence-reader-cutover-164]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/pg-presence-reader-cutover-164
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch mirror and add regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('game/presence_store.py')
+          text=p.read_text(encoding='utf-8')
+          old='''def sync_legacy_last_seen(conn, player_id: int, *, now: int) -> None:  # noqa: ANN001\n    """Compatibility mirror only; caller must isolate this optional PG write."""\n    conn.execute(\n        "UPDATE players SET last_seen = ? WHERE id = ? "\n        "AND (last_seen IS NULL OR last_seen < ?);",\n        (int(now), int(player_id), int(now) - LEGACY_SYNC_INTERVAL_SEC),\n    )\n'''
+          new='''def sync_legacy_last_seen(conn, player_id: int, *, now: int) -> bool:  # noqa: ANN001\n    """Best-effort PG mirror without ever waiting on the hot players row.\n\n    ``players`` is gameplay state, not the canonical PostgreSQL presence owner.\n    Acquire its row with ``SKIP LOCKED`` first; if gameplay currently owns the\n    row, leave the compatibility timestamp stale for this request instead of\n    burning the request lock timeout.\n    """\n    pid = int(player_id)\n    row = conn.execute(\n        "SELECT id FROM players WHERE id = ? FOR UPDATE SKIP LOCKED;",\n        (pid,),\n    ).fetchone()\n    if not row:\n        return False\n    conn.execute(\n        "UPDATE players SET last_seen = ? WHERE id = ? "\n        "AND (last_seen IS NULL OR last_seen < ?);",\n        (int(now), pid, int(now) - LEGACY_SYNC_INTERVAL_SEC),\n    )\n    return True\n'''
+          if text.count(old)!=1:
+              raise SystemExit(f'presence mirror anchor count={text.count(old)}')
+          p.write_text(text.replace(old,new,1),encoding='utf-8')
+          Path('tests/test_gc_pg_164_presence_skip_locked.py').write_text('''from game.presence_store import sync_legacy_last_seen\n\n\nclass _Result:\n    def __init__(self, row):\n        self._row = row\n\n    def fetchone(self):\n        return self._row\n\n\nclass _Conn:\n    def __init__(self, row):\n        self.row = row\n        self.calls = []\n\n    def execute(self, sql, params=()):\n        self.calls.append((sql, tuple(params)))\n        if sql.startswith("SELECT id FROM players"):\n            return _Result(self.row)\n        return _Result(None)\n\n\ndef test_legacy_presence_mirror_skips_busy_player_without_update():\n    conn = _Conn(None)\n    assert sync_legacy_last_seen(conn, 7, now=1000) is False\n    assert len(conn.calls) == 1\n    assert "FOR UPDATE SKIP LOCKED" in conn.calls[0][0]\n    assert not any("UPDATE players SET last_seen" in sql for sql, _ in conn.calls)\n\n\ndef test_legacy_presence_mirror_updates_only_after_nonblocking_row_claim():\n    conn = _Conn({"id": 7})\n    assert sync_legacy_last_seen(conn, 7, now=1000) is True\n    assert "FOR UPDATE SKIP LOCKED" in conn.calls[0][0]\n    assert any("UPDATE players SET last_seen" in sql for sql, _ in conn.calls[1:])\n''',encoding='utf-8')
+          PY
+      - name: Verify focused presence regressions
+        run: |
+          python -m pip install -r requirements-prod.txt pytest
+          python -m py_compile game/presence.py game/presence_store.py
+          python -m pytest -q tests/test_gc_pg_164_presence_skip_locked.py tests/test_gc_pg_142_presence_pool_starvation.py
+      - name: Commit product diff
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/presence_store.py tests/test_gc_pg_164_presence_skip_locked.py
+          git commit -m "fix(pg): skip locked legacy presence rows" || exit 0
+          git push origin HEAD:perf/pg-presence-reader-cutover-164
