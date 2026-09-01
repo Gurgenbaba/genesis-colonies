@@ -106,6 +106,8 @@ def set_runtime_value(key: str, value: str, conn=None) -> None:
                             pass
                 elif own:
                     rollback(conn)
+                from .db import is_db_lock_error
+
                 msg = str(exc).lower()
                 is_deadlock = "deadlock" in msg
                 if is_deadlock and attempt == 0:
@@ -113,9 +115,9 @@ def set_runtime_value(key: str, value: str, conn=None) -> None:
                     if own and not in_transaction(conn):
                         begin_write_transaction(conn)
                     continue
-                if is_deadlock:
+                if is_deadlock or is_db_lock_error(exc):
                     logger.warning(
-                        "runtime_state upsert skipped after deadlock key=%s",
+                        "runtime_state upsert skipped (lock) key=%s",
                         key,
                     )
                     return
