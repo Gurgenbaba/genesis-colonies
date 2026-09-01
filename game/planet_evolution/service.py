@@ -331,12 +331,14 @@ def set_active_planet(player_id: int, planet_id: int, conn: Optional[sqlite3.Con
     try:
         pid = int(player_id)
         plid = int(planet_id)
-        for attempt in range(3):
+        # PG: short local lock wait (hundreds of ms) × bounded retries — never multi-second UX.
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
                 begin_write_transaction(conn)
                 if get_db_backend() == "postgres":
                     try:
-                        conn.execute("SET LOCAL lock_timeout = '2s'")
+                        conn.execute("SET LOCAL lock_timeout = '250ms'")
                     except Exception:
                         pass
                 set_active_planet_id(pid, plid, conn)
@@ -350,8 +352,8 @@ def set_active_planet(player_id: int, planet_id: int, conn: Optional[sqlite3.Con
                     rollback(conn)
                 except Exception:
                     pass
-                if is_db_lock_error(exc) and attempt + 1 < 3:
-                    time.sleep(0.05 * (attempt + 1))
+                if is_db_lock_error(exc) and attempt + 1 < max_attempts:
+                    time.sleep(0.04 * (attempt + 1))
                     continue
                 if is_db_lock_error(exc):
                     logger.warning(

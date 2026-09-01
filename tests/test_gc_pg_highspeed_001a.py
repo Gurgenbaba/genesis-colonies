@@ -89,3 +89,78 @@ def test_get_debris_for_system_does_not_call_expire():
     assert "expire_due_debris_fields" not in names
     src = inspect.getsource(get_debris_for_system)
     assert "updated_at >" in src
+
+
+def test_list_system_structural_gates(galaxy_db, monkeypatch):
+    """001A master gates: SQL <100, opens<=3, writes=0, no per-player N+1 patterns."""
+    import game.galaxy as galaxy_mod
+
+    uid, coords = _player_planet_coords(galaxy_db)
+    g, s = int(coords["galaxy"]), int(coords["system"])
+
+    opens = {"n": 0}
+    real_db = galaxy_mod.db
+
+    def counting_db(*args, **kwargs):
+        opens["n"] += 1
+        return real_db(*args, **kwargs)
+
+    monkeypatch.setattr(galaxy_mod, "db", counting_db)
+
+    statements: list[str] = []
+    conn = real_db()
+
+    def trace(sql: str) -> None:
+        statements.append(sql)
+
+    conn.set_trace_callback(trace)
+    try:
+        data = list_system(g, s, conn=conn, viewer_player_id=uid)
+        assert len(data["slots"]) == 15
+    finally:
+        conn.set_trace_callback(None)
+        conn.close()
+
+    writes = [
+        stmt
+        for stmt in statements
+        if stmt.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
+    ]
+    assert len(writes) == 0, writes[:5]
+    assert len(statements) < 100, f"sql_count={len(statements)}"
+    assert opens["n"] <= 3, f"opens={opens['n']}"
+
+    # No per-player last_seen / pairwise alliance probes in the slot loop.
+    last_seen_single = [
+        stmt
+        for stmt in statements
+        if "last_seen" in stmt.lower()
+        and "from players" in stmt.lower()
+        and " in (" not in stmt.lower()
+    ]
+    assert last_seen_single == [], last_seen_single
+    alliance_pair = [
+        stmt
+        for stmt in statements
+        if "alliance_members am1" in stmt.lower() and "am2.player_id = ?" in stmt.lower()
+    ]
+    assert alliance_pair == [], alliance_pair
+
+
+def test_add_debris_does_not_revive_expired_amounts(galaxy_db):
+    uid, coords = _player_planet_coords(galaxy_db)
+    g, s, p = coords["galaxy"], coords["system"], coords["position"]
+    conn = db()
+    try:
+        add_debris_field(g, s, p, 1000, 500, conn=conn)
+        stale_at = int(time.time() - DEBRIS_FIELD_TTL_SECONDS - 60)
+        conn.execute(
+            "UPDATE debris_fields SET updated_at = ? WHERE galaxy = ? AND system = ? AND position = ?;",
+            (stale_at, g, s, p),
+        )
+        conn.commit()
+        totals = add_debris_field(g, s, p, 10, 5, conn=conn)
+        assert totals["metal"] == 10
+        assert totals["crystal"] == 5
+    finally:
+        conn.close()

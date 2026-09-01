@@ -12,6 +12,16 @@ from game.planet_evolution.service import set_active_planet
 pytest_plugins = ["tests.test_planet_registry"]
 
 
+def test_set_active_planet_uses_short_pg_lock_timeout():
+    import inspect
+
+    from game.planet_evolution import service as pe_service
+
+    src = inspect.getsource(pe_service.set_active_planet)
+    assert "lock_timeout = '250ms'" in src
+    assert "lock_timeout = '2s'" not in src
+
+
 def test_set_active_planet_lock_busy_returns_reason(switcher_db):
     from tests.test_planet_registry import _create_player
 

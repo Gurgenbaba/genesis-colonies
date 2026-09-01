@@ -6265,6 +6265,7 @@
   "pe_reason_forbidden": "Никакой авторизации.",
   "pe_reason_invalid_payload": "Неверный запрос.",
   "pe_reason_level_too_low": "Уровень планеты слишком низкий.",
+  "pe_reason_lock_busy": "Смена планеты кратко заблокирована — попробуйте снова.",
   "pe_reason_max_colonies": "Достигнуто максимальное количество планет.",
   "pe_reason_max_level": "Достигнут максимальный уровень исследования.",
   "pe_reason_missing_name": "Колонии нужно имя.",

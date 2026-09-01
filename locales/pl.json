@@ -6265,6 +6265,7 @@
   "pe_reason_forbidden": "Brak autoryzacji.",
   "pe_reason_invalid_payload": "Nieprawidłowe żądanie.",
   "pe_reason_level_too_low": "Poziom planety jest zbyt niski.",
+  "pe_reason_lock_busy": "Zmiana planety chwilowo zablokowana — spróbuj ponownie.",
   "pe_reason_max_colonies": "Osiągnięto maksymalną liczbę planet.",
   "pe_reason_max_level": "Osiągnięto maksymalny poziom badań.",
   "pe_reason_missing_name": "Kolonia potrzebuje nazwy.",

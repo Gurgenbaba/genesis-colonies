@@ -2604,15 +2604,16 @@ def noob_attack_strength_by_defender_ids(
     )
     if atk_id <= 0 or not targets:
         return {}
-    from .ranking import is_player_id_inactive, player_score_totals_by_ids
+    from .ranking import inactive_player_ids, player_score_totals_by_ids
 
     atk_score = _player_score_total(atk_id, conn=conn)
     min_def = ((atk_score + fac - 1) // fac) if atk_score > 0 else 0
     max_def = int(atk_score * fac)
     def_scores = player_score_totals_by_ids([atk_id] + targets, conn=conn)
+    inactive = inactive_player_ids(targets, conn=conn)
     out: Dict[int, Optional[str]] = {}
     for def_id in targets:
-        if is_player_id_inactive(def_id, conn=conn):
+        if def_id in inactive:
             out[def_id] = None
             continue
         def_score = int(def_scores.get(def_id, 0))

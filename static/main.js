@@ -32256,6 +32256,27 @@
     return String(reason);
   }
 
+  /** POST /api/planets/active with short client retries on lock_busy (409). */
+  GC.fetchPlanetActiveSwitch = async function fetchPlanetActiveSwitch(planetId, options = {}) {
+    const pid = parseInt(planetId || 0, 10);
+    const maxAttempts = Math.max(1, Math.min(3, Number(options.maxAttempts) || 3));
+    let last = { ok: false, reason: "lock_busy", retry: true };
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      last = await GC.fetchGameAction("/api/planets/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: JSON.stringify({ planet_id: pid }),
+        ...(options.fetchOpts || {}),
+      });
+      if (last?.ok) return last;
+      if (last?.reason !== "lock_busy" || !last?.retry) return last;
+      if (attempt + 1 < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 80 * (attempt + 1)));
+      }
+    }
+    return last;
+  };
+
   function syncHudSelectOpenState() {
     const anyOpen = !!document.querySelector(".gc-hud-select.is-open");
     document.body.classList.toggle("gc-has-open-popover", anyOpen);
@@ -33726,11 +33747,7 @@
       );
 
       try {
-        const res = await GC.fetchGameAction("/api/planets/active", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-          body: JSON.stringify({ planet_id: planetId }),
-        });
+        const res = await GC.fetchPlanetActiveSwitch(planetId);
         if (res?.ok) {
           const anyActive = applyActionState(res, "planet_switch");
           // GC-BST-22: apply stage positions in the same tick as switch (before panel refresh).
@@ -35230,11 +35247,7 @@
       root.classList.add("is-busy");
 
       try {
-        const res = await GC.fetchGameAction("/api/planets/active", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-          body: JSON.stringify({ planet_id: planetId }),
-        });
+        const res = await GC.fetchPlanetActiveSwitch(planetId);
         if (res?.ok) {
           applyActionState(res, "planet_switch");
           if (Array.isArray(res.planets)) {
@@ -37251,11 +37264,7 @@
           const pid = parseInt(String(cc.planet_id || btn?.dataset.planetId || "0"), 10);
           if (!pid) return;
           try {
-            const res = await GC.fetchGameAction("/api/planets/active", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-              body: JSON.stringify({ planet_id: pid }),
-            });
+            const res = await GC.fetchPlanetActiveSwitch(pid);
             if (res?.ok) {
               applyActionState(res, "planet_switch");
               closeModal();
@@ -38393,11 +38402,7 @@
       const planetId = parseInt(openColonyBtn.dataset.planetId || "0", 10);
       if (!planetId) return;
       try {
-        const res = await GC.fetchGameAction("/api/planets/active", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-          body: JSON.stringify({ planet_id: planetId }),
-        });
+        const res = await GC.fetchPlanetActiveSwitch(planetId);
         if (res?.ok) {
           applyActionState(res, "planet_switch");
           if (typeof GC.navigateTo === "function") {
@@ -39318,11 +39323,7 @@
       if (!planetId) return;
       btn.disabled = true;
       try {
-        const res = await GC.fetchGameAction("/api/planets/active", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-          body: JSON.stringify({ planet_id: planetId }),
-        });
+        const res = await GC.fetchPlanetActiveSwitch(planetId);
         if (res?.ok) {
           applyActionState(res, "planet_switch");
           if (typeof GC.navigateTo === "function") {
