@@ -23,6 +23,7 @@ from .auto_empire import (
 )
 from .db import begin_write_transaction, column_exists, commit, in_transaction, rollback
 from .ranking import RANKING_INACTIVE_AFTER_SEC
+from .presence_store import effective_last_seen_scalar_sql, touch_presence_bulk
 from .runtime_state import get_runtime_value, set_runtime_value
 
 logger = logging.getLogger(__name__)
@@ -380,20 +381,12 @@ def _save_json(key: str, value: Any, *, conn=None) -> None:
 
 
 def _touch_presence_bulk(conn, player_ids: Sequence[int], *, now: float) -> None:
-    """Batched `last_seen` refresh for shift-roster members in one query.
-
-    GC-INACTIVE-SHIFT-001: the shift roster *is* the visible online set
-    (2–3 accounts), so callers pass the full current roster.
-    """
+    """Batched shift-roster presence through the canonical backend store."""
     ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
     if not ids:
         return
-    placeholders = ",".join("?" * len(ids))
     try:
-        conn.execute(
-            f"UPDATE players SET last_seen = ? WHERE id IN ({placeholders});",
-            [float(now), *ids],
-        )
+        touch_presence_bulk(conn, ids, now=int(now))
     except Exception:
         logger.exception("inactive autoplay bulk presence touch failed")
 
@@ -447,20 +440,19 @@ def list_dormant_candidates(
     cutoff = ts - revisit_sec()
     excluded = {int(x) for x in (exclude_ids or set())}
     vac_select = (
-        "COALESCE(vacation_mode_active, 0)"
+        "COALESCE(p.vacation_mode_active, 0)"
         if column_exists(conn, "players", "vacation_mode_active")
         else "0"
     )
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     cur = conn.execute(
         f"""
-        SELECT id AS player_id,
-               last_seen,
+        SELECT p.id AS player_id,
+               {last_seen_expr} AS last_seen,
                {vac_select} AS vacation_mode_active
-        FROM players
-        WHERE (last_seen IS NULL OR last_seen < ?)
-        ORDER BY CASE WHEN last_seen IS NULL THEN 1 ELSE 0 END,
-                 last_seen ASC,
-                 id ASC
+        FROM players p
+        WHERE {last_seen_expr} < ?
+        ORDER BY last_seen ASC, p.id ASC
         LIMIT ?;
         """,
         (float(cutoff), int(max(1, limit))),

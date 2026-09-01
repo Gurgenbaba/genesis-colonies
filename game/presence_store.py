@@ -53,6 +53,26 @@ def effective_last_seen_sql(
     return f"COALESCE({player_alias}.last_seen, 0)"
 
 
+def effective_last_seen_scalar_sql(
+    *,
+    player_alias: str = "p",
+    backend: str | None = None,
+) -> str:
+    """Correlated effective-presence expression for existing player queries.
+
+    PostgreSQL reads canonical ``player_presence`` first while retaining the
+    legacy column as a rolling-deploy fallback. SQLite stays unchanged.
+    """
+    if uses_dedicated_presence(backend=backend):
+        return (
+            "GREATEST("
+            f"COALESCE((SELECT pp_gc_presence.last_seen FROM {PRESENCE_TABLE} pp_gc_presence "
+            f"WHERE pp_gc_presence.player_id = {player_alias}.id), 0), "
+            f"COALESCE({player_alias}.last_seen, 0))"
+        )
+    return f"COALESCE({player_alias}.last_seen, 0)"
+
+
 def get_presence_last_seen(
     conn, player_id: int, *, backend: str | None = None
 ) -> int:  # noqa: ANN001

@@ -998,8 +998,14 @@ def get_online_player_count(
         own_conn = True
     ts = int(now if now is not None else _now_ts())
     cutoff = ts - ONLINE_WINDOW_SEC
+    from .presence_store import effective_last_seen_scalar_sql
+
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (cutoff,))
+    cur.execute(
+        f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
+        (cutoff,),
+    )
     count = int(cur.fetchone()["c"])
     if own_conn:
         conn.close()
@@ -1024,16 +1030,19 @@ def list_online_players(
     ts = int(now if now is not None else _now_ts())
     cutoff = ts - ONLINE_WINDOW_SEC
     lim = max(1, min(int(limit), 200))
+    from .presence_store import effective_last_seen_scalar_sql
+
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT u.id, u.username, u.is_admin AS user_is_admin,
                p.name AS player_name, p.is_admin AS player_is_admin,
-               p.last_seen
+               {last_seen_expr} AS last_seen
         FROM players p
         JOIN users u ON u.id = p.id
-        WHERE p.last_seen >= ?
-        ORDER BY p.last_seen DESC
+        WHERE {last_seen_expr} >= ?
+        ORDER BY last_seen DESC
         LIMIT ?;
         """,
         (cutoff, lim),
@@ -1076,10 +1085,19 @@ def get_player_stats() -> dict:
 
     total_players = get_registered_player_count(conn=conn)
 
-    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (day_ago,))
+    from .presence_store import effective_last_seen_scalar_sql
+
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
+    cur.execute(
+        f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
+        (day_ago,),
+    )
     active_24h = int(cur.fetchone()["c"])
 
-    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (week_ago,))
+    cur.execute(
+        f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
+        (week_ago,),
+    )
     active_7d = int(cur.fetchone()["c"])
 
     online_now = get_online_player_count(conn=conn, now=now)
