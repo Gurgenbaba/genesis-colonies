@@ -410,6 +410,71 @@ def _probe_safe_controls(page) -> list[dict]:
     return results
 
 
+
+def _navigate_with_pjax_perf(page, target: str) -> dict:
+    """Drive the production PJAX navigator and return the newly emitted perf sample."""
+    return page.evaluate(
+        """
+        async (target) => {
+          const getter = window.GC_GET_NAV_PERF_SAMPLES;
+          if (!window.GC || typeof window.GC.navigateTo !== "function" || typeof getter !== "function") {
+            return { used_pjax: false, sample: null, status: null };
+          }
+          const before = getter().length;
+          await window.GC.navigateTo(target, { force: true });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const samples = getter();
+          const fresh = samples.slice(before);
+          const sample = fresh.length ? fresh[fresh.length - 1] : null;
+          let status = null;
+          if (sample && Array.isArray(sample.concurrent_requests)) {
+            const primary = sample.concurrent_requests.find((entry) => entry && entry.server)
+              || sample.concurrent_requests.find((entry) => entry && Number(entry.status) > 0)
+              || null;
+            if (primary) status = Number(primary.status || 0) || null;
+          }
+          return { used_pjax: true, sample, status, href: location.href };
+        }
+        """,
+        target,
+    )
+
+
+def _navigation_perf_summary(route_results: list[dict]) -> dict:
+    rows = []
+    for item in route_results:
+        sample = item.get("navigation_perf") or None
+        if not isinstance(sample, dict):
+            continue
+        rows.append(
+            {
+                "name": item.get("name"),
+                "route": item.get("route"),
+                "viewport": item.get("viewport"),
+                "total_navigation_ms": sample.get("total_navigation_ms"),
+                "server_ms": sample.get("server_ms"),
+                "sql_count": sample.get("sql_count"),
+                "sql_write_count": sample.get("sql_write_count"),
+                "db_connections": sample.get("db_connections"),
+                "db_query_ms": sample.get("db_query_ms"),
+                "db_backend": sample.get("db_backend"),
+            }
+        )
+
+    def total_ms(row: dict) -> float:
+        value = row.get("total_navigation_ms")
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return -1.0
+
+    rows.sort(key=total_ms, reverse=True)
+    return {
+        "sample_count": len(rows),
+        "worst_by_total_ms": rows[:12],
+    }
+
+
 def _write_html_report(report: dict, path: Path) -> None:
     counts = Counter(item["severity"] for item in report["findings"])
     rows = []
@@ -510,14 +575,27 @@ def _run_viewport(
                 "viewport": viewport_name,
                 "final_url": None,
                 "status": None,
+                "navigation_mode": None,
+                "navigation_perf": None,
                 "safe_controls": [],
                 "screenshot": shot_rel,
                 "dom": dom_rel,
             }
-            action = f"GET {spec.path}"
+            action = f"PJAX {spec.path}"
             try:
-                response = page.goto(f"{base_url.rstrip('/')}{spec.path}", wait_until="domcontentloaded", timeout=60_000)
-                result["status"] = response.status if response else None
+                nav_result = _navigate_with_pjax_perf(page, spec.path)
+                if nav_result.get("used_pjax"):
+                    result["navigation_mode"] = "pjax"
+                    result["navigation_perf"] = nav_result.get("sample")
+                    result["status"] = nav_result.get("status") or 200
+                else:
+                    response = page.goto(
+                        f"{base_url.rstrip('/')}{spec.path}",
+                        wait_until="domcontentloaded",
+                        timeout=60_000,
+                    )
+                    result["navigation_mode"] = "full-fallback"
+                    result["status"] = response.status if response else None
                 page.wait_for_selector("body", state="attached", timeout=10_000)
                 page.wait_for_timeout(650)
                 result["final_url"] = page.url
@@ -747,6 +825,7 @@ def main() -> int:
         "pass": not gate_findings and infrastructure_error is None,
         "summary": dict(Counter(item["severity"] for item in findings)),
         "route_count": len(route_results),
+        "navigation_perf": _navigation_perf_summary(route_results),
         "findings": findings,
         "routes": route_results,
     }
@@ -768,6 +847,7 @@ def main() -> int:
             "pass": report["pass"],
             "mode": report["mode"],
             "routes": report["route_count"],
+            "nav_perf_samples": report["navigation_perf"]["sample_count"],
             "summary": report["summary"],
             "gate_findings": len(gate_findings),
             "report": str(report_path.relative_to(ROOT)),
