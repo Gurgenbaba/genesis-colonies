@@ -2134,10 +2134,6 @@ def empire_view():
 @app.route("/trader-hub")
 @require_login
 def trader_hub_view():
-    ctx = _load_page_live_context(finish_source="trader_hub")
-    if ctx is None:
-        return redirect(url_for("login"))
-
     from game.exchange import exchange_schema_ready, get_exchange_status
     from game.planet_evolution.repository import get_context_planet
     from game.scrapyard import scrapyard_status
@@ -2146,7 +2142,15 @@ def trader_hub_view():
     scrapyard = {}
     conn = db()
     try:
-        planet = get_context_planet(int(session["user_id"]), conn=conn)
+        ctx = _load_page_live_context(
+            finish_source="trader_hub",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
+
+        planet = ctx.get("planet") or get_context_planet(int(session["user_id"]), conn=conn)
         pid = int(planet["id"])
         uid = int(session["user_id"])
         if exchange_schema_ready(conn):
