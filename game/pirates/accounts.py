@@ -185,15 +185,14 @@ def pirate_ai_profiles_by_ids(
 
 
 def _touch_bot_presence(conn, player_id: int) -> None:
-    """Keep AI commanders out of inactive ranking/galaxy styling."""
-    now = time.time()
+    """Keep AI commanders active via the backend-appropriate presence owner."""
+    from ..presence_store import touch_presence
+
+    now = int(time.time())
     try:
-        conn.execute(
-            "UPDATE players SET last_seen = ? WHERE id = ?;",
-            (now, int(player_id)),
-        )
+        touch_presence(conn, int(player_id), now=now)
     except Exception:
-        logger.exception("pirate bot last_seen touch failed player=%s", player_id)
+        logger.exception("pirate bot presence touch failed player=%s", player_id)
 
 
 def _ensure_public_ai_card(conn, player_id: int, faction_key: str) -> None:
