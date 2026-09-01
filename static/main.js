@@ -3497,6 +3497,11 @@
   GC.getDomPlanetId = getDomPlanetId;
 
   function mapActionError(reason, payload) {
+    if (reason === "ascension_required") {
+      const progress = t("buildings_mine_evo_progress", "Nächste Ascension");
+      const action = t("buildings_mine_evo_action", "Ascension einleiten");
+      return `${progress}: ${action}`;
+    }
     if (reason === "not_enough_resources" && payload) {
       let m = 0;
       let c = 0;
