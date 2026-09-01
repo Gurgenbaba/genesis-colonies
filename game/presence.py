@@ -86,6 +86,15 @@ def _sync_legacy_presence_optional(conn, player_id: int, *, now: int, backend: s
     )
 
 
+def _legacy_last_seen_for_mirror(conn, player_id: int) -> int:  # noqa: ANN001
+    """Read only the compatibility timestamp; never lock the players row."""
+    row = conn.execute(
+        "SELECT COALESCE(last_seen, 0) AS last_seen FROM players WHERE id = ? LIMIT 1;",
+        (int(player_id),),
+    ).fetchone()
+    return int(row["last_seen"] or 0) if row else 0
+
+
 def touch_player_online(player_id: int) -> None:
     """Mark a real authenticated player online using dedicated PG presence."""
     if not player_id:
@@ -104,11 +113,17 @@ def touch_player_online(player_id: int) -> None:
     backend = get_db_backend()
     conn = db()
     try:
-        # PostgreSQL reads only the dedicated presence table on this hot path.
         previous_seen = get_presence_last_seen(conn, pid, backend=backend)
         need_last_seen = previous_seen < touch_before
+
+        # The compatibility mirror has its own cadence. Driving this from the
+        # dedicated timestamp would keep an actively polling player's
+        # players.last_seen stale forever after the first mirror write.
+        legacy_seen = (
+            _legacy_last_seen_for_mirror(conn, pid) if backend == "postgres" else previous_seen
+        )
         need_legacy_sync = backend == "postgres" and should_sync_legacy_last_seen(
-            previous_seen=previous_seen,
+            previous_seen=legacy_seen,
             now=now,
         )
 

@@ -20,19 +20,28 @@ _FakeLockError.__name__ = "LockNotAvailable"
 
 
 class _FakeConn:
-    def __init__(self, *, lock_on_touch: bool = True, presence_seen: int = 0) -> None:
+    def __init__(
+        self,
+        *,
+        lock_on_touch: bool = True,
+        presence_seen: int = 0,
+        legacy_seen: int = 0,
+    ) -> None:
         self.closed = False
         self.rolled_back = False
         self.committed = False
         self.lock_on_touch = bool(lock_on_touch)
         self.presence_seen = int(presence_seen)
+        self.legacy_seen = int(legacy_seen)
         self.sql: list[str] = []
 
     def execute(self, sql, params=None):  # noqa: ANN001
         text = str(sql)
         self.sql.append(text)
-        if text.startswith("SELECT last_seen"):
+        if text.startswith("SELECT last_seen FROM player_presence"):
             return SimpleNamespace(fetchone=lambda: {"last_seen": self.presence_seen})
+        if "FROM players WHERE id" in text:
+            return SimpleNamespace(fetchone=lambda: {"last_seen": self.legacy_seen})
         if "INSERT INTO player_presence" in text and self.lock_on_touch:
             raise _FakeLockError("canceling statement due to lock timeout")
         return SimpleNamespace(fetchone=lambda: None)
@@ -121,8 +130,8 @@ def test_roster_release_failure_keeps_successful_presence_write(monkeypatch):
     assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
 
 
-def test_recent_dedicated_presence_skips_legacy_player_row_write(monkeypatch):
-    conn = _FakeConn(lock_on_touch=False, presence_seen=900)
+def test_recent_dedicated_presence_skips_fresh_legacy_player_row_write(monkeypatch):
+    conn = _FakeConn(lock_on_touch=False, presence_seen=900, legacy_seen=900)
     local_marks: list[int] = []
     _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
     presence.touch_player_online(7)
@@ -130,6 +139,16 @@ def test_recent_dedicated_presence_skips_legacy_player_row_write(monkeypatch):
     assert any("INSERT INTO player_presence" in sql for sql in conn.sql)
     assert not any("UPDATE players SET last_seen" in sql for sql in conn.sql)
     assert "SAVEPOINT gc_presence_legacy" not in conn.sql
+
+
+def test_stale_legacy_mirror_syncs_even_when_dedicated_presence_is_fresh(monkeypatch):
+    conn = _FakeConn(lock_on_touch=False, presence_seen=990, legacy_seen=700)
+    local_marks: list[int] = []
+    _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
+    presence.touch_player_online(7)
+    assert conn.committed is True
+    assert "SAVEPOINT gc_presence_legacy" in conn.sql
+    assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
 
 
 def test_legacy_sync_cadence_stays_inside_online_window():
