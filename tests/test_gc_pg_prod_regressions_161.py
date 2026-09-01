@@ -17,11 +17,11 @@ def test_records_aggregate_queries_group_selected_player_name_for_postgres():
     assert "GROUP BY c.player_id, pl.name\n        HAVING" in src
 
 
-def test_build_enqueue_vacation_probe_does_not_orphan_db_checkout():
+def test_build_enqueue_vacation_probe_reuses_mutation_checkout():
     src = _read("game/buildings.py")
     block = src.split("def queue_build_for_planet(", 1)[1].split("\n\ndef cancel_build_job_for_planet", 1)[0]
-    assert "vacation_blocks_outbound(user_id, conn=db())" not in block
     assert "conn = db()\n    ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)" in block
+    assert block.count("conn = db()") == 1
     assert "if not ok_vacation:\n        conn.close()" in block
 
 
