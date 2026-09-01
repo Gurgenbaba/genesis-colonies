@@ -2395,6 +2395,7 @@ def finish_request_perf_after(response):
         # only already-collected numeric counters/timings and create zero DB work.
         try:
             from game.config import is_nav_perf_debug_enabled
+            from game.db import get_db_backend
 
             if is_nav_perf_debug_enabled() and state.meta.get("pjax"):
                 response.headers["X-GC-Nav-Server-Ms"] = str(request_total_ms)
@@ -2413,6 +2414,7 @@ def finish_request_perf_after(response):
                         1,
                     )
                 )
+                response.headers["X-GC-Nav-Db-Backend"] = get_db_backend()
         except Exception:
             logger.debug("nav perf response headers failed", exc_info=True)
     except Exception:

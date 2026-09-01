@@ -43729,6 +43729,10 @@
             const value = Number(raw);
             return Number.isFinite(value) ? value : null;
           };
+          const headerText = (name) => {
+            const raw = res?.headers?.get?.(name);
+            return raw === null || raw === undefined || raw === "" ? null : String(raw);
+          };
           const serverMs = headerNumber("X-GC-Nav-Server-Ms");
           if (serverMs !== null) {
             entry.server = {
@@ -43737,6 +43741,7 @@
               sql_write_count: headerNumber("X-GC-Nav-Sql-Write-Count"),
               db_connections: headerNumber("X-GC-Nav-Db-Connections"),
               db_query_ms: headerNumber("X-GC-Nav-Db-Query-Ms"),
+              db_backend: headerText("X-GC-Nav-Db-Backend"),
             };
           }
           return res;
@@ -43788,6 +43793,7 @@
       sql_write_count: server?.sql_write_count ?? null,
       db_connections: server?.db_connections ?? null,
       db_query_ms: server?.db_query_ms ?? null,
+      db_backend: server?.db_backend ?? null,
       concurrent_requests: s.concurrent,
     };
     if (extra && typeof extra === "object") Object.assign(payload, extra);

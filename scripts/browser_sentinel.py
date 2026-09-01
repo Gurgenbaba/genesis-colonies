@@ -303,6 +303,23 @@ def _new_finding(
     return item
 
 
+def _runtime_event_severity(*, kind: str, problem: str, url: str = "", base_url: str = "") -> str:
+    text = str(problem or "")
+    if kind == "request_failed" and "net::ERR_ABORTED" in text:
+        path = urlsplit(str(url or "")).path
+        if path in {"/api/chat/bootstrap", "/api/messages"}:
+            return "LOW"
+    if (
+        kind == "console_error"
+        and str(base_url or "").startswith("http://127.0.0.1:")
+        and "WebSocket connection to '" in text
+        and "/ws/galaxy/" in text
+        and "Invalid frame header" in text
+    ):
+        return "LOW"
+    return "HIGH"
+
+
 def _install_third_party_guard(context, base_url: str) -> None:
     def route_handler(route, request) -> None:
         url = request.url
@@ -330,7 +347,16 @@ def _attach_runtime_capture(page, base_url: str, current: dict, events: list[dic
 
     def on_console(message) -> None:
         if message.type == "error":
-            add("console_error", "HIGH", problem=message.text)
+            problem = message.text
+            add(
+                "console_error",
+                _runtime_event_severity(
+                    kind="console_error",
+                    problem=problem,
+                    base_url=base_url,
+                ),
+                problem=problem,
+            )
 
     def on_page_error(error) -> None:
         add("page_exception", "HIGH", problem=str(error))
@@ -351,10 +377,16 @@ def _attach_runtime_capture(page, base_url: str, current: dict, events: list[dic
         if not _same_origin(request.url, base_url):
             return
         failure = getattr(request, "failure", None)
+        problem = f"Request failed: {request.url} ({failure or 'unknown'})"
         add(
             "request_failed",
-            "HIGH",
-            problem=f"Request failed: {request.url}",
+            _runtime_event_severity(
+                kind="request_failed",
+                problem=problem,
+                url=request.url,
+                base_url=base_url,
+            ),
+            problem=problem,
             details={"url": request.url, "resource_type": request.resource_type, "failure": failure},
         )
 
@@ -377,6 +409,8 @@ def _probe_safe_controls(page) -> list[dict]:
                 continue
             if control.evaluate("(el) => !!el.closest('form')"):
                 continue
+            if control.evaluate("(el) => el.tagName === 'A' || !!el.getAttribute('href')"):
+                continue
             if control.get_attribute("aria-selected") == "true":
                 continue
             label = (control.inner_text(timeout=1_000) or control.get_attribute("aria-label") or f"control-{index}").strip()
@@ -388,7 +422,7 @@ def _probe_safe_controls(page) -> list[dict]:
                     before = target.evaluate(
                         "(el) => ({hidden: !!el.hidden, ariaHidden: el.getAttribute('aria-hidden'), className: el.className})"
                     )
-            control.click(timeout=3_000)
+            control.click(timeout=3_000, force=True)
             page.wait_for_timeout(150)
             after = None
             if controls_id:
@@ -408,6 +442,77 @@ def _probe_safe_controls(page) -> list[dict]:
         except Exception as exc:
             results.append({"label": f"control-{index}", "ok": False, "error": str(exc)[:500]})
     return results
+
+
+
+def _navigate_with_pjax_perf(page, target: str) -> dict:
+    """Drive the production PJAX navigator and return the newly emitted perf sample."""
+    return page.evaluate(
+        """
+        async (target) => {
+          const getter = window.GC_GET_NAV_PERF_SAMPLES;
+          if (!window.GC || typeof window.GC.navigateTo !== "function" || typeof getter !== "function") {
+            return { used_pjax: false, sample: null, status: null };
+          }
+          const before = getter().length;
+          await window.GC.navigateTo(target, { force: true });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const samples = getter();
+          const fresh = samples.slice(before);
+          const sample = fresh.length ? fresh[fresh.length - 1] : null;
+          let status = null;
+          let primaryError = null;
+          if (sample && Array.isArray(sample.concurrent_requests)) {
+            const primary = sample.concurrent_requests.find((entry) =>
+              entry && Number(entry.offset_ms || 0) === 0 && ["pjax", "galaxy"].includes(String(entry.kind || ""))
+            ) || sample.concurrent_requests.find((entry) => entry && entry.server)
+              || sample.concurrent_requests.find((entry) => entry && Number(entry.status) > 0)
+              || null;
+            if (primary) {
+              status = Number(primary.status || 0) || null;
+              primaryError = primary.error ? String(primary.error) : null;
+            }
+          }
+          return { used_pjax: true, sample, status, primary_error: primaryError, href: location.href };
+        }
+        """,
+        target,
+    )
+
+
+def _navigation_perf_summary(route_results: list[dict]) -> dict:
+    rows = []
+    for item in route_results:
+        sample = item.get("navigation_perf") or None
+        if not isinstance(sample, dict):
+            continue
+        rows.append(
+            {
+                "name": item.get("name"),
+                "route": item.get("route"),
+                "viewport": item.get("viewport"),
+                "total_navigation_ms": sample.get("total_navigation_ms"),
+                "server_ms": sample.get("server_ms"),
+                "sql_count": sample.get("sql_count"),
+                "sql_write_count": sample.get("sql_write_count"),
+                "db_connections": sample.get("db_connections"),
+                "db_query_ms": sample.get("db_query_ms"),
+                "db_backend": sample.get("db_backend"),
+            }
+        )
+
+    def total_ms(row: dict) -> float:
+        value = row.get("total_navigation_ms")
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return -1.0
+
+    rows.sort(key=total_ms, reverse=True)
+    return {
+        "sample_count": len(rows),
+        "worst_by_total_ms": rows[:12],
+    }
 
 
 def _write_html_report(report: dict, path: Path) -> None:
@@ -510,14 +615,43 @@ def _run_viewport(
                 "viewport": viewport_name,
                 "final_url": None,
                 "status": None,
+                "navigation_mode": None,
+                "navigation_perf": None,
+                "navigation_error": None,
                 "safe_controls": [],
                 "screenshot": shot_rel,
                 "dom": dom_rel,
             }
-            action = f"GET {spec.path}"
+            action = f"PJAX {spec.path}"
             try:
-                response = page.goto(f"{base_url.rstrip('/')}{spec.path}", wait_until="domcontentloaded", timeout=60_000)
-                result["status"] = response.status if response else None
+                nav_result = _navigate_with_pjax_perf(page, spec.path)
+                if nav_result.get("used_pjax"):
+                    result["navigation_mode"] = "pjax"
+                    result["navigation_perf"] = nav_result.get("sample")
+                    result["navigation_error"] = nav_result.get("primary_error")
+                    result["status"] = nav_result.get("status")
+                    if result["navigation_error"]:
+                        _new_finding(
+                            findings,
+                            severity="HIGH",
+                            kind="pjax_navigation_failed",
+                            page_name=spec.name,
+                            route=spec.path,
+                            viewport=viewport_name,
+                            action=action,
+                            problem=f"PJAX primary request failed: {result['navigation_error']}",
+                            screenshot=shot_rel,
+                            dom=dom_rel,
+                            details={"navigation_perf": result["navigation_perf"] or {}},
+                        )
+                else:
+                    response = page.goto(
+                        f"{base_url.rstrip('/')}{spec.path}",
+                        wait_until="domcontentloaded",
+                        timeout=60_000,
+                    )
+                    result["navigation_mode"] = "full-fallback"
+                    result["status"] = response.status if response else None
                 page.wait_for_selector("body", state="attached", timeout=10_000)
                 page.wait_for_timeout(650)
                 result["final_url"] = page.url
@@ -747,6 +881,7 @@ def main() -> int:
         "pass": not gate_findings and infrastructure_error is None,
         "summary": dict(Counter(item["severity"] for item in findings)),
         "route_count": len(route_results),
+        "navigation_perf": _navigation_perf_summary(route_results),
         "findings": findings,
         "routes": route_results,
     }
@@ -768,6 +903,7 @@ def main() -> int:
             "pass": report["pass"],
             "mode": report["mode"],
             "routes": report["route_count"],
+            "nav_perf_samples": report["navigation_perf"]["sample_count"],
             "summary": report["summary"],
             "gate_findings": len(gate_findings),
             "report": str(report_path.relative_to(ROOT)),

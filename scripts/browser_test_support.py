@@ -60,6 +60,7 @@ def _server_env(db_file: Path, port: int | None = None) -> dict[str, str]:
             "FLASK_ENV": "development",
             "FLASK_DEBUG": "0",
             "GC_DB_BACKEND": "sqlite",
+            "GC_NAV_PERF_DEBUG": "1",
             "GC_DB_PATH": str(db_file),
             "GC_SKIP_MIGRATION_CHECK": "1",
             "GC_EMBEDDED_CRON": "0",
