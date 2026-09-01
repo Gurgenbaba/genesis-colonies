@@ -253,8 +253,20 @@
       inp.value = "";
       return;
     }
-    let num = clampToNumberInputCap(inp, parseInt(digits, 10));
-    const formatted = formatNumber(num);
+    let formatted = "";
+    if (inp.id === "gc-exchange-amount") {
+      // Preserve every manually-entered digit. Number/parseInt rounds large
+      // balances; BigInt is display/input-only and the API accepts the amount
+      // as a decimal string before Python int validation.
+      try {
+        formatted = formatNumber(BigInt(digits));
+      } catch (_) {
+        formatted = digits;
+      }
+    } else {
+      const num = clampToNumberInputCap(inp, parseInt(digits, 10));
+      formatted = formatNumber(num);
+    }
     inp.value = formatted;
     try {
       inp.setSelectionRange(formatted.length, formatted.length);
@@ -269,7 +281,11 @@
       inp.inputMode = "numeric";
       inp.autocomplete = "off";
     }
-    if (!inp.getAttribute("maxlength")) inp.maxLength = 20;
+    if (!inp.getAttribute("maxlength")) {
+      // Trader values can legitimately exceed the old 20-character UI cap.
+      // Keep other gameplay inputs unchanged; the server remains authoritative.
+      inp.maxLength = inp.id === "gc-exchange-amount" ? 96 : 20;
+    }
     if (inp.matches("[data-shipyard-qty],[data-defense-qty]")) {
       inp.removeAttribute("max");
     }
@@ -31751,6 +31767,7 @@
           errorEl.textContent = "";
         }
 
+        const amountDigits = String(amountInput.value || "").replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "") || "0";
         const amount = readNumberInput(amountInput);
         const dir = selectedDirection();
         const minNow = minForRoute(dir);
@@ -31780,7 +31797,9 @@
           const res = await GC.fetchGameAction("/api/exchange", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            body: JSON.stringify({ direction: dir, from, to, amount }),
+            // Send the exact decimal string; Flask/Python int accepts it and
+            // avoids JavaScript Number precision loss on very large empires.
+            body: JSON.stringify({ direction: dir, from, to, amount: amountDigits }),
           });
           if (res?.ok) {
             setNumberInputValue(amountInput, minNow);

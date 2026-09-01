@@ -13443,7 +13443,6 @@ def api_troops_cancel():
 def api_shipyard_build():
     from game.fleet import fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
-    from game.planet_evolution.repository import get_context_planet
     from game.shipyard import build_ship
 
     user_id = int(session.get("user_id") or 0)
@@ -13456,9 +13455,14 @@ def api_shipyard_build():
 
     amount = parse_int_number(data.get("amount") or 1, default=0)
 
+    # PostgreSQL: even the ownership/schema SELECTs below start an implicit
+    # transaction. The HTTP route therefore owns the whole short mutation.
+    # build_ship/build_ships deliberately does not commit a caller-owned tx.
     conn = db()
     try:
+        begin_write_transaction(conn)
         if not fleet_schema_ready(conn):
+            rollback(conn)
             return jsonify(fleet_err("fleet_unavailable")), 503
         from game.shipyard import resolve_owned_planet_id
 
@@ -13466,6 +13470,7 @@ def api_shipyard_build():
         req_pid = int(raw_pid) if raw_pid not in (None, "") else None
         planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
         if err:
+            rollback(conn)
             return jsonify(fleet_err(err)), 404
         ok, reason, result = build_ship(
             player_id=user_id,
@@ -13474,9 +13479,18 @@ def api_shipyard_build():
             amount=amount,
             conn=conn,
         )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        raise
     finally:
         conn.close()
 
+    # Build response state only after the enqueue commit. A later panel/state
+    # read failure must never roll back a successfully queued ship job.
     if ok:
         state, _ = _build_game_state_payload(include_panel=True, finish_source="api_shipyard_build")
         body = fleet_ok(result, message_key="shipyard_build_ok")
