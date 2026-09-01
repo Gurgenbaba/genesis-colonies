@@ -40,9 +40,8 @@ jobs:
       - name: Commit production patch
         run: |
           rm scripts/apply_gc_pg_168_vote_presence.py
-          rm .github/workflows/gc-pg-168-apply.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/vote_rewards.py tests/test_gc_pg_168_vote_presence.py .github/workflows/ci.yml scripts/apply_gc_pg_168_vote_presence.py .github/workflows/gc-pg-168-apply.yml
+          git add game/vote_rewards.py tests/test_gc_pg_168_vote_presence.py scripts/apply_gc_pg_168_vote_presence.py
           git commit -m 'perf(pg): move vote activity reads to player_presence'
           git push origin HEAD:perf/pg-168-vote-presence
