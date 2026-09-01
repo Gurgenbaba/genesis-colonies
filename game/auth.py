@@ -18,6 +18,7 @@ Bann-Logik:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
@@ -26,6 +27,7 @@ from flask import Response, current_app, flash, g, jsonify, redirect, request, s
 
 logger = logging.getLogger(__name__)
 
+from .db import DbPoolTimeout
 from .models import (
     db,
     ensure_player_and_homeworld,
@@ -248,7 +250,102 @@ def get_current_user() -> Optional[Dict[str, Any]]:
 # Bann-Helpers
 # =============================================================================
 
-def _get_active_ban(player_id: int) -> Optional[Dict[str, Any]]:
+# Negative cache: polls must not checkout a pool connection every 2s for "not banned".
+_BAN_NEG_TTL_SEC = 15.0
+_ban_neg_until: dict[int, float] = {}
+_ban_neg_lock = threading.Lock()
+
+
+def _mark_not_banned(player_id: int) -> None:
+    with _ban_neg_lock:
+        _ban_neg_until[int(player_id)] = time.monotonic() + _BAN_NEG_TTL_SEC
+
+
+def _cached_not_banned(player_id: int) -> bool:
+    now_m = time.monotonic()
+    with _ban_neg_lock:
+        exp = _ban_neg_until.get(int(player_id))
+        if exp is None:
+            return False
+        if exp <= now_m:
+            _ban_neg_until.pop(int(player_id), None)
+            return False
+        return True
+
+
+def _db_busy_response(*, json_api: bool):
+    if json_api:
+        return jsonify({"ok": False, "error": "db_busy", "retry": True}), 503
+    return Response("Service temporarily busy. Please retry.", status=503, mimetype="text/plain")
+
+
+def _ban_dict_from_until(
+    banned_until: int,
+    *,
+    now: int,
+    reason: str = "",
+    created_at: Optional[int] = None,
+) -> Dict[str, Any]:
+    def _fmt(ts: Optional[int]) -> str:
+        if ts is None:
+            return "-"
+        try:
+            return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts)))
+        except (OverflowError, OSError, ValueError):
+            return "-"
+
+    expires_text = _fmt(banned_until)
+    is_permanent = bool(banned_until - now > 10 * 365 * 24 * 3600)
+    if is_permanent:
+        expires_text = "permanent"
+    return {
+        "reason": reason,
+        "banned_until": banned_until,
+        "created_at": created_at,
+        "expires_text": expires_text,
+        "is_permanent": is_permanent,
+    }
+
+
+def _banned_until_from_player(player: Dict[str, Any], now: int) -> Optional[int]:
+    raw_bu = player.get("banned_until")
+    if raw_bu is None:
+        return None
+    try:
+        banned_until = int(raw_bu)
+    except (TypeError, ValueError):
+        return None
+    if banned_until <= now:
+        return None
+    return banned_until
+
+
+def _load_latest_ban_row(player_id: int) -> Optional[Dict[str, Any]]:
+    try:
+        conn = db()
+    except DbPoolTimeout:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT reason, banned_until, created_at
+              FROM bans
+             WHERE player_id = ?
+             ORDER BY created_at DESC
+             LIMIT 1;
+            """,
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def _get_active_ban(player_id: int, player: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """
     Prüft, ob der Player aktuell gebannt ist (players.banned_until > now).
     Zusätzlich wird versucht, den letzten bans-Eintrag zu laden.
@@ -256,33 +353,56 @@ def _get_active_ban(player_id: int) -> Optional[Dict[str, Any]]:
     Rückgabe:
       None  -> kein aktiver Bann
       Dict  -> { reason, banned_until, created_at, is_permanent, expires_text }
+
+    PoolTimeout / lock: fail-open (treat as not banned) so polls cannot 500.
     """
     pid = int(player_id)
     now = int(time.time())
+    if _cached_not_banned(pid):
+        return None
 
-    conn = db()
+    if player is not None:
+        banned_until = _banned_until_from_player(player, now)
+        if banned_until is None:
+            _mark_not_banned(pid)
+            return None
+        try:
+            extra = _load_latest_ban_row(pid)
+        except DbPoolTimeout:
+            extra = None
+        reason = ""
+        created_at: Optional[int] = None
+        if extra:
+            reason = extra.get("reason") or ""
+            created_at = extra.get("created_at")
+            if extra.get("banned_until") is not None:
+                banned_until = int(extra["banned_until"])
+        return _ban_dict_from_until(
+            banned_until, now=now, reason=reason, created_at=created_at
+        )
+
+    try:
+        conn = db()
+    except DbPoolTimeout:
+        logger.warning("ban check skipped pool_timeout player=%s", pid)
+        return None
     try:
         cur = conn.cursor()
 
         cur.execute("SELECT banned_until FROM players WHERE id = ?;", (pid,))
         row = cur.fetchone()
         if not row:
+            _mark_not_banned(pid)
             return None
 
         raw_bu = row.get("banned_until") if isinstance(row, dict) else row["banned_until"]
-        if raw_bu is None:
+        player_view = {"banned_until": raw_bu}
+        banned_until = _banned_until_from_player(player_view, now)
+        if banned_until is None:
+            _mark_not_banned(pid)
             return None
 
-        try:
-            banned_until = int(raw_bu)
-        except (TypeError, ValueError):
-            return None
-
-        if banned_until <= now:
-            return None
-
-        # Optional: letzter Ban-Eintrag
-        ban_row = None
+        extra = None
         try:
             cur.execute(
                 """
@@ -295,65 +415,50 @@ def _get_active_ban(player_id: int) -> Optional[Dict[str, Any]]:
                 (pid,),
             )
             ban_row = cur.fetchone()
+            extra = dict(ban_row) if ban_row else None
         except Exception:
-            ban_row = None
+            extra = None
 
         reason = ""
         created_at: Optional[int] = None
-
-        if ban_row:
+        if extra:
             try:
-                reason = (ban_row["reason"] or "") if ban_row["reason"] is not None else ""
+                reason = (extra.get("reason") or "") if extra.get("reason") is not None else ""
             except Exception:
                 reason = ""
-
             try:
-                bu2 = ban_row["banned_until"]
+                bu2 = extra.get("banned_until")
                 if bu2 is not None:
                     banned_until = int(bu2)
             except Exception:
                 pass
-
             try:
-                ca = ban_row["created_at"]
+                ca = extra.get("created_at")
                 created_at = int(ca) if ca is not None else None
             except Exception:
                 created_at = None
-
-        def _fmt(ts: Optional[int]) -> str:
-            if ts is None:
-                return "-"
-            try:
-                return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts)))
-            except (OverflowError, OSError, ValueError):
-                return "-"
-
-        expires_text = _fmt(banned_until)
-
-        # Permanent, wenn >10 Jahre in Zukunft
-        is_permanent = bool(banned_until - now > 10 * 365 * 24 * 3600)
-        if is_permanent:
-            expires_text = "permanent"
-
-        return {
-            "reason": reason,
-            "banned_until": banned_until,
-            "created_at": created_at,
-            "expires_text": expires_text,
-            "is_permanent": is_permanent,
-        }
+        return _ban_dict_from_until(
+            banned_until, now=now, reason=reason, created_at=created_at
+        )
+    except DbPoolTimeout:
+        logger.warning("ban check skipped pool_timeout player=%s", pid)
+        return None
     finally:
         conn.close()
 
 
-def _handle_if_banned(player_id: int):
+def _handle_if_banned(player_id: int, player: Optional[Dict[str, Any]] = None):
     """
     Wenn gebannt:
       - Session leeren
       - flash
       - redirect -> /login
     """
-    ban = _get_active_ban(int(player_id))
+    try:
+        ban = _get_active_ban(int(player_id), player=player)
+    except DbPoolTimeout:
+        logger.warning("ban check skipped pool_timeout player=%s", int(player_id))
+        return None
     if not ban:
         return None
 
@@ -395,14 +500,18 @@ def require_login(func: ViewFunc) -> ViewFunc:
             session.clear()
             return redirect(url_for("login"))
 
-        ban_response = _handle_if_banned(pid)
-        if ban_response is not None:
-            return ban_response
-
-        player = get_player_by_user_id(pid)
+        try:
+            player = get_player_by_user_id(pid)
+        except DbPoolTimeout:
+            logger.warning("login guard pool_timeout player=%s", pid)
+            return _db_busy_response(json_api=False)
         if not player:
             session.clear()
             return redirect(url_for("login"))
+
+        ban_response = _handle_if_banned(pid, player=player)
+        if ban_response is not None:
+            return ban_response
 
         # online markieren
         try:
@@ -435,14 +544,18 @@ def require_admin(func: ViewFunc) -> ViewFunc:
             session.clear()
             return redirect(url_for("login"))
 
-        ban_response = _handle_if_banned(pid)
-        if ban_response is not None:
-            return ban_response
-
-        user = get_current_user()
+        try:
+            user = get_current_user()
+        except DbPoolTimeout:
+            logger.warning("admin guard pool_timeout player=%s", pid)
+            return _db_busy_response(json_api=False)
         if not user:
             session.clear()
             return redirect(url_for("login"))
+
+        ban_response = _handle_if_banned(pid)
+        if ban_response is not None:
+            return ban_response
 
         if not bool(user.get("is_admin")):
             flash("Du hast keine Berechtigung für diesen Bereich.", "error")
@@ -482,14 +595,18 @@ def require_login_api(func: ViewFunc) -> ViewFunc:
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
 
-        ban_response = _handle_if_banned(pid)
-        if ban_response is not None:
-            return jsonify({"ok": False, "error": "banned", "data": None}), 403
-
-        player = get_player_by_user_id(pid)
+        try:
+            player = get_player_by_user_id(pid)
+        except DbPoolTimeout:
+            logger.warning("api login guard pool_timeout player=%s", pid)
+            return _db_busy_response(json_api=True)
         if not player:
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+
+        ban_response = _handle_if_banned(pid, player=player)
+        if ban_response is not None:
+            return jsonify({"ok": False, "error": "banned", "data": None}), 403
 
         try:
             touch_player_online(int(player["id"]))
@@ -519,14 +636,18 @@ def require_admin_api(func: ViewFunc) -> ViewFunc:
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in"}), 401
 
-        ban_response = _handle_if_banned(pid)
-        if ban_response is not None:
-            return jsonify({"ok": False, "error": "banned"}), 403
-
-        user = get_current_user()
+        try:
+            user = get_current_user()
+        except DbPoolTimeout:
+            logger.warning("admin api guard pool_timeout player=%s", pid)
+            return _db_busy_response(json_api=True)
         if not user:
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+        ban_response = _handle_if_banned(pid)
+        if ban_response is not None:
+            return jsonify({"ok": False, "error": "banned"}), 403
 
         if not bool(user.get("is_admin")):
             return jsonify({"ok": False, "error": "forbidden"}), 403

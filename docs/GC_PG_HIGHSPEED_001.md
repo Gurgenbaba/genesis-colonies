@@ -88,6 +88,7 @@ Deploy + measure after **each** slice. No big-bang.
 | Planet switch `lock_busy` (#136) | `POST /api/planets/active` 500 | 409 + client retry |
 | Galaxy/SSR soft-fallback (#137) | Galaxy PJAX / politics 500 | read-only fallback; directive CASE fix |
 | Fleet send/preview `lock_busy` | Asteroid recycle / preview 500 on `LockNotAvailable` | Preview: `persist=False` (no `FOR UPDATE`); send: soft 409 + client retry |
+| Auth pool checkout | Polls 500 at `_get_active_ban` → `PoolTimeout` as fake "postgres not configured" | Ban uses loaded player row + 15s negative cache; fail-open; `DbPoolTimeout` → 503; default `GC_PG_POOL_TIMEOUT=3` |
 
 ### Deferred (separate tickets)
 

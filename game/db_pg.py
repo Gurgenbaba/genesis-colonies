@@ -327,11 +327,12 @@ def get_connect_timeout_s() -> int:
 
 
 def get_pool_checkout_timeout_s() -> float:
-    raw = os.environ.get("GC_PG_POOL_TIMEOUT", "30").strip()
+    # Short default: waiting 30s occupies a gunicorn thread and starves the pool.
+    raw = os.environ.get("GC_PG_POOL_TIMEOUT", "3").strip()
     try:
-        return float(max(3, min(300, int(raw))))
+        return float(max(1, min(300, int(raw))))
     except ValueError:
-        return 30.0
+        return 3.0
 
 
 def _pool_configure(conn: Any) -> None:

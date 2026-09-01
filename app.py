@@ -114,6 +114,23 @@ from flask_sock import Sock
 
 sock = Sock(app)
 
+from game.db import DbPoolTimeout
+
+
+@app.errorhandler(DbPoolTimeout)
+def handle_db_pool_timeout(exc):
+    """Pool exhausted — 503, not a fake 'postgres not configured' 500."""
+    app.logger.warning("db pool timeout: %s", exc)
+    wants_json = (
+        str(request.path or "").startswith("/api/")
+        or "application/json" in (request.headers.get("Accept") or "")
+        or request.is_json
+    )
+    if wants_json:
+        return jsonify({"ok": False, "error": "db_busy", "retry": True}), 503
+    return ("Service temporarily busy. Please retry.", 503, {"Content-Type": "text/plain; charset=utf-8"})
+
+
 
 def ws_long_lived_safe() -> bool:
     """GC-AST-LIVE: can this process hold a long-lived WS connection open
