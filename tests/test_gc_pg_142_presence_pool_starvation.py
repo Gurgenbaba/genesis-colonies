@@ -1,11 +1,13 @@
-"""Issue #142 — authenticated presence must never nest pool checkouts on lock soft-fail."""
+"""Issue #142 / GC-PG-HIGHSPEED-001C presence regression gates."""
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
 import game.presence as presence
+from game import presence_store
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -80,7 +82,7 @@ def _patch_presence_basics(monkeypatch, conn, *, local_marks):
 
 
 def test_presence_lock_softfail_uses_one_checkout(monkeypatch):
-    """Regression: lock fallback must not hold one pool conn while asking for another."""
+    """Lock fallback must not hold one pool conn while asking for another."""
     conn = _FakeConn(lock_on_touch=True)
     local_marks: list[int] = []
     checkouts = _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
@@ -122,6 +124,42 @@ def test_roster_release_failure_keeps_successful_presence_write(monkeypatch):
     assert "RELEASE SAVEPOINT gc_presence_roster" in conn.sql
     assert any("INSERT INTO player_presence" in sql for sql in conn.sql)
     assert not any("UPDATE players SET last_seen" in sql for sql in conn.sql)
+
+
+def test_postgres_store_never_references_players_on_hot_touch():
+    conn = _FakeConn(lock_on_touch=False)
+    presence_store.touch_presence(conn, 11, now=1234, touch_before=1200, backend="postgres")
+    sql = "\n".join(conn.sql).lower()
+    assert "insert into player_presence" in sql
+    assert "update players" not in sql
+    assert "from players" not in sql
+
+
+def test_sqlite_store_keeps_legacy_path():
+    conn = _FakeConn(lock_on_touch=False)
+    presence_store.touch_presence(conn, 11, now=1234, touch_before=1200, backend="sqlite")
+    assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
+
+
+def test_presence_migration_is_idempotent_and_non_destructive():
+    migration = (ROOT / "migrations" / "158_player_presence.sql").read_text(encoding="utf-8")
+    assert "REFERENCES players" not in migration
+    assert "DROP TABLE" not in migration.upper()
+    assert "DROP COLUMN" not in migration.upper()
+
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.execute("CREATE TABLE players (id INTEGER PRIMARY KEY, last_seen INTEGER)")
+        conn.execute("INSERT INTO players (id, last_seen) VALUES (7, 777)")
+        conn.executescript(migration)
+        conn.executescript(migration)
+        row = conn.execute(
+            "SELECT player_id, last_seen FROM player_presence WHERE player_id = 7"
+        ).fetchone()
+        assert row == (7, 777)
+        assert conn.execute("SELECT last_seen FROM players WHERE id = 7").fetchone() == (777,)
+    finally:
+        conn.close()
 
 
 def test_auth_guards_use_non_nested_presence_owner():
