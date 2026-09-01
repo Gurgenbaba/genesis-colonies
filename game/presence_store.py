@@ -6,12 +6,17 @@ mirror (<= once per four minutes), isolated by the caller with a SAVEPOINT.
 That preserves legacy online/inactive readers while removing the former
 per-presence-interval write pressure from the hot gameplay row.
 
+Reader helpers deliberately differ from the authenticated hot-touch helper:
+``get_presence_last_seen`` stays player-row-free on PostgreSQL, while effective
+reader helpers prefer ``player_presence`` and fall back to legacy
+``players.last_seen`` during the rolling cutover.
+
 SQLite keeps the established ``players.last_seen`` path.
 """
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from typing import Dict, Iterable, Sequence
 
 from .db import get_db_backend
 
@@ -66,6 +71,75 @@ def get_presence_last_seen(
             (pid,),
         ).fetchone()
     return int(row["last_seen"] or 0) if row else 0
+
+
+def get_effective_last_seen(
+    conn, player_id: int, *, backend: str | None = None
+) -> int:  # noqa: ANN001
+    """Read current presence with a legacy fallback for rolling deployments.
+
+    This is for ranking/gameplay readers, not the authenticated touch hot path.
+    PostgreSQL prefers ``player_presence.last_seen`` but falls back to the
+    historical value on ``players`` until that account has produced its first
+    dedicated touch.
+    """
+    pid = int(player_id)
+    if uses_dedicated_presence(backend=backend):
+        row = conn.execute(
+            f"""
+            SELECT COALESCE(pp.last_seen, p.last_seen, 0) AS last_seen
+            FROM players p
+            LEFT JOIN {PRESENCE_TABLE} pp ON pp.player_id = p.id
+            WHERE p.id = ?
+            LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT COALESCE(last_seen, 0) AS last_seen FROM players WHERE id = ? LIMIT 1;",
+            (pid,),
+        ).fetchone()
+    return int(row["last_seen"] or 0) if row else 0
+
+
+def get_effective_last_seen_by_ids(
+    conn,
+    player_ids: Sequence[int] | Iterable[int],
+    *,
+    backend: str | None = None,
+) -> Dict[int, int]:  # noqa: ANN001
+    """Bulk current-presence read used by ranking/galaxy/autoplay readers."""
+    ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
+    if not ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in ids)
+    if uses_dedicated_presence(backend=backend):
+        cur = conn.execute(
+            f"""
+            SELECT p.id AS player_id,
+                   COALESCE(pp.last_seen, p.last_seen, 0) AS last_seen
+            FROM players p
+            LEFT JOIN {PRESENCE_TABLE} pp ON pp.player_id = p.id
+            WHERE p.id IN ({placeholders});
+            """,
+            tuple(ids),
+        )
+    else:
+        cur = conn.execute(
+            f"""
+            SELECT id AS player_id, COALESCE(last_seen, 0) AS last_seen
+            FROM players
+            WHERE id IN ({placeholders});
+            """,
+            tuple(ids),
+        )
+
+    out = {pid: 0 for pid in ids}
+    for row in cur.fetchall():
+        out[int(row["player_id"])] = int(row["last_seen"] or 0)
+    return out
 
 
 def should_sync_legacy_last_seen(*, previous_seen: int, now: int) -> bool:
