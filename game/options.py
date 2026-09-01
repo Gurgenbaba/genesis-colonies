@@ -1786,7 +1786,7 @@ def export_player_personal_data(player_id: int, *, conn=None) -> Dict[str, Any]:
 
         player = c.execute(
             """
-            SELECT id, name, last_seen, vacation_mode_active,
+            SELECT id, name, vacation_mode_active,
                    account_deletion_requested_at, account_deletion_due_at,
                    account_deleted_at
             FROM players WHERE id = ? LIMIT 1;
