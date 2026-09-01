@@ -379,6 +379,29 @@ def mark_request_live_refreshed() -> None:
         pass
 
 
+def mark_request_poll_safety_net_write() -> None:
+    """Poll safety-net finish merged into caller TX — request owner must commit."""
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            g.gc_poll_safety_net_write = True
+    except ImportError:
+        pass
+
+
+def consume_request_poll_safety_net_write() -> bool:
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context() and getattr(g, "gc_poll_safety_net_write", False):
+            g.gc_poll_safety_net_write = False
+            return True
+    except ImportError:
+        pass
+    return False
+
+
 def request_live_state_already_refreshed() -> bool:
     try:
         from flask import g, has_request_context

@@ -97,17 +97,21 @@ def test_poll_source_uses_caller_owned_savepoint():
     assert "gc_poll_live_write" in block
     assert "ROLLBACK TO SAVEPOINT" in block
     assert "manage_transaction=bool(own_conn)" in block
+    assert "mark_request_poll_safety_net_write" in block
+    assert "if own_conn:" in block and "commit(conn)" in block
     # Must not blanket-rollback caller-owned connections on lock soft-fail.
     assert "if own_conn:\n                try:\n                    rollback(conn)" in block
 
 
-def test_refresh_source_uses_caller_owned_savepoint():
+def test_refresh_source_uses_nested_side_effect_savepoints():
     source = (ROOT / "game" / "logic.py").read_text(encoding="utf-8")
     block = source.split("def refresh_player_live_state(")[1].split(
         "\ndef update_planet_resources(", 1
     )[0]
     assert "gc_refresh_live" in block
-    assert "ROLLBACK TO SAVEPOINT" in block
+    assert "_run_optional_side_effect" in block
+    assert "_locked_read_only_fallback" in block
+    assert "_soft_recover_refresh_side_effect" not in block
 
 
 def test_entrypoint_closes_pool_after_short_lived_seed():

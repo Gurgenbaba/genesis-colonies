@@ -1496,9 +1496,14 @@ def _load_page_live_context(
                 if not visit_recorded:
                     try_visit = False
 
-            if wrote_live or try_visit:
+            from game.live_state import (
+                consume_request_poll_safety_net_write,
+                get_request_context_planet,
+                perf_span as _live_perf_span,
+            )
+
+            if wrote_live or try_visit or consume_request_poll_safety_net_write():
                 commit(conn)
-            from game.live_state import get_request_context_planet, perf_span as _live_perf_span
             from game.buildings import get_build_queue_status_for_planet
 
             planet = get_request_context_planet(user_id, conn=conn)
@@ -11503,6 +11508,14 @@ def _build_game_state_payload(
                 pass
         return payload, user_id
     finally:
+        try:
+            from game.db import in_transaction
+            from game.models import commit
+
+            if in_transaction(conn):
+                commit(conn)
+        except Exception:
+            pass
         conn.close()
 
 

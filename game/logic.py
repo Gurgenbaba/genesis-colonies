@@ -280,9 +280,14 @@ def read_player_live_state_for_poll(
                     poll_sp = None
 
                 if in_transaction(conn):
-                    from .models import commit
+                    if own_conn:
+                        from .models import commit
 
-                    commit(conn)
+                        commit(conn)
+                    else:
+                        from .live_state import mark_request_poll_safety_net_write
+
+                        mark_request_poll_safety_net_write()
             else:
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                     _read_player_live_state_no_writes(uid, conn, player, planet)
@@ -376,7 +381,8 @@ def refresh_player_live_state(
     use_refresh_sp = False
     try:
         from .planet_evolution.repository import get_context_planet
-        from .db import get_db_backend, recover_aborted_transaction
+        from .db import get_db_backend, is_db_lock_error, recover_aborted_transaction
+        from .queue_engine import finish_player_due_work, _run_optional_side_effect
 
         player = load_player(uid, conn=conn)
         if not player:
@@ -391,45 +397,79 @@ def refresh_player_live_state(
         live_t0 = time.perf_counter()
         finish_t0 = time.perf_counter()
 
-        # Issue #140: isolate refresh writes on caller-owned PG connections so a
-        # lock/deadlock cannot leave the shared TX aborted for initiation/HUD.
         use_refresh_sp = (not own_conn) and get_db_backend() == "postgres"
+
+        def _release_refresh_savepoint() -> None:
+            nonlocal refresh_sp
+            if refresh_sp is None:
+                return
+            try:
+                conn.execute(f"RELEASE SAVEPOINT {refresh_sp}")
+            except Exception:
+                pass
+            refresh_sp = None
+
+        def _abort_refresh_savepoint() -> None:
+            nonlocal refresh_sp
+            if refresh_sp is None:
+                return
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {refresh_sp}")
+                conn.execute(f"RELEASE SAVEPOINT {refresh_sp}")
+            except Exception:
+                pass
+            refresh_sp = None
+
+        def _locked_read_only_fallback():
+            _abort_refresh_savepoint()
+            if own_conn:
+                try:
+                    from .models import rollback
+
+                    rollback(conn)
+                except Exception:
+                    pass
+            from .live_state import mark_request_live_refreshed
+
+            p = load_player(uid, conn=conn) or player
+            pl = get_context_planet(uid, conn=conn)
+            mark_request_live_refreshed()
+            return _read_player_live_state_no_writes(uid, conn, p, pl)
+
         if use_refresh_sp:
             if not in_transaction(conn):
                 begin_write_transaction(conn)
             refresh_sp = "gc_refresh_live"
             conn.execute(f"SAVEPOINT {refresh_sp}")
 
-        finish_result = finish_player_due_work(
-            uid,
-            conn,
-            source=str(finish_source or "live_state"),
-            update_scores=True,
-            recalc_ranks=bool(recalc_ranks),
-        )
-        if use_refresh_sp and refresh_sp is not None:
-            # Side effects below soft-fail via ROLLBACK TO SAVEPOINT — not full rollback.
-            pass
-        else:
-            recover_aborted_transaction(conn)
-
-        def _soft_recover_refresh_side_effect() -> None:
-            nonlocal refresh_sp
-            if use_refresh_sp and refresh_sp is not None:
-                try:
-                    conn.execute(f"ROLLBACK TO SAVEPOINT {refresh_sp}")
-                except Exception:
-                    pass
-            else:
-                recover_aborted_transaction(conn)
-
         try:
+            finish_result = finish_player_due_work(
+                uid,
+                conn,
+                source=str(finish_source or "live_state"),
+                update_scores=True,
+                recalc_ranks=bool(recalc_ranks),
+            )
+        except Exception as finish_exc:
+            if isinstance(finish_exc, sqlite3.OperationalError) or is_db_lock_error(
+                finish_exc
+            ):
+                logger.warning(
+                    "refresh_player_live_state locked at finish player_id=%s",
+                    uid,
+                    exc_info=True,
+                )
+                return _locked_read_only_fallback()
+            _abort_refresh_savepoint()
+            raise
+
+        def _companion_tick() -> None:
             from .world_boss_companions import tick_companion_missions_for_player
 
             tick_companion_missions_for_player(uid, conn=conn)
-        except Exception:
-            _soft_recover_refresh_side_effect()
-            logger.exception("companion mission tick failed player=%s", uid)
+
+        _run_optional_side_effect(conn, "refresh_companion", _companion_tick)
+
         try:
             from .live_state import set_request_perf_meta
 
@@ -438,14 +478,18 @@ def refresh_player_live_state(
                 set_request_perf_meta("derived_sync_count", derived)
         except Exception:
             pass
-        try:
+
+        def _alliance_finish() -> None:
             from .alliance import finish_due_alliance_projects, get_player_alliance
 
             membership = get_player_alliance(uid, conn=conn)
             if membership:
-                finish_due_alliance_projects(conn=conn, alliance_id=int(membership["alliance_id"]))
-        except Exception:
-            _soft_recover_refresh_side_effect()
+                finish_due_alliance_projects(
+                    conn=conn, alliance_id=int(membership["alliance_id"])
+                )
+
+        _run_optional_side_effect(conn, "refresh_alliance", _alliance_finish)
+
         finish_ms = (time.perf_counter() - finish_t0) * 1000.0
         if perf is not None:
             perf.add_finish_ms(finish_ms)
@@ -467,12 +511,24 @@ def refresh_player_live_state(
         if not in_transaction(conn):
             begin_write_transaction(conn)
 
-        sync_t0 = time.perf_counter()
-        planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
-            planet,
-            conn=conn,
-            skip_queue_finish=True,
-        )
+        try:
+            sync_t0 = time.perf_counter()
+            planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
+                planet,
+                conn=conn,
+                skip_queue_finish=True,
+            )
+        except Exception as sync_exc:
+            if isinstance(sync_exc, sqlite3.OperationalError) or is_db_lock_error(sync_exc):
+                logger.warning(
+                    "refresh_player_live_state locked at resource sync player_id=%s",
+                    uid,
+                    exc_info=True,
+                )
+                return _locked_read_only_fallback()
+            _abort_refresh_savepoint()
+            raise
+
         storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
 
         player_view = dict(player)
@@ -495,30 +551,20 @@ def refresh_player_live_state(
         except Exception:
             pass
 
-        if use_refresh_sp and refresh_sp is not None:
-            try:
-                conn.execute(f"RELEASE SAVEPOINT {refresh_sp}")
-            except Exception:
-                pass
-            refresh_sp = None
+        _release_refresh_savepoint()
 
         if own_conn:
             commit(conn)
-
-        from .live_state import mark_request_live_refreshed
 
         mark_request_live_refreshed()
 
         return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
 
-    except Exception:
+    except Exception as exc:
         if refresh_sp is not None:
-            try:
-                conn.execute(f"ROLLBACK TO SAVEPOINT {refresh_sp}")
-                conn.execute(f"RELEASE SAVEPOINT {refresh_sp}")
-            except Exception:
-                pass
-            refresh_sp = None
+            if isinstance(exc, sqlite3.OperationalError) or is_db_lock_error(exc):
+                return _locked_read_only_fallback()
+            _abort_refresh_savepoint()
         elif own_conn:
             from .models import rollback
 
