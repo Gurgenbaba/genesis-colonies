@@ -7360,15 +7360,19 @@ def api_imperial_directives_state():
 @app.route("/imperial-directives")
 @require_login
 def imperial_directives_view():
-    ctx = _load_page_live_context(finish_source="imperial_directives")
-    if ctx is None:
-        return redirect(url_for("login"))
-
     from game.directives.service import get_imperial_directives_state
 
     imperial_directives = {"ready": False, "directives": []}
     conn = db()
     try:
+        ctx = _load_page_live_context(
+            finish_source="imperial_directives",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
+
         imperial_directives = get_imperial_directives_state(
             int(session["user_id"]),
             conn=conn,
