@@ -1529,10 +1529,17 @@ def _load_page_live_context(
                 _stash_shell_boot_for_inject(user_id, conn)
         except RuntimeError:
             return None
-        except sqlite3.OperationalError:
-            rollback(conn)
-            if not use_poll_live_path and not use_planet_switch_live_path:
+        except Exception as live_exc:
+            # PG LockNotAvailable / deadlock are not sqlite3.OperationalError.
+            # Under live lock pressure, SSR/PJAX pages (e.g. /galaxy) must soft-fallback
+            # instead of 500 — same path poll/planet_switch already used.
+            from game.db import is_db_lock_error
+
+            if not (
+                isinstance(live_exc, sqlite3.OperationalError) or is_db_lock_error(live_exc)
+            ):
                 raise
+            rollback(conn)
             logger.warning(
                 "page live context locked, using read-only fallback user_id=%s source=%s",
                 user_id,
@@ -2464,11 +2471,25 @@ def galaxy_view():
         galaxy_nav = build_galaxy_nav(galaxy, system, conn=conn)
         if view != "command_map":
             from game.asteroids import ensure_asteroids_present
-            from game.db import commit as db_commit
+            from game.db import commit as db_commit, is_db_lock_error, rollback as db_rollback
 
             # Deploy bootstrap: first Galaxy open seeds belts if the universe is empty.
-            ensure_asteroids_present(conn=conn)
-            db_commit(conn)
+            # Best-effort: lock contention must not 500 PJAX/prefetch (aborted TX).
+            try:
+                ensure_asteroids_present(conn=conn)
+                db_commit(conn)
+            except Exception as asteroid_exc:
+                if is_db_lock_error(asteroid_exc) or isinstance(
+                    asteroid_exc, sqlite3.OperationalError
+                ):
+                    db_rollback(conn)
+                    logger.warning(
+                        "galaxy asteroid ensure skipped (database locked) user_id=%s",
+                        user_id,
+                        exc_info=True,
+                    )
+                else:
+                    raise
             system_data = list_system(
                 galaxy,
                 system,
