@@ -43,6 +43,7 @@ jobs:
             tests/test_gc_perf_resource_persist_001.py tests/test_gc_perf_buildings_002.py tests/test_gc_flt_scope_001.py \
             tests/test_gc_perf_002_nav_latency.py \
             tests/test_gc_perf_174_sentinel_nav_matrix.py \
+            tests/test_gc_pg_175_planet_context_hot_row.py \
             tests/test_gc_pg_142_presence_pool_starvation.py \
             tests/test_gc_pg_166_presence_secondary.py \
             tests/test_gc_pg_167_autoplay_admin_presence.py \
