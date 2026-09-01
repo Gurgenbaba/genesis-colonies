@@ -302,15 +302,18 @@ def search_players(
 
         rows = list_online_players(limit=limit)
         return _ok(players=rows, online_only=True)
+    from game.presence_store import effective_last_seen_scalar_sql
+
     conn = db()
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     try:
         cur = conn.cursor()
         if q.isdigit():
             cur.execute(
-                """
+                f"""
                 SELECT u.id, u.username, u.is_admin AS user_is_admin,
                        p.name AS player_name, p.is_admin AS player_is_admin,
-                       p.last_seen, p.banned_until
+                       {last_seen_expr} AS last_seen, p.banned_until
                 FROM users u
                 LEFT JOIN players p ON p.id = u.id
                 WHERE u.id = ?
@@ -321,10 +324,10 @@ def search_players(
         elif q:
             like = f"%{q}%"
             cur.execute(
-                """
+                f"""
                 SELECT u.id, u.username, u.is_admin AS user_is_admin,
                        p.name AS player_name, p.is_admin AS player_is_admin,
-                       p.last_seen, p.banned_until
+                       {last_seen_expr} AS last_seen, p.banned_until
                 FROM users u
                 LEFT JOIN players p ON p.id = u.id
                 WHERE u.username LIKE ? OR p.name LIKE ?
@@ -335,10 +338,10 @@ def search_players(
             )
         else:
             cur.execute(
-                """
+                f"""
                 SELECT u.id, u.username, u.is_admin AS user_is_admin,
                        p.name AS player_name, p.is_admin AS player_is_admin,
-                       p.last_seen, p.banned_until
+                       {last_seen_expr} AS last_seen, p.banned_until
                 FROM users u
                 LEFT JOIN players p ON p.id = u.id
                 ORDER BY u.id ASC
@@ -355,14 +358,17 @@ def search_players(
 
 
 def get_player_detail(player_id: int) -> Dict[str, Any]:
+    from game.presence_store import effective_last_seen_scalar_sql
+
     conn = db()
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     try:
         cur = conn.cursor()
         cur.execute(
-            """
+            f"""
             SELECT u.id, u.username, u.is_admin AS user_is_admin,
                    p.name AS player_name, p.is_admin AS player_is_admin,
-                   p.last_seen, p.banned_until
+                   {last_seen_expr} AS last_seen, p.banned_until
             FROM users u
             LEFT JOIN players p ON p.id = u.id
             WHERE u.id = ? LIMIT 1;
@@ -874,11 +880,13 @@ def apply_inactive_storage_boost(
     Raise metal/crystal/fuel storage on all ranking-inactive players' planets
     to at least ``target_level`` (never lowers existing higher levels).
     """
+    from game.presence_store import effective_last_seen_scalar_sql
     from game.ranking import RANKING_INACTIVE_AFTER_SEC
 
     level = clamp_building_level(target_level, INACTIVE_STORAGE_TARGET_LEVEL)
     ts = int(now if now is not None else time.time())
     cutoff = ts - int(RANKING_INACTIVE_AFTER_SEC)
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     result: Dict[str, Any] = {
         "ok": True,
         "target_level": level,
@@ -892,13 +900,13 @@ def apply_inactive_storage_boost(
     try:
         cur = conn.cursor()
         cur.execute(
-            """
+            f"""
             SELECT p.id AS player_id, pl.id AS planet_id
             FROM players p
             JOIN users u ON u.id = p.id
             JOIN planets pl ON pl.player_id = p.id
-            WHERE COALESCE(p.last_seen, 0) > 0
-              AND COALESCE(p.last_seen, 0) <= ?
+            WHERE {last_seen_expr} > 0
+              AND {last_seen_expr} <= ?
               AND COALESCE(p.banned_until, 0) <= ?
             ORDER BY p.id ASC, pl.id ASC;
             """,

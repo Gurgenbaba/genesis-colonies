@@ -622,13 +622,16 @@ def bootstrap_faction_bots(*, conn) -> List[Dict[str, Any]]:
 
 def list_bot_roster(*, conn) -> List[Dict[str, Any]]:
     """Admin Bot-Log roster: presence, buildings, score, outbound fleets."""
+    from ..presence_store import effective_last_seen_scalar_sql
+
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     out: List[Dict[str, Any]] = []
     for key in FACTION_BOTS:
         meta = FACTION_BOTS[key]
         cur = conn.execute(
-            """
+            f"""
             SELECT u.id AS player_id, u.username, p.name AS display_name,
-                   COALESCE(p.last_seen, 0) AS last_seen
+                   {last_seen_expr} AS last_seen
             FROM users u
             LEFT JOIN players p ON p.id = u.id
             WHERE u.username = ?
