@@ -12,6 +12,6 @@ jobs:
       - name: Remaining gameplay last_seen references
         run: |
           echo '=== WRITES ==='
-          rg -n "UPDATE players SET last_seen|SET last_seen =|touch_player_online|touch_presence_bulk" game || true
+          grep -RInE "UPDATE players SET last_seen|SET last_seen =|touch_player_online|touch_presence_bulk" game --include='*.py' || true
           echo '=== READS ==='
-          rg -n "last_seen" game --glob '*.py' || true
+          grep -RIn "last_seen" game --include='*.py' || true
