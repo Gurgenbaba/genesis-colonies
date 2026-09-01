@@ -1568,12 +1568,14 @@ def build_admin_vote_stats(*, conn, now: Optional[int] = None) -> Dict[str, Any]
     Distinguishes external player votes from historical synthetic reengagement grants.
     Does not mint rewards.
     """
+    from .presence_store import effective_last_seen_scalar_sql
     from .ranking import RANKING_INACTIVE_AFTER_SEC, is_player_inactive
 
     ts = int(now if now is not None else time.time())
     week_ago = ts - 7 * 86400
     day_ago = ts - 86400
     channel_expr = _admin_vote_channel_expr(conn)
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
     out: Dict[str, Any] = {
         "ready": vote_system_ready(conn),
         "inactive_threshold_sec": int(RANKING_INACTIVE_AFTER_SEC),
@@ -1671,24 +1673,24 @@ def build_admin_vote_stats(*, conn, now: Optional[int] = None) -> Dict[str, Any]
     inactive_cutoff = ts - int(RANKING_INACTIVE_AFTER_SEC)
     if vote_channel_column_ready(conn):
         cur.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT vr.user_id) AS c
             FROM vote_rewards vr
             JOIN players p ON p.id = vr.user_id
             WHERE vr.voted_at >= ?
               AND COALESCE(vr.vote_channel, 'player') = 'player'
-              AND COALESCE(p.last_seen, 0) <= ?;
+              AND {last_seen_expr} <= ?;
             """,
             (week_ago, inactive_cutoff),
         )
     else:
         cur.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT vr.user_id) AS c
             FROM vote_rewards vr
             JOIN players p ON p.id = vr.user_id
             WHERE vr.voted_at >= ?
-              AND COALESCE(p.last_seen, 0) <= ?;
+              AND {last_seen_expr} <= ?;
             """,
             (week_ago, inactive_cutoff),
         )
@@ -1732,8 +1734,8 @@ def build_admin_vote_stats(*, conn, now: Optional[int] = None) -> Dict[str, Any]
     out["providers"] = provider_stats
 
     cur.execute(
-        """
-        SELECT p.id AS user_id, COALESCE(p.last_seen, 0) AS last_seen
+        f"""
+        SELECT p.id AS user_id, {last_seen_expr} AS last_seen
         FROM players p
         JOIN users u ON u.id = p.id
         WHERE COALESCE(p.banned_until, 0) <= ?;
@@ -1768,6 +1770,7 @@ def search_admin_vote_players(
     offset: int = 0,
     now: Optional[int] = None,
 ) -> Dict[str, Any]:
+    from .presence_store import effective_last_seen_scalar_sql
     from .ranking import RANKING_INACTIVE_AFTER_SEC, is_player_inactive
 
     ts = int(now if now is not None else time.time())
@@ -1775,6 +1778,7 @@ def search_admin_vote_players(
     off = max(0, int(offset))
     inactive_cutoff = ts - int(RANKING_INACTIVE_AFTER_SEC)
     channel_expr = _admin_vote_channel_expr(conn)
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
 
     where: List[str] = ["COALESCE(p.banned_until, 0) <= ?"]
     params: List[Any] = [ts]
@@ -1786,10 +1790,10 @@ def search_admin_vote_players(
 
     activity_norm = str(activity or "all").strip().lower()
     if activity_norm == "active":
-        where.append("COALESCE(p.last_seen, 0) > ?")
+        where.append(f"{last_seen_expr} > ?")
         params.append(inactive_cutoff)
     elif activity_norm == "inactive":
-        where.append("(COALESCE(p.last_seen, 0) <= ? OR COALESCE(p.last_seen, 0) = 0)")
+        where.append(f"({last_seen_expr} <= ? OR {last_seen_expr} = 0)")
         params.append(inactive_cutoff)
 
     where_sql = " AND ".join(where)
@@ -1808,11 +1812,11 @@ def search_admin_vote_players(
     cur.execute(
         f"""
         SELECT p.id AS user_id, u.username, p.name AS player_name,
-               COALESCE(p.last_seen, 0) AS last_seen
+               {last_seen_expr} AS last_seen
         FROM players p
         JOIN users u ON u.id = p.id
         WHERE {where_sql}
-        ORDER BY p.last_seen DESC, p.id ASC
+        ORDER BY last_seen DESC, p.id ASC
         LIMIT ? OFFSET ?;
         """,
         tuple(params) + (lim, off),
