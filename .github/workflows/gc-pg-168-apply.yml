@@ -1,0 +1,48 @@
+name: GC PG 168 Vote Presence Apply
+
+on:
+  push:
+    branches:
+      - perf/pg-168-vote-presence
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/pg-168-vote-presence
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Apply scoped cutover
+        run: python scripts/apply_gc_pg_168_vote_presence.py
+
+      - name: Run targeted regression tests
+        env:
+          GC_SKIP_MIGRATION_CHECK: '1'
+        run: |
+          python -m pytest tests/test_gc_pg_168_vote_presence.py tests/test_vote_reengagement.py -q
+
+      - name: Commit production patch
+        run: |
+          rm scripts/apply_gc_pg_168_vote_presence.py
+          rm .github/workflows/gc-pg-168-apply.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game/vote_rewards.py tests/test_gc_pg_168_vote_presence.py .github/workflows/ci.yml scripts/apply_gc_pg_168_vote_presence.py .github/workflows/gc-pg-168-apply.yml
+          git commit -m 'perf(pg): move vote activity reads to player_presence'
+          git push origin HEAD:perf/pg-168-vote-presence
