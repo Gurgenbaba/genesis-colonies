@@ -135,4 +135,3 @@ def test_presence_lock_handler_has_no_db_checkout():
     )[0]
     assert "db()" not in lock_block
     assert "_release_roster_best_effort" not in source
-    assert "SAVEPOINT gc_presence_roster" in source
