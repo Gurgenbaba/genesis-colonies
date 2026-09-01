@@ -41,6 +41,7 @@ jobs:
             tests/test_fleet_worker.py tests/test_gc_perf_tk_005.py tests/test_gc_perf_fleet_write_001.py \
             tests/test_gc_perf_fleet_idle_001.py tests/test_gc_perf_state_006.py tests/test_gc_perf_state_007.py tests/test_gc_perf_state_008.py tests/test_gc_perf_state_009.py tests/test_gc_perf_state_010.py tests/test_gc_perf_state_011.py \
             tests/test_gc_perf_resource_persist_001.py tests/test_gc_perf_buildings_002.py tests/test_gc_flt_scope_001.py \
+            tests/test_gc_perf_002_nav_latency.py \
             tests/test_gc_pg_142_presence_pool_starvation.py \
             tests/test_gc_pg_166_presence_secondary.py \
             tests/test_gc_pg_167_autoplay_admin_presence.py \
