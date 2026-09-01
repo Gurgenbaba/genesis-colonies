@@ -1,8 +1,8 @@
 # GC-PG-HIGHSPEED-001 — PostgreSQL Hotpath Highspeed (Umbrella)
 
-> Status: 📋 Master-Doc · First implement slice: **001A Galaxy Bulk** (not started)  
+> Status: 🚧 In progress · **001A Galaxy Bulk shipped** · Next: **001B game-state zero-write**  
 > Epic: EPIC-19 Performance Core · Related: [GC_PERF_CORE.md](GC_PERF_CORE.md) · [PERFORMANCE.md](PERFORMANCE.md) · Cutover: [database/GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md)  
-> Incident context: live PG cutover 2026-08-31 · hotfixes #131 / #132 / #133 on `main`
+> Incident context: live PG cutover 2026-08-31 · hotfixes #131 / #132 / #133 · live recovery #136 · SSR/politics softfix #137 on `main`
 
 ---
 
@@ -139,7 +139,7 @@ Client may animate between authoritative snapshots; **server reconstructs truth*
 
 ### Status
 
-📋 Spec only — **no Galaxy code in this doc PR**.
+✅ Shipped (`#136` / main) — `list_system` bulk maps, write-free debris filter, SQL/opens gates in `tests/test_gc_pg_highspeed_001a.py`. Live measure after deploy still required for Admin p95.
 
 ### Why first
 
@@ -267,10 +267,50 @@ assert write_count == 0  # list_system / composition only
 
 ### Done when
 
-- [ ] Gates above green on SQLite CI path; PG when URL set  
-- [ ] `list_system` write_count == 0 (debris expire only on maint)  
+- [x] Gates above green on SQLite CI path; PG when URL set  
+- [x] `list_system` write_count == 0 (debris expire only on maint)  
 - [ ] Production Admin spike: Galaxy SQL &lt;100, opens ≈1–3, p95 trending &lt;1s  
-- [ ] No feature / response regression called out in Galaxy contract tests  
+- [x] No feature / response regression called out in Galaxy contract tests  
+
+---
+
+## GC-PG-HIGHSPEED-001B — Game-state zero-write poll
+
+### Status
+
+🚧 In progress (this slice).
+
+### Goal
+
+Idle `GET /api/game-state` diet poll (`finish_source=game_state`) must not open a write TX solely to materialize planet resources.
+
+| Path | Writes |
+|------|--------|
+| Idle diet (no due queue, fleet deferred) | **0** on live path (no `UPDATE planets` persist) |
+| Safety-net queue/fleet finish (worker heartbeat missing/stale) | Allowed (correctness) |
+| Presence `touch_player_online` | Out of scope → **001C** |
+
+### Owner
+
+| Role | Module |
+|------|--------|
+| Primary | `game/logic.py` `read_player_live_state_for_poll` |
+| Tests | `tests/test_gc_pg_highspeed_001b.py`, `tests/test_gc_perf_resource_persist_001.py` |
+| Doc | this file |
+
+### Semantics frozen
+
+- HUD still shows projected resources (read path / Ferdi).  
+- Queues/fleets still finish via workers; HTTP safety-net remains when heartbeats are stale.  
+- Full materialize-on-mutation redesign stays **WRITE-MIN-001**.
+
+### Test gates
+
+```text
+Idle poll after GC_RESOURCE_PERSIST_SEC window: UPDATE planets count == 0
+Structural: poll path no longer calls get_resource_persist_interval_sec
+Safety-net finish tests (STALL-001A) stay green
+```
 
 ---
 
@@ -293,11 +333,13 @@ assert write_count == 0  # list_system / composition only
 | #131 | TX rollback after initiation failure; `runtime_state` SAVEPOINT; case-battles ORDER BY |
 | #132 | Diet nav directives `read_only` (smoke unblock) |
 | #133 | Presence 250ms soft-skip; initiation SAVEPOINT; schema/`galaxy_max` caches |
+| #136 | Planet switch `lock_busy` + Galaxy 001A bulk |
+| #137 | SSR/PJAX lock soft-fallback; galactic-politics PG `$3`; runtime_state soft-skip |
 
 ---
 
 ## Next action
 
-1. Review/merge this master doc.  
-2. Implement **only** `GC-PG-HIGHSPEED-001A` (Galaxy Bulk) against the gates above.  
-3. Deploy, compare Admin spikes, then open 001B.
+1. Land **001B** (diet poll zero resource-persist).  
+2. Deploy + measure Admin `/api/game-state` write spikes.  
+3. Open **001C** presence off `players` hot row.

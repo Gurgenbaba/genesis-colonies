@@ -136,6 +136,10 @@ def read_player_live_state_for_poll(
     - Fleet dirty deferred when fleet-worker heartbeat is fresh; else player-scoped tick.
     - ``update_scores=True`` kept on safety-net finish: marks score dirty only
       (GC-SCORE-PERF-001); ``False`` would skip invalidation — do not flip without tests.
+
+    GC-PG-HIGHSPEED-001B:
+    - Idle diet poll is write-free for resource materialize (no periodic planet persist).
+    - Writes only on safety-net queue/fleet finish when workers are missing/stale.
     """
     from .db import begin_write_transaction, in_transaction
     from .models import db as _db, load_player, rollback
@@ -147,7 +151,6 @@ def read_player_live_state_for_poll(
         try_claim_poll_due_finish,
     )
     from .fleet_worker import is_fleet_worker_heartbeat_fresh
-    from game.config import get_resource_persist_interval_sec
 
     uid = int(player_id)
     own_conn = conn is None
@@ -158,18 +161,17 @@ def read_player_live_state_for_poll(
         from .planet_evolution.repository import get_context_planet
 
         planet = get_context_planet(uid, conn=conn)
-        planet_id = int(planet["id"])
 
         player = load_player(uid, conn=conn)
         if not player:
             raise RuntimeError(f"player {uid} not found")
 
         now = time.time()
-        last_raw = planet.get("last_update")
-        last = float(last_raw) if last_raw is not None else now
 
-        persist_resources = (now - last) >= float(get_resource_persist_interval_sec())
-
+        # GC-PG-HIGHSPEED-001B: pure diet poll never opens a write TX just to
+        # materialize resources. HUD projection stays read-only; persistence
+        # happens on mutations / SSR / WRITE-MIN, or below after a real
+        # safety-net queue/fleet finish.
         fleet_dirty = player_fleet_is_dirty(uid, conn=conn, now=now)
         attempt_queue, _queue_reason = should_poll_attempt_queue_finish(
             uid, conn=conn, now=now, planet_id=None
@@ -185,20 +187,8 @@ def read_player_live_state_for_poll(
         elif fleet_dirty and should_finish_queues:
             should_finish_fleet = False
 
-        # When both queue + fleet work are deferred to healthy workers, keep the
-        # diet poll write-free (no resource-persist IMMEDIATE either).
-        from game.config import is_game_worker_primary
-        from .runtime_state import is_queue_tick_heartbeat_fresh
-
-        if (
-            is_game_worker_primary()
-            and is_queue_tick_heartbeat_fresh(conn=conn, now=now)
-            and (not fleet_dirty or is_fleet_worker_heartbeat_fresh(conn=conn, now=now))
-        ):
-            persist_resources = False
-
         should_finish = bool(should_finish_queues or should_finish_fleet)
-        need_write = bool(should_finish or persist_resources)
+        need_write = bool(should_finish)
 
         try:
             if need_write:
@@ -294,7 +284,13 @@ def read_player_live_state_for_poll(
 
             return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
 
-        except sqlite3.OperationalError:
+        except Exception as poll_exc:
+            from .db import is_db_lock_error
+
+            if not (
+                isinstance(poll_exc, sqlite3.OperationalError) or is_db_lock_error(poll_exc)
+            ):
+                raise
             logger.warning(
                 "read_player_live_state_for_poll locked, read-only fallback player_id=%s",
                 uid,
