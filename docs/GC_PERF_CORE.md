@@ -10,6 +10,7 @@
 - SQLite remains the local/dev default and a kept volume backup — not the live source of truth.
 - Keine Parallel-Systeme (GC-000 Regel 15/17/19).
 - Hotpath work continues under **[GC-PG-HIGHSPEED-001](GC_PG_HIGHSPEED_001.md)** (001A Galaxy Bulk first) — fewer roundtrips/writes/locks, not longer timeouts or feature kills.
+- After 001A, **[GC-PG-HIGHSPEED-001F](GC_PG_HIGHSPEED_001F.md)** inventories SQLite-era throttles before any PG-aware default unlocks; 001F is docs-only and may run parallel to 001B.
 
 ## Status-Einordnung
 
@@ -68,7 +69,7 @@ Siehe `game.config.get_perf_budgets()` / [ARCHITECTURE.md](ARCHITECTURE.md). Bas
 
 Live cutover 2026-08-31: Postgres authoritative in production. Runbook: [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
 
-**Next:** PostgreSQL hotpath highspeed — [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md) (first code slice **001A Galaxy Bulk**).
+**Next:** PostgreSQL hotpath highspeed — [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md) (first code slice **001A Galaxy Bulk**). After 001A, [001F](GC_PG_HIGHSPEED_001F.md) audits SQLite-era throttles while 001B can continue in parallel.
 
 | Ticket | Inhalt | Status |
 |--------|--------|--------|
@@ -76,6 +77,7 @@ Live cutover 2026-08-31: Postgres authoritative in production. Runbook: [GC-DB-P
 | **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität (kritische Systeme) | ✅ live Postgres |
 | **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** / cutover import | SQLite→Postgres Importer + Live Cutover | ✅ live |
 | **[GC-PG-HIGHSPEED-001](GC_PG_HIGHSPEED_001.md)** | PG hotpath highspeed umbrella (001A Galaxy first) | 📋 |
+| **[GC-PG-HIGHSPEED-001F](GC_PG_HIGHSPEED_001F.md)** | SQLite-era throttle inventory; KEEP / PG-RETUNE / REMOVE / REPLACE; no default flips | 📋 after 001A, docs-only |
 | **GC-PERF-WRITE-MIN-001** | Materialize-on-mutation / rate boundaries | 📋 after 001A–C |
 | **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | ✅ shipyard + defense page binders; page-scoped script load |
 | **GC-PERF-OVERVIEW-TTFB-001** | `g.gc_fleet_hud` / `g.gc_world_boss_*` stash for inject_globals | ✅ |
@@ -104,6 +106,7 @@ Live cutover 2026-08-31: Postgres authoritative in production. Runbook: [GC-DB-P
 - Lock timeouts hochdrehen statt Writes/Contention zu senken
 - Features permanent abschalten als Performance-Fix (Autoplay=0 = incident soft-off only)
 - Parallel Galaxy-/Presence-/Admin-Systeme neben den Ownern
+- SQLite-era throttle knobs blind auf Maximalwerte setzen; 001F classifies first, later micro-tickets measure changes
 
 ## Owner
 
