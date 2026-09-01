@@ -18,10 +18,11 @@ _FakeLockError.__name__ = "LockNotAvailable"
 
 
 class _FakeConn:
-    def __init__(self) -> None:
+    def __init__(self, *, lock_on_update: bool = True) -> None:
         self.closed = False
         self.rolled_back = False
         self.committed = False
+        self.lock_on_update = bool(lock_on_update)
         self.sql: list[str] = []
 
     def execute(self, sql, params=None):  # noqa: ANN001
@@ -29,7 +30,7 @@ class _FakeConn:
         self.sql.append(text)
         if text.startswith("SELECT last_seen"):
             return SimpleNamespace(fetchone=lambda: {"last_seen": 0})
-        if text.startswith("UPDATE players SET last_seen"):
+        if text.startswith("UPDATE players SET last_seen") and self.lock_on_update:
             raise _FakeLockError("canceling statement due to lock timeout")
         return SimpleNamespace(fetchone=lambda: None)
 
@@ -46,19 +47,15 @@ class _FakeConn:
         self.closed = True
 
 
-def test_presence_lock_softfail_uses_one_checkout(monkeypatch):
-    """Regression: lock fallback must not hold one pool conn while asking for another."""
+def _patch_presence_basics(monkeypatch, conn, *, local_marks):
     from game import inactive_autoplay, models
 
-    conn = _FakeConn()
-    checkouts = 0
-    local_marks: list[int] = []
+    checkouts = {"n": 0}
 
     def fake_db():
-        nonlocal checkouts
-        checkouts += 1
-        if checkouts > 1:
-            raise AssertionError("nested/second pool checkout from presence lock fallback")
+        checkouts["n"] += 1
+        if checkouts["n"] > 1:
+            raise AssertionError("nested/second pool checkout from presence path")
         return conn
 
     monkeypatch.setattr(presence, "db", fake_db)
@@ -79,15 +76,49 @@ def test_presence_lock_softfail_uses_one_checkout(monkeypatch):
         "player_on_inactive_autoplay_roster",
         lambda player_id, *, conn: False,
     )
+    return checkouts
+
+
+def test_presence_lock_softfail_uses_one_checkout(monkeypatch):
+    """Regression: lock fallback must not hold one pool conn while asking for another."""
+    conn = _FakeConn(lock_on_update=True)
+    local_marks: list[int] = []
+    checkouts = _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
 
     presence.touch_player_online(7)
 
-    assert checkouts == 1
+    assert checkouts["n"] == 1
     assert conn.closed is True
     assert conn.rolled_back is True
     assert conn.committed is False
     assert local_marks == []  # next authenticated request must retry the touch
     assert any("SET LOCAL lock_timeout = '250ms'" in sql for sql in conn.sql)
+
+
+def test_roster_release_failure_keeps_successful_presence_write(monkeypatch):
+    """Optional roster failure is SAVEPOINT-isolated; last_seen still commits."""
+    from game import inactive_autoplay
+
+    conn = _FakeConn(lock_on_update=False)
+    local_marks: list[int] = []
+    checkouts = _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
+
+    monkeypatch.setattr(
+        inactive_autoplay,
+        "release_active_player_from_roster",
+        lambda player_id, *, conn: (_ for _ in ()).throw(RuntimeError("runtime_state unavailable")),
+    )
+
+    presence.touch_player_online(7)
+
+    assert checkouts["n"] == 1
+    assert conn.closed is True
+    assert conn.rolled_back is False
+    assert conn.committed is True
+    assert local_marks == [7]
+    assert "SAVEPOINT gc_presence_roster" in conn.sql
+    assert "ROLLBACK TO SAVEPOINT gc_presence_roster" in conn.sql
+    assert "RELEASE SAVEPOINT gc_presence_roster" in conn.sql
 
 
 def test_auth_guards_use_non_nested_presence_owner():
@@ -104,3 +135,4 @@ def test_presence_lock_handler_has_no_db_checkout():
     )[0]
     assert "db()" not in lock_block
     assert "_release_roster_best_effort" not in source
+    assert "SAVEPOINT gc_presence_roster" in source
