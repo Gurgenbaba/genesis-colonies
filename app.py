@@ -2815,20 +2815,21 @@ def shipyard_view():
     ssr = current_ssr_perf()
 
     data_t0 = time.perf_counter()
-    player_view, _, planet_row, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
-        finish_ssr_perf(response_bytes=0)
-        return redirect(url_for("login"))
-
-    from game.fleet import fleet_schema_ready
-    from game.planet_evolution.repository import get_context_planet
-    from game.shipyard import build_shipyard_page_context
-
     conn = db()
     try:
-        from game.live_state import perf_span
+        ctx = _load_page_live_context(finish_source="shipyard", conn=conn, close_conn=False)
+        if ctx is None:
+            finish_ssr_perf(response_bytes=0)
+            return redirect(url_for("login"))
 
-        planet = get_context_planet(int(session.get("user_id") or 0), conn=conn)
+        from game.fleet import fleet_schema_ready
+        from game.live_state import get_request_context_planet, perf_span
+        from game.shipyard import build_shipyard_page_context
+
+        player_view = ctx["player_view"]
+        planet = ctx.get("planet")
+        if not planet:
+            planet = get_request_context_planet(int(session.get("user_id") or 0), conn=conn)
         with perf_span("page_context.shipyard"):
             shipyard_ctx = (
                 build_shipyard_page_context(int(session.get("user_id") or 0), planet, conn=conn)
@@ -2844,11 +2845,11 @@ def shipyard_view():
     resp = render_template(
         "shipyard.html",
         player=player_view,
-        planet=planet_row,
+        planet=planet,
         shipyard=shipyard_ctx,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
     )
     if ssr is not None:
         ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
