@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
-from types import SimpleNamespace
 
 from game import world_boss as wb
 
@@ -73,6 +72,23 @@ def test_explicit_auto_flush_remains_opt_in(monkeypatch):
     monkeypatch.setattr(wb, "flush_ready_auto_attacks_for_player", _flush)
     wb.build_world_boss_payload(9, conn=_Conn(), now=12345.0, flush_auto=True)
     assert called == [9]
+
+
+def test_production_world_boss_get_callers_are_read_only():
+    src = (ROOT / "app.py").read_text(encoding="utf-8")
+    page = src.split("def world_boss_view():", 1)[1].split(
+        '@app.route("/api/world-boss")', 1
+    )[0]
+    api = src.split("def api_world_boss():", 1)[1].split(
+        '@app.route("/api/world-boss/attack"', 1
+    )[0]
+
+    for block in (page, api):
+        assert "flush_auto=True" not in block
+        assert "begin_write_transaction" not in block
+        assert "commit(conn)" not in block
+        assert "rollback(conn)" not in block
+        assert "build_world_boss_payload" in block
 
 
 def test_fleet_worker_remains_server_owned_auto_attack_mutation_owner():
