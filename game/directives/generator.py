@@ -128,7 +128,7 @@ def _player_total_score(player_id: int, *, conn: sqlite3.Connection) -> int:
     try:
         from ..ranking import get_player_score_cached
 
-        snapshot = get_player_score_cached(int(player_id), read_only=True)
+        snapshot = get_player_score_cached(int(player_id), read_only=True, conn=conn)
         return max(0, int(snapshot.get("total") or 0))
     except Exception:
         row = conn.execute(
