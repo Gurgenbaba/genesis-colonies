@@ -1,8 +1,12 @@
 """GC-PG-HIGHSPEED-001C dedicated player-presence storage helpers.
 
-PostgreSQL authenticated presence must not UPDATE or lock the hot ``players``
-gameplay row. SQLite keeps the established ``players.last_seen`` path for
-backward-compatible local/test behaviour; PostgreSQL uses ``player_presence``.
+PostgreSQL authenticated presence is owned by ``player_presence``. During the
+reader cutover we keep ``players.last_seen`` as a low-frequency compatibility
+mirror (<= once per four minutes), isolated by the caller with a SAVEPOINT.
+That preserves legacy online/inactive readers while removing the former
+per-presence-interval write pressure from the hot gameplay row.
+
+SQLite keeps the established ``players.last_seen`` path.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from typing import Iterable, Sequence
 from .db import get_db_backend
 
 PRESENCE_TABLE = "player_presence"
+LEGACY_SYNC_INTERVAL_SEC = 4 * 60
 
 
 def uses_dedicated_presence(*, backend: str | None = None) -> bool:
@@ -39,7 +44,7 @@ def effective_last_seen_sql(
     presence_alias: str = "pp",
     backend: str | None = None,
 ) -> str:
-    """Read dedicated presence first, preserving legacy backfill fallback."""
+    """Read dedicated presence first, preserving legacy fallback."""
     if uses_dedicated_presence(backend=backend):
         return f"COALESCE({presence_alias}.last_seen, {player_alias}.last_seen, 0)"
     return f"COALESCE({player_alias}.last_seen, 0)"
@@ -63,6 +68,20 @@ def get_presence_last_seen(
     return int(row["last_seen"] or 0) if row else 0
 
 
+def should_sync_legacy_last_seen(*, previous_seen: int, now: int) -> bool:
+    """Keep legacy readers fresh without restoring the 30s players-row write."""
+    return int(previous_seen or 0) <= int(now) - LEGACY_SYNC_INTERVAL_SEC
+
+
+def sync_legacy_last_seen(conn, player_id: int, *, now: int) -> None:  # noqa: ANN001
+    """Compatibility mirror only; caller must isolate this optional PG write."""
+    conn.execute(
+        "UPDATE players SET last_seen = ? WHERE id = ? "
+        "AND (last_seen IS NULL OR last_seen < ?);",
+        (int(now), int(player_id), int(now) - LEGACY_SYNC_INTERVAL_SEC),
+    )
+
+
 def touch_presence(
     conn,
     player_id: int,
@@ -75,7 +94,6 @@ def touch_presence(
     pid = int(player_id)
     ts = int(now)
     if uses_dedicated_presence(backend=backend):
-        # No FK by design: this UPSERT has no reason to lock players.
         conn.execute(
             f"""
             INSERT INTO {PRESENCE_TABLE} (player_id, last_seen, updated_at)
@@ -104,7 +122,7 @@ def touch_presence_bulk(
     now: int,
     backend: str | None = None,
 ) -> None:  # noqa: ANN001
-    """Refresh a tiny roster without moving PostgreSQL locks onto players."""
+    """Refresh a tiny roster using the backend-appropriate presence storage."""
     ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
     if not ids:
         return
