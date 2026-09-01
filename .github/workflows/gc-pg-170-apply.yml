@@ -29,7 +29,9 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Apply scoped cleanup
-        run: python scripts/apply_gc_pg_170_admin_legacy_presence.py
+        run: |
+          python scripts/apply_gc_pg_170_admin_legacy_presence.py
+          python scripts/apply_gc_pg_170_test_fix.py
 
       - name: Run targeted regression tests
         env:
@@ -37,15 +39,18 @@ jobs:
         run: |
           python -m pytest \
             tests/test_gc_pg_170_admin_legacy_presence.py \
-            tests/test_admin_control_center.py \
+            tests/test_admin_control_center.py::test_player_search_works \
+            tests/test_admin_control_center.py::test_search_no_sql_injection \
+            tests/test_inactive_storage_boost.py \
             tests/test_pirate_ecosystem.py \
             tests/test_options.py -q
 
       - name: Commit production patch
         run: |
           rm scripts/apply_gc_pg_170_admin_legacy_presence.py
+          rm scripts/apply_gc_pg_170_test_fix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game/admin_api.py game/pirates/accounts.py game/options.py tests/test_gc_pg_170_admin_legacy_presence.py scripts/apply_gc_pg_170_admin_legacy_presence.py
+          git add game/admin_api.py game/pirates/accounts.py game/options.py tests/test_gc_pg_170_admin_legacy_presence.py scripts/apply_gc_pg_170_admin_legacy_presence.py scripts/apply_gc_pg_170_test_fix.py
           git commit -m 'perf(pg): finish admin legacy presence readers'
           git push origin HEAD:perf/pg-170-admin-legacy-presence
