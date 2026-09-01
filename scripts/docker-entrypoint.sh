@@ -16,9 +16,6 @@ ensure_db_parent_dir()
 echo "[GC] Applying migrations..."
 python migrate.py
 
-echo "[GC] Ensuring PostgreSQL hotpath indexes (concurrent / best-effort)..."
-python scripts/ensure_pg_hotpath_indexes.py
-
 echo "[GC] Seeding player timeline from CHANGELOG if needed..."
 python -c "
 from game.config import init_config
