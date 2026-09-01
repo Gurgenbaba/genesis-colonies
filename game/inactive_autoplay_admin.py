@@ -41,8 +41,10 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
 
     from .fleet_worker import get_stage_skip_streak
     from .models import ONLINE_WINDOW_SEC, get_registered_player_count
+    from .presence_store import effective_last_seen_scalar_sql
 
     skip_streak = get_stage_skip_streak("inactive_autoplay", conn=conn)
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
 
     # GC-2617: live count of roster members currently inside the online
     # window — the number that actually matters for "does this look
@@ -55,8 +57,8 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
         try:
             row = conn.execute(
                 f"""
-                SELECT COUNT(*) AS c FROM players
-                WHERE id IN ({placeholders}) AND last_seen >= ?;
+                SELECT COUNT(*) AS c FROM players p
+                WHERE p.id IN ({placeholders}) AND {last_seen_expr} >= ?;
                 """,
                 [*ids, cutoff],
             ).fetchone()
@@ -80,7 +82,7 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
             # surface already does (e.g. game/vote_rewards.py admin stats, game/pirates/accounts.py).
             cur = conn.execute(
                 f"""
-                SELECT p.id AS id, u.username AS username, p.last_seen AS last_seen
+                SELECT p.id AS id, u.username AS username, {last_seen_expr} AS last_seen
                 FROM players p
                 JOIN users u ON u.id = p.id
                 WHERE p.id IN ({placeholders});
