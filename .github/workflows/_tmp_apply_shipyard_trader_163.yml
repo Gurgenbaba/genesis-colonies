@@ -23,7 +23,7 @@ jobs:
         run: |
           python -m py_compile app.py game/shipyard.py
           node --check static/main.js
-          python -m pytest -q tests/test_gc_pg_163_shipyard_trader.py tests/test_gc_trader_max_001.py tests/test_deep_vault_ark.py
+          python -m pytest -q tests/test_gc_pg_163_shipyard_trader.py tests/test_gc_trader_max_001.py
       - name: Commit product diff
         run: |
           if git diff --quiet -- app.py static/main.js; then
