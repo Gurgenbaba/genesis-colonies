@@ -4981,7 +4981,7 @@ def api_auction_house_bid():
     from game.auction_house import auction_schema_ready, build_auction_house_state, place_bid
     from game.planet_evolution.repository import get_context_planet
 
-    if not auction_schema_ready(db()):
+    if not _schema_ready_with_short_conn(auction_schema_ready):
         state, _ = _build_game_state_payload(
             include_panel=True,
             finish_source="api_auction_house_bid",
@@ -10664,6 +10664,15 @@ def api_chat_admin_unmute():
 # API (AJAX / main.js)
 # --------------------------------------------------------------------------
 
+def _schema_ready_with_short_conn(check_fn) -> bool:
+    """Run a schema readiness probe without leaking a pooled DB connection."""
+    conn = db()
+    try:
+        return bool(check_fn(conn))
+    finally:
+        conn.close()
+
+
 def _fleet_write_transaction(work):
     """Run fleet DB mutation with BEGIN IMMEDIATE and explicit commit/rollback."""
     conn = db()
@@ -11843,7 +11852,7 @@ def api_exchange():
     from game.exchange import execute_exchange, exchange_schema_ready
     from game.planet_evolution.repository import get_context_planet
 
-    if not exchange_schema_ready(db()):
+    if not _schema_ready_with_short_conn(exchange_schema_ready):
         state, _ = _build_game_state_payload(include_panel=True, finish_source="api_exchange")
         return jsonify({"ok": False, "reason": "exchange_unavailable", "state": state}), 503
 
@@ -11986,7 +11995,7 @@ def api_fuel_exchange_buy():
     from game.exchange import execute_exchange, exchange_schema_ready, get_exchange_config
     from game.planet_evolution.repository import get_context_planet
 
-    if not exchange_schema_ready(db()):
+    if not _schema_ready_with_short_conn(exchange_schema_ready):
         state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fuel_exchange")
         return jsonify({"ok": False, "reason": "fuel_exchange_unavailable", "state": state}), 503
 
@@ -12033,7 +12042,7 @@ def api_fleet_preview():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -12123,7 +12132,7 @@ def api_fleet_resolve_target():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     if request.method == "POST":
@@ -12213,7 +12222,7 @@ def api_fleet_state():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     conn = db()
@@ -12255,7 +12264,7 @@ def api_fleet_send():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         state = _fleet_mutation_game_state("api_fleet_send")
         body = fleet_err("fleet_unavailable", data={"state": state})
         return jsonify(body), 503
@@ -12432,7 +12441,7 @@ def api_fleet_bulk_launch_presets():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         state = _fleet_mutation_game_state("api_fleet_bulk_launch_presets")
         body = fleet_err("fleet_unavailable", data={"state": state})
         body["state"] = state
@@ -12491,7 +12500,7 @@ def api_fleet_recall():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         state = _fleet_mutation_game_state("api_fleet_recall")
         return jsonify(fleet_err("fleet_unavailable", data={"state": state})), 503
 
@@ -12529,7 +12538,7 @@ def api_fleet_presets_list():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
     presets = list_presets(user_id)
     if request.args.get("galaxy_attack") in ("1", "true", "yes"):
@@ -12546,7 +12555,7 @@ def api_fleet_presets_create():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -12576,7 +12585,7 @@ def api_fleet_presets_update(preset_id: int):
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -12601,7 +12610,7 @@ def api_fleet_presets_delete(preset_id: int):
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     ok, reason = delete_preset(preset_id, user_id)
@@ -12628,7 +12637,7 @@ def api_fleet_dev_seed_ships():
     allow = is_debug_enabled() or bool(player and player.get("is_admin"))
     if not allow:
         return jsonify(fleet_err("forbidden")), 403
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -13869,7 +13878,7 @@ def api_fleet_logistics_preview():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -13890,7 +13899,7 @@ def api_fleet_logistics_collect():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in", "state": {}}), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return _action_json_response(
             False, "fleet_unavailable", finish_source="api_fleet_logistics_collect"
         ), 503
@@ -13957,7 +13966,7 @@ def api_fleet_logistics_distribute():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in", "state": {}}), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return _action_json_response(
             False, "fleet_unavailable", finish_source="api_fleet_logistics_distribute"
         ), 503
@@ -14030,7 +14039,7 @@ def api_fleet_mass_expedition_preview():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -14065,7 +14074,7 @@ def api_fleet_mass_expedition():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
@@ -14130,7 +14139,7 @@ def api_admin_planet_ships(planet_id: int):
     from game.fleet import fleet_schema_ready, seed_planet_ships_stack
     from game.fleet_api import fleet_err, fleet_ok
 
-    if not fleet_schema_ready(db()):
+    if not _schema_ready_with_short_conn(fleet_schema_ready):
         return _admin_json(fleet_err("fleet_unavailable"))
 
     data = _admin_body()
