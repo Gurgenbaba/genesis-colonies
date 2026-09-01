@@ -1,8 +1,8 @@
 """Authenticated player-presence hot path.
 
-GC-PG-HIGHSPEED-001C moves PostgreSQL online touches off the hot ``players``
-gameplay row into ``player_presence``. SQLite intentionally keeps the legacy
-storage path for local/backward compatibility.
+GC-PG-HIGHSPEED-001C makes PostgreSQL ``player_presence`` the canonical hot
+presence store. While remaining readers are cut over, ``players.last_seen`` is
+kept as a low-frequency compatibility mirror (max once per four minutes).
 
 Presence stays best-effort, single-checkout, short-transaction work. A lock
 soft-fail never asks the pool for a second connection.
@@ -20,23 +20,36 @@ from .db import (
     is_db_lock_error,
     rollback,
 )
-from .presence_store import get_presence_last_seen, touch_presence
+from .presence_store import (
+    get_presence_last_seen,
+    should_sync_legacy_last_seen,
+    sync_legacy_last_seen,
+    touch_presence,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _release_roster_optional(conn, player_id: int) -> None:  # noqa: ANN001
-    """Release inactive-autoplay ownership without poisoning presence writes.
+def _run_optional_savepoint(conn, *, name: str, callback, failure_message: str, player_id: int) -> None:  # noqa: ANN001
+    """Run optional PostgreSQL work without poisoning the owning presence TX."""
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        callback()
+        conn.execute(f"RELEASE SAVEPOINT {name}")
+    except Exception:
+        try:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            conn.execute(f"RELEASE SAVEPOINT {name}")
+        except Exception:
+            raise
+        logger.warning(failure_message, int(player_id), exc_info=True)
 
-    PostgreSQL aborts the transaction after a failed statement. Scope this
-    optional side effect to a SAVEPOINT so a runtime-state failure cannot roll
-    back an already-successful presence-table write. SQLite keeps the established
-    fail-open behavior. No foreign transaction is committed or blanket-rolled
-    back here.
-    """
+
+def _release_roster_optional(conn, player_id: int, *, backend: str) -> None:  # noqa: ANN001
+    """Release inactive-autoplay ownership without poisoning presence writes."""
     from .inactive_autoplay import release_active_player_from_roster
 
-    if get_db_backend() != "postgres":
+    if backend != "postgres":
         try:
             release_active_player_from_roster(int(player_id), conn=conn)
         except Exception:
@@ -47,26 +60,34 @@ def _release_roster_optional(conn, player_id: int) -> None:  # noqa: ANN001
             )
         return
 
-    savepoint = "gc_presence_roster"
-    conn.execute(f"SAVEPOINT {savepoint}")
-    try:
-        release_active_player_from_roster(int(player_id), conn=conn)
-        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-    except Exception:
-        try:
-            conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-        except Exception:
-            raise
-        logger.warning(
-            "release_active_player_from_roster failed player=%s — presence preserved",
-            int(player_id),
-            exc_info=True,
-        )
+    _run_optional_savepoint(
+        conn,
+        name="gc_presence_roster",
+        callback=lambda: release_active_player_from_roster(int(player_id), conn=conn),
+        failure_message=(
+            "release_active_player_from_roster failed player=%s — presence preserved"
+        ),
+        player_id=int(player_id),
+    )
+
+
+def _sync_legacy_presence_optional(conn, player_id: int, *, now: int, backend: str) -> None:  # noqa: ANN001
+    """Keep legacy readers fresh without making players the hot presence owner."""
+    if backend != "postgres":
+        return
+    _run_optional_savepoint(
+        conn,
+        name="gc_presence_legacy",
+        callback=lambda: sync_legacy_last_seen(conn, int(player_id), now=int(now)),
+        failure_message=(
+            "legacy last_seen mirror skipped player=%s — dedicated presence preserved"
+        ),
+        player_id=int(player_id),
+    )
 
 
 def touch_player_online(player_id: int) -> None:
-    """Mark a real authenticated player online without hot player-row writes."""
+    """Mark a real authenticated player online using dedicated PG presence."""
     if not player_id:
         return
 
@@ -83,10 +104,13 @@ def touch_player_online(player_id: int) -> None:
     backend = get_db_backend()
     conn = db()
     try:
-        # On PostgreSQL this SELECT only touches player_presence. A gameplay
-        # transaction may hold the players row without stalling auth presence.
-        last_seen = get_presence_last_seen(conn, pid, backend=backend)
-        need_last_seen = last_seen < touch_before
+        # PostgreSQL reads only the dedicated presence table on this hot path.
+        previous_seen = get_presence_last_seen(conn, pid, backend=backend)
+        need_last_seen = previous_seen < touch_before
+        need_legacy_sync = backend == "postgres" and should_sync_legacy_last_seen(
+            previous_seen=previous_seen,
+            now=now,
+        )
 
         need_roster = False
         try:
@@ -101,7 +125,7 @@ def touch_player_online(player_id: int) -> None:
                 exc_info=True,
             )
 
-        if not need_last_seen and not need_roster:
+        if not need_last_seen and not need_roster and not need_legacy_sync:
             models._presence_local_mark(pid, now=now, interval=interval)
             return
 
@@ -116,7 +140,9 @@ def touch_player_online(player_id: int) -> None:
             touch_before=touch_before,
             backend=backend,
         )
-        _release_roster_optional(conn, pid)
+        if need_legacy_sync:
+            _sync_legacy_presence_optional(conn, pid, now=now, backend=backend)
+        _release_roster_optional(conn, pid, backend=backend)
         commit(conn)
         models._presence_local_mark(pid, now=now, interval=interval)
     except Exception as exc:

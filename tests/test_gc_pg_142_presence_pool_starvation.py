@@ -20,18 +20,19 @@ _FakeLockError.__name__ = "LockNotAvailable"
 
 
 class _FakeConn:
-    def __init__(self, *, lock_on_touch: bool = True) -> None:
+    def __init__(self, *, lock_on_touch: bool = True, presence_seen: int = 0) -> None:
         self.closed = False
         self.rolled_back = False
         self.committed = False
         self.lock_on_touch = bool(lock_on_touch)
+        self.presence_seen = int(presence_seen)
         self.sql: list[str] = []
 
     def execute(self, sql, params=None):  # noqa: ANN001
         text = str(sql)
         self.sql.append(text)
         if text.startswith("SELECT last_seen"):
-            return SimpleNamespace(fetchone=lambda: {"last_seen": 0})
+            return SimpleNamespace(fetchone=lambda: {"last_seen": self.presence_seen})
         if "INSERT INTO player_presence" in text and self.lock_on_touch:
             raise _FakeLockError("canceling statement due to lock timeout")
         return SimpleNamespace(fetchone=lambda: None)
@@ -82,13 +83,10 @@ def _patch_presence_basics(monkeypatch, conn, *, local_marks):
 
 
 def test_presence_lock_softfail_uses_one_checkout(monkeypatch):
-    """Lock fallback must not hold one pool conn while asking for another."""
     conn = _FakeConn(lock_on_touch=True)
     local_marks: list[int] = []
     checkouts = _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
-
     presence.touch_player_online(7)
-
     assert checkouts["n"] == 1
     assert conn.closed is True
     assert conn.rolled_back is True
@@ -99,21 +97,17 @@ def test_presence_lock_softfail_uses_one_checkout(monkeypatch):
 
 
 def test_roster_release_failure_keeps_successful_presence_write(monkeypatch):
-    """Optional roster failure is SAVEPOINT-isolated; presence still commits."""
     from game import inactive_autoplay
 
     conn = _FakeConn(lock_on_touch=False)
     local_marks: list[int] = []
     checkouts = _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
-
     monkeypatch.setattr(
         inactive_autoplay,
         "release_active_player_from_roster",
         lambda player_id, *, conn: (_ for _ in ()).throw(RuntimeError("runtime_state unavailable")),
     )
-
     presence.touch_player_online(7)
-
     assert checkouts["n"] == 1
     assert conn.closed is True
     assert conn.rolled_back is False
@@ -123,10 +117,29 @@ def test_roster_release_failure_keeps_successful_presence_write(monkeypatch):
     assert "ROLLBACK TO SAVEPOINT gc_presence_roster" in conn.sql
     assert "RELEASE SAVEPOINT gc_presence_roster" in conn.sql
     assert any("INSERT INTO player_presence" in sql for sql in conn.sql)
+    assert "SAVEPOINT gc_presence_legacy" in conn.sql
+    assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
+
+
+def test_recent_dedicated_presence_skips_legacy_player_row_write(monkeypatch):
+    conn = _FakeConn(lock_on_touch=False, presence_seen=900)
+    local_marks: list[int] = []
+    _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
+    presence.touch_player_online(7)
+    assert conn.committed is True
+    assert any("INSERT INTO player_presence" in sql for sql in conn.sql)
     assert not any("UPDATE players SET last_seen" in sql for sql in conn.sql)
+    assert "SAVEPOINT gc_presence_legacy" not in conn.sql
 
 
-def test_postgres_store_never_references_players_on_hot_touch():
+def test_legacy_sync_cadence_stays_inside_online_window():
+    assert presence_store.LEGACY_SYNC_INTERVAL_SEC < 5 * 60
+    assert presence_store.should_sync_legacy_last_seen(previous_seen=0, now=1_000)
+    assert presence_store.should_sync_legacy_last_seen(previous_seen=700, now=1_000)
+    assert not presence_store.should_sync_legacy_last_seen(previous_seen=900, now=1_000)
+
+
+def test_postgres_store_never_references_players_on_canonical_touch():
     conn = _FakeConn(lock_on_touch=False)
     presence_store.touch_presence(conn, 11, now=1234, touch_before=1200, backend="postgres")
     sql = "\n".join(conn.sql).lower()
@@ -144,11 +157,11 @@ def test_sqlite_store_keeps_legacy_path():
 def test_presence_migration_is_idempotent_partial_schema_safe_and_non_destructive():
     migration = (ROOT / "migrations" / "158_player_presence.sql").read_text(encoding="utf-8")
     assert "REFERENCES players" not in migration
+    assert "REFERENCES users(id) ON DELETE CASCADE" in migration
     assert "DROP TABLE" not in migration.upper()
     assert "DROP COLUMN" not in migration.upper()
     assert "FROM players" not in migration
 
-    # Historical migration tests intentionally start from partial schemas.
     conn = sqlite3.connect(":memory:")
     try:
         conn.executescript(migration)
@@ -164,15 +177,20 @@ def test_presence_migration_is_idempotent_partial_schema_safe_and_non_destructiv
     finally:
         conn.close()
 
-    # A real legacy players table is left untouched; lazy first-touch seeding
-    # avoids migration-time coupling to historical fixture schemas.
     conn = sqlite3.connect(":memory:")
     try:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
         conn.execute("CREATE TABLE players (id INTEGER PRIMARY KEY, last_seen INTEGER)")
+        conn.execute("INSERT INTO users (id) VALUES (7)")
         conn.execute("INSERT INTO players (id, last_seen) VALUES (7, 777)")
         conn.executescript(migration)
-        assert conn.execute("SELECT last_seen FROM players WHERE id = 7").fetchone() == (777,)
+        conn.execute(
+            "INSERT INTO player_presence (player_id, last_seen, updated_at) VALUES (7, 888, 888)"
+        )
+        conn.execute("DELETE FROM users WHERE id = 7")
         assert conn.execute("SELECT COUNT(*) FROM player_presence").fetchone() == (0,)
+        assert conn.execute("SELECT last_seen FROM players WHERE id = 7").fetchone() == (777,)
     finally:
         conn.close()
 
