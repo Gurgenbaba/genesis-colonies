@@ -57,7 +57,13 @@ def test_diet_resource_projection_does_not_persist_inside_throttle_window(
         conn.close()
 
 
-def test_diet_resource_poll_persists_after_throttle_window(game_client, monkeypatch):
+def test_diet_resource_poll_does_not_persist_after_throttle_window(game_client, monkeypatch):
+    """GC-PG-HIGHSPEED-001B: periodic poll resource persist removed (Case 2 test update).
+
+    Old requirement (RESOURCE-PERSIST-001): after GC_RESOURCE_PERSIST_SEC, diet poll
+    wrote planets. New requirement: idle diet poll stays write-free for materialize;
+    resources still project via read path. Safety-net finish may still write.
+    """
     _client, uid = game_client
     monkeypatch.setenv("GC_RESOURCE_PERSIST_SEC", "600")
     monkeypatch.setenv("GC_GAME_WORKER_PRIMARY", "1")
@@ -78,8 +84,8 @@ def test_diet_resource_poll_persists_after_throttle_window(game_client, monkeypa
         finally:
             conn.set_trace_callback(None)
 
-        assert any(
+        assert not any(
             re.match(r"^\s*UPDATE\s+planets\b", stmt, re.IGNORECASE) for stmt in writes
-        ), f"resource persist did not update planet after throttle window: {writes}"
+        ), f"idle diet poll must not persist planets after throttle window: {writes}"
     finally:
         conn.close()
