@@ -12,9 +12,11 @@ CREATE INDEX IF NOT EXISTS idx_player_presence_last_seen
 
 -- Non-destructive compatibility backfill. Legacy players.last_seen remains in place
 -- while readers migrate; existing dedicated rows always win on repeat migrations.
+-- `WHERE 1=1` disambiguates SQLite's INSERT..SELECT..ON CONFLICT grammar.
 INSERT INTO player_presence (player_id, last_seen, updated_at)
 SELECT id,
        CAST(COALESCE(last_seen, 0) AS BIGINT),
        CAST(COALESCE(last_seen, 0) AS BIGINT)
 FROM players
+WHERE 1 = 1
 ON CONFLICT (player_id) DO NOTHING;
