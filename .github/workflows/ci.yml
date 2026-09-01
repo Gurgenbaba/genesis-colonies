@@ -49,6 +49,7 @@ jobs:
             tests/test_gc_pg_empire_readonly_single_conn.py \
             tests/test_gc_pg_schema_ready_connection_leaks.py \
             tests/test_gc_pg_imperial_directives_single_conn.py \
+            tests/test_gc_pg_trader_hub_single_conn.py \
             tests/test_galactic_diplomacy.py::test_ensure_get_set_galaxy_personality \
             tests/test_commander_classes.py::test_linear_gate_and_sp_unlock \
             tests/test_commander_classes.py::test_effect_resolver_includes_class_mods \
