@@ -18,7 +18,7 @@ import logging
 import sqlite3
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
 
@@ -712,6 +712,42 @@ def is_player_id_inactive(player_id: int, *, conn, now: Optional[int] = None) ->
     return is_player_inactive(dict(row), now=now)
 
 
+def player_last_seen_by_ids(
+    player_ids: Sequence[int],
+    *,
+    conn,
+) -> Dict[int, int]:
+    """Batch read ``players.last_seen`` (missing ids → 0)."""
+    ids = sorted({int(p) for p in player_ids if int(p) > 0})
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT id, last_seen FROM players WHERE id IN ({placeholders});",
+        tuple(ids),
+    )
+    out = {pid: 0 for pid in ids}
+    for row in cur.fetchall():
+        out[int(row["id"])] = int(row["last_seen"] or 0)
+    return out
+
+
+def inactive_player_ids(
+    player_ids: Sequence[int],
+    *,
+    conn,
+    now: Optional[int] = None,
+) -> Set[int]:
+    """Ids whose ``last_seen`` is past the ranking inactive threshold (bulk)."""
+    seen = player_last_seen_by_ids(player_ids, conn=conn)
+    return {
+        pid
+        for pid, last_seen in seen.items()
+        if ranking_inactive_from_last_seen(last_seen, now=now)
+    }
+
+
 def _combat_ranking_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_combat"):
         return (
@@ -1040,6 +1076,27 @@ def get_player_score_row(player_id: int, conn=None) -> Optional[Dict[str, Any]]:
     if owns_conn:
         conn.close()
     return dict(row) if row else None
+
+
+def player_score_totals_by_ids(
+    player_ids: Sequence[int],
+    *,
+    conn,
+) -> Dict[int, int]:
+    """Batch read ``score_total`` from ``player_scores`` (missing ids → 0)."""
+    ids = sorted({int(p) for p in player_ids if int(p) > 0})
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT player_id, score_total FROM player_scores WHERE player_id IN ({placeholders});",
+        tuple(ids),
+    )
+    out = {pid: 0 for pid in ids}
+    for row in cur.fetchall():
+        out[int(row["player_id"])] = max(0, int(row["score_total"] or 0))
+    return out
 
 
 def get_player_score_cached(

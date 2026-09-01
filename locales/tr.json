@@ -6265,6 +6265,7 @@
   "pe_reason_forbidden": "Yetki yok.",
   "pe_reason_invalid_payload": "Geçersiz istek.",
   "pe_reason_level_too_low": "Gezegen seviyesi çok düşük.",
+  "pe_reason_lock_busy": "Gezegen değişimi kısa süre engellendi — tekrar deneyin.",
   "pe_reason_max_colonies": "Maksimum gezegen sayısına ulaşıldı.",
   "pe_reason_max_level": "Maksimum araştırma seviyesine ulaşıldı.",
   "pe_reason_missing_name": "Koloninin bir isme ihtiyacı var.",

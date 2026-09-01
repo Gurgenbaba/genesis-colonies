@@ -6265,6 +6265,7 @@
   "pe_reason_forbidden": "Sem autorização.",
   "pe_reason_invalid_payload": "Solicitação inválida.",
   "pe_reason_level_too_low": "Nível do planeta muito baixo.",
+  "pe_reason_lock_busy": "Troca de planeta bloqueada por um momento — tente novamente.",
   "pe_reason_max_colonies": "Número máximo de planetas alcançado.",
   "pe_reason_max_level": "Nível máximo de pesquisa alcançado.",
   "pe_reason_missing_name": "A colônia precisa de um nome.",

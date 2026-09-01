@@ -1002,7 +1002,17 @@ def add_debris_field(
         return {"metal": 0, "crystal": 0}
 
     now = int(time.time())
+    cutoff = now - int(DEBRIS_FIELD_TTL_SECONDS)
     cur = conn.cursor()
+    # Write-path hygiene: do not accumulate onto an expired row (Galaxy GET only filters).
+    cur.execute(
+        """
+        DELETE FROM debris_fields
+        WHERE galaxy = ? AND system = ? AND position = ?
+          AND updated_at <= ?;
+        """,
+        (g, s, p, float(cutoff)),
+    )
     cur.execute(
         """
         INSERT INTO debris_fields (galaxy, system, position, metal, crystal, updated_at)

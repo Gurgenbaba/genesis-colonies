@@ -115,8 +115,12 @@ def pirate_ai_profiles_by_ids(
     player_ids: Sequence[int],
     *,
     conn,
+    ensure_state: bool = True,
 ) -> Dict[int, Dict[str, Any]]:
-    """Batch-resolve pirate AI profiles (empty dict for humans)."""
+    """Batch-resolve pirate AI profiles (empty dict for humans).
+
+    ``ensure_state=False`` skips ``ensure_bot_state`` (read-only galaxy composition).
+    """
     ids = sorted({int(p) for p in player_ids if int(p) > 0})
     if not ids:
         return {}
@@ -139,16 +143,17 @@ def pirate_ai_profiles_by_ids(
             continue
         meta = FACTION_BOTS[faction_key]
         personality = meta["personality"]
-        try:
-            from .bot_state import ensure_bot_state
+        if ensure_state:
+            try:
+                from .bot_state import ensure_bot_state
 
-            state = ensure_bot_state(
-                conn, bot_player_id=int(row["player_id"]), faction_key=faction_key
-            )
-            if state.get("personality"):
-                personality = str(state["personality"])
-        except Exception:
-            pass
+                state = ensure_bot_state(
+                    conn, bot_player_id=int(row["player_id"]), faction_key=faction_key
+                )
+                if state.get("personality"):
+                    personality = str(state["personality"])
+            except Exception:
+                pass
         mode_key = {
             "aggressive": "pirate_ai_mode_aggressive",
             "turtle": "pirate_ai_mode_turtle",

@@ -2589,6 +2589,45 @@ def get_noob_protection_status(
     }
 
 
+def noob_attack_strength_by_defender_ids(
+    attacker_player_id: int,
+    defender_player_ids: Sequence[int],
+    *,
+    conn,
+    factor: int | None = None,
+) -> Dict[int, Optional[str]]:
+    """Galaxy bulk: defender_id → ``too_strong`` | ``too_weak`` | None (presentation only)."""
+    fac = max(1, int(factor if factor is not None else NOOB_PROTECTION_FACTOR))
+    atk_id = int(attacker_player_id)
+    targets = sorted(
+        {int(d) for d in defender_player_ids if int(d) > 0 and int(d) != atk_id}
+    )
+    if atk_id <= 0 or not targets:
+        return {}
+    from .ranking import inactive_player_ids, player_score_totals_by_ids
+
+    atk_score = _player_score_total(atk_id, conn=conn)
+    min_def = ((atk_score + fac - 1) // fac) if atk_score > 0 else 0
+    max_def = int(atk_score * fac)
+    def_scores = player_score_totals_by_ids([atk_id] + targets, conn=conn)
+    inactive = inactive_player_ids(targets, conn=conn)
+    out: Dict[int, Optional[str]] = {}
+    for def_id in targets:
+        if def_id in inactive:
+            out[def_id] = None
+            continue
+        def_score = int(def_scores.get(def_id, 0))
+        if min_def <= def_score <= max_def:
+            out[def_id] = None
+        elif def_score > max_def:
+            out[def_id] = "too_strong"
+        elif def_score < min_def:
+            out[def_id] = "too_weak"
+        else:
+            out[def_id] = None
+    return out
+
+
 def check_noob_protection(
     attacker_player_id: int,
     defender_player_id: int,
