@@ -190,8 +190,21 @@ def read_player_live_state_for_poll(
         should_finish = bool(should_finish_queues or should_finish_fleet)
         need_write = bool(should_finish)
 
+        # Issue #140: caller-owned PG connections must not be left INERROR after a
+        # lock soft-fail (initiation SAVEPOINT / later HUD reads → InFailedSqlTransaction).
+        # Mirror queue_engine / runtime_state: SAVEPOINT around the write slice only.
+        from .db import get_db_backend, is_db_lock_error
+
+        poll_sp = None
+        use_poll_sp = (not own_conn) and get_db_backend() == "postgres" and need_write
+
         try:
             if need_write:
+                if use_poll_sp:
+                    if not in_transaction(conn):
+                        begin_write_transaction(conn)
+                    poll_sp = "gc_poll_live_write"
+                    conn.execute(f"SAVEPOINT {poll_sp}")
                 if should_finish_queues:
                     finish_t0 = time.perf_counter()
                     # Keep update_scores=True: applies mark_player_score_dirty only.
@@ -229,10 +242,12 @@ def read_player_live_state_for_poll(
                 elif should_finish_fleet:
                     from .fleet import process_fleet_tick
 
+                    # Never manage_transaction on a caller-owned conn — that path
+                    # rollbacks the whole shared TX on failure (poisons initiation).
                     process_fleet_tick(
                         player_id=uid,
                         conn=conn,
-                        manage_transaction=True,
+                        manage_transaction=bool(own_conn),
                     )
                     from .live_state import mark_request_live_refreshed
 
@@ -257,10 +272,22 @@ def read_player_live_state_for_poll(
                     pass
                 storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
 
-                if in_transaction(conn):
-                    from .models import commit
+                if poll_sp is not None:
+                    try:
+                        conn.execute(f"RELEASE SAVEPOINT {poll_sp}")
+                    except Exception:
+                        pass
+                    poll_sp = None
 
-                    commit(conn)
+                if in_transaction(conn):
+                    if own_conn:
+                        from .models import commit
+
+                        commit(conn)
+                    else:
+                        from .live_state import mark_request_poll_safety_net_write
+
+                        mark_request_poll_safety_net_write()
             else:
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                     _read_player_live_state_no_writes(uid, conn, player, planet)
@@ -285,11 +312,16 @@ def read_player_live_state_for_poll(
             return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
 
         except Exception as poll_exc:
-            from .db import is_db_lock_error
-
             if not (
                 isinstance(poll_exc, sqlite3.OperationalError) or is_db_lock_error(poll_exc)
             ):
+                if poll_sp is not None:
+                    try:
+                        conn.execute(f"ROLLBACK TO SAVEPOINT {poll_sp}")
+                        conn.execute(f"RELEASE SAVEPOINT {poll_sp}")
+                    except Exception:
+                        pass
+                    poll_sp = None
                 raise
             logger.warning(
                 "read_player_live_state_for_poll locked, read-only fallback player_id=%s",
@@ -301,6 +333,14 @@ def read_player_live_state_for_poll(
                     rollback(conn)
                 except Exception:
                     pass
+            elif poll_sp is not None:
+                # Preserve prior caller writes outside this SAVEPOINT.
+                try:
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {poll_sp}")
+                    conn.execute(f"RELEASE SAVEPOINT {poll_sp}")
+                except Exception:
+                    pass
+                poll_sp = None
             from .planet_evolution.repository import get_context_planet
 
             player = load_player(uid, conn=conn) or player
@@ -337,8 +377,12 @@ def refresh_player_live_state(
     if own_conn:
         conn = _db()
 
+    refresh_sp = None
+    use_refresh_sp = False
     try:
         from .planet_evolution.repository import get_context_planet
+        from .db import get_db_backend, is_db_lock_error, recover_aborted_transaction
+        from .queue_engine import finish_player_due_work, _run_optional_side_effect
 
         player = load_player(uid, conn=conn)
         if not player:
@@ -352,23 +396,80 @@ def refresh_player_live_state(
         ssr = current_ssr_perf()
         live_t0 = time.perf_counter()
         finish_t0 = time.perf_counter()
-        finish_result = finish_player_due_work(
-            uid,
-            conn,
-            source=str(finish_source or "live_state"),
-            update_scores=True,
-            recalc_ranks=bool(recalc_ranks),
-        )
-        from .db import recover_aborted_transaction
 
-        recover_aborted_transaction(conn)
+        use_refresh_sp = (not own_conn) and get_db_backend() == "postgres"
+
+        def _release_refresh_savepoint() -> None:
+            nonlocal refresh_sp
+            if refresh_sp is None:
+                return
+            try:
+                conn.execute(f"RELEASE SAVEPOINT {refresh_sp}")
+            except Exception:
+                pass
+            refresh_sp = None
+
+        def _abort_refresh_savepoint() -> None:
+            nonlocal refresh_sp
+            if refresh_sp is None:
+                return
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {refresh_sp}")
+                conn.execute(f"RELEASE SAVEPOINT {refresh_sp}")
+            except Exception:
+                pass
+            refresh_sp = None
+
+        def _locked_read_only_fallback():
+            _abort_refresh_savepoint()
+            if own_conn:
+                try:
+                    from .models import rollback
+
+                    rollback(conn)
+                except Exception:
+                    pass
+            from .live_state import mark_request_live_refreshed
+
+            p = load_player(uid, conn=conn) or player
+            pl = get_context_planet(uid, conn=conn)
+            mark_request_live_refreshed()
+            return _read_player_live_state_no_writes(uid, conn, p, pl)
+
+        if use_refresh_sp:
+            if not in_transaction(conn):
+                begin_write_transaction(conn)
+            refresh_sp = "gc_refresh_live"
+            conn.execute(f"SAVEPOINT {refresh_sp}")
+
         try:
+            finish_result = finish_player_due_work(
+                uid,
+                conn,
+                source=str(finish_source or "live_state"),
+                update_scores=True,
+                recalc_ranks=bool(recalc_ranks),
+            )
+        except Exception as finish_exc:
+            if isinstance(finish_exc, sqlite3.OperationalError) or is_db_lock_error(
+                finish_exc
+            ):
+                logger.warning(
+                    "refresh_player_live_state locked at finish player_id=%s",
+                    uid,
+                    exc_info=True,
+                )
+                return _locked_read_only_fallback()
+            _abort_refresh_savepoint()
+            raise
+
+        def _companion_tick() -> None:
             from .world_boss_companions import tick_companion_missions_for_player
 
             tick_companion_missions_for_player(uid, conn=conn)
-        except Exception:
-            recover_aborted_transaction(conn)
-            logger.exception("companion mission tick failed player=%s", uid)
+
+        _run_optional_side_effect(conn, "refresh_companion", _companion_tick)
+
         try:
             from .live_state import set_request_perf_meta
 
@@ -377,14 +478,18 @@ def refresh_player_live_state(
                 set_request_perf_meta("derived_sync_count", derived)
         except Exception:
             pass
-        try:
+
+        def _alliance_finish() -> None:
             from .alliance import finish_due_alliance_projects, get_player_alliance
 
             membership = get_player_alliance(uid, conn=conn)
             if membership:
-                finish_due_alliance_projects(conn=conn, alliance_id=int(membership["alliance_id"]))
-        except Exception:
-            recover_aborted_transaction(conn)
+                finish_due_alliance_projects(
+                    conn=conn, alliance_id=int(membership["alliance_id"])
+                )
+
+        _run_optional_side_effect(conn, "refresh_alliance", _alliance_finish)
+
         finish_ms = (time.perf_counter() - finish_t0) * 1000.0
         if perf is not None:
             perf.add_finish_ms(finish_ms)
@@ -401,16 +506,29 @@ def refresh_player_live_state(
 
         mark_request_live_refreshed()
 
-        recover_aborted_transaction(conn)
+        if not use_refresh_sp:
+            recover_aborted_transaction(conn)
         if not in_transaction(conn):
             begin_write_transaction(conn)
 
-        sync_t0 = time.perf_counter()
-        planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
-            planet,
-            conn=conn,
-            skip_queue_finish=True,
-        )
+        try:
+            sync_t0 = time.perf_counter()
+            planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
+                planet,
+                conn=conn,
+                skip_queue_finish=True,
+            )
+        except Exception as sync_exc:
+            if isinstance(sync_exc, sqlite3.OperationalError) or is_db_lock_error(sync_exc):
+                logger.warning(
+                    "refresh_player_live_state locked at resource sync player_id=%s",
+                    uid,
+                    exc_info=True,
+                )
+                return _locked_read_only_fallback()
+            _abort_refresh_savepoint()
+            raise
+
         storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
 
         player_view = dict(player)
@@ -433,17 +551,21 @@ def refresh_player_live_state(
         except Exception:
             pass
 
+        _release_refresh_savepoint()
+
         if own_conn:
             commit(conn)
-
-        from .live_state import mark_request_live_refreshed
 
         mark_request_live_refreshed()
 
         return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
 
-    except Exception:
-        if own_conn:
+    except Exception as exc:
+        if refresh_sp is not None:
+            if isinstance(exc, sqlite3.OperationalError) or is_db_lock_error(exc):
+                return _locked_read_only_fallback()
+            _abort_refresh_savepoint()
+        elif own_conn:
             from .models import rollback
 
             rollback(conn)

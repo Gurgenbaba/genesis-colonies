@@ -414,4 +414,6 @@ def test_fleet_stale_uses_player_scoped_tick(game_client, monkeypatch):
     finally:
         conn.close()
     assert seen.get("player_id") == int(uid)
-    assert seen.get("manage_transaction") is True
+    # Issue #140: caller-owned conn must use manage_transaction=False so a fleet
+    # lock soft-fail cannot rollback the shared request TX (initiation abort).
+    assert seen.get("manage_transaction") is False
