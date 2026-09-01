@@ -671,7 +671,9 @@ def _vacation_mode_select(conn) -> str:
 
 def _last_seen_select(conn) -> str:
     if column_exists(conn, "players", "last_seen"):
-        return "COALESCE(p.last_seen, 0) AS last_seen"
+        from .presence_store import effective_last_seen_scalar_sql
+
+        return f"{effective_last_seen_scalar_sql(player_alias='p')} AS last_seen"
     return "0 AS last_seen"
 
 
@@ -702,14 +704,11 @@ def is_player_inactive(
 
 
 def is_player_id_inactive(player_id: int, *, conn, now: Optional[int] = None) -> bool:
-    """Server-side inactive check for a player id (uses ``players.last_seen``)."""
-    row = conn.execute(
-        "SELECT last_seen FROM players WHERE id = ? LIMIT 1;",
-        (int(player_id),),
-    ).fetchone()
-    if not row:
-        return True
-    return is_player_inactive(dict(row), now=now)
+    """Server-side inactive check using backend-appropriate canonical presence."""
+    from .presence_store import get_effective_last_seen
+
+    last_seen = get_effective_last_seen(conn, int(player_id))
+    return ranking_inactive_from_last_seen(last_seen, now=now)
 
 
 def player_last_seen_by_ids(
@@ -717,20 +716,10 @@ def player_last_seen_by_ids(
     *,
     conn,
 ) -> Dict[int, int]:
-    """Batch read ``players.last_seen`` (missing ids → 0)."""
-    ids = sorted({int(p) for p in player_ids if int(p) > 0})
-    if not ids:
-        return {}
-    placeholders = ",".join("?" for _ in ids)
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT id, last_seen FROM players WHERE id IN ({placeholders});",
-        tuple(ids),
-    )
-    out = {pid: 0 for pid in ids}
-    for row in cur.fetchall():
-        out[int(row["id"])] = int(row["last_seen"] or 0)
-    return out
+    """Batch read backend-appropriate effective presence (missing ids → 0)."""
+    from .presence_store import get_effective_last_seen_by_ids
+
+    return get_effective_last_seen_by_ids(conn, player_ids)
 
 
 def inactive_player_ids(

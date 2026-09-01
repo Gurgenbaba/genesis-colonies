@@ -429,7 +429,11 @@ def _player_activity_select(conn: sqlite3.Connection, *, alias: str = "pl") -> s
     else:
         parts.append("0 AS vacation_mode_active")
     if column_exists(conn, "players", "last_seen"):
-        parts.append(f"COALESCE({alias}.last_seen, 0) AS last_seen")
+        from .presence_store import effective_last_seen_scalar_sql
+
+        parts.append(
+            f"{effective_last_seen_scalar_sql(player_alias=alias)} AS last_seen"
+        )
     else:
         parts.append("0 AS last_seen")
     return ", ".join(parts)
