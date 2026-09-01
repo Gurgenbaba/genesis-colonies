@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install scoped test dependency
+        run: python -m pip install pytest
       - name: Apply exact Shipyard patch
         run: python scripts/_apply_pg_shipyard_single_request_conn.py
       - name: Verify source boundary
