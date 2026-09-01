@@ -2387,10 +2387,34 @@ def finish_request_perf_after(response):
             response_bytes=response_bytes,
             content_type=content_type,
         )
+        request_total_ms = round((time.perf_counter() - state.started_at) * 1000.0, 1)
         if state.sampled and not is_production_request_perf_header():
-            response.headers["X-GC-Request-Perf-Total-Ms"] = str(
-                round((time.perf_counter() - state.started_at) * 1000.0, 1)
-            )
+            response.headers["X-GC-Request-Perf-Total-Ms"] = str(request_total_ms)
+
+        # GC-PERF-173: staging/Sentinel PJAX correlation. These headers expose
+        # only already-collected numeric counters/timings and create zero DB work.
+        try:
+            from game.config import is_nav_perf_debug_enabled
+
+            if is_nav_perf_debug_enabled() and state.meta.get("pjax"):
+                response.headers["X-GC-Nav-Server-Ms"] = str(request_total_ms)
+                response.headers["X-GC-Nav-Sql-Count"] = str(int(state.sql_count))
+                response.headers["X-GC-Nav-Sql-Write-Count"] = str(int(state.sql_write_count))
+                response.headers["X-GC-Nav-Db-Connections"] = str(
+                    int(state.db_connection_open_count)
+                )
+                response.headers["X-GC-Nav-Db-Query-Ms"] = str(
+                    round(
+                        float(
+                            state.db_query_ms
+                            or state.phases.get("db_query_ms")
+                            or 0.0
+                        ),
+                        1,
+                    )
+                )
+        except Exception:
+            logger.debug("nav perf response headers failed", exc_info=True)
     except Exception:
         logger.debug("finish_request_perf_after failed", exc_info=True)
     return response

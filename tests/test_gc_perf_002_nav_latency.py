@@ -34,6 +34,18 @@ def test_nav_perf_browser_contract_in_main_js():
     assert "function finishNavPerf(extra)" in src
     assert 'console.info("[GC NAV PERF]"' in src
     assert "concurrent_requests" in src
+    assert "NAV_PERF_SAMPLE_LIMIT = 100" in src
+    assert "window.GC_NAV_PERF_SAMPLES" in src
+    assert "window.GC_GET_NAV_PERF_SAMPLES" in src
+    assert '_navPerfSamples.push(payload)' in src
+    for header in (
+        "X-GC-Nav-Server-Ms",
+        "X-GC-Nav-Sql-Count",
+        "X-GC-Nav-Sql-Write-Count",
+        "X-GC-Nav-Db-Connections",
+        "X-GC-Nav-Db-Query-Ms",
+    ):
+        assert header in src
 
 
 def test_request_perf_phase_keys_include_nav_latency_fields():
@@ -91,3 +103,34 @@ def test_buildings_pjax_request_perf_slow_log(game_client, monkeypatch, caplog):
     assert "finish_source=buildings" in msg
     assert "pjax=1" in msg
     assert "route=/buildings" in msg
+
+
+def test_buildings_pjax_nav_measurement_headers(game_client, monkeypatch):
+    monkeypatch.setenv("GC_NAV_PERF_DEBUG", "1")
+    client, _pid = game_client
+    resp = client.get(
+        "/buildings",
+        headers={"X-PJAX": "true", "X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    expected = (
+        "X-GC-Nav-Server-Ms",
+        "X-GC-Nav-Sql-Count",
+        "X-GC-Nav-Sql-Write-Count",
+        "X-GC-Nav-Db-Connections",
+        "X-GC-Nav-Db-Query-Ms",
+    )
+    for header in expected:
+        assert header in resp.headers
+        assert float(resp.headers[header]) >= 0
+
+
+def test_nav_measurement_headers_are_opt_in(game_client, monkeypatch):
+    monkeypatch.delenv("GC_NAV_PERF_DEBUG", raising=False)
+    client, _pid = game_client
+    resp = client.get(
+        "/buildings",
+        headers={"X-PJAX": "true", "X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    assert "X-GC-Nav-Server-Ms" not in resp.headers

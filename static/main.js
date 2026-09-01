@@ -43675,6 +43675,15 @@
 
   let _navPerfSession = null;
   let _navPerfFetchWrapped = false;
+  const NAV_PERF_SAMPLE_LIMIT = 100;
+  const _navPerfSamples = [];
+  window.GC_NAV_PERF_SAMPLES = _navPerfSamples;
+
+  function getNavPerfSamples() {
+    return _navPerfSamples.map((sample) => ({ ...sample }));
+  }
+
+  window.GC_GET_NAV_PERF_SAMPLES = getNavPerfSamples;
 
   function isNavPerfDebug() {
     return window.GC_NAV_PERF_DEBUG === true;
@@ -43714,6 +43723,22 @@
         return nativeFetch(input, init).then((res) => {
           entry.duration_ms = Math.round(performance.now() - entry.t0);
           entry.status = res.status;
+          const headerNumber = (name) => {
+            const raw = res?.headers?.get?.(name);
+            if (raw === null || raw === undefined || raw === "") return null;
+            const value = Number(raw);
+            return Number.isFinite(value) ? value : null;
+          };
+          const serverMs = headerNumber("X-GC-Nav-Server-Ms");
+          if (serverMs !== null) {
+            entry.server = {
+              server_ms: serverMs,
+              sql_count: headerNumber("X-GC-Nav-Sql-Count"),
+              sql_write_count: headerNumber("X-GC-Nav-Sql-Write-Count"),
+              db_connections: headerNumber("X-GC-Nav-Db-Connections"),
+              db_query_ms: headerNumber("X-GC-Nav-Db-Query-Ms"),
+            };
+          }
           return res;
         }).catch((err) => {
           entry.duration_ms = Math.round(performance.now() - entry.t0);
@@ -43746,6 +43771,8 @@
     if (!_navPerfSession || !isNavPerfDebug()) return;
     const s = _navPerfSession;
     const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
+    const serverRequest = s.concurrent.find((entry) => entry && entry.server) || null;
+    const server = serverRequest?.server || null;
     const payload = {
       from: s.from,
       to: s.to,
@@ -43756,9 +43783,18 @@
       swap_ms: s.swapEndAt && s.parseEndAt ? round(s.swapEndAt - s.parseEndAt) : null,
       init_ms: s.initEndAt && s.swapEndAt ? round(s.initEndAt - s.swapEndAt) : null,
       total_navigation_ms: round(performance.now() - s.clickAt),
+      server_ms: server?.server_ms ?? null,
+      sql_count: server?.sql_count ?? null,
+      sql_write_count: server?.sql_write_count ?? null,
+      db_connections: server?.db_connections ?? null,
+      db_query_ms: server?.db_query_ms ?? null,
       concurrent_requests: s.concurrent,
     };
     if (extra && typeof extra === "object") Object.assign(payload, extra);
+    _navPerfSamples.push(payload);
+    if (_navPerfSamples.length > NAV_PERF_SAMPLE_LIMIT) {
+      _navPerfSamples.splice(0, _navPerfSamples.length - NAV_PERF_SAMPLE_LIMIT);
+    }
     console.info("[GC NAV PERF]", payload);
     _navPerfSession = null;
   }
