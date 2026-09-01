@@ -1,29 +1,30 @@
 # EPIC Performance Core — Maximum Speed Stack
 
-> Status: ✅ **Core Foundation abgeschlossen** (nicht Production-Cutover)  
+> Status: ✅ **Core Foundation + Production Postgres cutover** (2026-08-31) · Next: [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md)  
 > Related: [ROADMAP.md](ROADMAP.md) Phase 7 · [EPICS.md](EPICS.md) EPIC-12 / EPIC-19 · [ARCHITECTURE.md](ARCHITECTURE.md) · [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md)
 
 ## Entscheidung
 
 - **Kein PHP-Neubau.** Stack bleibt Python + Flask.
-- **Kein Production-Cutover auf Postgres**, solange Schema-Port, Parität und Datenimport nicht grün sind.
-- SQLite bleibt Default und Live-Wahrheit bis Staging + Cutover-Checkliste.
+- **PostgreSQL is production-authoritative** after live cutover (2026-08-31). Runbook: [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
+- SQLite remains the local/dev default and a kept volume backup — not the live source of truth.
 - Keine Parallel-Systeme (GC-000 Regel 15/17/19).
+- Hotpath work continues under **[GC-PG-HIGHSPEED-001](GC_PG_HIGHSPEED_001.md)** (001A Galaxy Bulk first) — fewer roundtrips/writes/locks, not longer timeouts or feature kills.
 
 ## Status-Einordnung
 
 | Bereich | Status |
 |---------|--------|
 | Messbarkeit | ✅ |
-| PostgreSQL-Treiber und Pool | ✅ vorbereitet |
-| Worker-Infrastruktur | ✅ vorbereitet |
+| PostgreSQL-Treiber und Pool | ✅ live |
+| Worker-Infrastruktur | ✅ live |
 | Diet-State / Poll-Delta | ✅ Client `?since=` + default-on (**GC-PERF-LIVE-001**); server early-exit (**GC-PERF-STATE-004**) |
 | Lazy-Persistierung / Cache / Lasttest-Tool | ✅ Basis |
 | PostgreSQL-Schema (alle Tabellen/Migrationen) | ✅ **GC-PERF-PG-SCHEMA-001** |
-| Backend-Parität auf leerer PG-DB | ✅ A–F SQLite (**GC-PERF-PG-PARITY-001**); PG Staging wenn URL gesetzt |
-| SQLite→Postgres Datenimport | 🔄 Script+Spec (**GC-PERF-PG-MIGRATE-001**) — kein Cutover |
-| Railway Staging + Smoke + Baseline | ❌ |
-| Production-Cutover | ❌ |
+| Backend-Parität auf leerer PG-DB | ✅ **GC-PERF-PG-PARITY-001** (SQLite + PG Staging; live cutover 2026-08-31) |
+| SQLite→Postgres Datenimport | ✅ **GC-PERF-PG-MIGRATE-001** + live cutover |
+| Railway Staging + Smoke + Baseline | ✅ cutover smoke; continue via Highspeed gates |
+| Production-Cutover | ✅ 2026-08-31 — next: Highspeed-001 |
 | Vollständiger `main.js`-Split | 🔄 Scaffold → GC-PERF-JS-002 |
 | EffectResolver-Cache | ✅ request-scoped (**GC-PERF-EFFECT-CACHE-001**) |
 | Diet early-exit vor Payload-Build | ✅ **GC-PERF-STATE-004** + probe-skip **STATE-005** |
@@ -63,30 +64,19 @@ Siehe `game.config.get_perf_budgets()` / [ARCHITECTURE.md](ARCHITECTURE.md). Bas
 | GC-PERF-AUTO-007B | Evidence-driven cuts (page_context double-count fixed) | 🔄 partial — more after live spikes |
 | GC-PERF-FEEL-001 | Shell background WebP weight | ✅ |
 
-## Ticket-Serie B — Postgres Cutover (offen)
+## Ticket-Serie B — Postgres Cutover
 
-Reihenfolge verbindlich:
+Live cutover 2026-08-31: Postgres authoritative in production. Runbook: [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
 
-```text
-Schema-Port
-→ Postgres-Parität
-→ Datenimporter
-→ Railway-Staging
-→ Lasttest
-→ Backup + Wartungsfenster
-→ Production-Cutover
-→ Beobachtung
-→ main.js wirklich extrahieren (GC-PERF-JS-002)
-```
+**Next:** PostgreSQL hotpath highspeed — [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md) (first code slice **001A Galaxy Bulk**).
 
 | Ticket | Inhalt | Status |
 |--------|--------|--------|
 | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** | PostgreSQL-Schema & Migration Parity | ✅ |
-| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A–F (SQLite); PG opt-in |
-| **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** | SQLite→Postgres Importer + Invarianten (Script+Doc; kein Cutover) | 🔄 |
-| **GC-PERF-PG-STAGING-001** | Railway Staging + Worker + Smoke | 📋 |
-| **GC-PERF-PG-BASELINE-001** | SQLite vs PG Staging Metriken | 📋 |
-| **GC-PERF-PG-CUTOVER-001** | Wartungsfenster, Import, Rollback-Plan | 📋 |
+| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität (kritische Systeme) | ✅ live Postgres |
+| **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** / cutover import | SQLite→Postgres Importer + Live Cutover | ✅ live |
+| **[GC-PG-HIGHSPEED-001](GC_PG_HIGHSPEED_001.md)** | PG hotpath highspeed umbrella (001A Galaxy first) | 📋 |
+| **GC-PERF-WRITE-MIN-001** | Materialize-on-mutation / rate boundaries | 📋 after 001A–C |
 | **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | ✅ shipyard + defense page binders; page-scoped script load |
 | **GC-PERF-OVERVIEW-TTFB-001** | `g.gc_fleet_hud` / `g.gc_world_boss_*` stash for inject_globals | ✅ |
 | **GC-PERF-EFFECT-CACHE-001** | EffectResolver request-scoped Cache | ✅ |
@@ -109,10 +99,11 @@ Schema-Port
 
 ## Explizit nicht tun (jetzt)
 
-- Production `GC_DB_BACKEND=postgres` umschalten
-- SQLite-Volume/Datei löschen
-- Produktiven Multi-Worker ohne Schema-Parität
-- Blind-SQL-Dump als „Migration“
+- SQLite-Volume/Datei löschen (Backup / rollback hygiene)
+- Blind-SQL-Dump als „Migration“ / naive sqlite→psql dump
+- Lock timeouts hochdrehen statt Writes/Contention zu senken
+- Features permanent abschalten als Performance-Fix (Autoplay=0 = incident soft-off only)
+- Parallel Galaxy-/Presence-/Admin-Systeme neben den Ownern
 
 ## Owner
 
