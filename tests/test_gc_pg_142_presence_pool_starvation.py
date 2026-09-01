@@ -141,23 +141,38 @@ def test_sqlite_store_keeps_legacy_path():
     assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
 
 
-def test_presence_migration_is_idempotent_and_non_destructive():
+def test_presence_migration_is_idempotent_partial_schema_safe_and_non_destructive():
     migration = (ROOT / "migrations" / "158_player_presence.sql").read_text(encoding="utf-8")
     assert "REFERENCES players" not in migration
     assert "DROP TABLE" not in migration.upper()
     assert "DROP COLUMN" not in migration.upper()
+    assert "FROM players" not in migration
 
+    # Historical migration tests intentionally start from partial schemas.
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.executescript(migration)
+        conn.executescript(migration)
+        names = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table','index')"
+            ).fetchall()
+        }
+        assert "player_presence" in names
+        assert "idx_player_presence_last_seen" in names
+    finally:
+        conn.close()
+
+    # A real legacy players table is left untouched; lazy first-touch seeding
+    # avoids migration-time coupling to historical fixture schemas.
     conn = sqlite3.connect(":memory:")
     try:
         conn.execute("CREATE TABLE players (id INTEGER PRIMARY KEY, last_seen INTEGER)")
         conn.execute("INSERT INTO players (id, last_seen) VALUES (7, 777)")
         conn.executescript(migration)
-        conn.executescript(migration)
-        row = conn.execute(
-            "SELECT player_id, last_seen FROM player_presence WHERE player_id = 7"
-        ).fetchone()
-        assert row == (7, 777)
         assert conn.execute("SELECT last_seen FROM players WHERE id = 7").fetchone() == (777,)
+        assert conn.execute("SELECT COUNT(*) FROM player_presence").fetchone() == (0,)
     finally:
         conn.close()
 
