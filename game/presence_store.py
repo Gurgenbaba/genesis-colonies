@@ -11,7 +11,7 @@ SQLite keeps the established ``players.last_seen`` path.
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from typing import Dict, Iterable, Sequence
 
 from .db import get_db_backend
 
@@ -44,9 +44,12 @@ def effective_last_seen_sql(
     presence_alias: str = "pp",
     backend: str | None = None,
 ) -> str:
-    """Read dedicated presence first, preserving legacy fallback."""
+    """Newest activity wins during rolling PostgreSQL presence cutover."""
     if uses_dedicated_presence(backend=backend):
-        return f"COALESCE({presence_alias}.last_seen, {player_alias}.last_seen, 0)"
+        return (
+            f"GREATEST(COALESCE({presence_alias}.last_seen, 0), "
+            f"COALESCE({player_alias}.last_seen, 0))"
+        )
     return f"COALESCE({player_alias}.last_seen, 0)"
 
 
@@ -66,6 +69,79 @@ def get_presence_last_seen(
             (pid,),
         ).fetchone()
     return int(row["last_seen"] or 0) if row else 0
+
+
+def get_effective_last_seen(
+    conn, player_id: int, *, backend: str | None = None
+) -> int:  # noqa: ANN001
+    """Read current activity for gameplay readers during the 001C cutover.
+
+    PostgreSQL deliberately chooses the newer of dedicated presence and the
+    temporary legacy mirror. This keeps rolling deployments correct when an old
+    replica updates ``players.last_seen`` after a new replica created a
+    ``player_presence`` row. Authenticated hot-touch code must continue using
+    ``get_presence_last_seen`` instead.
+    """
+    pid = int(player_id)
+    if uses_dedicated_presence(backend=backend):
+        expr = effective_last_seen_sql(backend="postgres")
+        join = last_seen_join_sql(backend="postgres")
+        row = conn.execute(
+            f"""
+            SELECT {expr} AS last_seen
+            FROM players p
+            {join}
+            WHERE p.id = ?
+            LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT COALESCE(last_seen, 0) AS last_seen FROM players WHERE id = ? LIMIT 1;",
+            (pid,),
+        ).fetchone()
+    return int(row["last_seen"] or 0) if row else 0
+
+
+def get_effective_last_seen_by_ids(
+    conn,
+    player_ids: Sequence[int] | Iterable[int],
+    *,
+    backend: str | None = None,
+) -> Dict[int, int]:  # noqa: ANN001
+    """Bulk effective activity read for ranking/galaxy/autoplay cutover."""
+    ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
+    if not ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in ids)
+    if uses_dedicated_presence(backend=backend):
+        expr = effective_last_seen_sql(backend="postgres")
+        join = last_seen_join_sql(backend="postgres")
+        cur = conn.execute(
+            f"""
+            SELECT p.id AS player_id, {expr} AS last_seen
+            FROM players p
+            {join}
+            WHERE p.id IN ({placeholders});
+            """,
+            tuple(ids),
+        )
+    else:
+        cur = conn.execute(
+            f"""
+            SELECT id AS player_id, COALESCE(last_seen, 0) AS last_seen
+            FROM players
+            WHERE id IN ({placeholders});
+            """,
+            tuple(ids),
+        )
+
+    out = {pid: 0 for pid in ids}
+    for row in cur.fetchall():
+        out[int(row["player_id"])] = int(row["last_seen"] or 0)
+    return out
 
 
 def should_sync_legacy_last_seen(*, previous_seen: int, now: int) -> bool:
