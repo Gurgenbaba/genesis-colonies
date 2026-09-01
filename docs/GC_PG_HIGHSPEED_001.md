@@ -69,6 +69,7 @@ Observed after live PG + #131–#133 (Admin Perf / spikes; rough):
 
 ```text
 001A Galaxy Bulk          ← FIRST implement slice
+  ├─→ 001F SQLite Legacy Throttle Audit (docs only; may run parallel with 001B)
   ↓
 001B game-state zero-write
   ↓
@@ -79,7 +80,15 @@ Observed after live PG + #131–#133 (Admin Perf / spikes; rough):
 001E Worker non-blocking ownership (pg_try_advisory_lock / short TX)
 ```
 
-Deploy + measure after **each** slice. No big-bang.
+Deploy + measure after **each code slice**. No big-bang. **001F does not flip defaults**; it inventories SQLite-era throttles and feeds later micro-tickets.
+
+### 001F — SQLite Legacy Throttle Audit
+
+Companion: **[GC_PG_HIGHSPEED_001F.md](GC_PG_HIGHSPEED_001F.md)**.
+
+001A–E remove hotpath roundtrips/writes/lock contention. 001F answers the separate question: **which conservative limits exist because Genesis was protecting SQLite's single-writer path, and which remain valid under PostgreSQL?**
+
+Classification is fixed to **KEEP / PG-RETUNE / REMOVE / REPLACE**. Every future REMOVE/RETUNE needs its own measured micro-ticket; 001F itself is docs/inventory only. It starts after 001A and may run in parallel with 001B.
 
 ### Deferred (separate tickets)
 
@@ -87,6 +96,8 @@ Deploy + measure after **each** slice. No big-bang.
 |--------|--------|
 | **GC-PERF-WRITE-MIN-001** | Resource materialize-on-mutation; rate-change boundaries; drop periodic poll persist |
 | **GC-PG-HIGHSPEED-002** | `EXPLAIN ANALYZE` top queries; real missing indexes; Buildings/Research N+1; measured pool tuning |
+| **GC-PG-HIGHSPEED-001F1** | PG-aware Autoplay defaults; remove pure writer-yield on PG only after Soft-On measurement |
+| **GC-PG-HIGHSPEED-001F2** | Verify backend-only mutex/busy-timeout behavior; Flask/Gunicorn/pool defaults after 001E |
 | Bootstrap `close_pool()` | One-shot entrypoint seed — deploy restart hygiene (can ship as tiny 001A-adjacent or 001E prep) |
 | Ranking set-based rewrite | Prefer under **001E** or dedicated micro-ticket after 001A |
 | World Boss short TX | Prefer under **001E** (monolith → per-attack commits) |
@@ -101,6 +112,7 @@ Deploy + measure after **each** slice. No big-bang.
 - Pool tuning by guesswork  
 - Feature removal  
 - World Boss / Ranking / Admin / Presence table migration (later slices)
+- SQLite-era throttle/default changes (inventory only in **001F**, runtime changes later)
 
 ---
 
@@ -291,4 +303,4 @@ assert write_count == 0  # list_system / composition only
 
 1. Review/merge this master doc.  
 2. Implement **only** `GC-PG-HIGHSPEED-001A` (Galaxy Bulk) against the gates above.  
-3. Deploy, compare Admin spikes, then open 001B.
+3. Deploy + measure 001A. Then open **001B** and the docs-only **001F** audit lane; runtime throttle unlocks remain separate micro-PRs.
