@@ -3,13 +3,15 @@
 
 Starts Genesis against an already-provisioned disposable PostgreSQL instance
 (e.g. a GitHub Actions service container), applies migrations, creates a QA
-player, and launches the Flask process. The database URL is never printed.
+player, performs a real PostgreSQL planet-switch preflight, and launches the
+Flask process. The database URL is never printed.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -104,37 +106,115 @@ def _migrate() -> None:
         raise RuntimeError(f"Postgres Sentinel migration failed: {details[-4000:]}")
 
 
-def _create_test_player(username: str, password: str) -> None:
+def _create_test_player_and_preflight_switch(username: str, password: str) -> None:
+    """Seed a second colony and prove the production switch service on real PG.
+
+    GC-PG-175 regression: an explicit switch must persist in player_context and
+    must not rewrite players.active_planet_id. This runs before Chromium so a
+    recurrence of the production 409/lock-busy path fails the PG gate directly.
+    """
     code = r'''
 import json
-from game.models import create_user
+from game.db import db
+from game.models import create_user, get_homeworld
+from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+from game.planet_evolution.service import colonize_planet, set_active_planet
+
 ok, error, user = create_user(USERNAME, PASSWORD)
 if not ok or not user:
     raise SystemExit(error or "create_user failed")
-print(json.dumps({"ok": True, "id": int(user["id"])}))
-'''
-    bootstrap = (
-        f"USERNAME={username!r}\n"
-        f"PASSWORD={password!r}\n"
-        + code
+player_id = int(user["id"])
+
+conn = db()
+try:
+    homeworld = get_homeworld(player_id, conn=conn)
+    if not homeworld:
+        raise SystemExit("homeworld missing")
+    homeworld_id = int(homeworld["id"])
+    conn.execute("UPDATE planets SET planet_level = ? WHERE id = ?;", (25, homeworld_id))
+    conn.execute(
+        "INSERT INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?) "
+        "ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;",
+        (player_id, INTERSTELLAR_EXPANSION_TECH, 6),
     )
+    conn.commit()
+    ok_colony, reason_colony, extra = colonize_planet(
+        player_id,
+        name="Sentinel PG Colony",
+        galaxy=1,
+        system=220,
+        position=3,
+        conn=conn,
+    )
+    if not ok_colony or not extra or not extra.get("planet_id"):
+        raise SystemExit(f"colonize failed: {reason_colony}")
+    colony_id = int(extra["planet_id"])
+    conn.commit()
+finally:
+    conn.close()
+
+ok_switch, reason_switch = set_active_planet(player_id, colony_id)
+if not ok_switch:
+    raise SystemExit(f"planet switch to colony failed: {reason_switch}")
+
+conn = db()
+try:
+    context = conn.execute(
+        "SELECT active_planet_id FROM player_context WHERE player_id = ? LIMIT 1;",
+        (player_id,),
+    ).fetchone()
+    legacy = conn.execute(
+        "SELECT active_planet_id FROM players WHERE id = ? LIMIT 1;",
+        (player_id,),
+    ).fetchone()
+    if not context or int(context["active_planet_id"] or 0) != colony_id:
+        raise SystemExit("player_context did not persist colony switch")
+    if not legacy or int(legacy["active_planet_id"] or 0) != homeworld_id:
+        raise SystemExit("PostgreSQL switch unexpectedly rewrote players.active_planet_id")
+finally:
+    conn.close()
+
+ok_home, reason_home = set_active_planet(player_id, homeworld_id)
+if not ok_home:
+    raise SystemExit(f"planet switch back home failed: {reason_home}")
+
+conn = db()
+try:
+    context = conn.execute(
+        "SELECT active_planet_id FROM player_context WHERE player_id = ? LIMIT 1;",
+        (player_id,),
+    ).fetchone()
+    if not context or int(context["active_planet_id"] or 0) != homeworld_id:
+        raise SystemExit("player_context did not persist homeworld switch")
+finally:
+    conn.close()
+
+print(json.dumps({
+    "ok": True,
+    "id": player_id,
+    "homeworld_id": homeworld_id,
+    "colony_id": colony_id,
+    "planet_switch_preflight": True,
+}))
+'''
+    bootstrap = f"USERNAME={username!r}\nPASSWORD={password!r}\n" + code
     created = subprocess.run(
         [sys.executable, "-c", bootstrap],
         cwd=str(ROOT),
         env=_server_env(),
         capture_output=True,
         text=True,
-        timeout=90,
+        timeout=120,
     )
     if created.returncode != 0:
         details = (created.stderr or created.stdout or "").strip()
-        raise RuntimeError(f"Postgres Sentinel player bootstrap failed: {details[-3000:]}")
+        raise RuntimeError(f"Postgres Sentinel player/switch bootstrap failed: {details[-4000:]}")
     try:
         payload = json.loads((created.stdout or "").strip().splitlines()[-1])
     except Exception as exc:
         raise RuntimeError("Postgres Sentinel player bootstrap returned invalid output") from exc
-    if not payload.get("ok"):
-        raise RuntimeError("Postgres Sentinel player bootstrap did not succeed")
+    if not payload.get("ok") or not payload.get("planet_switch_preflight"):
+        raise RuntimeError("Postgres Sentinel planet-switch preflight did not succeed")
 
 
 def start_postgres_sandbox(artifact_root: Path) -> PostgresSandboxRuntime:
@@ -142,8 +222,8 @@ def start_postgres_sandbox(artifact_root: Path) -> PostgresSandboxRuntime:
     _migrate()
 
     username = f"SentinelPG{uuid.uuid4().hex[:8]}"
-    password = "Sentinel-pg-pass-123!"
-    _create_test_player(username, password)
+    password = "S-" + secrets.token_urlsafe(18)
+    _create_test_player_and_preflight_switch(username, password)
 
     port = _free_port()
     base_url = f"http://127.0.0.1:{port}"
