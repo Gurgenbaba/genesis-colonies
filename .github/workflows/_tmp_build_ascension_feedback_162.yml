@@ -1,0 +1,40 @@
+name: TEMP Apply Build Ascension Feedback 162
+
+on:
+  push:
+    branches:
+      - fix/build-ascension-required-feedback-162
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/build-ascension-required-feedback-162
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install scoped dependencies
+        run: python -m pip install -r requirements-prod.txt pytest
+      - name: Apply exact client contract patch
+        run: python scripts/_apply_build_ascension_feedback_162.py
+      - name: Verify client and ascension regressions
+        run: |
+          node --check static/main.js
+          python -m pytest -q tests/test_gc_build_ascension_feedback_162.py tests/test_ascension_queue_cap_contract.py tests/test_mine_evolution.py
+      - name: Commit generated product diff
+        run: |
+          if git diff --quiet -- static/main.js; then
+            echo "Ascension feedback patch already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/main.js
+          git commit -m "fix(buildings): explain ascension-required upgrade gate"
+          git push origin HEAD:fix/build-ascension-required-feedback-162
