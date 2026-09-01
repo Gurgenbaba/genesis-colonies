@@ -2,87 +2,65 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
-import game.pg_hotpath_indexes as hot
+from migrate import _required_tables
 
 ROOT = Path(__file__).resolve().parents[1]
+MIGRATION = ROOT / "migrations" / "159_pg_hotpath_indexes.sql"
 
 
-class _Conn:
-    def __init__(self) -> None:
-        self.sql: list[str] = []
-        self.committed = False
-        self.rolled_back = False
-        self.closed = False
-
-    def execute(self, sql, params=None):  # noqa: ANN001
-        self.sql.append(str(sql))
-        return self
-
-    def commit(self) -> None:
-        self.committed = True
-
-    def rollback(self) -> None:
-        self.rolled_back = True
-
-    def close(self) -> None:
-        self.closed = True
+def _sql() -> str:
+    return MIGRATION.read_text(encoding="utf-8")
 
 
-def test_sqlite_is_noop(monkeypatch):
-    monkeypatch.setattr(hot, "get_db_backend", lambda: "sqlite")
-    assert hot.ensure_postgres_hotpath_indexes() == 0
+def test_hotpath_migration_declares_optional_module_preconditions():
+    assert _required_tables(_sql()) == ["world_boss_events", "shipyard_queue"]
 
 
-def test_caller_owned_connection_is_not_committed_or_closed(monkeypatch):
-    conn = _Conn()
-    monkeypatch.setattr(hot, "get_db_backend", lambda: "postgres")
-    monkeypatch.setattr(hot, "table_exists", lambda _conn, _table: True)
-
-    attempted = hot.ensure_postgres_hotpath_indexes(conn=conn)
-
-    assert attempted == len(hot.HOTPATH_INDEXES)
-    assert conn.committed is False
-    assert conn.rolled_back is False
-    assert conn.closed is False
+def test_hotpath_migration_is_additive_only():
+    sql = _sql().upper()
+    assert "DROP TABLE" not in sql
+    assert "DROP COLUMN" not in sql
+    assert "ALTER TABLE" not in sql
+    assert "DELETE FROM" not in sql
+    assert "UPDATE " not in sql
 
 
-def test_startup_owned_connection_commits_and_closes(monkeypatch):
-    conn = _Conn()
-    monkeypatch.setattr(hot, "get_db_backend", lambda: "postgres")
-    monkeypatch.setattr(hot, "db", lambda: conn)
-    monkeypatch.setattr(hot, "table_exists", lambda _conn, _table: True)
-    monkeypatch.setattr(hot, "commit", lambda c: c.commit())
-    monkeypatch.setattr(hot, "rollback", lambda c: c.rollback())
-
-    hot.ensure_postgres_hotpath_indexes()
-
-    assert conn.committed is True
-    assert conn.rolled_back is False
-    assert conn.closed is True
-
-
-def test_missing_optional_tables_are_skipped(monkeypatch):
-    conn = _Conn()
-    monkeypatch.setattr(hot, "get_db_backend", lambda: "postgres")
-    monkeypatch.setattr(hot, "table_exists", lambda _conn, _table: False)
-
-    assert hot.ensure_postgres_hotpath_indexes(conn=conn) == 0
-    assert conn.sql == []
-
-
-def test_index_catalog_covers_world_boss_and_shipyard_query_shapes():
-    sql = "\n".join(entry[2].lower() for entry in hot.HOTPATH_INDEXES)
+def test_hotpath_indexes_match_world_boss_and_shipyard_query_shapes():
+    sql = _sql().lower()
     assert "world_boss_events(status, ends_at, starts_at, id)" in sql
     assert "world_boss_events(status, updated_at desc)" in sql
     assert "shipyard_queue(planet_id, status, queue_position, id)" in sql
     assert "shipyard_queue(status, finish_at, planet_id)" in sql
 
 
-def test_bootstrap_runs_hotpath_ensure_best_effort_after_db_init():
-    src = (ROOT / "game" / "bootstrap.py").read_text(encoding="utf-8")
-    init_pos = src.index("_init_db_with_retry()")
-    ensure_pos = src.index("ensure_postgres_hotpath_indexes()")
-    purge_pos = src.index("purge_stale_idempotency_global()", ensure_pos)
-    assert init_pos < ensure_pos < purge_pos
+def test_hotpath_migration_is_idempotent_on_compatible_schema():
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.execute(
+            "CREATE TABLE world_boss_events ("
+            "id INTEGER PRIMARY KEY, status TEXT, starts_at REAL, ends_at REAL, updated_at REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE shipyard_queue ("
+            "id INTEGER PRIMARY KEY, planet_id INTEGER, status TEXT, "
+            "queue_position INTEGER, finish_at REAL)"
+        )
+        conn.executescript(_sql())
+        conn.executescript(_sql())
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            ).fetchall()
+        }
+        assert {
+            "idx_world_boss_events_status_window_id",
+            "idx_world_boss_events_status_updated",
+            "idx_shipyard_queue_planet_status_pos_id",
+            "idx_shipyard_queue_status_finish_planet",
+        } <= indexes
+    finally:
+        conn.close()
