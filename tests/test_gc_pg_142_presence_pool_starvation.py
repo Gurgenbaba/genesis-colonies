@@ -210,3 +210,23 @@ def test_presence_lock_handler_has_no_db_checkout():
     )[0]
     assert "db()" not in lock_block
     assert "_release_roster_best_effort" not in source
+
+
+def test_postgres_presence_source_has_no_legacy_mirror_sql():
+    source = (ROOT / "game" / "presence.py").read_text(encoding="utf-8")
+    assert "sync_legacy_last_seen" not in source
+    assert "should_sync_legacy_last_seen" not in source
+    assert "gc_presence_legacy" not in source
+    assert "UPDATE players SET last_seen" not in source
+    assert "FROM players WHERE id" not in source
+
+
+def test_models_compat_entry_delegates_before_legacy_checkout():
+    source = (ROOT / "game" / "models.py").read_text(encoding="utf-8")
+    start = source.index("def touch_player_online(player_id: int) -> None:")
+    end = source.index("def _release_roster_best_effort", start)
+    block = source[start:end]
+    pg_gate = block.index('if get_db_backend() == "postgres":')
+    legacy_checkout = block.index("conn = db()")
+    assert pg_gate < legacy_checkout
+    assert "touch_dedicated_presence(int(player_id))" in block[:legacy_checkout]
