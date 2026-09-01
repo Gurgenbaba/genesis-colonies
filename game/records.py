@@ -270,7 +270,7 @@ def _top_colonies_record(conn) -> Dict[str, Any]:
             COUNT(*) AS value
         FROM planets p
         INNER JOIN players pl ON pl.id = p.player_id
-        GROUP BY p.player_id
+        GROUP BY p.player_id, pl.name
         ORDER BY value DESC, p.player_id ASC
         LIMIT 1;
         """
@@ -351,7 +351,7 @@ def _top_fleet_records(conn) -> List[Dict[str, Any]]:
             FROM planet_ships ps
             INNER JOIN players pl ON pl.id = ps.player_id
             WHERE ps.ship_key = ?
-            GROUP BY ps.player_id
+            GROUP BY ps.player_id, pl.name
             HAVING SUM(ps.amount) > 0
             ORDER BY value DESC, ps.player_id ASC
             LIMIT 1;
@@ -396,7 +396,7 @@ def _top_defense_records(conn) -> List[Dict[str, Any]]:
             INNER JOIN planets p ON p.id = pd.planet_id
             INNER JOIN players pl ON pl.id = p.player_id
             WHERE pd.defense_key = ?
-            GROUP BY p.player_id
+            GROUP BY p.player_id, pl.name
             HAVING SUM(pd.amount) > 0
             ORDER BY value DESC, p.player_id ASC
             LIMIT 1;
@@ -441,7 +441,7 @@ def _top_troop_records(conn) -> List[Dict[str, Any]]:
             INNER JOIN planets p ON p.id = pt.planet_id
             INNER JOIN players pl ON pl.id = p.player_id
             WHERE pt.troop_key = ?
-            GROUP BY p.player_id
+            GROUP BY p.player_id, pl.name
             HAVING SUM(pt.amount) > 0
             ORDER BY value DESC, p.player_id ASC
             LIMIT 1;
@@ -491,7 +491,7 @@ def _top_titan_records(conn) -> List[Dict[str, Any]]:
             COUNT(*) AS value
         FROM player_boss_companions c
         INNER JOIN players pl ON pl.id = c.player_id
-        GROUP BY c.player_id
+        GROUP BY c.player_id, pl.name
         HAVING COUNT(*) > 0
         ORDER BY value DESC, c.player_id ASC
         LIMIT 1;

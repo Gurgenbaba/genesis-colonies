@@ -14696,15 +14696,21 @@ def api_planets_set_active():
     if ok:
         from game.galaxy import sync_galaxy_view_session_for_planet
         from game.planet_evolution.repository import get_context_planet
-
-        sync_galaxy_view_session_for_planet(session, get_context_planet(user_id))
         from game.planet_evolution.service import list_player_planets_for_switcher
         from game.planet_visuals import apply_herocard_urls_to_switcher_planets
 
-        planets = apply_herocard_urls_to_switcher_planets(
-            list_player_planets_for_switcher(user_id),
-            versioned_static_url,
-        )
+        # Keep post-switch context + switcher reads on one short checkout.
+        # Previously these two helpers each opened a separate pool connection.
+        switch_conn = db()
+        try:
+            context_planet = get_context_planet(user_id, conn=switch_conn)
+            sync_galaxy_view_session_for_planet(session, context_planet)
+            planets = apply_herocard_urls_to_switcher_planets(
+                list_player_planets_for_switcher(user_id, conn=switch_conn),
+                versioned_static_url,
+            )
+        finally:
+            switch_conn.close()
     return jsonify({"ok": ok, "reason": reason, "state": state, "planets": planets})
 
 

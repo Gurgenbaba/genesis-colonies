@@ -2422,13 +2422,16 @@ def queue_build_for_planet(
 
     from .options import vacation_blocks_outbound
 
-    ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=db())
-    if not ok_vacation:
-        return False, vac_reason, {}
-
     want_max = str(queue_mode or "single").strip().lower() == "max"
 
+    # P0 PG: the vacation probe must share the mutation-owned checkout.
+    # The old vacation_blocks_outbound(user_id, conn=db()) orphaned a pooled
+    # connection before every build enqueue.
     conn = db()
+    ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)
+    if not ok_vacation:
+        conn.close()
+        return False, vac_reason, {}
     finished_any = False
     try:
         begin_write_transaction(conn)
