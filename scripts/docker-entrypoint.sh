@@ -16,6 +16,9 @@ ensure_db_parent_dir()
 echo "[GC] Applying migrations..."
 python migrate.py
 
+echo "[GC] Ensuring optional PostgreSQL hotpath indexes (concurrent / fail-open)..."
+python -m game.pg_hotpath_indexes || echo "[GC] WARNING: optional hotpath index helper failed; continuing startup."
+
 echo "[GC] Seeding player timeline from CHANGELOG if needed..."
 python -c "
 from game.config import init_config
