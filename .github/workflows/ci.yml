@@ -47,6 +47,7 @@ jobs:
             tests/test_gc_pg_168_vote_presence.py \
             tests/test_gc_pg_169_pirate_target_presence.py \
             tests/test_gc_pg_170_admin_legacy_presence.py \
+            tests/test_gc_pg_171_presence_history_backfill.py \
             tests/test_inactive_storage_boost.py \
             tests/test_gc_pg_world_boss_readonly_payload.py \
             tests/test_gc_pg_shipyard_single_request_conn.py \
