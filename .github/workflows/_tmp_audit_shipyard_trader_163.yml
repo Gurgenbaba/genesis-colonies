@@ -1,0 +1,29 @@
+name: TEMP Audit Shipyard Trader 163
+on:
+  push:
+    branches: [fix/pg-shipyard-trader-p0-163]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print exact hotpaths
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          def block(path, start, end, label):
+              text=Path(path).read_text(encoding='utf-8')
+              i=text.find(start)
+              if i < 0:
+                  print(f'=== {label}: START NOT FOUND ==='); return
+              j=text.find(end, i+len(start)) if end else -1
+              if j < 0: j=min(len(text), i+10000)
+              print(f'=== {label} ===')
+              print(text[i:j])
+          block('app.py', '@app.route("/api/shipyard/build"', '\n\n@app.route(', 'SHIPYARD ROUTE')
+          block('game/shipyard.py', 'def build_ship(', '\n\ndef ', 'BUILD_SHIP')
+          block('static/main.js', 'function initExchangePanel()', 'function renderScrapyardRows', 'TRADER JS')
+          block('game/exchange.py', 'def execute_exchange(', '\n\ndef ', 'EXCHANGE MUTATION')
+          PY
