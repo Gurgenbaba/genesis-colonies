@@ -3590,6 +3590,7 @@
   "fleet_error_fleet_unavailable": "Fleet system unavailable.",
   "fleet_error_forbidden": "Permission denied.",
   "fleet_error_generic": "Fleet action failed.",
+  "fleet_error_lock_busy": "Planet briefly locked — please send the fleet again.",
   "fleet_error_invalid_logistics_mode": "Invalid logistics mode.",
   "fleet_error_invalid_mission": "Invalid mission.",
   "fleet_error_invalid_preset_type": "Invalid preset type.",

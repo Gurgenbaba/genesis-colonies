@@ -3591,6 +3591,7 @@
   "fleet_error_fleet_unavailable": "System flotowy niedostępny.",
   "fleet_error_forbidden": "Odmowa pozwolenia.",
   "fleet_error_generic": "Akcja floty nie powiodła się.",
+  "fleet_error_lock_busy": "Planeta chwilowo zablokowana — wyślij flotę ponownie.",
   "fleet_error_invalid_logistics_mode": "Nieprawidłowy tryb logistyki.",
   "fleet_error_invalid_mission": "Nieprawidłowa misja.",
   "fleet_error_invalid_preset_type": "Nieprawidłowy typ ustawienia wstępnego.",

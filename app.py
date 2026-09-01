@@ -114,6 +114,23 @@ from flask_sock import Sock
 
 sock = Sock(app)
 
+from game.db import DbPoolTimeout
+
+
+@app.errorhandler(DbPoolTimeout)
+def handle_db_pool_timeout(exc):
+    """Pool exhausted — 503, not a fake 'postgres not configured' 500."""
+    app.logger.warning("db pool timeout: %s", exc)
+    wants_json = (
+        str(request.path or "").startswith("/api/")
+        or "application/json" in (request.headers.get("Accept") or "")
+        or request.is_json
+    )
+    if wants_json:
+        return jsonify({"ok": False, "error": "db_busy", "retry": True}), 503
+    return ("Service temporarily busy. Please retry.", 503, {"Content-Type": "text/plain; charset=utf-8"})
+
+
 
 def ws_long_lived_safe() -> bool:
     """GC-AST-LIVE: can this process hold a long-lived WS connection open
@@ -10657,8 +10674,16 @@ def _fleet_write_transaction(work):
         else:
             rollback(conn)
         return ok, reason, result
-    except Exception:
+    except Exception as exc:
         rollback(conn)
+        from game.db import is_db_lock_error
+
+        if is_db_lock_error(exc):
+            app.logger.warning(
+                "fleet write lock_busy — soft skip (%s)",
+                type(exc).__name__,
+            )
+            return False, "lock_busy", {"retry": True}
         raise
     finally:
         conn.close()
@@ -12053,6 +12078,19 @@ def api_fleet_preview():
             expedition_hours=int(data["expedition_hours"]) if data.get("expedition_hours") not in (None, "") else None,
         )
         return jsonify(fleet_ok({"preview": preview}, message_key="fleet_preview_ok"))
+    except Exception as exc:
+        from game.db import is_db_lock_error
+
+        if is_db_lock_error(exc):
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+            body = fleet_err("lock_busy", data={"retry": True})
+            body["reason"] = "lock_busy"
+            body["retry"] = True
+            return jsonify(body), 409
+        raise
     finally:
         conn.close()
 
@@ -12361,9 +12399,16 @@ def api_fleet_send():
             "noob_protection",
             "troop_slots_needed",
             "troop_berths",
+            "retry",
         ):
             if result.get(context_key) is not None:
                 err_data[context_key] = result[context_key]
+    if reason == "lock_busy":
+        err_data["retry"] = True
+        body = fleet_err("lock_busy", data=err_data)
+        body["reason"] = "lock_busy"
+        body["retry"] = True
+        return jsonify(body), 409
     return jsonify(fleet_err(reason or "generic", data=err_data)), 400
 
 

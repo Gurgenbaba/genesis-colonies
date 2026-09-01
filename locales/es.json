@@ -3591,6 +3591,7 @@
   "fleet_error_fleet_unavailable": "Sistema de flota no disponible.",
   "fleet_error_forbidden": "Permiso denegado.",
   "fleet_error_generic": "La acción de la flota fracasó.",
+  "fleet_error_lock_busy": "Planeta bloqueado un momento — envía la flota de nuevo.",
   "fleet_error_invalid_logistics_mode": "Modo de logística no válido.",
   "fleet_error_invalid_mission": "Misión no válida.",
   "fleet_error_invalid_preset_type": "Tipo preestablecido no válido.",

@@ -3591,6 +3591,7 @@
   "fleet_error_fleet_unavailable": "Filo sistemi mevcut değil.",
   "fleet_error_forbidden": "İzin reddedildi.",
   "fleet_error_generic": "Filo eylemi başarısız oldu.",
+  "fleet_error_lock_busy": "Gezegen kısa süre kilitli — filoyu tekrar gönderin.",
   "fleet_error_invalid_logistics_mode": "Geçersiz lojistik modu.",
   "fleet_error_invalid_mission": "Geçersiz görev.",
   "fleet_error_invalid_preset_type": "Geçersiz ön ayar türü.",

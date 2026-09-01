@@ -133,6 +133,21 @@ def ensure_db_parent_dir() -> Path:
     return db_path
 
 
+class DbPoolTimeout(Exception):
+    """Postgres pool checkout timed out. DATABASE_URL is configured; connections are busy."""
+
+
+def is_db_pool_timeout(exc: BaseException) -> bool:
+    """True for psycopg_pool.PoolTimeout / wrapped DbPoolTimeout."""
+    if isinstance(exc, DbPoolTimeout):
+        return True
+    name = type(exc).__name__
+    if name == "PoolTimeout":
+        return True
+    msg = str(exc).lower()
+    return "couldn't get a connection after" in msg or "pool timeout" in msg
+
+
 class TxAbort(Exception):
     """Rollback the current write transaction without treating it as an error."""
 
@@ -160,6 +175,8 @@ def db() -> DbConn:
         except NotImplementedError:
             raise
         except Exception as exc:
+            if is_db_pool_timeout(exc):
+                raise DbPoolTimeout(str(exc)) from exc
             raise NotImplementedError(f"{_POSTGRES_NOT_CONFIGURED} ({exc})") from exc
         try:
             from game.live_state import (

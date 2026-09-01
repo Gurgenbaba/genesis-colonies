@@ -3591,6 +3591,7 @@
   "fleet_error_fleet_unavailable": "Système de flotte indisponible.",
   "fleet_error_forbidden": "Autorisation refusée.",
   "fleet_error_generic": "L'action de la flotte a échoué.",
+  "fleet_error_lock_busy": "Planète brièvement verrouillée — renvoyez la flotte.",
   "fleet_error_invalid_logistics_mode": "Mode logistique invalide.",
   "fleet_error_invalid_mission": "Mission invalide.",
   "fleet_error_invalid_preset_type": "Type de préréglage invalide.",
