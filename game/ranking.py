@@ -18,7 +18,7 @@ import logging
 import sqlite3
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
 
@@ -1040,6 +1040,27 @@ def get_player_score_row(player_id: int, conn=None) -> Optional[Dict[str, Any]]:
     if owns_conn:
         conn.close()
     return dict(row) if row else None
+
+
+def player_score_totals_by_ids(
+    player_ids: Sequence[int],
+    *,
+    conn,
+) -> Dict[int, int]:
+    """Batch read ``score_total`` from ``player_scores`` (missing ids → 0)."""
+    ids = sorted({int(p) for p in player_ids if int(p) > 0})
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT player_id, score_total FROM player_scores WHERE player_id IN ({placeholders});",
+        tuple(ids),
+    )
+    out = {pid: 0 for pid in ids}
+    for row in cur.fetchall():
+        out[int(row["player_id"])] = max(0, int(row["score_total"] or 0))
+    return out
 
 
 def get_player_score_cached(

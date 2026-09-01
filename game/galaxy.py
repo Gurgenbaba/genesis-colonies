@@ -435,11 +435,32 @@ def _player_activity_select(conn: sqlite3.Connection, *, alias: str = "pl") -> s
     return ", ".join(parts)
 
 
+def _viewer_allied_player_ids(viewer_player_id: Optional[int], conn: sqlite3.Connection) -> Set[int]:
+    """Players sharing an alliance with the viewer (excluding viewer)."""
+    viewer_id = int(viewer_player_id or 0)
+    if viewer_id <= 0 or not table_exists(conn, "alliance_members"):
+        return set()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT am2.player_id
+        FROM alliance_members am1
+        INNER JOIN alliance_members am2
+            ON am2.alliance_id = am1.alliance_id
+        WHERE am1.player_id = ?;
+        """,
+        (viewer_id,),
+    )
+    return {int(row["player_id"]) for row in cur.fetchall() if int(row["player_id"]) != viewer_id}
+
+
 def _attach_player_status_flags(
     slot: Dict[str, Any],
     *,
     viewer_player_id: Optional[int],
     conn: sqlite3.Connection,
+    pirate_profiles: Optional[Mapping[int, Mapping[str, Any]]] = None,
+    noob_strengths: Optional[Mapping[int, Optional[str]]] = None,
 ) -> None:
     """Vacation / inactive / noob-protection strength hints for galaxy presentation."""
     if not slot.get("occupied"):
@@ -459,12 +480,16 @@ def _attach_player_status_flags(
     slot["recently_active"] = bool(last_seen > 0 and (time.time() - last_seen) < RECENTLY_ACTIVE_WINDOW_SEC)
 
     target_player_id = int(slot.get("player_id") or 0)
-    try:
-        from .pirates.accounts import get_pirate_ai_profile
+    ai = None
+    if pirate_profiles is not None:
+        ai = pirate_profiles.get(target_player_id)
+    elif target_player_id > 0:
+        try:
+            from .pirates.accounts import get_pirate_ai_profile
 
-        ai = get_pirate_ai_profile(target_player_id, conn=conn) if target_player_id > 0 else None
-    except Exception:
-        ai = None
+            ai = get_pirate_ai_profile(target_player_id, conn=conn)
+        except Exception:
+            ai = None
     if ai:
         slot["is_ai"] = True
         slot["inactive"] = False
@@ -490,17 +515,20 @@ def _attach_player_status_flags(
         and not slot.get("is_own_planet")
         and not slot.get("is_ai")
     ):
-        from .fleet import get_noob_protection_status
+        if noob_strengths is not None:
+            strength = noob_strengths.get(target_player_id)
+        else:
+            from .fleet import get_noob_protection_status
 
-        info = get_noob_protection_status(viewer_id, target_player_id, conn=conn)
-        if not info.get("allowed"):
-            def_score = int(info.get("defender_score") or 0)
-            max_def = int(info.get("max_defender_score") or 0)
-            min_def = int(info.get("min_defender_score") or 0)
-            if def_score > max_def:
-                strength = "too_strong"
-            elif def_score < min_def:
-                strength = "too_weak"
+            info = get_noob_protection_status(viewer_id, target_player_id, conn=conn)
+            if not info.get("allowed"):
+                def_score = int(info.get("defender_score") or 0)
+                max_def = int(info.get("max_defender_score") or 0)
+                min_def = int(info.get("min_defender_score") or 0)
+                if def_score > max_def:
+                    strength = "too_strong"
+                elif def_score < min_def:
+                    strength = "too_weak"
     slot["attack_strength"] = strength
 
 
@@ -681,21 +709,26 @@ def get_debris_for_system(
     *,
     now: Optional[float] = None,
 ) -> Dict[int, Dict[str, Any]]:
-    """Map position → debris row for one system (amounts + ``updated_at`` for TTL)."""
-    from .combat import debris_schema_ready, expire_due_debris_fields
+    """Map position → debris row for one system (amounts + ``updated_at`` for TTL).
+
+    GC-PG-HIGHSPEED-001A: read-only composition — filter expired rows here;
+    physical DELETE stays on maintenance ``expire_due_debris_fields``.
+    """
+    from .combat import DEBRIS_FIELD_TTL_SECONDS, debris_schema_ready
 
     out: Dict[int, Dict[str, Any]] = {}
     if not debris_schema_ready(conn):
         return out
-    # Hard-expire past-TTL fields before attach (same owner as harvest DELETE).
-    expire_due_debris_fields(conn=conn, now=now)
+    ts = float(now if now is not None else time.time())
+    cutoff = ts - float(DEBRIS_FIELD_TTL_SECONDS)
     cur = conn.cursor()
     cur.execute(
         """
         SELECT position, metal, crystal, updated_at
         FROM debris_fields
         WHERE galaxy = ? AND system = ?
-          AND (position BETWEEN ? AND ? OR position = ?);
+          AND (position BETWEEN ? AND ? OR position = ?)
+          AND updated_at > ?;
         """,
         (
             int(galaxy),
@@ -703,6 +736,7 @@ def get_debris_for_system(
             POSITION_MIN,
             POSITION_MAX,
             EXPEDITION_SLOT_POSITION,
+            cutoff,
         ),
     )
     for row in cur.fetchall():
@@ -858,9 +892,10 @@ def list_system(
 
     validate_coordinates(galaxy, system, POSITION_MIN, conn=conn)
 
-    from .alliance import are_players_allied
+    allied_player_ids = _viewer_allied_player_ids(viewer_player_id, conn)
 
     by_position: Dict[int, Dict[str, Any]] = {}
+    occupied_player_ids: List[int] = []
     if _coords_schema_ready(conn):
         cur = conn.cursor()
         has_planet_class = column_exists(conn, "planets", "planet_class")
@@ -902,7 +937,7 @@ def list_system(
             is_ally = (
                 not is_own
                 and viewer_player_id is not None
-                and are_players_allied(int(viewer_player_id), player_id, conn=conn)
+                and player_id in allied_player_ids
             )
             is_active = (
                 active_planet_id is not None and pid == int(active_planet_id)
@@ -935,6 +970,32 @@ def list_system(
                 "is_highlighted": is_highlighted,
                 "colony_target": False,
             }
+            occupied_player_ids.append(player_id)
+
+    pirate_profiles: Dict[int, Dict[str, Any]] = {}
+    noob_strengths: Dict[int, Optional[str]] = {}
+    if occupied_player_ids:
+        try:
+            from .pirates.accounts import pirate_ai_profiles_by_ids
+
+            pirate_profiles = pirate_ai_profiles_by_ids(
+                occupied_player_ids,
+                conn=conn,
+                ensure_state=False,
+            )
+        except Exception:
+            pirate_profiles = {}
+        if viewer_player_id is not None:
+            try:
+                from .fleet import noob_attack_strength_by_defender_ids
+
+                noob_strengths = noob_attack_strength_by_defender_ids(
+                    int(viewer_player_id),
+                    occupied_player_ids,
+                    conn=conn,
+                )
+            except Exception:
+                noob_strengths = {}
 
     debris_by_position = get_debris_for_system(int(galaxy), int(system), conn)
     try:
@@ -994,6 +1055,8 @@ def list_system(
                 slot,
                 viewer_player_id=viewer_player_id,
                 conn=conn,
+                pirate_profiles=pirate_profiles,
+                noob_strengths=noob_strengths,
             )
             slots.append(slot)
         else:

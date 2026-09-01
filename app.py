@@ -14585,6 +14585,8 @@ def api_planets_set_active():
 
     user_id = int(session["user_id"])
     ok, reason = set_active_planet(user_id, planet_id)
+    if not ok and reason == "lock_busy":
+        return jsonify({"ok": False, "reason": reason, "retry": True}), 409
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source="api_planets_active",

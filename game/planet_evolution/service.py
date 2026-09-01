@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
+from ..db import (
+    begin_write_transaction,
+    commit,
+    get_db_backend,
+    is_db_lock_error,
+    lock_planet_for_update,
+    rollback,
+)
+
+logger = logging.getLogger(__name__)
 from ..models import (
     db,
     get_game_settings,
@@ -319,13 +329,39 @@ def set_active_planet(player_id: int, planet_id: int, conn: Optional[sqlite3.Con
     if own:
         conn = db()
     try:
-        begin_write_transaction(conn)
-        set_active_planet_id(int(player_id), int(planet_id), conn)
-        commit(conn)
-        return True, "ok"
-    except ValueError as exc:
-        rollback(conn)
-        return False, str(exc)
+        pid = int(player_id)
+        plid = int(planet_id)
+        for attempt in range(3):
+            try:
+                begin_write_transaction(conn)
+                if get_db_backend() == "postgres":
+                    try:
+                        conn.execute("SET LOCAL lock_timeout = '2s'")
+                    except Exception:
+                        pass
+                set_active_planet_id(pid, plid, conn)
+                commit(conn)
+                return True, "ok"
+            except ValueError as exc:
+                rollback(conn)
+                return False, str(exc)
+            except Exception as exc:
+                try:
+                    rollback(conn)
+                except Exception:
+                    pass
+                if is_db_lock_error(exc) and attempt + 1 < 3:
+                    time.sleep(0.05 * (attempt + 1))
+                    continue
+                if is_db_lock_error(exc):
+                    logger.warning(
+                        "set_active_planet locked player=%s planet=%s — lock_busy",
+                        pid,
+                        plid,
+                    )
+                    return False, "lock_busy"
+                raise
+        return False, "lock_busy"
     finally:
         if own and conn is not None:
             conn.close()
