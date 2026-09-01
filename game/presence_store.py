@@ -149,13 +149,27 @@ def should_sync_legacy_last_seen(*, previous_seen: int, now: int) -> bool:
     return int(previous_seen or 0) <= int(now) - LEGACY_SYNC_INTERVAL_SEC
 
 
-def sync_legacy_last_seen(conn, player_id: int, *, now: int) -> None:  # noqa: ANN001
-    """Compatibility mirror only; caller must isolate this optional PG write."""
+def sync_legacy_last_seen(conn, player_id: int, *, now: int) -> bool:  # noqa: ANN001
+    """Best-effort PG mirror without ever waiting on the hot players row.
+
+    ``players`` is gameplay state, not the canonical PostgreSQL presence owner.
+    Acquire its row with ``SKIP LOCKED`` first; if gameplay currently owns the
+    row, leave the compatibility timestamp stale for this request instead of
+    burning the request lock timeout.
+    """
+    pid = int(player_id)
+    row = conn.execute(
+        "SELECT id FROM players WHERE id = ? FOR UPDATE SKIP LOCKED;",
+        (pid,),
+    ).fetchone()
+    if not row:
+        return False
     conn.execute(
         "UPDATE players SET last_seen = ? WHERE id = ? "
         "AND (last_seen IS NULL OR last_seen < ?);",
-        (int(now), int(player_id), int(now) - LEGACY_SYNC_INTERVAL_SEC),
+        (int(now), pid, int(now) - LEGACY_SYNC_INTERVAL_SEC),
     )
+    return True
 
 
 def touch_presence(
