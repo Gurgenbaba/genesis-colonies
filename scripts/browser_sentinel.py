@@ -303,6 +303,23 @@ def _new_finding(
     return item
 
 
+def _runtime_event_severity(*, kind: str, problem: str, url: str = "", base_url: str = "") -> str:
+    text = str(problem or "")
+    if kind == "request_failed" and "net::ERR_ABORTED" in text:
+        path = urlsplit(str(url or "")).path
+        if path in {"/api/chat/bootstrap", "/api/messages"}:
+            return "LOW"
+    if (
+        kind == "console_error"
+        and str(base_url or "").startswith("http://127.0.0.1:")
+        and "WebSocket connection to '" in text
+        and "/ws/galaxy/" in text
+        and "Invalid frame header" in text
+    ):
+        return "LOW"
+    return "HIGH"
+
+
 def _install_third_party_guard(context, base_url: str) -> None:
     def route_handler(route, request) -> None:
         url = request.url
@@ -330,7 +347,16 @@ def _attach_runtime_capture(page, base_url: str, current: dict, events: list[dic
 
     def on_console(message) -> None:
         if message.type == "error":
-            add("console_error", "HIGH", problem=message.text)
+            problem = message.text
+            add(
+                "console_error",
+                _runtime_event_severity(
+                    kind="console_error",
+                    problem=problem,
+                    base_url=base_url,
+                ),
+                problem=problem,
+            )
 
     def on_page_error(error) -> None:
         add("page_exception", "HIGH", problem=str(error))
@@ -351,10 +377,16 @@ def _attach_runtime_capture(page, base_url: str, current: dict, events: list[dic
         if not _same_origin(request.url, base_url):
             return
         failure = getattr(request, "failure", None)
+        problem = f"Request failed: {request.url} ({failure or 'unknown'})"
         add(
             "request_failed",
-            "HIGH",
-            problem=f"Request failed: {request.url}",
+            _runtime_event_severity(
+                kind="request_failed",
+                problem=problem,
+                url=request.url,
+                base_url=base_url,
+            ),
+            problem=problem,
             details={"url": request.url, "resource_type": request.resource_type, "failure": failure},
         )
 

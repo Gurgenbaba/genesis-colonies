@@ -61,3 +61,38 @@ def test_pjax_backend_header_behavior(game_client, monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.headers.get("X-GC-Nav-Db-Backend") == "sqlite"
+
+
+def test_sentinel_lifecycle_noise_classifier_is_narrow():
+    from scripts.browser_sentinel import _runtime_event_severity
+
+    assert _runtime_event_severity(
+        kind="request_failed",
+        problem="Request failed: http://127.0.0.1:5000/api/chat/bootstrap (net::ERR_ABORTED)",
+        url="http://127.0.0.1:5000/api/chat/bootstrap",
+        base_url="http://127.0.0.1:5000",
+    ) == "LOW"
+    assert _runtime_event_severity(
+        kind="request_failed",
+        problem="Request failed: http://127.0.0.1:5000/api/messages?limit=50 (net::ERR_ABORTED)",
+        url="http://127.0.0.1:5000/api/messages?limit=50",
+        base_url="http://127.0.0.1:5000",
+    ) == "LOW"
+    assert _runtime_event_severity(
+        kind="request_failed",
+        problem="Request failed: http://127.0.0.1:5000/api/game-state (net::ERR_ABORTED)",
+        url="http://127.0.0.1:5000/api/game-state",
+        base_url="http://127.0.0.1:5000",
+    ) == "HIGH"
+
+
+def test_sentinel_local_werkzeug_galaxy_ws_noise_is_not_live_suppression():
+    from scripts.browser_sentinel import _runtime_event_severity
+
+    problem = "WebSocket connection to 'ws://127.0.0.1:5000/ws/galaxy/5/404' failed: Invalid frame header"
+    assert _runtime_event_severity(
+        kind="console_error", problem=problem, base_url="http://127.0.0.1:5000"
+    ) == "LOW"
+    assert _runtime_event_severity(
+        kind="console_error", problem=problem, base_url="https://genesis-colonies.com"
+    ) == "HIGH"
