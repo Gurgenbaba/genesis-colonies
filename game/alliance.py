@@ -465,9 +465,15 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
             """,
             (int(alliance_id),),
         )
+        raw_rows = [dict(r) for r in cur.fetchall()]
+        from .presence_store import get_effective_last_seen_by_ids
+
+        effective_seen = get_effective_last_seen_by_ids(
+            conn, [int(r.get("player_id") or 0) for r in raw_rows]
+        )
         rows = []
-        for r in cur.fetchall():
-            d = dict(r)
+        for d in raw_rows:
+            d["last_seen"] = effective_seen.get(int(d.get("player_id") or 0), 0)
             d["role"] = _normalize_role(d.get("role"))
             d["donation_points"] = int(d.get("donation_points") or 0)
             d["xp_contribution"] = int(d.get("xp_contribution") or 0)

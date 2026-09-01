@@ -462,11 +462,9 @@ def _buyer_score_total(player_id: int, *, conn) -> int:
 def _buyer_last_seen(player_id: int, *, conn) -> float:
     if not column_exists(conn, "players", "last_seen"):
         return 0.0
-    row = conn.execute(
-        "SELECT COALESCE(last_seen, 0) AS last_seen FROM players WHERE id = ? LIMIT 1;",
-        (int(player_id),),
-    ).fetchone()
-    return float(row["last_seen"] or 0) if row else 0.0
+    from .presence_store import get_effective_last_seen
+
+    return float(get_effective_last_seen(conn, int(player_id)))
 
 
 def _buyer_is_banned(player_id: int, *, conn) -> bool:
@@ -542,24 +540,27 @@ def creator_performance_stats(creator_id: int, *, conn, now: Optional[float] = N
         ).fetchone()
         registrations = int(row["c"] or 0) if row else 0
         if column_exists(conn, "players", "last_seen"):
+            from .presence_store import effective_last_seen_scalar_sql
+
+            last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
             row7 = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS c
                 FROM player_referrals r
                 JOIN players p ON p.id = r.referred_player_id
                 WHERE r.referrer_player_id = ?
-                  AND COALESCE(p.last_seen, 0) >= ?;
+                  AND {last_seen_expr} >= ?;
                 """,
                 (referrer_id, ts - 7 * 24 * 3600),
             ).fetchone()
             active_7d = int(row7["c"] or 0) if row7 else 0
             row30 = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS c
                 FROM player_referrals r
                 JOIN players p ON p.id = r.referred_player_id
                 WHERE r.referrer_player_id = ?
-                  AND COALESCE(p.last_seen, 0) >= ?;
+                  AND {last_seen_expr} >= ?;
                 """,
                 (referrer_id, ts - 30 * 24 * 3600),
             ).fetchone()
