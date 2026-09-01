@@ -20,24 +20,38 @@ echo "[GC] Seeding player timeline from CHANGELOG if needed..."
 python -c "
 from game.config import init_config
 init_config()
-from game.universe_news import ensure_changelog_seeded
-result = ensure_changelog_seeded()
-if result.get('seeded'):
-    inserted = (result.get('import') or {}).get('inserted', 0)
-    print(f'[GC] Timeline seeded from CHANGELOG ({inserted} major releases).')
-else:
-    print(f'[GC] Timeline seed skipped ({result.get(\"reason\", \"ok\")}).')
+try:
+    from game.universe_news import ensure_changelog_seeded
+    result = ensure_changelog_seeded()
+    if result.get('seeded'):
+        inserted = (result.get('import') or {}).get('inserted', 0)
+        print(f'[GC] Timeline seeded from CHANGELOG ({inserted} major releases).')
+    else:
+        print(f'[GC] Timeline seed skipped ({result.get(\"reason\", \"ok\")}).')
+finally:
+    try:
+        from game.db_pg import close_pool
+        close_pool()
+    except Exception:
+        pass
 "
 
 echo "[GC] Verifying Codex catalog..."
 python -c "
 from game.config import init_config
 init_config()
-from game.codex import ensure_codex_catalog_ready
-result = ensure_codex_catalog_ready()
-if not result.get('ok'):
-    raise SystemExit(f\"Codex catalog not ready: {result}\")
-print(f\"[GC] Codex catalog OK ({result.get('article_count')} articles, {result.get('category_count')} bands).\")
+try:
+    from game.codex import ensure_codex_catalog_ready
+    result = ensure_codex_catalog_ready()
+    if not result.get('ok'):
+        raise SystemExit(f\"Codex catalog not ready: {result}\")
+    print(f\"[GC] Codex catalog OK ({result.get('article_count')} articles, {result.get('category_count')} bands).\")
+finally:
+    try:
+        from game.db_pg import close_pool
+        close_pool()
+    except Exception:
+        pass
 "
 
 echo "[GC] Verifying Story TTS (edge-tts / Killian)..."
