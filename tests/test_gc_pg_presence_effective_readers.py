@@ -31,21 +31,23 @@ class _Conn:
         return self.responses.pop(0)
 
 
-def test_pg_effective_expression_uses_newest_timestamp():
+def test_pg_effective_expression_is_canonical_presence_only():
     expr = presence_store.effective_last_seen_sql(backend="postgres")
-    assert expr == "GREATEST(COALESCE(pp.last_seen, 0), COALESCE(p.last_seen, 0))"
+    assert expr == "COALESCE(pp.last_seen, 0)"
+    assert expr != "COALESCE(p.last_seen, 0)"
     assert presence_store.last_seen_join_sql(backend="postgres") == (
         "LEFT JOIN player_presence pp ON pp.player_id = p.id"
     )
 
 
-def test_pg_effective_single_reader_uses_newest_wins_query():
+def test_pg_effective_single_reader_reads_presence_table_only():
     conn = _Conn([_Rows(one={"last_seen": 999})])
     seen = presence_store.get_effective_last_seen(conn, 7, backend="postgres")
     assert seen == 999
-    sql = conn.sql[0]
-    assert "GREATEST(COALESCE(pp.last_seen, 0), COALESCE(p.last_seen, 0))" in sql
-    assert "LEFT JOIN player_presence pp ON pp.player_id = p.id" in sql
+    sql = conn.sql[0].lower()
+    assert "from player_presence" in sql
+    assert "from players" not in sql
+    assert "join players" not in sql
     assert conn.params == [(7,)]
 
 
@@ -65,7 +67,10 @@ def test_pg_effective_bulk_reader_uses_one_query_and_fills_missing_ids():
     )
     assert seen == {2: 222, 4: 0, 9: 999}
     assert len(conn.sql) == 1
-    assert "GREATEST(COALESCE(pp.last_seen, 0), COALESCE(p.last_seen, 0))" in conn.sql[0]
+    sql = conn.sql[0].lower()
+    assert "from player_presence" in sql
+    assert "from players" not in sql
+    assert "join players" not in sql
     assert conn.params == [(2, 4, 9)]
 
 

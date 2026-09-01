@@ -1,10 +1,8 @@
 """GC-PG-HIGHSPEED-001C dedicated player-presence storage helpers.
 
-PostgreSQL authenticated presence is owned by ``player_presence``. During the
-reader cutover we keep ``players.last_seen`` as a low-frequency compatibility
-mirror (<= once per four minutes), isolated by the caller with a SAVEPOINT.
-That preserves legacy online/inactive readers while removing the former
-per-presence-interval write pressure from the hot gameplay row.
+PostgreSQL authenticated presence is owned exclusively by ``player_presence``.
+All PostgreSQL activity readers use that canonical table; ``players.last_seen``
+remains a SQLite compatibility column only.
 
 SQLite keeps the established ``players.last_seen`` path.
 """
@@ -16,8 +14,6 @@ from typing import Dict, Iterable, Sequence
 from .db import get_db_backend
 
 PRESENCE_TABLE = "player_presence"
-LEGACY_SYNC_INTERVAL_SEC = 4 * 60
-
 
 def uses_dedicated_presence(*, backend: str | None = None) -> bool:
     return str(backend or get_db_backend()) == "postgres"
@@ -44,12 +40,9 @@ def effective_last_seen_sql(
     presence_alias: str = "pp",
     backend: str | None = None,
 ) -> str:
-    """Newest activity wins during rolling PostgreSQL presence cutover."""
+    """Backend-aware activity expression; PostgreSQL is canonical-only."""
     if uses_dedicated_presence(backend=backend):
-        return (
-            f"GREATEST(COALESCE({presence_alias}.last_seen, 0), "
-            f"COALESCE({player_alias}.last_seen, 0))"
-        )
+        return f"COALESCE({presence_alias}.last_seen, 0)"
     return f"COALESCE({player_alias}.last_seen, 0)"
 
 
@@ -58,17 +51,15 @@ def effective_last_seen_scalar_sql(
     player_alias: str = "p",
     backend: str | None = None,
 ) -> str:
-    """Correlated effective-presence expression for existing player queries.
+    """Correlated activity expression for existing player queries.
 
-    PostgreSQL reads canonical ``player_presence`` first while retaining the
-    legacy column as a rolling-deploy fallback. SQLite stays unchanged.
+    PostgreSQL reads only canonical ``player_presence``. SQLite intentionally
+    keeps the legacy players column for local/test compatibility.
     """
     if uses_dedicated_presence(backend=backend):
         return (
-            "GREATEST("
             f"COALESCE((SELECT pp_gc_presence.last_seen FROM {PRESENCE_TABLE} pp_gc_presence "
-            f"WHERE pp_gc_presence.player_id = {player_alias}.id), 0), "
-            f"COALESCE({player_alias}.last_seen, 0))"
+            f"WHERE pp_gc_presence.player_id = {player_alias}.id), 0)"
         )
     return f"COALESCE({player_alias}.last_seen, 0)"
 
@@ -94,26 +85,11 @@ def get_presence_last_seen(
 def get_effective_last_seen(
     conn, player_id: int, *, backend: str | None = None
 ) -> int:  # noqa: ANN001
-    """Read current activity for gameplay readers during the 001C cutover.
-
-    PostgreSQL deliberately chooses the newer of dedicated presence and the
-    temporary legacy mirror. This keeps rolling deployments correct when an old
-    replica updates ``players.last_seen`` after a new replica created a
-    ``player_presence`` row. Authenticated hot-touch code must continue using
-    ``get_presence_last_seen`` instead.
-    """
+    """Read current activity from the backend's canonical presence owner."""
     pid = int(player_id)
     if uses_dedicated_presence(backend=backend):
-        expr = effective_last_seen_sql(backend="postgres")
-        join = last_seen_join_sql(backend="postgres")
         row = conn.execute(
-            f"""
-            SELECT {expr} AS last_seen
-            FROM players p
-            {join}
-            WHERE p.id = ?
-            LIMIT 1;
-            """,
+            f"SELECT last_seen FROM {PRESENCE_TABLE} WHERE player_id = ? LIMIT 1;",
             (pid,),
         ).fetchone()
     else:
@@ -130,21 +106,18 @@ def get_effective_last_seen_by_ids(
     *,
     backend: str | None = None,
 ) -> Dict[int, int]:  # noqa: ANN001
-    """Bulk effective activity read for ranking/galaxy/autoplay cutover."""
+    """Bulk activity read from the backend's canonical presence owner."""
     ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
     if not ids:
         return {}
 
     placeholders = ",".join("?" for _ in ids)
     if uses_dedicated_presence(backend=backend):
-        expr = effective_last_seen_sql(backend="postgres")
-        join = last_seen_join_sql(backend="postgres")
         cur = conn.execute(
             f"""
-            SELECT p.id AS player_id, {expr} AS last_seen
-            FROM players p
-            {join}
-            WHERE p.id IN ({placeholders});
+            SELECT player_id, COALESCE(last_seen, 0) AS last_seen
+            FROM {PRESENCE_TABLE}
+            WHERE player_id IN ({placeholders});
             """,
             tuple(ids),
         )
@@ -162,34 +135,6 @@ def get_effective_last_seen_by_ids(
     for row in cur.fetchall():
         out[int(row["player_id"])] = int(row["last_seen"] or 0)
     return out
-
-
-def should_sync_legacy_last_seen(*, previous_seen: int, now: int) -> bool:
-    """Keep legacy readers fresh without restoring the 30s players-row write."""
-    return int(previous_seen or 0) <= int(now) - LEGACY_SYNC_INTERVAL_SEC
-
-
-def sync_legacy_last_seen(conn, player_id: int, *, now: int) -> bool:  # noqa: ANN001
-    """Best-effort PG mirror without ever waiting on the hot players row.
-
-    ``players`` is gameplay state, not the canonical PostgreSQL presence owner.
-    Acquire its row with ``SKIP LOCKED`` first; if gameplay currently owns the
-    row, leave the compatibility timestamp stale for this request instead of
-    burning the request lock timeout.
-    """
-    pid = int(player_id)
-    row = conn.execute(
-        "SELECT id FROM players WHERE id = ? FOR UPDATE SKIP LOCKED;",
-        (pid,),
-    ).fetchone()
-    if not row:
-        return False
-    conn.execute(
-        "UPDATE players SET last_seen = ? WHERE id = ? "
-        "AND (last_seen IS NULL OR last_seen < ?);",
-        (int(now), pid, int(now) - LEGACY_SYNC_INTERVAL_SEC),
-    )
-    return True
 
 
 def touch_presence(

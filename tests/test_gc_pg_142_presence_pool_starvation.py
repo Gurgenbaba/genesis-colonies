@@ -40,8 +40,6 @@ class _FakeConn:
         self.sql.append(text)
         if text.startswith("SELECT last_seen FROM player_presence"):
             return SimpleNamespace(fetchone=lambda: {"last_seen": self.presence_seen})
-        if "FROM players WHERE id" in text:
-            return SimpleNamespace(fetchone=lambda: {"last_seen": self.legacy_seen})
         if "INSERT INTO player_presence" in text and self.lock_on_touch:
             raise _FakeLockError("canceling statement due to lock timeout")
         return SimpleNamespace(fetchone=lambda: None)
@@ -126,36 +124,20 @@ def test_roster_release_failure_keeps_successful_presence_write(monkeypatch):
     assert "ROLLBACK TO SAVEPOINT gc_presence_roster" in conn.sql
     assert "RELEASE SAVEPOINT gc_presence_roster" in conn.sql
     assert any("INSERT INTO player_presence" in sql for sql in conn.sql)
-    assert "SAVEPOINT gc_presence_legacy" in conn.sql
-    assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
-
-
-def test_recent_dedicated_presence_skips_fresh_legacy_player_row_write(monkeypatch):
-    conn = _FakeConn(lock_on_touch=False, presence_seen=900, legacy_seen=900)
-    local_marks: list[int] = []
-    _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
-    presence.touch_player_online(7)
-    assert conn.committed is True
-    assert any("INSERT INTO player_presence" in sql for sql in conn.sql)
-    assert not any("UPDATE players SET last_seen" in sql for sql in conn.sql)
     assert "SAVEPOINT gc_presence_legacy" not in conn.sql
+    assert not any("UPDATE players SET last_seen" in sql for sql in conn.sql)
 
 
-def test_stale_legacy_mirror_syncs_even_when_dedicated_presence_is_fresh(monkeypatch):
-    conn = _FakeConn(lock_on_touch=False, presence_seen=990, legacy_seen=700)
+def test_recent_dedicated_presence_skips_all_database_writes_when_not_rostered(monkeypatch):
+    conn = _FakeConn(lock_on_touch=False, presence_seen=990, legacy_seen=0)
     local_marks: list[int] = []
     _patch_presence_basics(monkeypatch, conn, local_marks=local_marks)
     presence.touch_player_online(7)
-    assert conn.committed is True
-    assert "SAVEPOINT gc_presence_legacy" in conn.sql
-    assert any("UPDATE players SET last_seen" in sql for sql in conn.sql)
-
-
-def test_legacy_sync_cadence_stays_inside_online_window():
-    assert presence_store.LEGACY_SYNC_INTERVAL_SEC < 5 * 60
-    assert presence_store.should_sync_legacy_last_seen(previous_seen=0, now=1_000)
-    assert presence_store.should_sync_legacy_last_seen(previous_seen=700, now=1_000)
-    assert not presence_store.should_sync_legacy_last_seen(previous_seen=900, now=1_000)
+    assert conn.committed is False
+    assert local_marks == [7]
+    assert not any("INSERT INTO player_presence" in sql for sql in conn.sql)
+    assert not any("UPDATE players SET last_seen" in sql for sql in conn.sql)
+    assert not any("FROM players WHERE id" in sql for sql in conn.sql)
 
 
 def test_postgres_store_never_references_players_on_canonical_touch():
@@ -228,3 +210,23 @@ def test_presence_lock_handler_has_no_db_checkout():
     )[0]
     assert "db()" not in lock_block
     assert "_release_roster_best_effort" not in source
+
+
+def test_postgres_presence_source_has_no_legacy_mirror_sql():
+    source = (ROOT / "game" / "presence.py").read_text(encoding="utf-8")
+    assert "sync_legacy_last_seen" not in source
+    assert "should_sync_legacy_last_seen" not in source
+    assert "gc_presence_legacy" not in source
+    assert "UPDATE players SET last_seen" not in source
+    assert "FROM players WHERE id" not in source
+
+
+def test_models_compat_entry_delegates_before_legacy_checkout():
+    source = (ROOT / "game" / "models.py").read_text(encoding="utf-8")
+    start = source.index("def touch_player_online(player_id: int) -> None:")
+    end = source.index("def _release_roster_best_effort", start)
+    block = source[start:end]
+    pg_gate = block.index('if get_db_backend() == "postgres":')
+    legacy_checkout = block.index("conn = db()")
+    assert pg_gate < legacy_checkout
+    assert "touch_dedicated_presence(int(player_id))" in block[:legacy_checkout]

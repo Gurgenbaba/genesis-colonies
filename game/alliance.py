@@ -435,7 +435,6 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
         cur.execute(
             """
             SELECT am.player_id, am.role, am.joined_at, p.name AS player_name,
-                   COALESCE(p.last_seen, 0) AS last_seen,
                    COALESCE(SUM(d.amount), 0) AS donation_points,
                    COALESCE(SUM(d.xp_granted), 0) AS xp_contribution,
                    COALESCE(ps.score_total, '0') AS total_score,
@@ -452,7 +451,7 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
             LEFT JOIN planets hw
               ON hw.player_id = am.player_id AND COALESCE(hw.is_homeworld, 0) = 1
             WHERE am.alliance_id = ?
-            GROUP BY am.player_id, am.role, am.joined_at, p.name, p.last_seen, ps.score_total,
+            GROUP BY am.player_id, am.role, am.joined_at, p.name, ps.score_total,
                      hw.id, hw.name, hw.galaxy, hw.system, hw.position
             ORDER BY
                 CASE am.role

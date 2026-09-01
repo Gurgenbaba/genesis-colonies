@@ -881,6 +881,13 @@ def touch_player_online(player_id: int) -> None:
     """
     if not player_id:
         return
+    from .db import get_db_backend
+
+    if get_db_backend() == "postgres":
+        from .presence import touch_player_online as touch_dedicated_presence
+
+        touch_dedicated_presence(int(player_id))
+        return
     now = int(_now_ts())
     pid = int(player_id)
     interval = _presence_touch_interval_sec()
