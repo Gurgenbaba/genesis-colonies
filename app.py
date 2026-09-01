@@ -7988,20 +7988,15 @@ def world_boss_view():
     if player_view is None:
         return redirect(url_for("login"))
 
-    from game.db import begin_write_transaction, commit, rollback
     from game.world_boss import build_world_boss_payload
 
     player_id = _current_player_id()
     conn = db()
     wb_payload = None
     try:
-        begin_write_transaction(conn)
-        try:
-            wb_payload = build_world_boss_payload(player_id, conn=conn, flush_auto=True)
-            commit(conn)
-        except Exception:
-            rollback(conn)
-            raise
+        # PostgreSQL GET hotpath: payload composition is read-only. Auto attacks
+        # are server-owned by the fleet worker / explicit POST mutations.
+        wb_payload = build_world_boss_payload(player_id, conn=conn)
     finally:
         conn.close()
 
@@ -8023,21 +8018,13 @@ def api_world_boss():
     if player_id is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     try:
-        from game.db import begin_write_transaction, commit, rollback
         from game.world_boss import build_world_boss_payload
 
         event_id = request.args.get("event_id", type=int)
         conn = db()
         try:
-            begin_write_transaction(conn)
-            try:
-                payload = build_world_boss_payload(
-                    player_id, conn=conn, event_id=event_id, flush_auto=True
-                )
-                commit(conn)
-            except Exception:
-                rollback(conn)
-                raise
+            # GET must never become an attack transaction merely by polling.
+            payload = build_world_boss_payload(player_id, conn=conn, event_id=event_id)
         finally:
             conn.close()
         return jsonify(payload)
