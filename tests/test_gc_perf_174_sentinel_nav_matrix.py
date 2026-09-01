@@ -26,6 +26,22 @@ def test_sentinel_drives_real_pjax_and_persists_route_samples():
     assert '"nav_perf_samples": report["navigation_perf"]["sample_count"]' in src
 
 
+def test_sentinel_safe_controls_never_click_navigation_links():
+    src = _read("scripts/browser_sentinel.py")
+    block = src.split("def _probe_safe_controls(page)", 1)[1].split("def _navigate_with_pjax_perf", 1)[0]
+    assert "el.tagName === 'A'" in block
+    assert "el.getAttribute('href')" in block
+    assert "force=True" in block
+
+
+def test_sentinel_marks_primary_pjax_failures_explicitly():
+    src = _read("scripts/browser_sentinel.py")
+    assert "primaryError" in src
+    assert '"navigation_error": None' in src
+    assert 'kind="pjax_navigation_failed"' in src
+    assert 'result["status"] = nav_result.get("status")' in src
+
+
 def test_nav_sample_carries_database_backend_identity():
     server = _read("game/live_state.py")
     client = _read("static/main.js")

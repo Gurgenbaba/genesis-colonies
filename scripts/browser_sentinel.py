@@ -377,6 +377,8 @@ def _probe_safe_controls(page) -> list[dict]:
                 continue
             if control.evaluate("(el) => !!el.closest('form')"):
                 continue
+            if control.evaluate("(el) => el.tagName === 'A' || !!el.getAttribute('href')"):
+                continue
             if control.get_attribute("aria-selected") == "true":
                 continue
             label = (control.inner_text(timeout=1_000) or control.get_attribute("aria-label") or f"control-{index}").strip()
@@ -388,7 +390,7 @@ def _probe_safe_controls(page) -> list[dict]:
                     before = target.evaluate(
                         "(el) => ({hidden: !!el.hidden, ariaHidden: el.getAttribute('aria-hidden'), className: el.className})"
                     )
-            control.click(timeout=3_000)
+            control.click(timeout=3_000, force=True)
             page.wait_for_timeout(150)
             after = None
             if controls_id:
@@ -427,13 +429,19 @@ def _navigate_with_pjax_perf(page, target: str) -> dict:
           const fresh = samples.slice(before);
           const sample = fresh.length ? fresh[fresh.length - 1] : null;
           let status = null;
+          let primaryError = null;
           if (sample && Array.isArray(sample.concurrent_requests)) {
-            const primary = sample.concurrent_requests.find((entry) => entry && entry.server)
+            const primary = sample.concurrent_requests.find((entry) =>
+              entry && Number(entry.offset_ms || 0) === 0 && ["pjax", "galaxy"].includes(String(entry.kind || ""))
+            ) || sample.concurrent_requests.find((entry) => entry && entry.server)
               || sample.concurrent_requests.find((entry) => entry && Number(entry.status) > 0)
               || null;
-            if (primary) status = Number(primary.status || 0) || null;
+            if (primary) {
+              status = Number(primary.status || 0) || null;
+              primaryError = primary.error ? String(primary.error) : null;
+            }
           }
-          return { used_pjax: true, sample, status, href: location.href };
+          return { used_pjax: true, sample, status, primary_error: primaryError, href: location.href };
         }
         """,
         target,
@@ -577,6 +585,7 @@ def _run_viewport(
                 "status": None,
                 "navigation_mode": None,
                 "navigation_perf": None,
+                "navigation_error": None,
                 "safe_controls": [],
                 "screenshot": shot_rel,
                 "dom": dom_rel,
@@ -587,7 +596,22 @@ def _run_viewport(
                 if nav_result.get("used_pjax"):
                     result["navigation_mode"] = "pjax"
                     result["navigation_perf"] = nav_result.get("sample")
-                    result["status"] = nav_result.get("status") or 200
+                    result["navigation_error"] = nav_result.get("primary_error")
+                    result["status"] = nav_result.get("status")
+                    if result["navigation_error"]:
+                        _new_finding(
+                            findings,
+                            severity="HIGH",
+                            kind="pjax_navigation_failed",
+                            page_name=spec.name,
+                            route=spec.path,
+                            viewport=viewport_name,
+                            action=action,
+                            problem=f"PJAX primary request failed: {result['navigation_error']}",
+                            screenshot=shot_rel,
+                            dom=dom_rel,
+                            details={"navigation_perf": result["navigation_perf"] or {}},
+                        )
                 else:
                     response = page.goto(
                         f"{base_url.rstrip('/')}{spec.path}",
