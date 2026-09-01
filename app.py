@@ -10657,8 +10657,16 @@ def _fleet_write_transaction(work):
         else:
             rollback(conn)
         return ok, reason, result
-    except Exception:
+    except Exception as exc:
         rollback(conn)
+        from game.db import is_db_lock_error
+
+        if is_db_lock_error(exc):
+            app.logger.warning(
+                "fleet write lock_busy — soft skip (%s)",
+                type(exc).__name__,
+            )
+            return False, "lock_busy", {"retry": True}
         raise
     finally:
         conn.close()
@@ -12053,6 +12061,19 @@ def api_fleet_preview():
             expedition_hours=int(data["expedition_hours"]) if data.get("expedition_hours") not in (None, "") else None,
         )
         return jsonify(fleet_ok({"preview": preview}, message_key="fleet_preview_ok"))
+    except Exception as exc:
+        from game.db import is_db_lock_error
+
+        if is_db_lock_error(exc):
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+            body = fleet_err("lock_busy", data={"retry": True})
+            body["reason"] = "lock_busy"
+            body["retry"] = True
+            return jsonify(body), 409
+        raise
     finally:
         conn.close()
 
@@ -12361,9 +12382,16 @@ def api_fleet_send():
             "noob_protection",
             "troop_slots_needed",
             "troop_berths",
+            "retry",
         ):
             if result.get(context_key) is not None:
                 err_data[context_key] = result[context_key]
+    if reason == "lock_busy":
+        err_data["retry"] = True
+        body = fleet_err("lock_busy", data=err_data)
+        body["reason"] = "lock_busy"
+        body["retry"] = True
+        return jsonify(body), 409
     return jsonify(fleet_err(reason or "generic", data=err_data)), 400
 
 

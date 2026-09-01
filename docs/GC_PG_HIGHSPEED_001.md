@@ -81,6 +81,14 @@ Observed after live PG + #131–#133 (Admin Perf / spikes; rough):
 
 Deploy + measure after **each** slice. No big-bang.
 
+### Live hotfixes (stability, not architecture)
+
+| Fix | Symptom | Behaviour |
+|-----|---------|-----------|
+| Planet switch `lock_busy` (#136) | `POST /api/planets/active` 500 | 409 + client retry |
+| Galaxy/SSR soft-fallback (#137) | Galaxy PJAX / politics 500 | read-only fallback; directive CASE fix |
+| Fleet send/preview `lock_busy` | Asteroid recycle / preview 500 on `LockNotAvailable` | Preview: `persist=False` (no `FOR UPDATE`); send: soft 409 + client retry |
+
 ### Deferred (separate tickets)
 
 | Ticket | Scope |

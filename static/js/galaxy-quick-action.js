@@ -588,16 +588,26 @@
 
       const exec = async () => {
         let res;
+        const maxAttempts = 3;
         try {
-          res = await fetchGameAction("/api/fleet/send", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Requested-With": "XMLHttpRequest",
-              ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
-            },
-            body: JSON.stringify(payload),
-          });
+          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            res = await fetchGameAction("/api/fleet/send", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+                ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+              },
+              body: JSON.stringify(payload),
+            });
+            const busy =
+              res &&
+              !res.ok &&
+              (res.error === "lock_busy" || res.reason === "lock_busy") &&
+              res.retry !== false;
+            if (!busy || attempt + 1 >= maxAttempts) break;
+            await new Promise((r) => setTimeout(r, 80 * (attempt + 1)));
+          }
         } catch (_err) {
           if (typeof onError === "function") {
             onError("server_error", { ok: false, error: "server_error" });

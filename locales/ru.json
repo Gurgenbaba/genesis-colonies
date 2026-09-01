@@ -3591,6 +3591,7 @@
   "fleet_error_fleet_unavailable": "Система флота недоступна.",
   "fleet_error_forbidden": "Доступ запрещен.",
   "fleet_error_generic": "Действия флота провалились.",
+  "fleet_error_lock_busy": "Планета кратко заблокирована — отправьте флот снова.",
   "fleet_error_invalid_logistics_mode": "Неверный режим логистики.",
   "fleet_error_invalid_mission": "Неверная миссия.",
   "fleet_error_invalid_preset_type": "Неверный тип пресета.",

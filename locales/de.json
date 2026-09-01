@@ -3590,6 +3590,7 @@
   "fleet_error_fleet_unavailable": "Flottensystem nicht verfügbar.",
   "fleet_error_forbidden": "Keine Berechtigung.",
   "fleet_error_generic": "Flottenaktion fehlgeschlagen.",
+  "fleet_error_lock_busy": "Planet kurz gesperrt — bitte Flotte erneut senden.",
   "fleet_error_invalid_logistics_mode": "Ungültiger Logistik-Modus.",
   "fleet_error_invalid_mission": "Ungültige Mission.",
   "fleet_error_invalid_preset_type": "Ungültiger Vorlagentyp.",

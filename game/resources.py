@@ -200,11 +200,21 @@ def apply_resource_delta_unbounded(
 #   RESOURCE UPDATE
 # ==========================================================================
 
-def _refresh_planet_resource_balances(planet: dict, *, conn, planet_id: int) -> None:
-    """Re-read balances after finish/tick may have credited cargo (GC-620K)."""
-    from .db import lock_planet_for_update
+def _refresh_planet_resource_balances(
+    planet: dict,
+    *,
+    conn,
+    planet_id: int,
+    for_update: bool = True,
+) -> None:
+    """Re-read balances after finish/tick may have credited cargo (GC-620K).
 
-    lock_planet_for_update(conn, int(planet_id))
+    for_update=False: plain SELECT (fleet preview / read-only projection — no row lock).
+    """
+    if for_update:
+        from .db import lock_planet_for_update
+
+        lock_planet_for_update(conn, int(planet_id))
     cur = conn.cursor()
     cur.execute(
         "SELECT metal, crystal, fuel_cells, last_update FROM planets WHERE id = ? LIMIT 1;",
@@ -330,7 +340,13 @@ def project_planet_resource_balances(planet: dict, *, conn, now: float | None = 
     return planet
 
 
-def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool = False):
+def update_planet_resources(
+    planet: dict,
+    conn=None,
+    *,
+    skip_queue_finish: bool = False,
+    persist: bool = True,
+):
     """
     Conn-safe Update:
     - gleiche DB-Connection wird durchgereicht (wenn vorhanden)
@@ -340,6 +356,9 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
       Must stay True there — otherwise finish_due_work → sync → update_planet_resources would
       call finish_due_work_once again (double queue processing). sync never sets skip_queue_finish=False.
       Re-reads metal/crystal/fuel from DB first so fleet/combat credits are not overwritten.
+
+    persist=False: in-memory production projection only (fleet preview). No FOR UPDATE,
+      save_planet, evolution tick, or progress emits — avoids lock contention on hot planets.
     """
     planet = dict(planet)  # ✅ wichtig (sqlite row -> dict)
 
@@ -357,12 +376,12 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         own_conn = True
 
     try:
-        if own_conn:
+        if own_conn and persist:
             from .db import begin_write_transaction
 
             begin_write_transaction(conn)
 
-        if not skip_queue_finish:
+        if persist and not skip_queue_finish:
             finish_due_work_once(
                 player_id=player_id,
                 planet_id=planet_id,
@@ -373,7 +392,12 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
 
             mark_request_live_refreshed()
 
-        _refresh_planet_resource_balances(planet, conn=conn, planet_id=planet_id)
+        _refresh_planet_resource_balances(
+            planet,
+            conn=conn,
+            planet_id=planet_id,
+            for_update=persist,
+        )
 
         now, delta = _production_elapsed_seconds(planet)
 
@@ -417,7 +441,12 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
                 monotonic_floor=True,
             )
 
-        if delta > 0 and not vacation_frozen and (prod_delta_metal or prod_delta_crystal or prod_delta_fuel):
+        if (
+            persist
+            and delta > 0
+            and not vacation_frozen
+            and (prod_delta_metal or prod_delta_crystal or prod_delta_fuel)
+        ):
             try:
                 from .directives.progress import emit_resource_produced_events
 
@@ -443,6 +472,9 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         planet["last_update"] = now
         planet["energy_total"] = int(energy_total)
         planet["energy_used"] = int(energy_used)
+
+        if not persist:
+            return planet, buildings, ratio, int(energy_total), int(energy_used)
 
         save_planet(planet, conn=conn)
 
@@ -478,7 +510,7 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         return planet, buildings, ratio, int(energy_total), int(energy_used)
 
     except Exception:
-        if own_conn:
+        if own_conn and persist:
             conn.rollback()
         raise
     finally:

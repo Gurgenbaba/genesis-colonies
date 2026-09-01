@@ -3591,6 +3591,7 @@
   "fleet_error_fleet_unavailable": "Sistema de frota indisponível.",
   "fleet_error_forbidden": "Permissão negada.",
   "fleet_error_generic": "A ação da frota falhou.",
+  "fleet_error_lock_busy": "Planeta bloqueado por um momento — envie a frota de novo.",
   "fleet_error_invalid_logistics_mode": "Modo logístico inválido.",
   "fleet_error_invalid_mission": "Missão inválida.",
   "fleet_error_invalid_preset_type": "Tipo de predefinição inválido.",

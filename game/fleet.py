@@ -1446,8 +1446,12 @@ def validate_fleet_send(
     speed_percent: int,
     conn,
     world_key: str | None = None,
+    persist_resources: bool = True,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """Full pre-send validation including target resolution and balances preview."""
+    """Full pre-send validation including target resolution and balances preview.
+
+    persist_resources=False: project accrued stock in memory only (fleet preview path).
+    """
     mission = str(mission_type or "").strip().lower()
     ships_n = normalize_ships(ships)
     resources_n = calculate_loaded_resources(resources)
@@ -1488,6 +1492,7 @@ def validate_fleet_send(
         dict(origin_row),
         conn=conn,
         skip_queue_finish=True,
+        persist=bool(persist_resources),
     )
 
     origin = _origin_coords(origin_planet)
@@ -1810,6 +1815,7 @@ def build_fleet_send_preview(
                 speed_percent=int(speed_percent),
                 conn=conn,
                 world_key=wk,
+                persist_resources=False,
             )
             can_send = ok
             block_reason = reason or ""
