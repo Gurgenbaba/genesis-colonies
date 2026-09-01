@@ -32,8 +32,8 @@ from .models import (
     db,
     ensure_player_and_homeworld,
     get_player_by_user_id,
-    touch_player_online,
 )
+from .presence import touch_player_online
 
 ViewFunc = Callable[..., Any]
 
