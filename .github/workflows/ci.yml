@@ -46,6 +46,7 @@ jobs:
             tests/test_gc_pg_shipyard_single_request_conn.py \
             tests/test_gc_pg_defense_single_request_conn.py \
             tests/test_gc_pg_world_boss_single_request_conn.py \
+            tests/test_gc_pg_empire_readonly_single_conn.py \
             tests/test_galactic_diplomacy.py::test_ensure_get_set_galaxy_personality \
             tests/test_commander_classes.py::test_linear_gate_and_sp_unlock \
             tests/test_commander_classes.py::test_effect_resolver_includes_class_mods \
