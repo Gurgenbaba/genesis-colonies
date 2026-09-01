@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import json
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -38,12 +39,13 @@ _current_locale: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 
 # GC-PG-HIGHSPEED: authenticated requests previously opened a fresh database
-# checkout in app.before_request merely to read users.locale. Keep the user's
-# authoritative locale in the signed Flask session after the first read and
-# refresh it immediately when the option changes. Background jobs and callers
-# that explicitly pass a connection continue to read the database directly.
+# checkout in app.before_request merely to read users.locale. Keep a short-lived
+# browser-session cache so request/poll traffic stops churning the PG pool while
+# multi-browser changes still converge quickly to the authoritative DB value.
 _SESSION_LOCALE_KEY = "gc_player_locale"
 _SESSION_LOCALE_PLAYER_KEY = "gc_player_locale_player_id"
+_SESSION_LOCALE_CHECKED_AT_KEY = "gc_player_locale_checked_at"
+_SESSION_LOCALE_TTL_SEC = 60.0
 
 
 @lru_cache(maxsize=len(SUPPORTED_LOCALES) + 2)
@@ -107,13 +109,33 @@ def set_request_locale(locale: str | None) -> str:
     return loc
 
 
+def _clear_session_player_locale(player_id: int | None = None) -> None:
+    if not has_request_context():
+        return
+    try:
+        if player_id is not None:
+            cached_pid = int(session.get(_SESSION_LOCALE_PLAYER_KEY) or 0)
+            if cached_pid not in (0, int(player_id)):
+                return
+        session.pop(_SESSION_LOCALE_KEY, None)
+        session.pop(_SESSION_LOCALE_PLAYER_KEY, None)
+        session.pop(_SESSION_LOCALE_CHECKED_AT_KEY, None)
+    except Exception:
+        pass
+
+
 def _session_player_locale(player_id: int) -> str | None:
-    """Return the request-session locale only when it belongs to this player."""
+    """Return a fresh request-session locale only when it belongs to this player."""
     if not has_request_context():
         return None
     try:
         cached_pid = int(session.get(_SESSION_LOCALE_PLAYER_KEY) or 0)
         if cached_pid != int(player_id):
+            return None
+        checked_at = float(session.get(_SESSION_LOCALE_CHECKED_AT_KEY) or 0.0)
+        age = time.time() - checked_at
+        if checked_at <= 0.0 or age < 0.0 or age > _SESSION_LOCALE_TTL_SEC:
+            _clear_session_player_locale(int(player_id))
             return None
         raw = session.get(_SESSION_LOCALE_KEY)
         if raw is None:
@@ -129,6 +151,7 @@ def _store_session_player_locale(player_id: int, locale: str) -> None:
     try:
         session[_SESSION_LOCALE_PLAYER_KEY] = int(player_id)
         session[_SESSION_LOCALE_KEY] = normalize_locale(locale)
+        session[_SESSION_LOCALE_CHECKED_AT_KEY] = float(time.time())
     except Exception:
         pass
 
@@ -153,9 +176,8 @@ def get_player_locale(player_id: int, *, conn=None) -> str:
         return DEFAULT_LOCALE
 
     # app.before_request calls this without a connection on every authenticated
-    # HTTP request. After the first authoritative read, avoid another PG pool
-    # checkout entirely. Explicit-connection callers intentionally bypass this
-    # request cache so worker/gameplay logic keeps normal DB semantics.
+    # HTTP request. Fresh session cache hits avoid a PG pool checkout entirely;
+    # explicit-connection callers intentionally bypass the request cache.
     if conn is None:
         cached = _session_player_locale(pid)
         if cached is not None:
@@ -192,9 +214,13 @@ def set_player_locale(player_id: int, locale: str, *, conn=None) -> str:
         c.execute("UPDATE users SET locale = ? WHERE id = ?;", (loc, pid))
         if own:
             c.commit()
-        # Keep the browser request cache immediately coherent with an options
-        # change. No TTL/staleness window is required for the normal UI path.
-        _store_session_player_locale(pid, loc)
+            # This transaction is committed here, so the session may safely
+            # reflect the new authoritative value immediately.
+            _store_session_player_locale(pid, loc)
+        else:
+            # Caller owns commit/rollback. Never serialize an uncommitted value
+            # into the browser session; force one authoritative read next request.
+            _clear_session_player_locale(pid)
     finally:
         if own:
             c.close()
