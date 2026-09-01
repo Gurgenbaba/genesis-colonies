@@ -132,18 +132,20 @@ def _score_opportunity(
 
 def _candidate_planets(conn, galaxy: int, *, limit: int = 40) -> List[Dict[str, Any]]:
     from ..db import column_exists
+    from ..presence_store import effective_last_seen_scalar_sql
 
     vac_col = (
         "COALESCE(pl.vacation_mode_active, 0)"
         if column_exists(conn, "players", "vacation_mode_active")
         else "0"
     )
+    last_seen_expr = effective_last_seen_scalar_sql(player_alias="pl")
     cur = conn.execute(
         f"""
         SELECT p.id AS planet_id, p.player_id, p.galaxy, p.system, p.position,
                p.metal, p.crystal, COALESCE(p.fuel_cells, 0) AS fuel_cells,
                pl.name AS owner_name,
-               COALESCE(pl.last_seen, 0) AS last_seen,
+               {last_seen_expr} AS last_seen,
                {vac_col} AS vacation_mode_active
         FROM planets p
         INNER JOIN players pl ON pl.id = p.player_id
@@ -303,11 +305,9 @@ def ingest_spy_report_for_intel(
     threat = int(threat_info.get("threat") or 0)
     last_seen = 0.0
     if target_player_id:
-        cur = conn.execute(
-            "SELECT COALESCE(last_seen, 0) AS last_seen FROM players WHERE id = ?;",
-            (target_player_id,),
-        )
-        last_seen = float((cur.fetchone() or {"last_seen": 0})["last_seen"] or 0)
+        from ..presence_store import get_effective_last_seen
+
+        last_seen = float(get_effective_last_seen(conn, target_player_id))
     offline_h = max(0.0, (ts - last_seen) / 3600.0) if last_seen > 0 else 48.0
     opp = _score_opportunity(
         metal=metal,
