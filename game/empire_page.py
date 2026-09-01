@@ -526,12 +526,18 @@ def _strip_ranking_fields(colony: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def build_empire_context(player_id: int, *, conn=None) -> Dict[str, Any]:
+def build_empire_context(
+    player_id: int,
+    *,
+    conn=None,
+    sync_resources: bool = True,
+) -> Dict[str, Any]:
     """
     Aggregate empire-wide colony data for the /empire page.
 
     All production and energy values are computed server-side via EffectResolver.
-    Resource balances are ticked for every owned planet before aggregation.
+    Resource balances are ticked for every owned planet only when ``sync_resources`` is true.
+    Read-only SSR callers should refresh their active live context separately and pass false.
     """
     from .models import db as _db
     from .resources import sync_player_planet_resources
@@ -542,7 +548,13 @@ def build_empire_context(player_id: int, *, conn=None) -> Dict[str, Any]:
         conn = _db()
 
     try:
-        sync_player_planet_resources(uid, conn=conn, finish_queue_first=True, skip_fresh_sec=2.0)
+        if sync_resources:
+            sync_player_planet_resources(
+                uid,
+                conn=conn,
+                finish_queue_first=True,
+                skip_fresh_sec=2.0,
+            )
 
         player = load_player(uid, conn=conn) or {}
         planets = get_planets_by_player(uid, conn=conn)
@@ -566,7 +578,7 @@ def build_empire_context(player_id: int, *, conn=None) -> Dict[str, Any]:
                 )
             )
 
-        scores = get_player_score_cached(uid, read_only=True)
+        scores = get_player_score_cached(uid, read_only=True, conn=conn)
         limit = get_planet_limit_block(uid, conn=conn)
 
         public_colonies = [_strip_ranking_fields(c) for c in colonies]

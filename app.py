@@ -2111,16 +2111,23 @@ def empire_view():
     uid = int(user_id)
     conn = db()
     try:
+        # One request-owned connection. Refresh only the active live context;
+        # Empire aggregation below must not persist every colony on a GET.
+        ctx = _load_page_live_context(finish_source="empire", conn=conn, close_conn=False)
+        if ctx is None:
+            return redirect(url_for("login"))
+
         try:
             record_page_visit(uid, "empire", conn=conn)
             commit(conn)
         except Exception:
             rollback(conn)
             logger.exception("initiation empire visit failed user_id=%s", uid)
+
+        empire = build_empire_context(uid, conn=conn, sync_resources=False)
     finally:
         conn.close()
 
-    empire = build_empire_context(uid)
     return render_template("empire.html", empire=empire)
 
 
