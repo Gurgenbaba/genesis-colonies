@@ -68,6 +68,19 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
     from game.schema_validation import validate_core_schema
 
     _init_db_with_retry()
+
+    # GC-PG-HIGHSPEED-001D: additive, best-effort indexes for the two hot
+    # production surfaces currently showing contention.  This deliberately
+    # stays outside historical numbered migrations because several migration
+    # regression fixtures use partial schemas.  The helper checks table
+    # existence and owns a short PostgreSQL transaction; SQLite is a no-op.
+    try:
+        from game.pg_hotpath_indexes import ensure_postgres_hotpath_indexes
+
+        ensure_postgres_hotpath_indexes()
+    except Exception as exc:
+        print(f"[GC bootstrap] WARNING: PostgreSQL hotpath indexes: {exc}", file=sys.stderr)
+
     purge_stale_idempotency_global()
 
     try:
