@@ -27,3 +27,4 @@ def test_alliance_member_activity_is_overridden_from_effective_presence():
     block = text[start:end]
     assert "get_effective_last_seen_by_ids" in block
     assert 'd["last_seen"] = effective_seen.get' in block
+    assert "p.last_seen" not in block

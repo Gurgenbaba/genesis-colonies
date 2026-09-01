@@ -9,12 +9,12 @@ def _read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_pg_scalar_presence_reads_dedicated_table_with_legacy_fallback(monkeypatch):
+def test_pg_scalar_presence_reads_dedicated_table_without_legacy_fallback(monkeypatch):
     monkeypatch.setattr("game.presence_store.get_db_backend", lambda: "postgres")
     expr = effective_last_seen_scalar_sql(player_alias="p")
     assert "player_presence" in expr
     assert "pp_gc_presence.player_id = p.id" in expr
-    assert "p.last_seen" in expr
+    assert "p.last_seen" not in expr
 
 
 def test_sqlite_scalar_presence_keeps_legacy_column(monkeypatch):
