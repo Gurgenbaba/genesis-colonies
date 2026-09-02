@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Mapping, Sequence
 
-from ..db import is_integrity_error, table_exists
+from ..db import table_exists
 from .engine import (
     STATUS_ACTIVE,
     advance_if_complete,
@@ -286,17 +286,12 @@ def _record_progress_delta(
     conn,
     now: int,
 ) -> bool:
-    try:
-        conn.execute(
-            """
-            INSERT INTO player_initiation_progress (
-                player_id, source_event_id, delta, created_at
-            ) VALUES (?, ?, ?, ?);
-            """,
-            (int(player_id), str(source_event_id), int(delta), int(now)),
-        )
-        return True
-    except Exception as exc:
-        if is_integrity_error(exc):
-            return False
-        raise
+    cur = conn.execute(
+        """
+        INSERT OR IGNORE INTO player_initiation_progress (
+            player_id, source_event_id, delta, created_at
+        ) VALUES (?, ?, ?, ?);
+        """,
+        (int(player_id), str(source_event_id), int(delta), int(now)),
+    )
+    return int(cur.rowcount or 0) > 0
