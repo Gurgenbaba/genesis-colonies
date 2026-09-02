@@ -13,8 +13,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install pytest
-        run: pip install pytest
+      - name: Install dependencies
+        run: pip install -r requirements-prod.txt pytest
       - name: Contract tests
         run: |
           python -m py_compile scripts/browser_report.py tests/test_gc_sentinel_pjax_abort_noise.py
