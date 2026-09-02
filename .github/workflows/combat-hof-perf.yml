@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "game/combat_hof.py"
+      - "game/pg_hotpath_indexes.py"
       - "migrations/*player_messages*"
       - "tests/test_gc_perf_hof_001.py"
       - ".github/workflows/combat-hof-perf.yml"
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - "game/combat_hof.py"
+      - "game/pg_hotpath_indexes.py"
       - "migrations/*player_messages*"
       - "tests/test_gc_perf_hof_001.py"
       - ".github/workflows/combat-hof-perf.yml"
@@ -39,7 +41,7 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile and diff gate
         run: |
-          python -m py_compile game/combat_hof.py tests/test_gc_perf_hof_001.py
+          python -m py_compile game/combat_hof.py game/pg_hotpath_indexes.py tests/test_gc_perf_hof_001.py
           git diff --check
       - name: Combat HoF cursor regression
         run: python -m pytest -q --tb=line tests/test_gc_perf_hof_001.py tests/test_combat_hof.py
