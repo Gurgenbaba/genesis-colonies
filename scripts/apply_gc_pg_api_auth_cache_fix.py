@@ -2,8 +2,8 @@ from pathlib import Path
 
 p = Path("game/auth.py")
 text = p.read_text(encoding="utf-8")
-old = '''        try:\n            player = get_player_by_user_id(pid)\n        except DbPoolTimeout:\n            logger.warning("api login guard pool_timeout player=%s", pid)\n            return _db_busy_response(json_api=True)\n        if not player:\n            session.clear()\n            return jsonify({"ok": False, "error": "unauthorized"}), 401\n'''
-new = '''        player = _cached_guard_player(pid)\n        if player is None:\n            try:\n                player = get_player_by_user_id(pid)\n            except DbPoolTimeout:\n                logger.warning("api login guard pool_timeout player=%s", pid)\n                return _db_busy_response(json_api=True)\n            else:\n                if player:\n                    _cache_guard_player(pid, player)\n        if not player:\n            _clear_guard_player(pid)\n            session.clear()\n            return jsonify({"ok": False, "error": "unauthorized"}), 401\n'''
+old = '''        try:\n            player = get_player_by_user_id(pid)\n        except DbPoolTimeout:\n            logger.warning("api login guard pool_timeout player=%s", pid)\n            return _db_busy_response(json_api=True)\n        if not player:\n            session.clear()\n            return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401\n'''
+new = '''        player = _cached_guard_player(pid)\n        if player is None:\n            try:\n                player = get_player_by_user_id(pid)\n            except DbPoolTimeout:\n                logger.warning("api login guard pool_timeout player=%s", pid)\n                return _db_busy_response(json_api=True)\n            else:\n                if player:\n                    _cache_guard_player(pid, player)\n        if not player:\n            _clear_guard_player(pid)\n            session.clear()\n            return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401\n'''
 if old not in text:
     raise SystemExit("require_login_api marker not found")
 text = text.replace(old, new, 1)
