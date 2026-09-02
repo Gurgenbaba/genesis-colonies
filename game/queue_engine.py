@@ -27,14 +27,19 @@ _ENGINE_LOCK = threading.RLock()
 
 _MAX_FINISH_PASSES = 8
 _SAVEPOINT_SEQ = 0
+_SLOW_STEP_LOG_MS = 250
 
 
 def _run_finish_step(conn: sqlite3.Connection, label: str, fn) -> Any:
     """
     Run one finish subsection. On Postgres, wrap in SAVEPOINT so a failure
     does not abort the whole finish transaction (GC-PERF-PG-PARITY-001).
+
+    GC-PERF-QUEUE-TELEMETRY-001 logs only genuinely slow queue subsections so
+    production completion spikes can be attributed without adding idle noise.
     """
     global _SAVEPOINT_SEQ
+    step_started = time.perf_counter()
     use_sp = get_db_backend() == "postgres"
     sp = None
     if use_sp:
@@ -65,6 +70,15 @@ def _run_finish_step(conn: sqlite3.Connection, label: str, fn) -> Any:
             except Exception:
                 logger.exception("queue_engine savepoint rollback failed (%s)", label)
         raise
+    finally:
+        elapsed_ms = int((time.perf_counter() - step_started) * 1000)
+        if elapsed_ms >= int(_SLOW_STEP_LOG_MS):
+            logger.info(
+                "queue_engine slow-step label=%s duration_ms=%s backend=%s",
+                label,
+                elapsed_ms,
+                get_db_backend(),
+            )
 
 
 def _run_optional_side_effect(conn: sqlite3.Connection, label: str, fn) -> None:
