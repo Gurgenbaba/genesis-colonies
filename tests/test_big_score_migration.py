@@ -118,14 +118,15 @@ def _create_populated_legacy_db(path: Path) -> list[dict[str, int]]:
             """
         )
 
-        # Pretend the database has already received every numbered migration
-        # before 154. This makes the real runner execute exactly migration 154.
-        prior = sorted(
-            p.name for p in MIGRATIONS_DIR.glob("*.sql") if p.name < MIGRATION_NAME
+        # This is a surgical migration-154 fixture. Mark every other migration as
+        # already applied so adding a later unrelated migration cannot silently
+        # broaden this regression into a partial-schema full-run test.
+        other_migrations = sorted(
+            p.name for p in MIGRATIONS_DIR.glob("*.sql") if p.name != MIGRATION_NAME
         )
         conn.executemany(
             "INSERT INTO migration_history (name, applied_at) VALUES (?, 1770000000);",
-            [(name,) for name in prior],
+            [(name,) for name in other_migrations],
         )
 
         rows = [_legacy_row(player_id) for player_id in range(1, PLAYER_COUNT + 1)]
