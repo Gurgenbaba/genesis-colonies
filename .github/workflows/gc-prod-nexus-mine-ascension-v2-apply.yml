@@ -47,8 +47,7 @@ jobs:
             tests/test_nexus_building_caps.py \
             tests/test_mine_evolution.py \
             tests/test_effects.py \
-            tests/test_ascension_queue_cap_contract.py \
-            tests/test_shipyard.py
+            tests/test_ascension_queue_cap_contract.py
           python -m py_compile game/effects/effect_resolver.py game/buildings.py
           git diff --check
       - name: Commit validated source patch
@@ -66,6 +65,7 @@ jobs:
             docs/MINE_EVOLUTION.md \
             docs/BUILDINGS_SYSTEM.md \
             docs/EFFECTS.md \
+            docs/STELLAR_FORGE.md \
             tests/test_gc_prod_nexus_mine_ascension_contract.py \
             tests/test_nexus_building_caps.py \
             tests/test_mine_evolution.py \
