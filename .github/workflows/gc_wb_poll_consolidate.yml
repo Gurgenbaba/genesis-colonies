@@ -26,8 +26,7 @@ jobs:
           src = Path('static/main.js').read_text(encoding='utf-8')
           needle = 'const wbFlushAutoUntilFired ='
           start = src.index(needle)
-          end = src.index('const bindWorldBossAttackCooldownUnlock', start)
-          print(src[start:end])
+          print(src[start:start + 4500])
           print('GET /api/world-boss count:', src.count('fetch("/api/world-boss"'))
           PY
       - name: Existing World Boss poll regressions
