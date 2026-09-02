@@ -20,7 +20,15 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
+from .db import (
+    begin_write_transaction,
+    column_exists,
+    commit,
+    db,
+    get_db_backend,
+    rollback,
+    table_exists,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -784,6 +792,86 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
     return rows
 
 
+
+def _recalculate_ranks_postgres_set_based(conn) -> int:
+    """Rewrite all current rank columns with one PostgreSQL UPDATE.
+
+    ``player_scores.score_*`` are decimal TEXT for arbitrary-precision score
+    semantics. PostgreSQL NUMERIC preserves those values exactly while window
+    functions eliminate the previous one-UPDATE-per-player round trips.
+
+    Ordering intentionally mirrors the mature Python ranking path exactly.
+    """
+    _ensure_score_rows(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        WITH scored AS (
+            SELECT
+                p.id AS player_id,
+                GREATEST(CAST(COALESCE(ps.score_buildings, '0') AS NUMERIC), 0) AS building_score,
+                GREATEST(CAST(COALESCE(ps.score_research, '0') AS NUMERIC), 0) AS research_score,
+                GREATEST(CAST(COALESCE(ps.score_fleet, '0') AS NUMERIC), 0) AS fleet_score,
+                GREATEST(CAST(COALESCE(ps.score_defense, '0') AS NUMERIC), 0) AS defense_score,
+                GREATEST(CAST(COALESCE(ps.score_planet_evolution, '0') AS NUMERIC), 0) AS evolution_score,
+                GREATEST(CAST(COALESCE(ps.score_combat, '0') AS NUMERIC), 0) AS combat_score,
+                GREATEST(CAST(COALESCE(ps.score_destroyed, '0') AS NUMERIC), 0) AS destroyed_score
+            FROM players p
+            INNER JOIN player_scores ps ON ps.player_id = p.id
+        ),
+        effective AS (
+            SELECT
+                player_id,
+                building_score,
+                research_score,
+                fleet_score,
+                combat_score,
+                destroyed_score,
+                (building_score + research_score + fleet_score + defense_score + evolution_score) AS total_score,
+                (fleet_score + defense_score + destroyed_score) AS military_score
+            FROM scored
+        ),
+        ranked AS (
+            SELECT
+                player_id,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY total_score DESC, building_score DESC, research_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_total,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY building_score DESC, research_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_building,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY research_score DESC, building_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_research,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY fleet_score DESC, building_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_fleet,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY combat_score DESC, fleet_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_combat,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY destroyed_score DESC, fleet_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_destroyed,
+                CAST(ROW_NUMBER() OVER (
+                    ORDER BY military_score DESC, fleet_score DESC, player_id ASC
+                ) AS INTEGER) AS rank_military
+            FROM effective
+        )
+        UPDATE player_scores ps
+        SET
+            rank_total = ranked.rank_total,
+            rank_building = ranked.rank_building,
+            rank_research = ranked.rank_research,
+            rank_fleet = ranked.rank_fleet,
+            rank_combat = ranked.rank_combat,
+            rank_destroyed = ranked.rank_destroyed,
+            rank_military = ranked.rank_military
+        FROM ranked
+        WHERE ps.player_id = ranked.player_id;
+        """
+    )
+    return max(0, int(cur.rowcount or 0))
+
 def recalculate_ranks(conn=None) -> int:
     """Assign rank_total / rank_building / rank_research from current score columns (atomic)."""
     owns_conn = False
@@ -797,6 +885,11 @@ def recalculate_ranks(conn=None) -> int:
         return 0
 
     def _apply() -> int:
+        has_rank_fleet = column_exists(conn, "player_scores", "rank_fleet")
+        has_rank_combat = column_exists(conn, "player_scores", "rank_combat")
+        if get_db_backend() == "postgres" and has_rank_combat:
+            return _recalculate_ranks_postgres_set_based(conn)
+
         rows = _fetch_all_score_rows(conn)
         total_sorted = sorted(
             rows,
@@ -840,8 +933,6 @@ def recalculate_ranks(conn=None) -> int:
         rank_destroyed_map = {r["player_id"]: idx for idx, r in enumerate(destroyed_sorted, start=1)}
         rank_military_map = {r["player_id"]: idx for idx, r in enumerate(military_sorted, start=1)}
 
-        has_rank_fleet = column_exists(conn, "player_scores", "rank_fleet")
-        has_rank_combat = column_exists(conn, "player_scores", "rank_combat")
         cur = conn.cursor()
         for row in rows:
             pid = row["player_id"]
