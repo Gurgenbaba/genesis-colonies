@@ -40,7 +40,10 @@ jobs:
         run: python scripts/apply_gc_pg_build_cancel_single_conn.py
       - name: Run queue regressions
         run: |
-          python -m pytest -q tests/test_gc_pg_build_cancel_single_connection.py tests/test_gc831_queue_refund.py tests/test_gc833b_queue_cancel_state.py tests/test_queue_static_contract.py
+          python -m pytest -q \
+            tests/test_gc_pg_build_cancel_single_connection.py \
+            tests/test_queue_static_contract.py \
+            tests/test_gc_perf_pg_parity_001.py::test_parity_c_queues_sqlite
           python -m py_compile game/buildings.py
           git diff --check
       - name: Commit validated source patch
