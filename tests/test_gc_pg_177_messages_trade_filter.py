@@ -24,11 +24,11 @@ def test_trade_category_uses_bound_like_patterns():
 
 
 def test_trade_category_pg_rewrite_contains_only_psycopg_placeholders():
-    from game.db_pg import _rewrite_sql_placeholders
+    from game.db_pg import rewrite_sqlite_placeholders
     from game.messages import _category_clause
 
     sql, params = _category_clause("trade")
-    rewritten = _rewrite_sql_placeholders(sql)
+    rewritten = rewrite_sqlite_placeholders(sql)
     assert rewritten.count("%s") == 5
     assert rewritten.count("%") == 5
     assert len(params) == 5
