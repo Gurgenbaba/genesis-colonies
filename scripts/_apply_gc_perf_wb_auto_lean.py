@@ -47,8 +47,8 @@ def main() -> int:
     source = _replace_once_in_function(
         source,
         "execute_instant_attack",
-        "    caller. ``hit_mult`` ∈ {1, 5}; ×5 remains five waves / five cooldowns.\n",
-        "    caller. ``hit_mult`` ∈ {1, 5}; ×5 remains five waves / five cooldowns.\n"
+        "    the caller. ``hit_mult`` ∈ {1, 5}; ×5 remains five waves / five cooldowns.\n",
+        "    the caller. ``hit_mult`` ∈ {1, 5}; ×5 remains five waves / five cooldowns.\n"
         "    ``lean_response`` keeps all gameplay writes but skips UI-only ranking,\n"
         "    recognition and second hangar reads for background worker strikes.\n",
     )
