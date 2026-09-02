@@ -1,0 +1,53 @@
+name: GC Production Shop Payment Recovery Apply
+
+on:
+  push:
+    branches:
+      - fix/prod-shop-payment-recovery
+
+concurrency:
+  group: gc-prod-shop-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: '0'
+      SECRET_KEY: ci-shop-recovery-secret-key-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: '1'
+      GC_EMBEDDED_CRON: '0'
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-shop-payment-recovery
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Apply payment recovery patch
+        run: python scripts/apply_gc_prod_shop_payment_recovery.py
+      - name: Run shop regressions
+        run: |
+          python -m pytest -q tests/test_gc_prod_shop_payment_recovery.py tests/test_shop_payments.py
+          python -m py_compile game/shop.py
+          git diff --check
+      - name: Commit validated source patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/apply_gc_prod_shop_payment_recovery.py .github/workflows/gc-prod-shop-payment-recovery-apply.yml
+          git add game/shop.py tests/test_gc_prod_shop_payment_recovery.py
+          git commit -m 'fix(shop): recover duplicate paid events before fulfillment'
+          git push origin HEAD:fix/prod-shop-payment-recovery
