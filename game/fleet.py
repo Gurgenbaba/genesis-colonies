@@ -8438,10 +8438,14 @@ def build_logistics_page_context(
             except GalaxyCoordinateError:
                 continue
             # Tick production so Collect cards match live stock (not stale last_update).
+            # GC-PERF-FLEET-LOGISTICS-002: SSR is a read path. Compute live
+            # resource stock for the card, but do not write every colony merely
+            # because /fleet was opened. Actions revalidate/persist authoritatively.
             planet_live, *_rest = update_planet_resources(
                 dict(p),
                 conn=conn,
                 skip_queue_finish=True,
+                persist=False,
             )
             stock = planet_resource_stock(planet_live)
             ships = get_planet_ships(pid, conn=conn)
