@@ -40,6 +40,12 @@ HOTPATH_INDEXES: tuple[tuple[str, str, str], ...] = (
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_shipyard_queue_status_finish_planet "
         "ON shipyard_queue(status, finish_at, planet_id);",
     ),
+    (
+        "player_messages",
+        "idx_player_messages_combat_cursor",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_player_messages_combat_cursor "
+        "ON player_messages(category, id);",
+    ),
 )
 
 
