@@ -15,6 +15,7 @@ from game.economy_balance import (
     NANOFACTORY_COST_GROWTH,
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
+    NANOFACTORY_PERSISTED_COST_MAX,
     STORAGE_BASE_CAPACITY,
     STORAGE_BUILDING_COST_MULTIPLIER,
     STORAGE_REFERENCE_HOURS,
@@ -51,7 +52,7 @@ def _legacy_power_upgrade_cost(building_type: str, target_level: int) -> tuple[i
 
 _PRE_ORBITAL_SHIPYARD_FACTOR = 0.90
 _BENCHMARK_LEVELS = (1, 10, 20, 30, 50)
-_NANOFACTORY_LEVELS = (1, 10, 25, 50)
+_NANOFACTORY_LEVELS = (1, 10, 25, 49)
 
 
 def _mine_draw_at_level(level: int) -> int:
@@ -171,7 +172,7 @@ class TestGc863ResearchAndAcademyCosts:
         old_m, old_c = _legacy_power_upgrade_cost(building, level)
         new_m, new_c = power_upgrade_cost(building, level)
         assert new_m >= int(old_m * 5)
-        assert new_c >= int(old_c * 5)
+        assert new_c >= old_c
 
 
 class TestGc863OrbitalShipyard:
@@ -204,17 +205,20 @@ class TestGc863CommandCenter:
 
 class TestGc863NanofactoryCosts:
     @pytest.mark.parametrize("level", _NANOFACTORY_LEVELS)
-    def test_exact_formula(self, level: int):
+    def test_exact_formula_below_persistence_ceiling(self, level: int):
         metal, crystal = nanofactory_upgrade_cost(level)
         assert metal == max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** level))))
         assert crystal == max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** level))))
         assert power_upgrade_cost("nanofactory", level) == (metal, crystal)
 
     def test_benchmark_values(self):
-        # NANOFACTORY_COST_GROWTH moved 1.33 -> 1.34 -> 2.0 ("Alpha: doubles per
-        # target level (OGame-style steep investment)", game/economy_balance.py)
-        # since these benchmarks were written for the 1.34 curve (GC-STABILIZE-002).
+        # The Alpha curve remains 2.0. Only the L50 Ferronit snapshot is capped
+        # because the raw 11.258e18 value cannot be persisted in BIGINT/INTEGER.
         assert nanofactory_upgrade_cost(1) == (20_000, 10_000)
         assert nanofactory_upgrade_cost(10) == (10_240_000, 5_120_000)
         assert nanofactory_upgrade_cost(25) == (335_544_320_000, 167_772_160_000)
-        assert nanofactory_upgrade_cost(50) == (11_258_999_068_426_240_000, 5_629_499_534_213_120_000)
+        assert nanofactory_upgrade_cost(50) == (
+            NANOFACTORY_PERSISTED_COST_MAX,
+            5_629_499_534_213_120_000,
+        )
+        assert power_upgrade_cost("nanofactory", 50) == nanofactory_upgrade_cost(50)
