@@ -11,6 +11,10 @@ class LockNotAvailable(Exception):
     pass
 
 
+class InFailedSqlTransaction(RuntimeError):
+    pass
+
+
 class _FakePgConn:
     def __init__(self) -> None:
         self.aborted = False
@@ -24,13 +28,17 @@ class _FakePgConn:
             self.aborted = False
             return self
         if upper.startswith("RELEASE SAVEPOINT"):
+            if self.aborted:
+                raise InFailedSqlTransaction(
+                    "current transaction is aborted, commands ignored until end of transaction block"
+                )
             return self
         if upper.startswith("SAVEPOINT"):
             if self.aborted:
-                raise RuntimeError("current transaction is aborted")
+                raise InFailedSqlTransaction("current transaction is aborted")
             return self
         if self.aborted:
-            raise RuntimeError("current transaction is aborted")
+            raise InFailedSqlTransaction("current transaction is aborted")
         return self
 
 
@@ -56,6 +64,34 @@ def test_pg_lock_timeout_soft_skips_and_restores_parent_transaction(monkeypatch)
     assert any(s.startswith("ROLLBACK TO SAVEPOINT GC_STELLAR_FORGE_OPERATIONAL_PROGRESS") for s in conn.statements)
     assert any(s.startswith("RELEASE SAVEPOINT GC_STELLAR_FORGE_OPERATIONAL_PROGRESS") for s in conn.statements)
     conn.execute("SELECT 1")  # parent transaction is still usable
+
+
+def test_pg_silently_aborted_hook_is_recovered_before_return(monkeypatch):
+    conn = _FakePgConn()
+    monkeypatch.setattr(hooks, "get_db_backend", lambda: "postgres")
+
+    def _silent_abort(planet_id, protocol, amount, *, conn, now=None):
+        # Mirrors schema_ready(): a PG statement fails, the guard catches it and
+        # returns normally while PostgreSQL keeps the savepoint INERROR.
+        conn.aborted = True
+        return None
+
+    monkeypatch.setattr(hooks, "_record_operational_progress", _silent_abort)
+
+    hooks.record_operational_progress(7, "exploration", 1, conn=conn, now=123.0)
+
+    assert conn.aborted is False
+    releases = [
+        s
+        for s in conn.statements
+        if s.startswith("RELEASE SAVEPOINT GC_STELLAR_FORGE_OPERATIONAL_PROGRESS")
+    ]
+    assert len(releases) == 2  # first release exposes INERROR; second follows rollback
+    assert any(
+        s.startswith("ROLLBACK TO SAVEPOINT GC_STELLAR_FORGE_OPERATIONAL_PROGRESS")
+        for s in conn.statements
+    )
+    conn.execute("SELECT 1")  # parent transaction remains usable
 
 
 def test_pg_unknown_failure_is_reraised_after_parent_transaction_recovery(monkeypatch):
