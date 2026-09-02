@@ -13,7 +13,7 @@ import json
 import logging
 import math
 import time
-from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from .db import table_exists
 from .runtime_state import get_runtime_value, set_runtime_value
@@ -3211,6 +3211,165 @@ def _event_card_for_player(
             alliance_xp_earned=int(outlook.get("alliance_xp_earned") or 0),
         ),
         "reward_outlook": outlook,
+    }
+
+
+def build_world_boss_live_payload(
+    player_id: int,
+    *,
+    conn,
+    event_ids: Optional[Iterable[int]] = None,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Small read-only payload for the 3s/7s World Boss live poll.
+
+    The full page payload contains ranking, recognition, rewards, companions and
+    formation data. Rebuilding all of that merely to animate shared HP and the
+    current player's auto-attack delta turned each browser poll into hundreds of
+    PostgreSQL statements. This endpoint shape reads the event rows plus one
+    contribution snapshot per visible event and leaves all gameplay writes with
+    the maintenance worker / explicit POST routes.
+    """
+    ts = float(now if now is not None else _now())
+    uid = int(player_id)
+    if not world_boss_schema_ready(conn):
+        return {
+            "ok": True,
+            "ready": False,
+            "event": None,
+            "events": [],
+            "player": None,
+            "server_now": ts,
+            "flushed_attacks": [],
+        }
+
+    requested_ids = {
+        int(raw_id)
+        for raw_id in (event_ids or ())
+        if raw_id is not None and int(raw_id) > 0
+    }
+    events = list_active_events(
+        conn=conn,
+        now=ts,
+        limit=MAX_CONCURRENT_EVENTS + 5,
+    )
+    seen_ids = {int(event["id"]) for event in events}
+    for event_id in sorted(requested_ids - seen_ids, reverse=True):
+        event = get_event_by_id(int(event_id), conn=conn)
+        if event:
+            events.append(event)
+
+    from .db import column_exists
+
+    has_xp = column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "alliance_xp")
+    has_auto = column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "auto_attack_enabled")
+    xp_select = "c.alliance_xp" if has_xp else "0 AS alliance_xp"
+    auto_select = (
+        "c.auto_attack_enabled" if has_auto else "0 AS auto_attack_enabled"
+    )
+
+    cards: List[Dict[str, Any]] = []
+    for event in events:
+        row = conn.execute(
+            f"""
+            SELECT c.player_id, c.alliance_id, c.damage, c.waves,
+                   {xp_select}, c.last_attack_at, {auto_select},
+                   1 + (
+                       SELECT COUNT(*) FROM world_boss_contributions ranked
+                       WHERE ranked.event_id = c.event_id
+                         AND (
+                             ranked.damage > c.damage
+                             OR (ranked.damage = c.damage AND ranked.updated_at < c.updated_at)
+                         )
+                   ) AS player_rank,
+                   (
+                       SELECT COUNT(*) FROM world_boss_contributions total
+                       WHERE total.event_id = c.event_id
+                   ) AS total_players
+            FROM world_boss_contributions c
+            WHERE c.event_id = ? AND c.player_id = ?
+            LIMIT 1;
+            """,
+            (int(event["id"]), uid),
+        ).fetchone()
+
+        contribution = None
+        attack_meta: Dict[str, Any] = {
+            "waves": 0,
+            "max_waves": int(MAX_WAVES_PER_PLAYER),
+            "wave_cooldown_sec": int(WAVE_COOLDOWN_SEC),
+            "last_attack_at": None,
+            "next_attack_at": None,
+            "cooldown_until": None,
+            "cooldown_remaining": 0,
+        }
+        player_rank = None
+        total_players = 0
+        auto_enabled = False
+        if row:
+            last_at = (
+                float(row["last_attack_at"])
+                if row["last_attack_at"] is not None
+                else 0.0
+            )
+            cooldown_until = (
+                float(last_at + WAVE_COOLDOWN_SEC)
+                if last_at > 0 and ts < last_at + WAVE_COOLDOWN_SEC
+                else None
+            )
+            player_rank = int(row["player_rank"] or 0) or None
+            total_players = int(row["total_players"] or 0)
+            auto_enabled = bool(int(row["auto_attack_enabled"] or 0))
+            contribution = {
+                "rank": player_rank,
+                "player_id": uid,
+                "alliance_id": (
+                    int(row["alliance_id"])
+                    if row["alliance_id"] is not None
+                    else None
+                ),
+                "damage": int(row["damage"] or 0),
+                "waves": int(row["waves"] or 0),
+                "alliance_xp": int(row["alliance_xp"] or 0),
+                "last_attack_at": last_at if last_at > 0 else None,
+            }
+            attack_meta.update(
+                {
+                    "waves": int(row["waves"] or 0),
+                    "last_attack_at": last_at if last_at > 0 else None,
+                    "next_attack_at": cooldown_until,
+                    "cooldown_until": cooldown_until,
+                    "cooldown_remaining": (
+                        max(0, int(cooldown_until - ts))
+                        if cooldown_until is not None
+                        else 0
+                    ),
+                }
+            )
+
+        cards.append(
+            {
+                "event": event,
+                "player": {
+                    "contribution": contribution,
+                    "attack_meta": attack_meta,
+                    "rank": player_rank,
+                    "total_players": total_players,
+                    "total_damage": int((contribution or {}).get("damage") or 0),
+                    "auto_attack_enabled": auto_enabled,
+                },
+            }
+        )
+
+    primary = cards[0] if cards else None
+    return {
+        "ok": True,
+        "ready": True,
+        "event": primary["event"] if primary else None,
+        "events": cards,
+        "player": primary["player"] if primary else None,
+        "server_now": ts,
+        "flushed_attacks": [],
     }
 
 

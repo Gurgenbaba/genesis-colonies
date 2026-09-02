@@ -8046,13 +8046,32 @@ def api_world_boss():
     if player_id is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     try:
-        from game.world_boss import build_world_boss_payload
+        from game.world_boss import build_world_boss_live_payload, build_world_boss_payload
 
         event_id = request.args.get("event_id", type=int)
+        live_poll = request.args.get("live", "").strip().lower() in {"1", "true", "yes"}
+        visible_event_ids: list[int] = []
+        if live_poll:
+            for token in request.args.get("event_ids", "").split(","):
+                try:
+                    value = int(token.strip())
+                except (TypeError, ValueError):
+                    continue
+                if value > 0 and value not in visible_event_ids:
+                    visible_event_ids.append(value)
+                if len(visible_event_ids) >= 8:
+                    break
         conn = db()
         try:
             # GET must never become an attack transaction merely by polling.
-            payload = build_world_boss_payload(player_id, conn=conn, event_id=event_id)
+            if live_poll:
+                payload = build_world_boss_live_payload(
+                    int(player_id),
+                    conn=conn,
+                    event_ids=visible_event_ids,
+                )
+            else:
+                payload = build_world_boss_payload(player_id, conn=conn, event_id=event_id)
         finally:
             conn.close()
         return jsonify(payload)
