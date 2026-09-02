@@ -6,6 +6,11 @@ import sqlite3
 from pathlib import Path
 
 from game.tick_runner import list_players_with_due_work, run_tick
+from scripts.run_game_worker import (
+    _queue_heartbeat_interval,
+    _queue_tick_has_activity,
+    _should_persist_queue_heartbeat,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -101,3 +106,56 @@ def test_game_worker_queue_only_passes_tail_kill_switches():
     assert 'parser.add_argument(\n        "--queue-only"' in src
     assert "include_fleet_tail=False" in src
     assert "include_inbox_retention=False" in src
+    assert "persist=False" in src
+    assert "record_queue_tick_result" in src
+
+
+def test_idle_queue_worker_heartbeat_defaults_to_fifteen_seconds(monkeypatch):
+    monkeypatch.delenv("GC_GAME_WORKER_HEARTBEAT_SEC", raising=False)
+    assert _queue_heartbeat_interval(5.0) == 15.0
+
+
+def test_queue_worker_heartbeat_interval_never_runs_faster_than_tick(monkeypatch):
+    monkeypatch.setenv("GC_GAME_WORKER_HEARTBEAT_SEC", "5")
+    assert _queue_heartbeat_interval(20.0) == 20.0
+    monkeypatch.setenv("GC_GAME_WORKER_HEARTBEAT_SEC", "999")
+    assert _queue_heartbeat_interval(5.0) == 30.0
+
+
+def test_idle_ticks_skip_runtime_state_write_until_heartbeat_due():
+    idle = {"ok": True, "players_processed": 0, "finished": {"buildings": 0}}
+    assert _queue_tick_has_activity(idle) is False
+    assert _should_persist_queue_heartbeat(
+        idle,
+        now_mono=100.0,
+        last_persist_mono=90.0,
+        heartbeat_sec=15.0,
+    ) is False
+    assert _should_persist_queue_heartbeat(
+        idle,
+        now_mono=106.0,
+        last_persist_mono=90.0,
+        heartbeat_sec=15.0,
+    ) is True
+
+
+def test_real_queue_work_and_errors_persist_immediately():
+    work = {
+        "ok": True,
+        "players_processed": 1,
+        "finished": {"buildings": 1, "research": 0},
+    }
+    failed = {
+        "ok": False,
+        "players_processed": 0,
+        "finished": {},
+        "errors": ["boom"],
+    }
+    for result in (work, failed):
+        assert _queue_tick_has_activity(result) is True
+        assert _should_persist_queue_heartbeat(
+            result,
+            now_mono=101.0,
+            last_persist_mono=100.0,
+            heartbeat_sec=15.0,
+        ) is True
