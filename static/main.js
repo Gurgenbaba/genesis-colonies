@@ -41892,6 +41892,9 @@
 
     // Live HP + auto FX while on the World Boss page (own strikes and other players).
     const wbLivePollTick = () => {
+      // GC-PG-WB-POLL-001: never spend a PostgreSQL request on a hidden tab.
+      // Countdowns and encounter timers are client-side, so no gameplay state is lost.
+      if (document.hidden) return;
       const cards = root.querySelectorAll(".gc-world-boss-card");
       if (!cards.length) return;
       const busyCard = root.querySelector(".gc-world-boss-card[data-wb-auto-poll-busy='1']");
@@ -41944,14 +41947,47 @@
           });
         });
     };
-    const wbAutoPollId =
-      typeof GC.setSafeInterval === "function"
-        ? GC.setSafeInterval(wbLivePollTick, 1000)
-        : setInterval(wbLivePollTick, 1000);
+    // GC-PG-WB-POLL-001: the old fixed 1s loop kept /api/world-boss almost
+    // continuously in flight when the endpoint itself needed multiple seconds.
+    // Poll faster only while Auto-Attack is active, back off for normal viewing,
+    // and suspend network work while the tab is hidden. The existing busy flag
+    // remains the no-overlap authority inside wbLivePollTick().
+    let wbAutoPollId = null;
+    let wbAutoPollStopped = false;
+    const wbLivePollDelayMs = () => {
+      if (document.hidden) return 15000;
+      const autoOn = root.querySelector(
+        "[data-wb-auto-attack][data-wb-auto-enabled='1']"
+      );
+      return autoOn ? 3000 : 7000;
+    };
+    const wbScheduleLivePoll = (delayMs = wbLivePollDelayMs()) => {
+      if (wbAutoPollStopped || !root.isConnected) return;
+      if (wbAutoPollId != null) clearTimeout(wbAutoPollId);
+      wbAutoPollId = window.setTimeout(() => {
+        wbAutoPollId = null;
+        if (!document.hidden) wbLivePollTick();
+        wbScheduleLivePoll();
+      }, Math.max(250, Number(delayMs) || wbLivePollDelayMs()));
+    };
+    const wbHandleVisibilityChange = () => {
+      if (wbAutoPollStopped) return;
+      if (document.hidden) {
+        wbScheduleLivePoll(15000);
+        return;
+      }
+      // Refresh immediately after returning to the page, then resume adaptive cadence.
+      wbLivePollTick();
+      wbScheduleLivePoll(wbLivePollDelayMs());
+    };
+    document.addEventListener("visibilitychange", wbHandleVisibilityChange);
+    wbScheduleLivePoll(1000);
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
-        if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(wbAutoPollId);
-        else clearInterval(wbAutoPollId);
+        wbAutoPollStopped = true;
+        document.removeEventListener("visibilitychange", wbHandleVisibilityChange);
+        if (wbAutoPollId != null) clearTimeout(wbAutoPollId);
+        wbAutoPollId = null;
       });
     }
 
