@@ -39,7 +39,7 @@ No second production engine. Bonus registers on the existing Ferdi formula via `
 | Planet-scoped rank per mine | Account-wide evolution |
 | Tribute at rank milestone (no level reset) | Industrial Core / PE unlocks |
 | Linear thresholds + catch-up | Other buildings (solar, shipyard, …) |
-| Soft-uncapped resolver + **enqueue gate at the next Ascension milestone** | Permanent hard max on mines |
+| Nexus-limited normal progression to **L200**, then Ascension gates every +25 levels | Permanent hard max on mines |
 
 Future (docs only until separate tickets):
 
@@ -53,11 +53,11 @@ Future (docs only until separate tickets):
 
 | Building | Cap (Phase 1) |
 |----------|----------------|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver remains soft-uncapped (`UNCAPPED_BUILDING_LEVEL`), but **new build jobs stop at `required_level(rank+1)` until that Ascension is completed** |
+| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Nexuses unlock normal levels up to **L200**. At L200 Ascension I is required; each completed Ascension unlocks the next **25 mine levels** (225, 250, 275, ...). |
 | `solar_plant` | unchanged: `50 + core + 2×geo` |
 | Storages / other | unchanged |
 
-Nexus no longer raises the **mine** hardcap. The resolver stays uncapped, while the build queue uses the next Ascension milestone as a progression gate. Existing overlevel/catch-up levels are never reduced.
+**Canonical contract:** Nexuses are the normal building-limit system and can unlock mines only up to L200. Ascension begins exactly there and takes over further mine progression in 25-level steps. Existing overlevel/catch-up levels are never reduced.
 
 ---
 

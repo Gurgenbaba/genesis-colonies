@@ -22,7 +22,7 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 
 | Gebäude | Cap-Formel |
 |---------|------------|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver soft-uncapped; **Build-Enqueue nur bis zum nächsten Ascension-Milestone `required_level(rank+1)`** |
+| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Nexus-Limit bis **L200**; danach Mine-Ascension in +25-Level-Gates (225, 250, 275, ...) |
 | `solar_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` |
 | `metal_storage`, `crystal_storage`, `fuel_storage` | `50 + 2×geothermal_nexus` (ohne Core) |
 | alle übrigen | `50` |

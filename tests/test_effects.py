@@ -316,10 +316,7 @@ class TestBuildingEffects:
         e1, _ = er.compute_energy()
 
         assert e1 > e0
-        # EPIC-29: mines uncapped; geo still raises solar/storage caps.
-        from game.mine_evolution import UNCAPPED_BUILDING_LEVEL
-
-        assert get_max_level_for_building("metal_mine", b2) == UNCAPPED_BUILDING_LEVEL
+        assert get_max_level_for_building("metal_mine", b2) == 50 + 4
         assert get_max_level_for_building("solar_plant", b2) == 50 + 4
         assert get_max_level_for_building("metal_storage", b2) == 54
 
@@ -328,10 +325,8 @@ class TestBuildingEffects:
             "planet_core_nexus": 3,
             "geothermal_nexus": 2,
         }
-        from game.mine_evolution import UNCAPPED_BUILDING_LEVEL
-
         assert EffectResolver(b, {}).get_max_building_level("solar_plant") == 57
-        assert EffectResolver(b, {}).get_max_building_level("fuel_cell_plant") == UNCAPPED_BUILDING_LEVEL
+        assert EffectResolver(b, {}).get_max_building_level("fuel_cell_plant") == 57
         assert EffectResolver(b, {}).get_max_building_level("metal_storage") == 54
 
     def test_radar_scan_range_active(self):

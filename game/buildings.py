@@ -1627,7 +1627,12 @@ def _effective_building_queue_cap(
     gate = int(required_level_for_evolution(rank + 1) or 0)
     if gate <= 0:
         return max_level
-    return min(max_level, gate)
+    # Before the first Ascension, the Nexus-derived normal cap is authoritative
+    # (and tops out at L200). Once Rank I exists, Ascension owns the endgame
+    # gate: I -> 225, II -> 250, ... independent of further Nexus growth.
+    if rank <= 0:
+        return min(max_level, gate)
+    return gate
 
 
 def _make_panel_row(
