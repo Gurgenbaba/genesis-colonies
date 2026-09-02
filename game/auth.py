@@ -123,6 +123,12 @@ def login_user(user: Any) -> None:
 
 def logout_user() -> None:
     """Leert die Session."""
+    try:
+        pid = int(session.get("user_id") or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if pid:
+        _clear_guard_player(pid)
     session.clear()
 
 
@@ -254,6 +260,47 @@ def get_current_user() -> Optional[Dict[str, Any]]:
 _BAN_NEG_TTL_SEC = 15.0
 _ban_neg_until: dict[int, float] = {}
 _ban_neg_lock = threading.Lock()
+
+# GC-PG-BUSY-NAV-001: auth is on every protected route. A rapid action ->
+# navigation burst must not consume another PG checkout merely to reload the
+# same player row. Fresh cache is intentionally tiny; stale use is allowed
+# only as a fail-soft path for safe non-API GET/HEAD navigation after a pool
+# timeout. Mutating/API requests never use stale auth state.
+_PLAYER_GUARD_TTL_SEC = 2.0
+_PLAYER_GUARD_STALE_SEC = 30.0
+_player_guard_cache: dict[int, tuple[float, Dict[str, Any]]] = {}
+_player_guard_lock = threading.Lock()
+
+
+def _cache_guard_player(player_id: int, player: Dict[str, Any]) -> None:
+    with _player_guard_lock:
+        _player_guard_cache[int(player_id)] = (time.monotonic(), dict(player))
+
+
+def _cached_guard_player(player_id: int, *, allow_stale: bool = False) -> Optional[Dict[str, Any]]:
+    now_m = time.monotonic()
+    max_age = _PLAYER_GUARD_STALE_SEC if allow_stale else _PLAYER_GUARD_TTL_SEC
+    with _player_guard_lock:
+        entry = _player_guard_cache.get(int(player_id))
+        if entry is None:
+            return None
+        cached_at, player = entry
+        age = now_m - cached_at
+        if age > _PLAYER_GUARD_STALE_SEC:
+            _player_guard_cache.pop(int(player_id), None)
+            return None
+        if age > max_age:
+            return None
+        return dict(player)
+
+
+def _clear_guard_player(player_id: int) -> None:
+    with _player_guard_lock:
+        _player_guard_cache.pop(int(player_id), None)
+
+
+def _safe_html_navigation_request() -> bool:
+    return request.method in ("GET", "HEAD") and not request.path.startswith("/api/")
 
 
 def _mark_not_banned(player_id: int) -> None:
@@ -500,12 +547,30 @@ def require_login(func: ViewFunc) -> ViewFunc:
             session.clear()
             return redirect(url_for("login"))
 
-        try:
-            player = get_player_by_user_id(pid)
-        except DbPoolTimeout:
-            logger.warning("login guard pool_timeout player=%s", pid)
-            return _db_busy_response(json_api=False)
+        player = _cached_guard_player(pid)
+        if player is None:
+            try:
+                player = get_player_by_user_id(pid)
+            except DbPoolTimeout:
+                if _safe_html_navigation_request():
+                    player = _cached_guard_player(pid, allow_stale=True)
+                    if player is not None:
+                        logger.warning(
+                            "login guard pool_timeout using cached player for safe navigation player=%s path=%s",
+                            pid,
+                            request.path,
+                        )
+                    else:
+                        logger.warning("login guard pool_timeout player=%s path=%s", pid, request.path)
+                        return _db_busy_response(json_api=False)
+                else:
+                    logger.warning("login guard pool_timeout player=%s path=%s", pid, request.path)
+                    return _db_busy_response(json_api=False)
+            else:
+                if player:
+                    _cache_guard_player(pid, player)
         if not player:
+            _clear_guard_player(pid)
             session.clear()
             return redirect(url_for("login"))
 
