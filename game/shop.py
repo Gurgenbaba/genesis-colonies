@@ -1638,14 +1638,23 @@ def fulfill_order(
     if out is not None:
         out["granted"] = {"lines": granted_all}
         out["fulfill_reason"] = grant_reason
+        # Creator bookkeeping is secondary to paid reward delivery. PostgreSQL
+        # marks a transaction failed after *any* SQL error, so swallowing an
+        # exception here without rolling back poisoned the outer fulfillment
+        # savepoint and rolled back already-granted rewards. Isolate optional
+        # promo work in its own savepoint and recover the transaction state.
+        promo_savepoint = f"{savepoint}_promo"
+        conn.execute(f"SAVEPOINT {promo_savepoint};")
         try:
             from . import shop_promos as promos
 
             if promos.schema_ready(conn):
                 promos.credit_commission_for_order(out, conn=conn, now=ts)
                 promos.release_held_commissions(conn=conn, now=ts)
+            conn.execute(f"RELEASE SAVEPOINT {promo_savepoint};")
         except Exception:
-            pass
+            conn.execute(f"ROLLBACK TO SAVEPOINT {promo_savepoint};")
+            conn.execute(f"RELEASE SAVEPOINT {promo_savepoint};")
     _release_fulfillment_savepoint()
     return True, grant_reason, out
 
@@ -2136,6 +2145,10 @@ def build_shop_return_payload(
         status_key = "paid"
         headline_key = "shop_return_paid_title"
         body_key = "shop_return_paid"
+    elif status == STATUS_FAILED:
+        status_key = "failed"
+        headline_key = "shop_return_failed_title"
+        body_key = "shop_return_failed"
     else:
         status_key = "pending"
         headline_key = "shop_return_pending_title"

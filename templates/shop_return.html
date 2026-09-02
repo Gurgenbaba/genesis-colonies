@@ -20,6 +20,8 @@
           {{ T("shop_return_status_paid", "Wird freigeschaltet") }}
         {% elif status_key == 'pending' %}
           {{ T("shop_return_status_pending", "Ausstehend") }}
+        {% elif status_key == 'failed' %}
+          {{ T("shop_return_status_failed", "Fehlgeschlagen") }}
         {% else %}
           {{ T("shop_return_status_unknown", "Unbekannt") }}
         {% endif %}

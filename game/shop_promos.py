@@ -727,17 +727,29 @@ def release_held_commissions(*, conn, now: Optional[float] = None, creator_id: O
     if not schema_ready(conn):
         return 0
     ts = _now(now)
-    rows = conn.execute(
-        """
-        SELECT l.id, l.creator_id, l.order_id, l.buyer_player_id, l.promo_code_id,
-               l.commission_cents, c.player_id AS creator_player_id
-        FROM shop_creator_ledger l
-        JOIN shop_creators c ON c.id = l.creator_id
-        WHERE l.status = 'held'
-          AND (? IS NULL OR l.creator_id = ?);
-        """,
-        (int(creator_id) if creator_id else None, int(creator_id) if creator_id else None),
-    ).fetchall()
+    creator_filter = int(creator_id) if creator_id is not None else None
+    if creator_filter is None:
+        rows = conn.execute(
+            """
+            SELECT l.id, l.creator_id, l.order_id, l.buyer_player_id, l.promo_code_id,
+                   l.commission_cents, c.player_id AS creator_player_id
+            FROM shop_creator_ledger l
+            JOIN shop_creators c ON c.id = l.creator_id
+            WHERE l.status = 'held';
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT l.id, l.creator_id, l.order_id, l.buyer_player_id, l.promo_code_id,
+                   l.commission_cents, c.player_id AS creator_player_id
+            FROM shop_creator_ledger l
+            JOIN shop_creators c ON c.id = l.creator_id
+            WHERE l.status = 'held'
+              AND l.creator_id = ?;
+            """,
+            (creator_filter,),
+        ).fetchall()
     released = 0
     for row in rows:
         ok_q, reason_q = buyer_qualifies_for_commission(

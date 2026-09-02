@@ -9048,5 +9048,8 @@
   "changelog_merges_collapsed": "commits de merge agrupados",
   "changelog_full_intro": "Cada cambio importante del repositorio se reescribe en inglés legible. Los merges duplicados se agrupan y el trabajo técnico sigue disponible en Todos los commits.",
   "changelog_filter_label": "Filtro del changelog",
-  "changelog_search_placeholder": "Buscar versión, sistema o cambio…"
+  "changelog_search_placeholder": "Buscar versión, sistema o cambio…",
+  "shop_return_status_failed": "Fallido",
+  "shop_return_failed_title": "Falló la entrega",
+  "shop_return_failed": "El pago fue detectado, pero la entrega de la recompensa falló. No vuelvas a pagar; soporte puede recuperar el pedido de forma segura."
 }

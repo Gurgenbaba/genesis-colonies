@@ -9048,5 +9048,8 @@
   "changelog_merges_collapsed": "birleştirme commitleri toplandı",
   "changelog_full_intro": "Depodaki her önemli değişiklik anlaşılır İngilizce olarak yeniden yazılır. Yinelenen merge kayıtları birleştirilir; teknik çalışmalar Tüm commitler görünümünde kalır.",
   "changelog_filter_label": "Değişiklik günlüğü filtresi",
-  "changelog_search_placeholder": "Sürüm, sistem veya değişiklik ara…"
+  "changelog_search_placeholder": "Sürüm, sistem veya değişiklik ara…",
+  "shop_return_status_failed": "Başarısız",
+  "shop_return_failed_title": "Teslimat başarısız",
+  "shop_return_failed": "Ödeme algılandı ancak ödül teslimatı başarısız oldu. Lütfen tekrar ödeme yapmayın; destek siparişi güvenli şekilde kurtarabilir."
 }
