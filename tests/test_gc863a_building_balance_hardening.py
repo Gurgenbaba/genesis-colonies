@@ -14,6 +14,7 @@ from game.economy_balance import (
     NANOFACTORY_COST_GROWTH,
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
+    NANOFACTORY_PERSISTED_COST_MAX,
     RESEARCH_COST_AFFORD_HOURS,
     nanofactory_upgrade_cost,
     power_upgrade_cost,
@@ -98,15 +99,17 @@ class TestGc863aNanofactory:
     def test_growth_rate(self) -> None:
         assert NANOFACTORY_COST_GROWTH == pytest.approx(2.0)
 
-    @pytest.mark.parametrize("level", (1, 10, 25, 50))
-    def test_formula_unchanged(self, level: int) -> None:
+    @pytest.mark.parametrize("level", (1, 10, 25, 49))
+    def test_formula_unchanged_below_persistence_ceiling(self, level: int) -> None:
         metal, crystal = nanofactory_upgrade_cost(level)
         assert metal == max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** level))))
         assert crystal == max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** level))))
 
-    def test_level_50_stays_in_billions(self) -> None:
+    def test_level_50_fits_persisted_queue_cost_columns(self) -> None:
         metal, crystal = nanofactory_upgrade_cost(50)
-        assert metal >= 20_000_000_000
+        assert metal == NANOFACTORY_PERSISTED_COST_MAX
+        assert metal <= 9_000_000_000_000_000_000
+        assert crystal < NANOFACTORY_PERSISTED_COST_MAX
         assert crystal >= 10_000_000_000
 
 
