@@ -97,6 +97,43 @@ def player_fleet_is_dirty(
             conn.close()
 
 
+def _optional_due_queue_readiness(conn) -> tuple[bool, bool, bool, bool]:
+    """Return readiness for evolution, shipyard, defense and troop queue tables.
+
+    PostgreSQL schema metadata is process-cached (GC-PERF-PG-SCHEMA-CACHE-001),
+    so these guards are cheap after warmup while legacy/dev databases remain safe.
+    """
+    evolution_ready = False
+    shipyard_ready = False
+    defense_ready = False
+    troop_ready = False
+    try:
+        from .planet_evolution.repository import evolution_schema_ready
+
+        evolution_ready = bool(evolution_schema_ready(conn))
+    except Exception:
+        pass
+    try:
+        from .shipyard_queue import shipyard_queue_table_ready
+
+        shipyard_ready = bool(shipyard_queue_table_ready(conn))
+    except Exception:
+        pass
+    try:
+        from .defense import defense_queue_table_ready
+
+        defense_ready = bool(defense_queue_table_ready(conn))
+    except Exception:
+        pass
+    try:
+        from .troops import troop_queue_table_ready
+
+        troop_ready = bool(troop_queue_table_ready(conn))
+    except Exception:
+        pass
+    return evolution_ready, shipyard_ready, defense_ready, troop_ready
+
+
 def player_has_due_queue_work(
     player_id: int,
     conn=None,
@@ -107,158 +144,138 @@ def player_has_due_queue_work(
     """
     Read-only check for due queue jobs; fleet movements are intentionally excluded.
 
-    Fleet due-state is owned by ``player_fleet_is_dirty()`` and must be checked
-    separately by poll orchestration. Keeping this helper queue-only avoids a second
-    ``fleet_movements`` probe on every game-state poll.
+    GC-PERF-PG-DUE-PROBE-001: all ready queue domains are folded into one
+    ``SELECT ... WHERE EXISTS(...) OR ...`` statement. The former implementation
+    performed one remote PostgreSQL round trip per domain on every game-state poll.
+    Optional schema guards stay fail-open for legacy/dev databases.
     """
     owns_conn = conn is None
     if owns_conn:
         conn = db()
     ts = due_cutoff_ts(now)
+    uid = int(player_id)
     pid_filter = int(planet_id) if planet_id is not None else None
     try:
-        cur = conn.cursor()
+        evolution_ready, shipyard_ready, defense_ready, troop_ready = (
+            _optional_due_queue_readiness(conn)
+        )
+        clauses: list[str] = []
+        params: list[object] = []
+
+        def add(clause: str, *values: object) -> None:
+            clauses.append(f"EXISTS ({clause})")
+            params.extend(values)
+
         if pid_filter is not None:
-            cur.execute(
-                """
-                SELECT 1
-                FROM build_queue bq
-                WHERE bq.planet_id = ? AND bq.finish_time <= ?
-                LIMIT 1;
-                """,
-                (pid_filter, ts),
+            add(
+                "SELECT 1 FROM build_queue bq WHERE bq.planet_id = ? AND bq.finish_time <= ? LIMIT 1",
+                pid_filter,
+                ts,
             )
         else:
-            cur.execute(
-                """
-                SELECT 1
-                FROM build_queue bq
-                INNER JOIN planets p ON p.id = bq.planet_id
-                WHERE p.player_id = ? AND bq.finish_time <= ?
-                LIMIT 1;
-                """,
-                (int(player_id), ts),
+            add(
+                "SELECT 1 FROM build_queue bq INNER JOIN planets p ON p.id = bq.planet_id "
+                "WHERE p.player_id = ? AND bq.finish_time <= ? LIMIT 1",
+                uid,
+                ts,
             )
-        if cur.fetchone():
-            return True
-        cur.execute(
-            """
-            SELECT 1 FROM research_queue
-            WHERE user_id = ? AND finish_at <= ?
-            LIMIT 1;
-            """,
-            (int(player_id), ts),
+
+        # Account research remains account-scoped even when a planet filter is supplied,
+        # matching the pre-collapse behavior.
+        add(
+            "SELECT 1 FROM research_queue WHERE user_id = ? AND finish_at <= ? LIMIT 1",
+            uid,
+            ts,
         )
-        if cur.fetchone():
-            return True
-        try:
-            from .planet_evolution.repository import evolution_schema_ready
 
-            if evolution_schema_ready(conn):
-                if pid_filter is not None:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM planet_research_queue prq
-                        WHERE prq.planet_id = ? AND prq.finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (pid_filter, ts),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM planet_research_queue prq
-                        INNER JOIN planets p ON p.id = prq.planet_id
-                        WHERE p.player_id = ? AND prq.finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (int(player_id), ts),
-                    )
-                if cur.fetchone():
-                    return True
-                if pid_filter is not None:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM planet_ascension_queue paq
-                        WHERE paq.planet_id = ? AND paq.state = 'active' AND paq.finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (pid_filter, ts),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM planet_ascension_queue paq
-                        INNER JOIN planets p ON p.id = paq.planet_id
-                        WHERE p.player_id = ? AND paq.state = 'active' AND paq.finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (int(player_id), ts),
-                    )
-                if cur.fetchone():
-                    return True
-        except Exception:
-            pass
-        try:
-            from .shipyard_queue import shipyard_queue_table_ready
+        if evolution_ready:
+            if pid_filter is not None:
+                add(
+                    "SELECT 1 FROM planet_research_queue prq "
+                    "WHERE prq.planet_id = ? AND prq.finish_at <= ? LIMIT 1",
+                    pid_filter,
+                    ts,
+                )
+                add(
+                    "SELECT 1 FROM planet_ascension_queue paq "
+                    "WHERE paq.planet_id = ? AND paq.state = 'active' AND paq.finish_at <= ? LIMIT 1",
+                    pid_filter,
+                    ts,
+                )
+            else:
+                add(
+                    "SELECT 1 FROM planet_research_queue prq "
+                    "INNER JOIN planets p ON p.id = prq.planet_id "
+                    "WHERE p.player_id = ? AND prq.finish_at <= ? LIMIT 1",
+                    uid,
+                    ts,
+                )
+                add(
+                    "SELECT 1 FROM planet_ascension_queue paq "
+                    "INNER JOIN planets p ON p.id = paq.planet_id "
+                    "WHERE p.player_id = ? AND paq.state = 'active' AND paq.finish_at <= ? LIMIT 1",
+                    uid,
+                    ts,
+                )
 
-            if shipyard_queue_table_ready(conn):
-                if pid_filter is not None:
-                    cur.execute(
-                        """
-                        SELECT 1 FROM shipyard_queue
-                        WHERE planet_id = ? AND status = 'queued' AND finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (pid_filter, ts),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM shipyard_queue sq
-                        INNER JOIN planets p ON p.id = sq.planet_id
-                        WHERE p.player_id = ? AND sq.status = 'queued' AND sq.finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (int(player_id), ts),
-                    )
-                if cur.fetchone():
-                    return True
-        except Exception:
-            pass
-        try:
-            from .defense import defense_queue_table_ready
+        if shipyard_ready:
+            if pid_filter is not None:
+                add(
+                    "SELECT 1 FROM shipyard_queue sq "
+                    "WHERE sq.planet_id = ? AND sq.status = 'queued' AND sq.finish_at <= ? LIMIT 1",
+                    pid_filter,
+                    ts,
+                )
+            else:
+                add(
+                    "SELECT 1 FROM shipyard_queue sq "
+                    "INNER JOIN planets p ON p.id = sq.planet_id "
+                    "WHERE p.player_id = ? AND sq.status = 'queued' AND sq.finish_at <= ? LIMIT 1",
+                    uid,
+                    ts,
+                )
 
-            if defense_queue_table_ready(conn):
-                if pid_filter is not None:
-                    cur.execute(
-                        """
-                        SELECT 1 FROM defense_queue
-                        WHERE planet_id = ? AND status = 'queued' AND finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (pid_filter, ts),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT 1
-                        FROM defense_queue dq
-                        INNER JOIN planets p ON p.id = dq.planet_id
-                        WHERE p.player_id = ? AND dq.status = 'queued' AND dq.finish_at <= ?
-                        LIMIT 1;
-                        """,
-                        (int(player_id), ts),
-                    )
-                if cur.fetchone():
-                    return True
-        except Exception:
-            pass
+        if defense_ready:
+            if pid_filter is not None:
+                add(
+                    "SELECT 1 FROM defense_queue dq "
+                    "WHERE dq.planet_id = ? AND dq.status = 'queued' AND dq.finish_at <= ? LIMIT 1",
+                    pid_filter,
+                    ts,
+                )
+            else:
+                add(
+                    "SELECT 1 FROM defense_queue dq "
+                    "INNER JOIN planets p ON p.id = dq.planet_id "
+                    "WHERE p.player_id = ? AND dq.status = 'queued' AND dq.finish_at <= ? LIMIT 1",
+                    uid,
+                    ts,
+                )
+
+        # Troops are finished by the queue engine/worker too. Including them here
+        # closes the old poll-safety-net blind spot if the queue worker ever goes stale.
+        if troop_ready:
+            if pid_filter is not None:
+                add(
+                    "SELECT 1 FROM troop_queue tq "
+                    "WHERE tq.planet_id = ? AND tq.status = 'queued' AND tq.finish_at <= ? LIMIT 1",
+                    pid_filter,
+                    ts,
+                )
+            else:
+                add(
+                    "SELECT 1 FROM troop_queue tq "
+                    "WHERE tq.player_id = ? AND tq.status = 'queued' AND tq.finish_at <= ? LIMIT 1",
+                    uid,
+                    ts,
+                )
+
+        row = conn.execute(
+            "SELECT 1 WHERE " + " OR ".join(clauses) + " LIMIT 1;",
+            tuple(params),
+        ).fetchone()
+        return row is not None
+    except Exception:
         return False
     finally:
         if owns_conn and conn is not None:
@@ -476,16 +493,20 @@ def should_poll_attempt_queue_finish(
     queue_due = player_has_due_queue_work(
         player_id, conn=conn, now=now_f, planet_id=planet_id
     )
-    has_pending = player_has_pending_queue_work(
-        player_id, conn=conn, planet_id=planet_id
-    )
 
+    # GC-PERF-PG-DUE-PROBE-001: production queue worker owns interval cadence.
+    # In worker-primary mode pending-but-not-due state is irrelevant, so never pay
+    # a second multi-domain pending probe just to return no_queue_due/defer.
     if is_game_worker_primary():
         if not queue_due:
             return False, "no_queue_due"
         if is_queue_tick_heartbeat_fresh(conn=conn, now=now_f):
             return False, "queue_tick_fresh_defer"
         return True, "safety_net_due"
+
+    has_pending = player_has_pending_queue_work(
+        player_id, conn=conn, planet_id=planet_id
+    )
     if queue_due:
         return True, "due"
     if has_pending and seconds_until_poll_finish_allowed(player_id, conn=conn) <= 0.0:
