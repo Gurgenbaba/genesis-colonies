@@ -34,10 +34,10 @@ from .service import (
     panel_forge_fields,
     pay_tribute,
     record_hull_mass_delivery,
-    record_operational_progress,
     schema_ready,
     start_campaign,
 )
+from .safe_hooks import record_operational_progress
 
 __all__ = [
     "FORGE_BUILDING",
