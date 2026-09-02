@@ -1,0 +1,55 @@
+name: GC Asset Cache Deploy SHA
+
+on:
+  push:
+    branches:
+      - fix/prod-static-cache-deploy-sha
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Materialize deploy-scoped asset version
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path('app.py')
+          src = app.read_text(encoding='utf-8')
+          old = '''def get_asset_version() -> str:\n    try:\n        return VERSION_FILE.read_text(encoding="utf-8").strip() or "dev"\n    except Exception:\n        return "dev"\n'''
+          new = '''def get_asset_version() -> str:\n    try:\n        base_version = VERSION_FILE.read_text(encoding="utf-8").strip() or "dev"\n    except Exception:\n        base_version = "dev"\n\n    # GC-ASSET-CACHE-001: VERSION changes are intentionally sparse, while JS/CSS\n    # hotfixes can ship multiple times between releases. Scope cache-busting URLs\n    # to the deployed source commit so an old immutable/static browser cache can\n    # never pin a player to stale frontend logic after a production deploy.\n    for key in ("RAILWAY_GIT_COMMIT_SHA", "GC_GIT_SHA", "SOURCE_COMMIT", "GIT_COMMIT"):\n        raw_sha = str(os.environ.get(key, "") or "").strip()\n        if raw_sha:\n            deploy_sha = re.sub(r"[^0-9A-Za-z._-]+", "", raw_sha)[:12]\n            if deploy_sha:\n                return f"{base_version}-{deploy_sha}"\n    return base_version\n'''
+          if old in src:
+              assert src.count(old) == 1, src.count(old)
+              app.write_text(src.replace(old, new, 1), encoding='utf-8')
+          else:
+              assert 'GC-ASSET-CACHE-001' in src, 'get_asset_version contract not found'
+
+          test = Path('tests/test_gc_asset_cache_deploy_sha.py')
+          if not test.exists():
+              test.write_text('''from pathlib import Path\n\n\ndef test_asset_version_includes_deploy_sha(monkeypatch):\n    import app\n\n    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "abcdef1234567890")\n    assert app.get_asset_version() == f"{Path('VERSION').read_text(encoding='utf-8').strip()}-abcdef123456"\n\n\ndef test_asset_version_falls_back_to_release_version(monkeypatch):\n    import app\n\n    for key in ("RAILWAY_GIT_COMMIT_SHA", "GC_GIT_SHA", "SOURCE_COMMIT", "GIT_COMMIT"):\n        monkeypatch.delenv(key, raising=False)\n    assert app.get_asset_version() == Path('VERSION').read_text(encoding='utf-8').strip()\n''', encoding='utf-8')
+          PY
+      - name: Asset version regressions
+        run: |
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q tests/test_gc_asset_cache_deploy_sha.py tests/test_landing_media.py
+      - name: Commit materialized fix
+        run: |
+          if git diff --quiet -- app.py tests/test_gc_asset_cache_deploy_sha.py; then
+            echo "No materialization changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py tests/test_gc_asset_cache_deploy_sha.py
+          git commit -m "fix(static): scope asset cache keys to deploy commit"
+          git push origin HEAD:fix/prod-static-cache-deploy-sha
