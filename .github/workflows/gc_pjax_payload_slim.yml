@@ -1,0 +1,57 @@
+name: GC PJAX Payload Slim
+
+on:
+  push:
+    branches:
+      - perf/pjax-shell-payload-slim
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Materialize inert PJAX payload removal
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          tpl = Path('templates/base.html')
+          src = tpl.read_text(encoding='utf-8')
+          guard = '  {% if not request.headers.get("X-PJAX") %}\n'
+          start_anchor = '  <!-- Locale JSON für Frontend-JS -->\n'
+          end_anchor = '  {% include "partials/cookie_notice.html" %}\n'
+          if guard not in src:
+              assert src.count(start_anchor) == 1, src.count(start_anchor)
+              assert src.count(end_anchor) == 1, src.count(end_anchor)
+              src = src.replace(start_anchor, guard + start_anchor, 1)
+              src = src.replace(end_anchor, '  {% endif %}\n\n' + end_anchor, 1)
+              tpl.write_text(src, encoding='utf-8')
+
+          test = Path('tests/test_gc_pjax_payload_slim.py')
+          if not test.exists():
+              test.write_text('''def test_pjax_omits_inert_shell_json_payloads(game_client):\n    client, _pid = game_client\n    full = client.get("/buildings?tab=resources")\n    pjax = client.get(\n        "/buildings?tab=resources",\n        headers={"X-PJAX": "true", "X-Requested-With": "XMLHttpRequest"},\n    )\n    assert full.status_code == 200\n    assert pjax.status_code == 200\n    full_body = full.get_data()\n    pjax_body = pjax.get_data()\n    assert b'id="gc-locale"' in full_body\n    assert b'id="gc-client-config"' in full_body\n    assert b'id="gc-codex-client"' in full_body\n    assert b'id="gc-locale"' not in pjax_body\n    assert b'id="gc-client-config"' not in pjax_body\n    assert b'id="gc-codex-client"' not in pjax_body\n    assert b'id="main-content"' in pjax_body\n    assert len(pjax_body) + 100_000 < len(full_body)\n''', encoding='utf-8')
+          PY
+      - name: PJAX payload regressions
+        run: |
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q tests/test_gc_pjax_payload_slim.py tests/test_gc_perf_174_sentinel_nav_matrix.py tests/test_gc592f_pjax_regression.py
+      - name: Commit materialized slice
+        run: |
+          if git diff --quiet -- templates/base.html tests/test_gc_pjax_payload_slim.py; then
+            echo "No materialization changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add templates/base.html tests/test_gc_pjax_payload_slim.py
+          git commit -m "perf(pjax): omit inert shell JSON on soft navigation"
+          git push origin HEAD:perf/pjax-shell-payload-slim
