@@ -87,7 +87,8 @@ def test_paid_paypal_timekeeper_s_fulfills_on_postgres():
 
 def test_failed_order_is_not_presented_as_pending():
     """A failed grant must never be rendered as an innocent 'payment pending'."""
-    from game.shop import build_shop_return_payload
+    from game.db import begin_write_transaction, db, rollback
+    from game.shop import build_shop_return_payload, ensure_catalog_seeded
 
     fake = {
         "id": 43,
@@ -110,6 +111,14 @@ def test_failed_order_is_not_presented_as_pending():
             }
         ],
     }
-    payload = build_shop_return_payload(fake, conn=None)
-    assert payload["status"] == "failed"
-    assert payload["status_key"] == "failed"
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_catalog_seeded(conn)
+        payload = build_shop_return_payload(fake, conn=conn)
+        assert payload["status"] == "failed"
+        assert payload["status_key"] == "failed"
+    finally:
+        rollback(conn)
+        conn.close()
