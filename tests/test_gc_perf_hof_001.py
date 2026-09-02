@@ -8,6 +8,7 @@ import game.db as dbmod
 import game.models as models
 from game.db import db
 from game.models import init_db
+from game.pg_hotpath_indexes import HOTPATH_INDEXES
 
 
 @pytest.fixture()
@@ -28,7 +29,7 @@ def hof_perf_db(tmp_path, monkeypatch):
     dbmod._DB_PATH = None
 
 
-def test_combat_hof_cursor_index_is_migrated(hof_perf_db):
+def test_combat_hof_cursor_index_is_migrated_for_sqlite(hof_perf_db):
     conn = db()
     try:
         rows = conn.execute("PRAGMA index_list('player_messages');").fetchall()
@@ -58,3 +59,17 @@ def test_combat_hof_cursor_query_uses_index(hof_perf_db):
         assert "idx_player_messages_combat_cursor" in detail, detail
     finally:
         conn.close()
+
+
+def test_postgres_combat_hof_cursor_index_is_concurrent():
+    matches = [
+        (table, name, sql)
+        for table, name, sql in HOTPATH_INDEXES
+        if name == "idx_player_messages_combat_cursor"
+    ]
+    assert len(matches) == 1
+    table, _, sql = matches[0]
+    normalized = " ".join(str(sql).split()).upper()
+    assert table == "player_messages"
+    assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS IDX_PLAYER_MESSAGES_COMBAT_CURSOR" in normalized
+    assert "ON PLAYER_MESSAGES(CATEGORY, ID)" in normalized
