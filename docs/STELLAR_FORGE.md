@@ -15,9 +15,9 @@ Give a maxed-out `orbital_shipyard` a meaningful, repeatable Ascension loop that
 1. Sinks resources at the **planet**, not the empire — forces transport/logistics play, not a wallet check.
 2. Requires **new** production (Hull Mass produced *after* the campaign starts), not counting the existing fleet.
 3. Requires using other live systems (Fleet missions, Combat, Expedition, Recycler) to close a rank.
-4. Grants **capability unlocks per rank**, not raw build-speed multipliers that would blow out ship-count inflation further.
+4. Increases **ships built per production cycle** through the existing shipyard batch-capacity math, while also granting capability unlocks.
 
-No second shipyard engine. Stellar Forge reads/writes its own rank state and layers modifiers onto the existing shipyard math in `game/shipyard.py` — it does not reimplement batch capacity, build time, or the build queue.
+No second shipyard engine. Stellar Forge reads/writes its own rank state and layers modifiers onto the existing shipyard math in `game/shipyard.py` — it does not reimplement batch capacity, build time, or the build queue. `orbital_production_batch_capacity(..., forge_rank)` is authoritative for the throughput increase.
 
 ---
 
@@ -51,7 +51,7 @@ Hull Mass (new concept for Manufacturing Trials) must be defined fresh — see P
 | `orbital_shipyard` only | Other buildings' own Ascension mechanics |
 | Planet-scoped rank per shipyard | Account-wide Forge rank |
 | 4-pillar campaign per rank (Tribute / Manufacturing / Operational / Forge Cores) | Skill trees, Capital Hulls, Overdrive |
-| Ranks I–III, capability unlocks only (extra queue slot, Ascension HUD, Nanite-Assisted order option) | Specialization (Vanguard/Logistics/Odyssey forge), Redline Overdrive, Capital Hulls |
+| Ranks I–III: higher ships-per-cycle batch capacity plus capability unlocks (extra queue slot, Ascension HUD, Nanite-Assisted order option) | Specialization (Vanguard/Logistics/Odyssey forge), Redline Overdrive, Capital Hulls |
 | Forge Cores as a new collectible currency, sourced from existing endgame content (World Boss, Expedition, Recycler) | New content generators built solely to drop Forge Cores |
 
 Future (docs only until separate tickets, own EPIC-30 sub-numbers):

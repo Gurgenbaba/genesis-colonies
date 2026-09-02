@@ -64,7 +64,7 @@ def mevo_db(tmp_path, monkeypatch):
     import migrate
 
     migrate.main()
-    uname = f"mevo_{uuid.uuid4().hex[:8]}"
+    uname = f"Nova{uuid.uuid4().hex[:8]}"
     ok, err, user = create_user(uname, "test-pass-123")
     assert ok, err
     uid = int(user["id"])
@@ -116,7 +116,7 @@ class TestMineEvolutionFormulas:
 
 
 class TestMineEvolutionCaps:
-    def test_mines_uncapped_solar_still_capped(self):
+    def test_mines_nexus_limited_until_first_ascension(self):
         from game.effects.effect_resolver import EffectResolver
 
         buildings = {
@@ -128,10 +128,11 @@ class TestMineEvolutionCaps:
             "geothermal_nexus": 3,
         }
         er = EffectResolver(buildings, {})
-        assert er.get_max_building_level("metal_mine") == UNCAPPED_BUILDING_LEVEL
-        assert er.get_max_building_level("crystal_mine") == UNCAPPED_BUILDING_LEVEL
-        assert er.get_max_building_level("fuel_cell_plant") == UNCAPPED_BUILDING_LEVEL
-        assert er.get_max_building_level("solar_plant") == 50 + 5 + 2 * 3
+        expected_prod_cap = 50 + 5 + 2 * 3
+        assert er.get_max_building_level("metal_mine") == expected_prod_cap
+        assert er.get_max_building_level("crystal_mine") == expected_prod_cap
+        assert er.get_max_building_level("fuel_cell_plant") == expected_prod_cap
+        assert er.get_max_building_level("solar_plant") == expected_prod_cap
         assert er.get_max_building_level("metal_storage") == 50 + 2 * 3
         assert er.get_max_building_level("research_lab") == 50
 
@@ -561,6 +562,10 @@ class TestMineEvolutionPanel:
         planet = get_homeworld(player_id=uid)
         pid = int(planet["id"])
         buildings = get_planet_buildings(pid)
+        # This panel test is about the pre-Ascension L180 state, not the
+        # low-Nexus cap. Give the fixture enough normal Nexus progression
+        # to make L180 legal while still remaining below the L200 boundary.
+        buildings["planet_core_nexus"] = 150
         buildings["metal_mine"] = 180
         save_planet_buildings(pid, buildings)
         planet = dict(planet)
