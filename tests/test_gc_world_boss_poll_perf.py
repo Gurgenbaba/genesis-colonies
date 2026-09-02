@@ -30,7 +30,9 @@ def test_world_boss_live_poll_keeps_no_overlap_guard():
     js = _main_js()
     marker = 'const wbLivePollTick = () => {'
     start = js.index(marker)
-    block = js[start : start + 1800]
+    scheduler_marker = '// GC-PG-WB-POLL-001: the old fixed 1s loop'
+    end = js.index(scheduler_marker, start)
+    block = js[start:end]
     assert 'data-wb-auto-poll-busy' in block
     assert 'card.dataset.wbAutoPollBusy = "1";' in block
     assert 'delete card.dataset.wbAutoPollBusy;' in block
