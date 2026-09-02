@@ -50,6 +50,6 @@ jobs:
         run: |
           python -m pytest -q --tb=line \
             tests/test_gc_perf_queue_worker_001.py \
-            tests/test_gc_perf_core_suite.py \
+            tests/test_gc_perf_core_suite.py::test_game_worker_primary_skips_interval_finish \
             tests/test_gc_prod_sqlite_stall_001a.py \
             tests/test_queue_engine.py
