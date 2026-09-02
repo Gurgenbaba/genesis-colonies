@@ -2719,7 +2719,11 @@ def cancel_build_job_for_planet(
         lock_planet_for_update(conn, planet_id)
         now = time.time()
 
-        owner_id = get_planet_owner_id(planet_id)
+        owner_row = conn.execute(
+            "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+            (planet_id,),
+        ).fetchone()
+        owner_id = int(owner_row["player_id"]) if owner_row else None
         if not owner_id:
             rollback(conn)
             return False, "not_found", {"msg": "Planet owner not found"}
