@@ -1,0 +1,39 @@
+name: Apply Queue Slow-Step Telemetry Codemod
+
+on:
+  push:
+    branches:
+      - perf/queue-slow-step-telemetry
+    paths:
+      - scripts/_apply_gc_perf_queue_slow_step_telemetry.py
+      - .github/workflows/apply-queue-slow-step-telemetry.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/queue-slow-step-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply deterministic codemod
+        run: |
+          python scripts/_apply_gc_perf_queue_slow_step_telemetry.py
+          python -m py_compile game/queue_engine.py
+          git diff --check
+          git diff --exit-code -- game/queue_engine.py && {
+            echo "Codemod produced no source diff" >&2
+            exit 1
+          } || true
+      - name: Commit generated source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/queue_engine.py
+          git commit -m "perf(queue): log slow completion subsections"
+          git push
