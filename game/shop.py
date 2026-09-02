@@ -1569,12 +1569,26 @@ def fulfill_order(
     if not lines:
         return False, "unknown_sku", order
 
+    # P0: make multi-unit / multi-line grants atomic inside the caller transaction.
+    # A later unit failure must never leave earlier inventory/timekeeper grants
+    # committed while the order is marked failed and retried.
+    savepoint = f"shop_fulfill_{int(order_id)}"
+    conn.execute(f"SAVEPOINT {savepoint};")
+
+    def _rollback_fulfillment_savepoint() -> None:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint};")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint};")
+
+    def _release_fulfillment_savepoint() -> None:
+        conn.execute(f"RELEASE SAVEPOINT {savepoint};")
+
     granted_all: List[Dict[str, Any]] = []
     grant_reason = "ok"
     any_ok_grant = False
     for line in lines:
         product = get_product(str(line["sku"]), conn=conn, active_only=False)
         if not product:
+            _rollback_fulfillment_savepoint()
             conn.execute(
                 """
                 UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
@@ -1595,6 +1609,7 @@ def fulfill_order(
                 conn=conn,
             )
             if not ok_g:
+                _rollback_fulfillment_savepoint()
                 conn.execute(
                     """
                     UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
@@ -1631,7 +1646,82 @@ def fulfill_order(
                 promos.release_held_commissions(conn=conn, now=ts)
         except Exception:
             pass
+    _release_fulfillment_savepoint()
     return True, grant_reason, out
+
+
+def repair_fulfilled_order(
+    order_id: int,
+    *,
+    conn,
+    expected_player_id: Optional[int] = None,
+    reason: str,
+    metadata: Optional[Mapping[str, Any]] = None,
+    now: Optional[float] = None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Explicit one-time recovery for an order falsely marked fulfilled.
+
+    This is intentionally *not* automatic. Operators must independently verify
+    that payment was received and rewards are missing. The repair ledger has a
+    unique order_id, preventing a second compensation pass.
+    """
+    if not table_exists(conn, "shop_fulfillment_repairs"):
+        return False, "repair_schema_unavailable", None
+    order = get_order(int(order_id), conn=conn)
+    if not order:
+        return False, "order_not_found", None
+    pid = int(order["player_id"])
+    if expected_player_id is not None and pid != int(expected_player_id):
+        return False, "player_mismatch", order
+    if str(order.get("status") or "") != STATUS_FULFILLED:
+        return False, "not_marked_fulfilled", order
+    existing = conn.execute(
+        "SELECT order_id FROM shop_fulfillment_repairs WHERE order_id = ? LIMIT 1;",
+        (int(order_id),),
+    ).fetchone()
+    if existing:
+        return True, "already_repaired", order
+
+    why = str(reason or "").strip()
+    if not why:
+        return False, "repair_reason_required", order
+    ts = float(now if now is not None else time.time())
+    original_status = str(order.get("status") or "")
+
+    # Re-enter the real grant pipeline. Merely changing status never grants items.
+    conn.execute(
+        """
+        UPDATE shop_orders
+        SET status = ?, fulfilled_at = NULL, fulfill_reason = ?
+        WHERE id = ?;
+        """,
+        (STATUS_PAID, "repair_regrant_pending", int(order_id)),
+    )
+    ok, fulfill_reason, repaired = fulfill_order(int(order_id), conn=conn, now=ts)
+    if not ok:
+        return False, fulfill_reason, repaired
+
+    conn.execute(
+        """
+        INSERT INTO shop_fulfillment_repairs (
+            order_id, player_id, original_status, reason, metadata_json, repaired_at
+        ) VALUES (?, ?, ?, ?, ?, ?);
+        """,
+        (
+            int(order_id),
+            pid,
+            original_status,
+            why,
+            _json_dumps(dict(metadata or {})),
+            ts,
+        ),
+    )
+    out = get_order(int(order_id), conn=conn)
+    if out is not None:
+        out["repair_reason"] = why
+        out["repair_fulfill_reason"] = fulfill_reason
+        out["granted"] = (repaired or {}).get("granted")
+    return True, "repaired", out
 
 
 def record_payment_event(
@@ -1722,8 +1812,9 @@ def process_paid_event(
             return True, "duplicate", order
         # A previous paid-event pass may have persisted the event and then
         # failed during reward granting. Those states are safe to resume:
-        # mark_paid() is idempotent and _grant_product_once() protects rewards
-        # from double credit on a partial prior fulfillment.
+        # mark_paid() is idempotent and fulfill_order() rolls back its grant
+        # savepoint on any explicit unit failure, so retries cannot duplicate
+        # a partially committed multi-unit grant.
         if status not in (STATUS_PENDING, STATUS_PAID, STATUS_FAILED):
             return True, "duplicate", order
 
