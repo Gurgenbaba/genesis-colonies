@@ -51,11 +51,12 @@ jobs:
         run: python scripts/apply_gc_prod_paypal_pg_43.py
       - name: Bootstrap production-shaped PostgreSQL schema
         run: python migrate.py
-      - name: Verify paid Timekeeper fulfillment on PostgreSQL 16
-        run: >-
-          python -m pytest -vv -s
-          tests/test_gc_prod_paypal_pg_fulfillment_43.py
-      - name: Verify existing shop regressions
+      - name: Verify paid fulfillment contracts on PostgreSQL 16
+        run: python -m pytest -vv -s tests/test_gc_prod_paypal_pg_fulfillment_43.py
+      - name: Verify existing shop regressions in their SQLite test mode
+        env:
+          GC_DB_BACKEND: sqlite
+          DATABASE_URL: ""
         run: >-
           python -m pytest -q
           tests/test_shop_payments.py
