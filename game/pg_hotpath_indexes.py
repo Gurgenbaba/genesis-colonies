@@ -29,6 +29,13 @@ HOTPATH_INDEXES: tuple[tuple[str, str, str], ...] = (
         "ON world_boss_events(status, updated_at DESC);",
     ),
     (
+        "world_boss_contributions",
+        "idx_world_boss_contrib_auto_enabled_player_event",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_world_boss_contrib_auto_enabled_player_event "
+        "ON world_boss_contributions(player_id, event_id) "
+        "WHERE auto_attack_enabled = 1;",
+    ),
+    (
         "shipyard_queue",
         "idx_shipyard_queue_planet_status_pos_id",
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_shipyard_queue_planet_status_pos_id "
