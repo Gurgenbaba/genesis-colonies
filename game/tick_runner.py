@@ -47,6 +47,8 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
         "errors": [],
         "batches": 0,
         "players_processed": 0,
+        "planet_scopes_processed": 0,
+        "account_scopes_processed": 0,
         "skipped_due_to_dedup": False,
         "derived_sync_count": 0,
     }
@@ -79,14 +81,22 @@ def _merge_tick_results(target: Dict[str, Any], batch: Dict[str, Any]) -> None:
     )
 
 
-def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[int]:
-    """Distinct players with any due server-owned queue work.
+def list_due_work_scopes(
+    now: Optional[float] = None,
+    conn=None,
+) -> Dict[int, Dict[str, Any]]:
+    """Exact player/planet scopes containing due server-owned queue work.
 
     GC-PERF-QUEUE-WORKER-001: the former worker candidate query only saw
     build_queue + research_queue. Shipyard/defense/Planet-Evolution/troop jobs
     therefore still became due inside `/api/game-state` and forced the HTTP
     request to finish them synchronously. Build the candidate UNION from tables
     that actually exist so legacy/test schemas stay compatible.
+
+    GC-PERF-QUEUE-SCOPE-001: retain the due planet instead of collapsing the
+    scan to player IDs. The queue-only worker can then finish only those planets
+    and avoid probing every empty queue family on every colony. Account research
+    remains an explicit player-scoped flag.
     """
     own = conn is None
     if own:
@@ -95,13 +105,13 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
     try:
         selects: list[str] = [
             """
-            SELECT p.player_id AS player_id
+            SELECT p.player_id AS player_id, b.planet_id AS planet_id, 0 AS account_scope
             FROM build_queue b
             INNER JOIN planets p ON p.id = b.planet_id
             WHERE p.player_id IS NOT NULL AND b.finish_time <= ?
             """,
             """
-            SELECT user_id AS player_id
+            SELECT user_id AS player_id, NULL AS planet_id, 1 AS account_scope
             FROM research_queue
             WHERE user_id IS NOT NULL AND finish_at <= ?
             """,
@@ -112,7 +122,7 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
             (
                 "planet_research_queue",
                 """
-                SELECT p.player_id AS player_id
+                SELECT p.player_id AS player_id, q.planet_id AS planet_id, 0 AS account_scope
                 FROM planet_research_queue q
                 INNER JOIN planets p ON p.id = q.planet_id
                 WHERE p.player_id IS NOT NULL AND q.finish_at <= ?
@@ -121,7 +131,7 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
             (
                 "planet_ascension_queue",
                 """
-                SELECT p.player_id AS player_id
+                SELECT p.player_id AS player_id, q.planet_id AS planet_id, 0 AS account_scope
                 FROM planet_ascension_queue q
                 INNER JOIN planets p ON p.id = q.planet_id
                 WHERE p.player_id IS NOT NULL AND q.state = 'active' AND q.finish_at <= ?
@@ -130,7 +140,7 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
             (
                 "shipyard_queue",
                 """
-                SELECT p.player_id AS player_id
+                SELECT p.player_id AS player_id, q.planet_id AS planet_id, 0 AS account_scope
                 FROM shipyard_queue q
                 INNER JOIN planets p ON p.id = q.planet_id
                 WHERE p.player_id IS NOT NULL AND q.status = 'queued' AND q.finish_at <= ?
@@ -139,7 +149,7 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
             (
                 "defense_queue",
                 """
-                SELECT p.player_id AS player_id
+                SELECT p.player_id AS player_id, q.planet_id AS planet_id, 0 AS account_scope
                 FROM defense_queue q
                 INNER JOIN planets p ON p.id = q.planet_id
                 WHERE p.player_id IS NOT NULL AND q.status = 'queued' AND q.finish_at <= ?
@@ -148,7 +158,7 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
             (
                 "troop_queue",
                 """
-                SELECT player_id
+                SELECT player_id, planet_id, 0 AS account_scope
                 FROM troop_queue
                 WHERE player_id IS NOT NULL AND status = 'queued' AND finish_at <= ?
                 """,
@@ -161,10 +171,28 @@ def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[i
 
         cur = conn.cursor()
         cur.execute(" UNION ".join(selects), tuple(params))
-        return sorted({int(r["player_id"]) for r in cur.fetchall() if r["player_id"] is not None})
+        scopes: Dict[int, Dict[str, Any]] = {}
+        for row in cur.fetchall():
+            if row["player_id"] is None:
+                continue
+            uid = int(row["player_id"])
+            scope = scopes.setdefault(
+                uid,
+                {"planet_ids": set(), "account_research": False},
+            )
+            if int(row["account_scope"] or 0):
+                scope["account_research"] = True
+            elif row["planet_id"] is not None:
+                scope["planet_ids"].add(int(row["planet_id"]))
+        return scopes
     finally:
         if own and conn is not None:
             conn.close()
+
+
+def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[int]:
+    """Backward-compatible distinct-player view of :func:`list_due_work_scopes`."""
+    return sorted(list_due_work_scopes(now=now, conn=conn))
 
 
 def _run_global_fleet_tail(result: Dict[str, Any], *, source: str) -> None:
@@ -222,14 +250,23 @@ def run_tick(
     result = _empty_tick_result(source, scope)
 
     now = time.time()
-    player_ids = list_players_with_due_work(now=now)
+    due_scopes = list_due_work_scopes(now=now)
+    player_ids = sorted(due_scopes)
     result["players_processed"] = len(player_ids)
+    result["planet_scopes_processed"] = sum(
+        len(scope.get("planet_ids") or ()) for scope in due_scopes.values()
+    )
+    result["account_scopes_processed"] = sum(
+        1 for scope in due_scopes.values() if bool(scope.get("account_research"))
+    )
 
     logger.info(
-        "queue tick start source=%s scope=%s players=%s batch_size=%s queue_only=%s",
+        "queue tick start source=%s scope=%s players=%s planets=%s accounts=%s batch_size=%s queue_only=%s",
         source,
         scope,
         len(player_ids),
+        result["planet_scopes_processed"],
+        result["account_scopes_processed"],
         batch_size,
         not include_fleet_tail,
     )
@@ -238,14 +275,33 @@ def run_tick(
         batch_players = player_ids[offset : offset + batch_size]
         result["batches"] += 1
         for pid in batch_players:
-            batch_result = finish_due_work(
-                player_id=int(pid),
-                now=now,
-                source=str(source or "cron"),
-                update_scores=update_scores,
-                recalc_ranks=recalc_ranks,
-            )
-            _merge_tick_results(result, batch_result)
+            scope = due_scopes[int(pid)]
+            for due_planet_id in sorted(scope.get("planet_ids") or ()):
+                batch_result = finish_due_work(
+                    player_id=int(pid),
+                    planet_id=int(due_planet_id),
+                    now=now,
+                    source=str(source or "cron"),
+                    update_scores=update_scores,
+                    recalc_ranks=recalc_ranks,
+                    include_account_research=False,
+                    include_fleet=False,
+                    include_relocations=False,
+                )
+                _merge_tick_results(result, batch_result)
+
+            if bool(scope.get("account_research")):
+                batch_result = finish_due_work(
+                    player_id=int(pid),
+                    now=now,
+                    source=str(source or "cron"),
+                    update_scores=update_scores,
+                    recalc_ranks=recalc_ranks,
+                    include_planet_queues=False,
+                    include_fleet=False,
+                    include_relocations=False,
+                )
+                _merge_tick_results(result, batch_result)
 
     if include_fleet_tail:
         _run_global_fleet_tail(result, source=source)
