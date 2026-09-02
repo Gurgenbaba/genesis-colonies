@@ -29,6 +29,13 @@ HOTPATH_INDEXES: tuple[tuple[str, str, str], ...] = (
         "ON world_boss_events(status, updated_at DESC);",
     ),
     (
+        "world_boss_contributions",
+        "idx_world_boss_contrib_auto_enabled_player_event",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_world_boss_contrib_auto_enabled_player_event "
+        "ON world_boss_contributions(player_id, event_id) "
+        "WHERE auto_attack_enabled = 1;",
+    ),
+    (
         "shipyard_queue",
         "idx_shipyard_queue_planet_status_pos_id",
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_shipyard_queue_planet_status_pos_id "
@@ -56,6 +63,42 @@ def _table_exists(conn: Any, table_name: str) -> bool:
         (str(table_name),),
     ).fetchone()
     return row is not None
+
+
+def _drop_invalid_index(conn: Any, index_name: str) -> bool:
+    """Remove a failed CREATE INDEX CONCURRENTLY artifact before retrying.
+
+    PostgreSQL deliberately leaves an ``indisvalid = false`` catalog entry when
+    a concurrent build is cancelled (for example by our startup statement
+    timeout). ``CREATE INDEX ... IF NOT EXISTS`` would otherwise see the name
+    forever and silently skip the rebuild. This helper runs only on the direct
+    autocommit migration connection, so ``DROP INDEX CONCURRENTLY`` is legal.
+    """
+    row = conn.execute(
+        """
+        SELECT i.indisvalid
+        FROM pg_class idx
+        JOIN pg_index i ON i.indexrelid = idx.oid
+        JOIN pg_namespace ns ON ns.oid = idx.relnamespace
+        WHERE ns.nspname = current_schema()
+          AND idx.relname = ?
+        LIMIT 1;
+        """,
+        (str(index_name),),
+    ).fetchone()
+    if row is None:
+        return False
+    try:
+        is_valid = bool(row["indisvalid"])
+    except (KeyError, TypeError):
+        is_valid = bool(row[0])
+    if is_valid:
+        return False
+
+    quoted = str(index_name).replace('"', '""')
+    conn.execute(f'DROP INDEX CONCURRENTLY IF EXISTS "{quoted}";')
+    print(f"[GC] PostgreSQL hotpath index recovered invalid artifact: {index_name}")
+    return True
 
 
 def ensure_hotpath_indexes() -> int:
@@ -96,12 +139,17 @@ def ensure_hotpath_indexes() -> int:
                             f"table {table_name} absent; skip."
                         )
                         continue
+                    # A cancelled CREATE INDEX CONCURRENTLY leaves an invalid
+                    # same-name index. Remove it first; IF NOT EXISTS alone is
+                    # not enough and would permanently hide the failed build.
+                    _drop_invalid_index(conn, index_name)
                     conn.execute(sql)
                     ready += 1
                     print(f"[GC] PostgreSQL hotpath index ready: {index_name}")
                 except Exception as exc:
                     # Autocommit means one failed CONCURRENTLY statement cannot
-                    # poison the next optional index attempt.
+                    # poison the next optional index attempt. Do not count a
+                    # failed/drop-blocked index as ready; a later deploy retries.
                     print(f"[GC] WARNING: hotpath index {index_name} skipped: {exc}")
             return ready
         finally:

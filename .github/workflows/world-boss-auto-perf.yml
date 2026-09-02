@@ -1,0 +1,43 @@
+name: World Boss Auto Performance Gate
+
+on:
+  pull_request:
+    paths:
+      - "game/pg_hotpath_indexes.py"
+      - "tests/test_gc_perf_world_boss_auto_001.py"
+      - ".github/workflows/world-boss-auto-perf.yml"
+  push:
+    branches: [main]
+    paths:
+      - "game/pg_hotpath_indexes.py"
+      - "tests/test_gc_perf_world_boss_auto_001.py"
+      - ".github/workflows/world-boss-auto-perf.yml"
+
+jobs:
+  world-boss-auto-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-world-boss-auto-perf-not-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Compile and diff gate
+        run: |
+          python -m py_compile game/pg_hotpath_indexes.py tests/test_gc_perf_world_boss_auto_001.py
+          git diff --check
+      - name: World Boss auto index regression
+        run: python -m pytest -q --tb=line tests/test_gc_perf_world_boss_auto_001.py
