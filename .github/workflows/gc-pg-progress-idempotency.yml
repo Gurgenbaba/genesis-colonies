@@ -1,0 +1,229 @@
+name: GC PG Progress Idempotency
+
+on:
+  push:
+    branches:
+      - fix/pg-progress-idempotency-aborted-tx
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      GC_DB_BACKEND: postgres
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      GC_TEST_POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      GC_SKIP_MIGRATION_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Apply PG-safe idempotent progress writers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"expected block missing in {path}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "game/initiation/progress.py",
+              "from ..db import is_integrity_error, table_exists",
+              "from ..db import table_exists",
+          )
+          replace_once(
+              "game/initiation/progress.py",
+              '''def _record_progress_delta(
+              player_id: int,
+              *,
+              source_event_id: str,
+              delta: int,
+              conn,
+              now: int,
+          ) -> bool:
+              try:
+                  conn.execute(
+                      """
+                      INSERT INTO player_initiation_progress (
+                          player_id, source_event_id, delta, created_at
+                      ) VALUES (?, ?, ?, ?);
+                      """,
+                      (int(player_id), str(source_event_id), int(delta), int(now)),
+                  )
+                  return True
+              except Exception as exc:
+                  if is_integrity_error(exc):
+                      return False
+                  raise
+          ''',
+              '''def _record_progress_delta(
+              player_id: int,
+              *,
+              source_event_id: str,
+              delta: int,
+              conn,
+              now: int,
+          ) -> bool:
+              cur = conn.execute(
+                  """
+                  INSERT OR IGNORE INTO player_initiation_progress (
+                      player_id, source_event_id, delta, created_at
+                  ) VALUES (?, ?, ?, ?);
+                  """,
+                  (int(player_id), str(source_event_id), int(delta), int(now)),
+              )
+              return int(cur.rowcount or 0) > 0
+          ''',
+          )
+
+          replace_once(
+              "game/story/progress.py",
+              "from ..db import is_integrity_error, table_exists",
+              "from ..db import table_exists",
+          )
+          replace_once(
+              "game/story/progress.py",
+              '''def _record_progress_delta(
+              player_arc_id: int,
+              *,
+              source_event_id: str,
+              delta: int,
+              conn,
+              now: int,
+          ) -> bool:
+              try:
+                  conn.execute(
+                      """
+                      INSERT INTO player_story_progress (
+                          player_arc_id, source_event_id, delta, created_at
+                      ) VALUES (?, ?, ?, ?);
+                      """,
+                      (int(player_arc_id), str(source_event_id), int(delta), int(now)),
+                  )
+                  return True
+              except Exception as exc:
+                  if is_integrity_error(exc):
+                      return False
+                  raise
+          ''',
+              '''def _record_progress_delta(
+              player_arc_id: int,
+              *,
+              source_event_id: str,
+              delta: int,
+              conn,
+              now: int,
+          ) -> bool:
+              cur = conn.execute(
+                  """
+                  INSERT OR IGNORE INTO player_story_progress (
+                      player_arc_id, source_event_id, delta, created_at
+                  ) VALUES (?, ?, ?, ?);
+                  """,
+                  (int(player_arc_id), str(source_event_id), int(delta), int(now)),
+              )
+              return int(cur.rowcount or 0) > 0
+          ''',
+          )
+
+          replace_once(
+              "game/directives/progress.py",
+              '''def _record_progress_delta(
+              player_directive_id: int,
+              *,
+              source_event_id: str,
+              delta: int,
+              conn: sqlite3.Connection,
+              now: int,
+          ) -> bool:
+              if not progress_schema_ready(conn):
+                  return True
+              try:
+                  conn.execute(
+                      """
+                      INSERT INTO directive_progress (
+                          player_directive_id, source_event_id, delta, created_at
+                      ) VALUES (?, ?, ?, ?);
+                      """,
+                      (int(player_directive_id), str(source_event_id), int(delta), int(now)),
+                  )
+                  return True
+              except Exception as exc:
+                  from ..db import is_integrity_error
+
+                  if is_integrity_error(exc):
+                      return False
+                  raise
+          ''',
+              '''def _record_progress_delta(
+              player_directive_id: int,
+              *,
+              source_event_id: str,
+              delta: int,
+              conn: sqlite3.Connection,
+              now: int,
+          ) -> bool:
+              if not progress_schema_ready(conn):
+                  return True
+              cur = conn.execute(
+                  """
+                  INSERT OR IGNORE INTO directive_progress (
+                      player_directive_id, source_event_id, delta, created_at
+                  ) VALUES (?, ?, ?, ?);
+                  """,
+                  (int(player_directive_id), str(source_event_id), int(delta), int(now)),
+              )
+              return int(cur.rowcount or 0) > 0
+          ''',
+          )
+          PY
+      - name: Compile
+        run: python -m compileall -q game tests/test_gc_pg_progress_idempotency.py
+      - name: PostgreSQL duplicate transaction regression
+        run: python -m pytest -q tests/test_gc_pg_progress_idempotency.py
+      - name: Existing progress regressions
+        env:
+          GC_DB_BACKEND: sqlite
+          DATABASE_URL: ""
+          GC_TEST_POSTGRES_URL: ""
+        run: |
+          python -m pytest -q tests/test_command_initiation.py
+          python -m pytest -q tests/test_gc_pg_lock_softfail_hotpath.py
+      - name: Diff check
+        run: git diff --check
+      - name: Commit validated source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/initiation/progress.py game/story/progress.py game/directives/progress.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(pg): keep duplicate progress events transaction-safe"
+          git push
