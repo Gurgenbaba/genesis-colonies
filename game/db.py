@@ -163,29 +163,61 @@ def write_mutex_depth() -> int:
     return _write_mutex_depth()
 
 
-def _track_request_postgres_connection(conn: DbConn) -> None:
-    """Register a pooled PG checkout for defensive Flask request teardown.
+def _request_postgres_connection() -> DbConn | None:
+    """Return the PG checkout already pinned to this Flask request, if any."""
+    try:
+        from flask import g, has_request_context
 
-    Normal domain code still owns explicit close(). The tracker only guarantees
-    that a forgotten close cannot accumulate until GC_PG_POOL_MAX is exhausted.
-    PgConnection.close() is idempotent, so already-returned connections are safe.
+        if not has_request_context():
+            return None
+        return getattr(g, "gc_pg_request_connection", None)
+    except Exception:
+        return None
+
+
+def _pin_request_postgres_connection(conn: DbConn) -> bool:
+    """Pin one pooled PG checkout to the current Flask request.
+
+    Deep helpers historically call ``db()`` independently and often close their
+    local handle. On Postgres that can make one request hold several pool slots
+    at once before teardown runs. Pinning collapses all nested ``db()`` calls in
+    a request onto one checkout. Helper ``close()`` becomes a transaction-cleanup
+    boundary; the actual pool return happens exactly once in teardown_request.
     """
     try:
         from flask import g, has_request_context
 
         if not has_request_context():
-            return
-        tracked = getattr(g, "gc_pg_request_connections", None)
-        if tracked is None:
-            tracked = []
-            g.gc_pg_request_connections = tracked
-        tracked.append(conn)
+            return False
+        real_close = conn.close
+
+        def _request_local_close() -> None:
+            try:
+                if in_transaction(conn):
+                    rollback(conn)
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+        conn.close = _request_local_close  # type: ignore[method-assign]
+        g.gc_pg_request_connection = conn
+        g.gc_pg_request_connection_real_close = real_close
+        # Legacy marker retained for the original request-pool guard contract.
+        g.gc_pg_request_connections = [conn]
+        return True
     except Exception:
-        pass
+        return False
+
+
+def _track_request_postgres_connection(conn: DbConn) -> None:
+    """Compatibility entrypoint: request tracking now pins a single checkout."""
+    _pin_request_postgres_connection(conn)
 
 
 def close_request_postgres_connections() -> int:
-    """Return any PG checkouts still associated with the current request."""
+    """Return the request-pinned PG checkout to the pool exactly once."""
     if get_db_backend() != "postgres":
         return 0
     try:
@@ -193,24 +225,40 @@ def close_request_postgres_connections() -> int:
 
         if not has_request_context():
             return 0
-        tracked = list(getattr(g, "gc_pg_request_connections", ()) or ())
+        conn = getattr(g, "gc_pg_request_connection", None)
+        real_close = getattr(g, "gc_pg_request_connection_real_close", None)
+        g.gc_pg_request_connection = None
+        g.gc_pg_request_connection_real_close = None
         g.gc_pg_request_connections = []
     except Exception:
         return 0
-    closed = 0
-    for conn in reversed(tracked):
+    if conn is None:
+        return 0
+    try:
+        if in_transaction(conn):
+            rollback(conn)
+    except Exception:
         try:
-            conn.close()
-            closed += 1
+            conn.rollback()
         except Exception:
             pass
-    return closed
+    try:
+        if callable(real_close):
+            real_close()
+        else:
+            conn.close()
+        return 1
+    except Exception:
+        return 0
 
 
 def db() -> DbConn:
     """Open a DB connection for the configured backend."""
     backend = get_db_backend()
     if backend == "postgres":
+        existing = _request_postgres_connection()
+        if existing is not None:
+            return existing
         conn_t0 = time.perf_counter()
         try:
             from game.db_pg import connect_postgres
