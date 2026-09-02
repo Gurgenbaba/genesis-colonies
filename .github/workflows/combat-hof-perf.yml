@@ -1,0 +1,45 @@
+name: Combat HoF Performance Gate
+
+on:
+  pull_request:
+    paths:
+      - "game/combat_hof.py"
+      - "migrations/*player_messages*"
+      - "tests/test_gc_perf_hof_001.py"
+      - ".github/workflows/combat-hof-perf.yml"
+  push:
+    branches: [main]
+    paths:
+      - "game/combat_hof.py"
+      - "migrations/*player_messages*"
+      - "tests/test_gc_perf_hof_001.py"
+      - ".github/workflows/combat-hof-perf.yml"
+
+jobs:
+  combat-hof-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-combat-hof-perf-not-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Compile and diff gate
+        run: |
+          python -m py_compile game/combat_hof.py tests/test_gc_perf_hof_001.py
+          git diff --check
+      - name: Combat HoF cursor regression
+        run: python -m pytest -q --tb=line tests/test_gc_perf_hof_001.py tests/test_combat_hof.py
