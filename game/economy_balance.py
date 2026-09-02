@@ -142,6 +142,9 @@ STORAGE_REFERENCE_HOURS = 24
 NANOFACTORY_METAL_BASE = 10_000.0
 NANOFACTORY_CRYSTAL_BASE = 5_000.0
 NANOFACTORY_COST_GROWTH = 2.0  # Alpha: doubles per target level (OGame-style steep investment)
+# Queue cost snapshots are persisted as signed 64-bit integers on both supported DB paths.
+# L50 metal would otherwise exceed BIGINT/SQLite INTEGER while L49 remains valid.
+NANOFACTORY_PERSISTED_COST_MAX = 9_000_000_000_000_000_000
 
 # GC-821B — exchange (scales with empire day production via exchange.py).
 EXCHANGE_DAILY_LIMIT_MIN = 500_000
@@ -420,11 +423,14 @@ def storage_capacity_anchor(
 
 
 def nanofactory_upgrade_cost(target_level: int) -> Tuple[int, int]:
-    """GC-863 — Ferronit/Crytite = base × 1.33^target_level."""
+    """GC-863 — steep Alpha curve, capped only at the DB-safe persisted snapshot ceiling."""
     lvl = max(1, int(target_level))
-    metal = max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
-    crystal = max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
-    return metal, crystal
+    raw_metal = max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
+    raw_crystal = max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
+    return (
+        min(raw_metal, NANOFACTORY_PERSISTED_COST_MAX),
+        min(raw_crystal, NANOFACTORY_PERSISTED_COST_MAX),
+    )
 
 
 def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]:
