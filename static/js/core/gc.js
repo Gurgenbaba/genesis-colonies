@@ -38,11 +38,6 @@
 
   /**
    * GC-PJAX-RESILIENCE-001 — transient gateway protection for read-only live polls.
-   *
-   * A Railway/container handover can make several independent GET pollers receive
-   * 502 at the same time. Retrying each poller immediately creates a thundering herd,
-   * so the selected read endpoints share one short backoff window. Mutating requests
-   * are intentionally excluded: actions keep their existing idempotency/error flow.
    */
   (function installGatewayBackoff() {
     if (typeof global.fetch !== "function" || global.fetch.__gcGatewayBackoffWrapped) return;
@@ -167,14 +162,7 @@
     };
   })();
 
-  /**
-   * GC-PJAX-RESILIENCE-001 — keep preload hints useful.
-   *
-   * SSR image preloads are already present before this script executes and remain
-   * untouched. main.js may create a GC LCP preload only after a PJAX DOM swap; at
-   * that point the real <img> request has already started, so Chrome reports the
-   * late preload as unused. Suppress only those GC-owned dynamic image hints.
-   */
+  /** GC-PJAX-RESILIENCE-001 — suppress only late GC-owned PJAX image preloads. */
   (function installLatePjaxPreloadGuard() {
     var head = global.document && global.document.head;
     if (!head || head.__gcLatePjaxPreloadGuard) return;
@@ -200,14 +188,7 @@
     head.__gcLatePjaxPreloadGuard = true;
   })();
 
-  /**
-   * GC-PJAX-RESILIENCE-001 — one Messages init per live #messages-page root.
-   *
-   * main.js intentionally has a special Messages boot path. During a fast PJAX
-   * transition the module runner can be reached more than once; messages.js then
-   * resets its state and starts another inbox load. Guard the exported init entry
-   * points while preserving a fresh init whenever PJAX swaps in a new root node.
-   */
+  /** GC-PJAX-RESILIENCE-001 — one Messages init per live #messages-page root. */
   (function installMessagesInitGuard() {
     GC.modules = GC.modules || {};
 
@@ -258,6 +239,110 @@
       reset: function reset() {
         lastRoot = null;
         lastNoRootAt = 0;
+      },
+    };
+  })();
+
+  /**
+   * GC-PERF-FLEET-TABS-001 — instant Fleet / Collect / Distribute switching.
+   *
+   * fleet.html already contains the send panel and the embedded logistics payload.
+   * A top-tab click therefore does not need another /fleet PJAX request. This only
+   * switches presentation of server-rendered state; the existing href remains the
+   * fallback for modified clicks, missing payloads, reloads and deep links.
+   */
+  (function installFleetFastTabs() {
+    var doc = global.document;
+    if (!doc || GC.core.fleetFastTabsInstalled) return;
+    GC.core.fleetFastTabsInstalled = true;
+
+    function normalizeMode(raw) {
+      var mode = String(raw || "send").toLowerCase();
+      return mode === "collect" || mode === "distribute" ? mode : "send";
+    }
+
+    function syncLogisticsPresentation(logPage, mode) {
+      if (!logPage || logPage.dataset.ready !== "1") return false;
+      logPage.dataset.logisticsMode = mode;
+      logPage.querySelectorAll("[data-logistics-tab]").forEach(function (tab) {
+        var active = tab.getAttribute("data-logistics-tab") === mode;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      logPage.querySelectorAll("[data-logistics-panel]").forEach(function (panel) {
+        panel.hidden = panel.getAttribute("data-logistics-panel") !== mode;
+      });
+      return true;
+    }
+
+    function activateFleetMode(page, mode, href) {
+      var nextMode = normalizeMode(mode);
+      var logistics = nextMode === "collect" || nextMode === "distribute";
+      var sendPanel = page.querySelector('[data-fleet-mode-panel="send"]');
+      var logisticsPanel = page.querySelector('[data-fleet-mode-panel="logistics"]');
+      var logPage = page.querySelector("#logistics-page");
+
+      if (logistics && !syncLogisticsPresentation(logPage, nextMode)) return false;
+
+      page.dataset.fleetPageMode = nextMode;
+      page.querySelectorAll("[data-fleet-mode-tab]").forEach(function (tab) {
+        var active = normalizeMode(tab.getAttribute("data-fleet-mode-tab")) === nextMode;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      if (sendPanel) sendPanel.hidden = logistics;
+      if (logisticsPanel) logisticsPanel.hidden = !logistics;
+
+      if (logistics && logPage && logPage.dataset.gcFleetFastTabsInit !== "1") {
+        var logisticsModule = GC.modules && GC.modules.logistics;
+        if (GC._logisticsEventsBound !== true && typeof logisticsModule === "function") {
+          logisticsModule();
+        }
+        logPage.dataset.gcFleetFastTabsInit = "1";
+      }
+
+      if (href && global.history && typeof global.history.replaceState === "function") {
+        try {
+          var nextUrl = new URL(href, global.location.href);
+          global.history.replaceState(global.history.state, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
+        } catch (_) {}
+      }
+
+      return true;
+    }
+
+    doc.addEventListener(
+      "click",
+      function (event) {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+        var target = event.target;
+        var tab = target && target.closest ? target.closest("[data-fleet-mode-tab]") : null;
+        if (!tab || tab.target === "_blank" || tab.hasAttribute("download")) return;
+        var page = doc.getElementById("fleet-page");
+        if (!page || page.dataset.ready !== "1" || !page.contains(tab)) return;
+
+        var mode = normalizeMode(tab.getAttribute("data-fleet-mode-tab"));
+        if (!activateFleetMode(page, mode, tab.getAttribute("href"))) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      },
+      true
+    );
+
+    GC.core.fleetFastTabs = {
+      activate: function activate(mode) {
+        var page = doc.getElementById("fleet-page");
+        return page ? activateFleetMode(page, mode, null) : false;
       },
     };
   })();
