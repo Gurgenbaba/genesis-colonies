@@ -88,9 +88,16 @@ def _pin_request_postgres_connection(conn: DbConn) -> bool:
         conn.close = _request_local_close  # type: ignore[method-assign]
         g.gc_pg_request_connection = conn
         g.gc_pg_request_connection_real_close = real_close
+        # Legacy marker retained for the original request-pool guard contract.
+        g.gc_pg_request_connections = [conn]
         return True
     except Exception:
         return False
+
+
+def _track_request_postgres_connection(conn: DbConn) -> None:
+    """Compatibility entrypoint: request tracking now pins a single checkout."""
+    _pin_request_postgres_connection(conn)
 
 
 def close_request_postgres_connections() -> int:
@@ -106,6 +113,7 @@ def close_request_postgres_connections() -> int:
         real_close = getattr(g, "gc_pg_request_connection_real_close", None)
         g.gc_pg_request_connection = None
         g.gc_pg_request_connection_real_close = None
+        g.gc_pg_request_connections = []
     except Exception:
         return 0
     if conn is None:
@@ -149,11 +157,11 @@ new_db = '''    if backend == "postgres":
             from game.db_pg import connect_postgres
 
             conn = connect_postgres()
-            _pin_request_postgres_connection(conn)
+            _track_request_postgres_connection(conn)
 '''
 if old_db not in s:
     raise SystemExit('db postgres checkout block not found')
 s = s.replace(old_db, new_db, 1)
 p.write_text(s, encoding='utf-8')
 
-Path('tests/test_gc_request_single_pg_checkout.py').write_text('''import os\n\nfrom flask import Flask\n\nimport game.db as gcdb\nimport game.db_pg as dbpg\n\n\nclass FakeConn:\n    def __init__(self):\n        self.in_transaction = False\n        self.real_close_calls = 0\n        self.rollback_calls = 0\n\n    def close(self):\n        self.real_close_calls += 1\n\n    def rollback(self):\n        self.rollback_calls += 1\n        self.in_transaction = False\n\n\ndef test_one_postgres_checkout_per_flask_request(monkeypatch):\n    monkeypatch.setenv("GC_DB_BACKEND", "postgres")\n    calls = []\n\n    def fake_connect():\n        conn = FakeConn()\n        calls.append(conn)\n        return conn\n\n    monkeypatch.setattr(dbpg, "connect_postgres", fake_connect)\n    app = Flask(__name__)\n    with app.test_request_context("/"):\n        a = gcdb.db()\n        b = gcdb.db()\n        assert a is b\n        assert len(calls) == 1\n        a.close()\n        assert a.real_close_calls == 0\n        c = gcdb.db()\n        assert c is a\n        assert gcdb.close_request_postgres_connections() == 1\n        assert a.real_close_calls == 1\n\n\ndef test_request_local_close_rolls_back_before_reuse(monkeypatch):\n    monkeypatch.setenv("GC_DB_BACKEND", "postgres")\n    conn = FakeConn()\n    monkeypatch.setattr(dbpg, "connect_postgres", lambda: conn)\n    app = Flask(__name__)\n    with app.test_request_context("/"):\n        got = gcdb.db()\n        got.in_transaction = True\n        got.close()\n        assert got.rollback_calls == 1\n        assert got.real_close_calls == 0\n        assert gcdb.db() is got\n        gcdb.close_request_postgres_connections()\n        assert got.real_close_calls == 1\n\n\ndef test_outside_request_keeps_normal_pool_checkout_semantics(monkeypatch):\n    monkeypatch.setenv("GC_DB_BACKEND", "postgres")\n    made = []\n\n    def fake_connect():\n        conn = FakeConn()\n        made.append(conn)\n        return conn\n\n    monkeypatch.setattr(dbpg, "connect_postgres", fake_connect)\n    a = gcdb.db()\n    b = gcdb.db()\n    assert a is not b\n    assert len(made) == 2\n''', encoding='utf-8')
+Path('tests/test_gc_request_single_pg_checkout.py').write_text('''from flask import Flask\n\nimport game.db as gcdb\nimport game.db_pg as dbpg\n\n\nclass FakeConn:\n    def __init__(self):\n        self.in_transaction = False\n        self.real_close_calls = 0\n        self.rollback_calls = 0\n\n    def close(self):\n        self.real_close_calls += 1\n\n    def rollback(self):\n        self.rollback_calls += 1\n        self.in_transaction = False\n\n\ndef test_one_postgres_checkout_per_flask_request(monkeypatch):\n    monkeypatch.setenv("GC_DB_BACKEND", "postgres")\n    calls = []\n\n    def fake_connect():\n        conn = FakeConn()\n        calls.append(conn)\n        return conn\n\n    monkeypatch.setattr(dbpg, "connect_postgres", fake_connect)\n    app = Flask(__name__)\n    with app.test_request_context("/"):\n        a = gcdb.db()\n        b = gcdb.db()\n        assert a is b\n        assert len(calls) == 1\n        a.close()\n        assert a.real_close_calls == 0\n        assert gcdb.db() is a\n        assert gcdb.close_request_postgres_connections() == 1\n        assert a.real_close_calls == 1\n\n\ndef test_request_local_close_rolls_back_before_reuse(monkeypatch):\n    monkeypatch.setenv("GC_DB_BACKEND", "postgres")\n    conn = FakeConn()\n    monkeypatch.setattr(dbpg, "connect_postgres", lambda: conn)\n    app = Flask(__name__)\n    with app.test_request_context("/"):\n        got = gcdb.db()\n        got.in_transaction = True\n        got.close()\n        assert got.rollback_calls == 1\n        assert got.real_close_calls == 0\n        assert gcdb.db() is got\n        gcdb.close_request_postgres_connections()\n        assert got.real_close_calls == 1\n\n\ndef test_outside_request_keeps_normal_pool_checkout_semantics(monkeypatch):\n    monkeypatch.setenv("GC_DB_BACKEND", "postgres")\n    made = []\n\n    def fake_connect():\n        conn = FakeConn()\n        made.append(conn)\n        return conn\n\n    monkeypatch.setattr(dbpg, "connect_postgres", fake_connect)\n    a = gcdb.db()\n    b = gcdb.db()\n    assert a is not b\n    assert len(made) == 2\n''', encoding='utf-8')
