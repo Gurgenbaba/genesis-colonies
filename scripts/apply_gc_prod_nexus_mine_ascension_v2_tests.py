@@ -33,8 +33,8 @@ replace_once(
 )
 replace_once(
     "tests/test_mine_evolution.py",
-    '''        uname = f"mevo_{uuid.uuid4().hex[:8]}"\n''',
-    '''        uname = f"Nova{uuid.uuid4().hex[:8]}"\n''',
+    '''    uname = f"mevo_{uuid.uuid4().hex[:8]}"\n''',
+    '''    uname = f"Nova{uuid.uuid4().hex[:8]}"\n''',
 )
 
 replace_once(
