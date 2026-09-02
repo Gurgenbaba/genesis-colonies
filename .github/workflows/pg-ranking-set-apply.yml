@@ -63,7 +63,11 @@ jobs:
       - name: PostgreSQL set-based ranking regression
         run: pytest -q -s tests/test_gc_pg_ranking_set_based.py
 
-      - name: Existing ranking regression
+      - name: Existing ranking regression (SQLite)
+        env:
+          GC_DB_BACKEND: sqlite
+          DATABASE_URL: ''
+          GC_TEST_POSTGRES_URL: ''
         run: pytest -q tests/test_ranking.py
 
       - name: Commit generated source and test
