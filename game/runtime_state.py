@@ -31,11 +31,23 @@ def _is_missing_runtime_state_table_error(exc: BaseException) -> bool:
 
 
 def ensure_runtime_state_table(conn=None) -> None:
-    """Explicit/lazy schema repair only; normal hot paths rely on migration 015."""
+    """Explicit/lazy schema repair only; normal hot paths rely on migration 015.
+
+    A ready schema is detected with one read-only probe. This is important for
+    legacy callers such as queue-poll coordination: they may still call this
+    helper, but they must never execute CREATE TABLE / CREATE INDEX in steady
+    state. DDL is reserved for a genuinely missing legacy/dev table.
+    """
     own = conn is None
     if own:
         conn = db()
     try:
+        try:
+            conn.execute("SELECT 1 FROM runtime_state LIMIT 1;").fetchone()
+            return
+        except Exception as exc:
+            if not _is_missing_runtime_state_table_error(exc):
+                raise
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS runtime_state (
