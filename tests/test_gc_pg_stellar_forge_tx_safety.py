@@ -34,10 +34,10 @@ class _FakePgConn:
         return self
 
 
-def _poison_with(exc_type):
+def _poison_with(exc_type, message: str = "canceling statement due to lock timeout"):
     def _impl(planet_id, protocol, amount, *, conn, now=None):
         conn.aborted = True
-        raise exc_type("canceling statement due to lock timeout")
+        raise exc_type(message)
 
     return _impl
 
@@ -61,7 +61,11 @@ def test_pg_lock_timeout_soft_skips_and_restores_parent_transaction(monkeypatch)
 def test_pg_unknown_failure_is_reraised_after_parent_transaction_recovery(monkeypatch):
     conn = _FakePgConn()
     monkeypatch.setattr(hooks, "get_db_backend", lambda: "postgres")
-    monkeypatch.setattr(hooks, "_record_operational_progress", _poison_with(ValueError))
+    monkeypatch.setattr(
+        hooks,
+        "_record_operational_progress",
+        _poison_with(ValueError, "unexpected forge write failure"),
+    )
 
     with pytest.raises(ValueError):
         hooks.record_operational_progress(7, "exploration", 1, conn=conn, now=123.0)
