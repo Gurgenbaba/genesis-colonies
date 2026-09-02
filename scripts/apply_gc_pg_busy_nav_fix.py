@@ -32,8 +32,11 @@ def _cached_guard_player(player_id: int, *, allow_stale: bool = False) -> Option
         if entry is None:
             return None
         cached_at, player = entry
-        if now_m - cached_at > max_age:
+        age = now_m - cached_at
+        if age > _PLAYER_GUARD_STALE_SEC:
             _player_guard_cache.pop(int(player_id), None)
+            return None
+        if age > max_age:
             return None
         return dict(player)
 
