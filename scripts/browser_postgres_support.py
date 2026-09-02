@@ -116,6 +116,7 @@ def _create_test_player_and_preflight_switch(username: str, password: str) -> No
     code = r'''
 import json
 from game.db import db
+from game.db_pg import close_pool
 from game.models import create_user, get_homeworld
 from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
 from game.planet_evolution.service import colonize_planet, set_active_planet
@@ -150,6 +151,15 @@ try:
         raise SystemExit(f"colonize failed: {reason_colony}")
     colony_id = int(extra["planet_id"])
     conn.commit()
+    legacy_before_row = conn.execute(
+        "SELECT active_planet_id FROM players WHERE id = ? LIMIT 1;",
+        (player_id,),
+    ).fetchone()
+    legacy_before = (
+        int(legacy_before_row["active_planet_id"])
+        if legacy_before_row and legacy_before_row["active_planet_id"] is not None
+        else None
+    )
 finally:
     conn.close()
 
@@ -163,14 +173,21 @@ try:
         "SELECT active_planet_id FROM player_context WHERE player_id = ? LIMIT 1;",
         (player_id,),
     ).fetchone()
-    legacy = conn.execute(
+    legacy_after_row = conn.execute(
         "SELECT active_planet_id FROM players WHERE id = ? LIMIT 1;",
         (player_id,),
     ).fetchone()
+    legacy_after = (
+        int(legacy_after_row["active_planet_id"])
+        if legacy_after_row and legacy_after_row["active_planet_id"] is not None
+        else None
+    )
     if not context or int(context["active_planet_id"] or 0) != colony_id:
         raise SystemExit("player_context did not persist colony switch")
-    if not legacy or int(legacy["active_planet_id"] or 0) != homeworld_id:
-        raise SystemExit("PostgreSQL switch unexpectedly rewrote players.active_planet_id")
+    if legacy_after != legacy_before:
+        raise SystemExit(
+            f"PostgreSQL switch rewrote players.active_planet_id: before={legacy_before} after={legacy_after}"
+        )
 finally:
     conn.close()
 
@@ -184,16 +201,29 @@ try:
         "SELECT active_planet_id FROM player_context WHERE player_id = ? LIMIT 1;",
         (player_id,),
     ).fetchone()
+    legacy_final_row = conn.execute(
+        "SELECT active_planet_id FROM players WHERE id = ? LIMIT 1;",
+        (player_id,),
+    ).fetchone()
+    legacy_final = (
+        int(legacy_final_row["active_planet_id"])
+        if legacy_final_row and legacy_final_row["active_planet_id"] is not None
+        else None
+    )
     if not context or int(context["active_planet_id"] or 0) != homeworld_id:
         raise SystemExit("player_context did not persist homeworld switch")
+    if legacy_final != legacy_before:
+        raise SystemExit("PostgreSQL homeworld switch rewrote players.active_planet_id")
 finally:
     conn.close()
 
+close_pool()
 print(json.dumps({
     "ok": True,
     "id": player_id,
     "homeworld_id": homeworld_id,
     "colony_id": colony_id,
+    "legacy_active_planet_id": legacy_before,
     "planet_switch_preflight": True,
 }))
 '''
