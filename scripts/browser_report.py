@@ -4,8 +4,13 @@
 The browser harness intentionally blocks third-party requests. Chromium emits a
 bare console error (``Failed to load resource: net::ERR_FAILED``) for those
 aborts without exposing the URL on the console message. Same-origin failures
-are captured separately as ``request_failed`` / ``http_error`` findings, so the
-bare Chromium abort line is safe to classify as scanner noise here.
+are captured separately as ``request_failed`` / ``http_error`` findings.
+
+A second browser-only noise class occurs during intentional PJAX navigation:
+the page lifecycle cancels an in-flight same-origin ``fetch`` and Chromium
+reports ``net::ERR_ABORTED``. This is not an HTTP failure and must not turn an
+otherwise successful route journey red. The exception below is deliberately
+narrow: request_failed + fetch + net::ERR_ABORTED + PJAX action only.
 """
 
 from __future__ import annotations
@@ -19,12 +24,29 @@ SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 THRESHOLDS = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 
-def is_scanner_noise(item: dict) -> bool:
+def _is_pjax_navigation_abort(item: dict) -> bool:
+    if item.get("kind") != "request_failed":
+        return False
+    details = item.get("details") or {}
+    if not isinstance(details, dict):
+        return False
+    failure = str(details.get("failure") or "").strip()
+    resource_type = str(details.get("resource_type") or "").strip().lower()
+    action = str(item.get("action") or "").strip().upper()
     return (
+        failure == "net::ERR_ABORTED"
+        and resource_type == "fetch"
+        and action.startswith("PJAX ")
+    )
+
+
+def is_scanner_noise(item: dict) -> bool:
+    bare_blocked_resource = (
         item.get("kind") == "console_error"
         and str(item.get("problem") or "").strip()
         == "Failed to load resource: net::ERR_FAILED"
     )
+    return bare_blocked_resource or _is_pjax_navigation_abort(item)
 
 
 def evaluate(report: dict, fail_on: str) -> dict:
