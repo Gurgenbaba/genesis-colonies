@@ -172,7 +172,7 @@ class TestGc863ResearchAndAcademyCosts:
         old_m, old_c = _legacy_power_upgrade_cost(building, level)
         new_m, new_c = power_upgrade_cost(building, level)
         assert new_m >= int(old_m * 5)
-        assert new_c >= old_c
+        assert new_c >= int(old_c * 5)
 
 
 class TestGc863OrbitalShipyard:
