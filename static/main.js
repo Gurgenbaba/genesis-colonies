@@ -40958,7 +40958,7 @@
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
 
-    const wbFlushAutoUntilFired = (card, { attemptsLeft = 12 } = {}) => {
+    const wbFlushAutoUntilFired = (card, { attemptsLeft = 1 } = {}) => {
       if (!card || !card.isConnected || attemptsLeft <= 0) return;
       const autoOn = card.querySelector("[data-wb-auto-attack][data-wb-auto-enabled='1']");
       if (!autoOn) return;

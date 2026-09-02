@@ -42,3 +42,9 @@ def test_world_boss_live_poll_initial_refresh_remains_prompt():
     js = _main_js()
     assert 'wbScheduleLivePoll(1000);' in js
     assert 'wbLivePollTick();\n      wbScheduleLivePoll(wbLivePollDelayMs());' in js
+
+
+def test_world_boss_cooldown_refresh_is_one_shot():
+    js = _main_js()
+    assert 'const wbFlushAutoUntilFired = (card, { attemptsLeft = 1 } = {}) =>' in js
+    assert 'const wbFlushAutoUntilFired = (card, { attemptsLeft = 12 } = {}) =>' not in js
