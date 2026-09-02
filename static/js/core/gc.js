@@ -295,7 +295,7 @@
 
       if (logistics && logPage && logPage.dataset.gcFleetFastTabsInit !== "1") {
         var logisticsModule = GC.modules && GC.modules.logistics;
-        if (typeof logisticsModule === "function") {
+        if (GC._logisticsEventsBound !== true && typeof logisticsModule === "function") {
           logisticsModule();
         }
         logPage.dataset.gcFleetFastTabsInit = "1";
