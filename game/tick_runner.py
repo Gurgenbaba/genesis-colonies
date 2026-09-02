@@ -11,11 +11,25 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from .db import db
+from .db import db, table_exists
 from .queue_engine import finish_due_work
 from .runtime_state import record_queue_tick_result
 
 logger = logging.getLogger(__name__)
+
+_FINISHED_KEYS = (
+    "buildings",
+    "research",
+    "planet_research",
+    "ascension",
+    "shipyard",
+    "defense",
+    "troops",
+    "fleet_arrivals",
+    "fleet_returns",
+    "fleet_holding",
+    "planet_relocations",
+)
 
 
 def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
@@ -23,16 +37,7 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
         "ok": True,
         "source": str(source or "cron"),
         "scope": str(scope or "due"),
-        "finished": {
-            "buildings": 0,
-            "research": 0,
-            "shipyard": 0,
-            "defense": 0,
-            "fleet_arrivals": 0,
-            "fleet_returns": 0,
-            "fleet_holding": 0,
-            "inbox_purged": 0,
-        },
+        "finished": {key: 0 for key in _FINISHED_KEYS} | {"inbox_purged": 0},
         "affected_players": [],
         "affected_planets": [],
         "score_updates": 0,
@@ -50,7 +55,7 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
 def _merge_tick_results(target: Dict[str, Any], batch: Dict[str, Any]) -> None:
     fin = target["finished"]
     bfin = batch.get("finished") or {}
-    for key in ("buildings", "research", "shipyard", "defense", "fleet_arrivals", "fleet_returns", "fleet_holding"):
+    for key in _FINISHED_KEYS:
         fin[key] = int(fin.get(key, 0)) + int(bfin.get(key, 0))
 
     target["score_updates"] = int(target.get("score_updates", 0)) + int(batch.get("score_updates", 0))
@@ -75,117 +80,94 @@ def _merge_tick_results(target: Dict[str, Any], batch: Dict[str, Any]) -> None:
 
 
 def list_players_with_due_work(now: Optional[float] = None, conn=None) -> List[int]:
-    """Distinct player ids with due build or research jobs."""
+    """Distinct players with any due server-owned queue work.
+
+    GC-PERF-QUEUE-WORKER-001: the former worker candidate query only saw
+    build_queue + research_queue. Shipyard/defense/Planet-Evolution/troop jobs
+    therefore still became due inside `/api/game-state` and forced the HTTP
+    request to finish them synchronously. Build the candidate UNION from tables
+    that actually exist so legacy/test schemas stay compatible.
+    """
     own = conn is None
     if own:
         conn = db()
-    if now is None:
-        now = time.time()
+    ts = float(now if now is not None else time.time())
     try:
-        cur = conn.cursor()
-        cur.execute(
+        selects: list[str] = [
             """
-            SELECT DISTINCT p.player_id AS player_id
+            SELECT p.player_id AS player_id
             FROM build_queue b
             INNER JOIN planets p ON p.id = b.planet_id
             WHERE p.player_id IS NOT NULL AND b.finish_time <= ?
-            UNION
-            SELECT DISTINCT user_id AS player_id
-            FROM research_queue
-            WHERE finish_at <= ?;
             """,
-            (float(now), float(now)),
+            """
+            SELECT user_id AS player_id
+            FROM research_queue
+            WHERE user_id IS NOT NULL AND finish_at <= ?
+            """,
+        ]
+        params: list[float] = [ts, ts]
+
+        optional = (
+            (
+                "planet_research_queue",
+                """
+                SELECT p.player_id AS player_id
+                FROM planet_research_queue q
+                INNER JOIN planets p ON p.id = q.planet_id
+                WHERE p.player_id IS NOT NULL AND q.finish_at <= ?
+                """,
+            ),
+            (
+                "planet_ascension_queue",
+                """
+                SELECT p.player_id AS player_id
+                FROM planet_ascension_queue q
+                INNER JOIN planets p ON p.id = q.planet_id
+                WHERE p.player_id IS NOT NULL AND q.state = 'active' AND q.finish_at <= ?
+                """,
+            ),
+            (
+                "shipyard_queue",
+                """
+                SELECT p.player_id AS player_id
+                FROM shipyard_queue q
+                INNER JOIN planets p ON p.id = q.planet_id
+                WHERE p.player_id IS NOT NULL AND q.status = 'queued' AND q.finish_at <= ?
+                """,
+            ),
+            (
+                "defense_queue",
+                """
+                SELECT p.player_id AS player_id
+                FROM defense_queue q
+                INNER JOIN planets p ON p.id = q.planet_id
+                WHERE p.player_id IS NOT NULL AND q.status = 'queued' AND q.finish_at <= ?
+                """,
+            ),
+            (
+                "troop_queue",
+                """
+                SELECT player_id
+                FROM troop_queue
+                WHERE player_id IS NOT NULL AND status = 'queued' AND finish_at <= ?
+                """,
+            ),
         )
-        return sorted({int(r["player_id"]) for r in cur.fetchall()})
+        for table_name, sql in optional:
+            if table_exists(conn, table_name):
+                selects.append(sql)
+                params.append(ts)
+
+        cur = conn.cursor()
+        cur.execute(" UNION ".join(selects), tuple(params))
+        return sorted({int(r["player_id"]) for r in cur.fetchall() if r["player_id"] is not None})
     finally:
         if own and conn is not None:
             conn.close()
 
 
-def run_tick(
-    *,
-    scope: str = "due",
-    batch_size: int = 100,
-    source: str = "cron",
-    update_scores: bool = True,
-    recalc_ranks: bool = False,
-    persist: bool = True,
-) -> Dict[str, Any]:
-    """
-    Process due queues globally in player batches (no request dedup).
-
-    Args:
-        scope: Currently only ``due`` (players with overdue jobs).
-        batch_size: Max players per finish_due_work batch.
-        source: Label for logs/audit (cron, worker, cli, …).
-        update_scores: Refresh player_scores after finishes (GC-2606 default on).
-        recalc_ranks: Expensive; leave False — ranking_worker owns ranks.
-        persist: Write summary to runtime_state for admin health.
-    """
-    if scope != "due":
-        raise ValueError(f"unsupported tick scope: {scope!r}")
-
-    started = time.perf_counter()
-    batch_size = max(1, int(batch_size))
-    result = _empty_tick_result(source, scope)
-
-    now = time.time()
-    player_ids = list_players_with_due_work(now=now)
-    result["players_processed"] = len(player_ids)
-
-    logger.info(
-        "queue tick start source=%s scope=%s players=%s batch_size=%s",
-        source,
-        scope,
-        len(player_ids),
-        batch_size,
-    )
-
-    if not player_ids:
-        try:
-            from .fleet_worker import run_fleet_worker
-
-            fleet_result = run_fleet_worker(source=str(source or "cron"), force=True, persist=False)
-            result["finished"]["fleet_arrivals"] = int(fleet_result.get("processed_arrivals") or 0)
-            result["finished"]["fleet_returns"] = int(fleet_result.get("processed_returns") or 0)
-            result["finished"]["fleet_holding"] = int(fleet_result.get("processed_holding") or 0)
-            if fleet_result.get("errors"):
-                result["errors"].extend(f"fleet: {err}" for err in fleet_result["errors"])
-                result["ok"] = False
-        except Exception as exc:
-            result["ok"] = False
-            result["errors"].append(f"fleet tick: {exc}")
-            logger.exception("queue tick fleet worker failed source=%s", source)
-
-        try:
-            from .messages import purge_expired_inbox_messages
-
-            purged = purge_expired_inbox_messages(now=now)
-            result["finished"]["inbox_purged"] = int(purged)
-        except Exception as exc:
-            result["ok"] = False
-            result["errors"].append(f"inbox retention: {exc}")
-            logger.exception("queue tick inbox retention failed source=%s", source)
-
-        result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
-        result["duration_ms"] = result["tick_elapsed_ms"]
-        if persist:
-            record_queue_tick_result(result)
-        return result
-
-    for offset in range(0, len(player_ids), batch_size):
-        batch_players = player_ids[offset : offset + batch_size]
-        result["batches"] += 1
-        for pid in batch_players:
-            batch_result = finish_due_work(
-                player_id=int(pid),
-                now=now,
-                source=str(source or "cron"),
-                update_scores=update_scores,
-                recalc_ranks=recalc_ranks,
-            )
-            _merge_tick_results(result, batch_result)
-
+def _run_global_fleet_tail(result: Dict[str, Any], *, source: str) -> None:
     try:
         from .fleet_worker import run_fleet_worker
 
@@ -201,10 +183,8 @@ def run_tick(
         result["errors"].append(f"fleet tick: {exc}")
         logger.exception("queue tick fleet worker failed source=%s", source)
 
-    result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
-    if result["duration_ms"] <= 0:
-        result["duration_ms"] = result["tick_elapsed_ms"]
 
+def _run_inbox_retention(result: Dict[str, Any], *, now: float, source: str) -> None:
     try:
         from .messages import purge_expired_inbox_messages
 
@@ -214,6 +194,69 @@ def run_tick(
         result["ok"] = False
         result["errors"].append(f"inbox retention: {exc}")
         logger.exception("queue tick inbox retention failed source=%s", source)
+
+
+def run_tick(
+    *,
+    scope: str = "due",
+    batch_size: int = 100,
+    source: str = "cron",
+    update_scores: bool = True,
+    recalc_ranks: bool = False,
+    persist: bool = True,
+    include_fleet_tail: bool = True,
+    include_inbox_retention: bool = True,
+) -> Dict[str, Any]:
+    """Process due queues globally in player batches (no request dedup).
+
+    `include_fleet_tail=False` is the dedicated queue-sidecar mode. Fleet and
+    World-Boss maintenance remain owned by `run_maintenance_worker.py`; otherwise
+    a 5s queue cadence would accidentally execute the whole maintenance bag every
+    5 seconds. Defaults preserve the historical cron/CLI behavior.
+    """
+    if scope != "due":
+        raise ValueError(f"unsupported tick scope: {scope!r}")
+
+    started = time.perf_counter()
+    batch_size = max(1, int(batch_size))
+    result = _empty_tick_result(source, scope)
+
+    now = time.time()
+    player_ids = list_players_with_due_work(now=now)
+    result["players_processed"] = len(player_ids)
+
+    logger.info(
+        "queue tick start source=%s scope=%s players=%s batch_size=%s queue_only=%s",
+        source,
+        scope,
+        len(player_ids),
+        batch_size,
+        not include_fleet_tail,
+    )
+
+    for offset in range(0, len(player_ids), batch_size):
+        batch_players = player_ids[offset : offset + batch_size]
+        result["batches"] += 1
+        for pid in batch_players:
+            batch_result = finish_due_work(
+                player_id=int(pid),
+                now=now,
+                source=str(source or "cron"),
+                update_scores=update_scores,
+                recalc_ranks=recalc_ranks,
+            )
+            _merge_tick_results(result, batch_result)
+
+    if include_fleet_tail:
+        _run_global_fleet_tail(result, source=source)
+
+    if include_inbox_retention:
+        _run_inbox_retention(result, now=now, source=source)
+
+    result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
+    # Per-player finish duration is useful diagnostics, but wall clock is the
+    # authoritative worker heartbeat duration (also meaningful on an idle tick).
+    result["duration_ms"] = result["tick_elapsed_ms"]
 
     logger.info(
         "queue tick done source=%s finished=%s players=%s batches=%s duration_ms=%s errors=%s",

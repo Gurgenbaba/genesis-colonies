@@ -1,0 +1,55 @@
+name: Queue Worker Performance Gate
+
+on:
+  pull_request:
+    paths:
+      - "game/tick_runner.py"
+      - "game/queue_poll.py"
+      - "scripts/run_game_worker.py"
+      - "scripts/docker-entrypoint.sh"
+      - "tests/test_gc_perf_queue_worker_001.py"
+      - ".github/workflows/queue-worker-perf.yml"
+  push:
+    branches: [main]
+    paths:
+      - "game/tick_runner.py"
+      - "game/queue_poll.py"
+      - "scripts/run_game_worker.py"
+      - "scripts/docker-entrypoint.sh"
+      - "tests/test_gc_perf_queue_worker_001.py"
+      - ".github/workflows/queue-worker-perf.yml"
+
+jobs:
+  queue-worker-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-queue-worker-perf-not-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Compile and shell syntax
+        run: |
+          python -m py_compile game/tick_runner.py scripts/run_game_worker.py tests/test_gc_perf_queue_worker_001.py
+          sh -n scripts/docker-entrypoint.sh
+          git diff --check
+      - name: Queue worker regression
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_gc_perf_queue_worker_001.py \
+            tests/test_gc_perf_core_suite.py::test_game_worker_primary_skips_interval_finish \
+            tests/test_gc_prod_sqlite_stall_001a.py \
+            tests/test_queue_engine.py

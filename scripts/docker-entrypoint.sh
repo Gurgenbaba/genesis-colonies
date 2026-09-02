@@ -101,6 +101,39 @@ else
   echo "[GC] Maintenance sidecar off (GC_MAINTENANCE_WORKER=${MAINT_WORKER}); embedded cron may run in-process."
 fi
 
+# GC-PERF-QUEUE-WORKER-001: PostgreSQL can safely run a second small writer.
+# Complete economy queues outside HTTP so /api/game-state no longer inherits
+# queue_finish/resource_tick latency. The queue worker is intentionally
+# queue-only: fleet/World-Boss/post-maint remains owned by the maintenance
+# sidecar above. SQLite stays on the historical request/maintenance ownership.
+DB_BACKEND="${GC_DB_BACKEND:-sqlite}"
+GAME_WORKER="${GC_GAME_WORKER:-auto}"
+if [ "${GAME_WORKER}" = "auto" ]; then
+  case "${DB_BACKEND}" in
+    postgres|postgresql) GAME_WORKER=1 ;;
+    *) GAME_WORKER=0 ;;
+  esac
+fi
+if [ "${GAME_WORKER}" = "1" ] || [ "${GAME_WORKER}" = "true" ] || [ "${GAME_WORKER}" = "yes" ] || [ "${GAME_WORKER}" = "on" ]; then
+  GAME_WORKER_SEC="${GC_GAME_WORKER_SEC:-5}"
+  export GC_GAME_WORKER=1
+  # Web polls now defer due queue completion while this worker heartbeat is fresh;
+  # stale/missing heartbeat still activates the existing request safety net.
+  export GC_GAME_WORKER_PRIMARY=1
+  echo "[GC] Starting PostgreSQL queue worker sidecar (interval=${GAME_WORKER_SEC}s, queue-only)..."
+  (
+    while true; do
+      python scripts/run_game_worker.py --queue-only --interval "${GAME_WORKER_SEC}" --source queue_worker || true
+      echo "[GC] Queue worker exited; restarting in 3s..."
+      sleep 3
+    done
+  ) &
+  GAME_PID=$!
+  echo "[GC] Queue worker supervisor pid=${GAME_PID}"
+else
+  echo "[GC] Queue worker sidecar off (GC_GAME_WORKER=${GAME_WORKER}, backend=${DB_BACKEND})."
+fi
+
 GUNICORN_EXTRA=""
 case "${WORKER_CLASS}" in
   gthread|sync)
