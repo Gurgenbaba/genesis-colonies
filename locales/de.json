@@ -9048,5 +9048,8 @@
   "changelog_merges_collapsed": "Merge-Commits zusammengefasst",
   "changelog_full_intro": "Jede relevante Repository-Änderung, verständlich auf Englisch aufbereitet. Doppelte Merge-Commits werden zusammengefasst; technische Änderungen bleiben unter Alle Commits sichtbar.",
   "changelog_filter_label": "Changelog-Filter",
-  "changelog_search_placeholder": "Version, System oder Änderung suchen…"
+  "changelog_search_placeholder": "Version, System oder Änderung suchen…",
+  "shop_return_status_failed": "Fehlgeschlagen",
+  "shop_return_failed_title": "Freischaltung fehlgeschlagen",
+  "shop_return_failed": "Die Zahlung wurde erkannt, aber die Freischaltung ist fehlgeschlagen. Bitte nicht erneut bezahlen; der Support kann die Bestellung sicher wiederherstellen."
 }

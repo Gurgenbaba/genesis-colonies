@@ -9048,5 +9048,8 @@
   "changelog_merges_collapsed": "commits de fusion regroupés",
   "changelog_full_intro": "Chaque changement important du dépôt est reformulé en anglais lisible. Les doublons de fusion sont regroupés et le travail technique reste disponible dans Tous les commits.",
   "changelog_filter_label": "Filtre du changelog",
-  "changelog_search_placeholder": "Rechercher une version, un système ou un changement…"
+  "changelog_search_placeholder": "Rechercher une version, un système ou un changement…",
+  "shop_return_status_failed": "Échec",
+  "shop_return_failed_title": "Échec de l’attribution",
+  "shop_return_failed": "Le paiement a été détecté, mais l’attribution a échoué. Ne payez pas à nouveau ; le support peut restaurer la commande en toute sécurité."
 }

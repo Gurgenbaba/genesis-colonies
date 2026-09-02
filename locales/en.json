@@ -9048,5 +9048,8 @@
   "changelog_merges_collapsed": "merge commits collapsed",
   "changelog_full_intro": "Every meaningful repository change, rewritten into readable English. Merge duplicates are collapsed; technical work remains available in the All commits view.",
   "changelog_filter_label": "Changelog filter",
-  "changelog_search_placeholder": "Search version, system or change…"
+  "changelog_search_placeholder": "Search version, system or change…",
+  "shop_return_status_failed": "Failed",
+  "shop_return_failed_title": "Fulfillment failed",
+  "shop_return_failed": "The payment was detected, but the reward grant failed. Please do not pay again; support can safely recover the order."
 }

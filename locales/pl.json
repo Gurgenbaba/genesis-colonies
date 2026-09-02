@@ -9048,5 +9048,8 @@
   "changelog_merges_collapsed": "scalone commity merge",
   "changelog_full_intro": "Każda istotna zmiana repozytorium jest opisana czytelnym angielskim. Duplikaty merge są scalane, a prace techniczne pozostają dostępne w widoku Wszystkie commity.",
   "changelog_filter_label": "Filtr changelogu",
-  "changelog_search_placeholder": "Szukaj wersji, systemu lub zmiany…"
+  "changelog_search_placeholder": "Szukaj wersji, systemu lub zmiany…",
+  "shop_return_status_failed": "Niepowodzenie",
+  "shop_return_failed_title": "Nie udało się przyznać nagrody",
+  "shop_return_failed": "Płatność została wykryta, ale przyznanie nagrody nie powiodło się. Nie płać ponownie; wsparcie może bezpiecznie odzyskać zamówienie."
 }
