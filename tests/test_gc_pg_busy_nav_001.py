@@ -65,6 +65,20 @@ def test_safe_html_navigation_uses_stale_cache_on_pool_timeout():
     _clear_guard_player(pid)
 
 
+def test_api_request_reuses_fresh_guard_cache_without_db_checkout():
+    pid = 910004
+    _clear_guard_player(pid)
+    _cache_guard_player(pid, _player(pid))
+    app = _app()
+    with app.test_client() as client:
+        _login(client, pid)
+        with patch("game.auth.get_player_by_user_id") as load, patch("game.auth.touch_player_online"):
+            response = client.get("/api/protected")
+    assert response.status_code == 200
+    load.assert_not_called()
+    _clear_guard_player(pid)
+
+
 def test_api_request_never_uses_stale_cache_on_pool_timeout():
     pid = 910003
     _clear_guard_player(pid)

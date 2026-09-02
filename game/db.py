@@ -163,6 +163,50 @@ def write_mutex_depth() -> int:
     return _write_mutex_depth()
 
 
+def _track_request_postgres_connection(conn: DbConn) -> None:
+    """Register a pooled PG checkout for defensive Flask request teardown.
+
+    Normal domain code still owns explicit close(). The tracker only guarantees
+    that a forgotten close cannot accumulate until GC_PG_POOL_MAX is exhausted.
+    PgConnection.close() is idempotent, so already-returned connections are safe.
+    """
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return
+        tracked = getattr(g, "gc_pg_request_connections", None)
+        if tracked is None:
+            tracked = []
+            g.gc_pg_request_connections = tracked
+        tracked.append(conn)
+    except Exception:
+        pass
+
+
+def close_request_postgres_connections() -> int:
+    """Return any PG checkouts still associated with the current request."""
+    if get_db_backend() != "postgres":
+        return 0
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return 0
+        tracked = list(getattr(g, "gc_pg_request_connections", ()) or ())
+        g.gc_pg_request_connections = []
+    except Exception:
+        return 0
+    closed = 0
+    for conn in reversed(tracked):
+        try:
+            conn.close()
+            closed += 1
+        except Exception:
+            pass
+    return closed
+
+
 def db() -> DbConn:
     """Open a DB connection for the configured backend."""
     backend = get_db_backend()
@@ -172,6 +216,7 @@ def db() -> DbConn:
             from game.db_pg import connect_postgres
 
             conn = connect_postgres()
+            _track_request_postgres_connection(conn)
         except NotImplementedError:
             raise
         except Exception as exc:

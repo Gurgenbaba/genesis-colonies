@@ -660,12 +660,18 @@ def require_login_api(func: ViewFunc) -> ViewFunc:
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
 
-        try:
-            player = get_player_by_user_id(pid)
-        except DbPoolTimeout:
-            logger.warning("api login guard pool_timeout player=%s", pid)
-            return _db_busy_response(json_api=True)
+        player = _cached_guard_player(pid)
+        if player is None:
+            try:
+                player = get_player_by_user_id(pid)
+            except DbPoolTimeout:
+                logger.warning("api login guard pool_timeout player=%s", pid)
+                return _db_busy_response(json_api=True)
+            else:
+                if player:
+                    _cache_guard_player(pid, player)
         if not player:
+            _clear_guard_player(pid)
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
 
