@@ -1,0 +1,46 @@
+name: World Boss Auto Lean Performance Gate
+
+on:
+  pull_request:
+    paths:
+      - "game/world_boss.py"
+      - "tests/test_gc_perf_world_boss_auto_lean_001.py"
+      - ".github/workflows/world-boss-auto-lean-perf.yml"
+  push:
+    branches: [main]
+    paths:
+      - "game/world_boss.py"
+      - "tests/test_gc_perf_world_boss_auto_lean_001.py"
+      - ".github/workflows/world-boss-auto-lean-perf.yml"
+
+jobs:
+  world-boss-auto-lean-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-world-boss-auto-lean-not-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Compile and diff gate
+        run: |
+          python -m py_compile game/world_boss.py tests/test_gc_perf_world_boss_auto_lean_001.py
+          git diff --check
+      - name: Lean auto-fire regression
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_gc_perf_world_boss_auto_lean_001.py \
+            tests/test_world_boss.py

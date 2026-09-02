@@ -1411,6 +1411,7 @@ def execute_instant_attack(
     rng: Any = None,
     auto_select: bool = False,
     hit_mult: int = 1,
+    lean_response: bool = False,
 ) -> Dict[str, Any]:
     """
     GC-WB-RAID-002 — resolve a server-owned World Boss raid strike in-request.
@@ -1418,6 +1419,8 @@ def execute_instant_attack(
     Ships stay in hangar. Damage, cooldown, contribution, Containment, Fleet
     Resonance and Target Lock are resolved in the same DB transaction owned by
     the caller. ``hit_mult`` ∈ {1, 5}; ×5 remains five waves / five cooldowns.
+    ``lean_response`` keeps all gameplay writes but skips UI-only ranking,
+    recognition and second hangar reads for background worker strikes.
     """
     import random
 
@@ -1670,13 +1673,28 @@ def execute_instant_attack(
     except Exception:
         logger.exception("world_boss directive emit failed instant event=%s", eid)
 
-    updated = get_event_by_id(eid, conn=conn)
+    # Background auto-fire only needs success/damage/defeat. Do not build
+    # ranking/recognition/hangar response payloads that the maintenance worker
+    # immediately discards. Defeat handling still needs the refreshed event.
+    updated = get_event_by_id(eid, conn=conn) if defeated else None
     if defeated and updated:
         set_runtime_value(SCHEDULE_RUNTIME_KEY, str(ts), conn=conn)
         try:
             _announce_defeat(updated, conn=conn)
         except Exception:
             logger.exception("world_boss defeat news failed event=%s", eid)
+
+    if lean_response:
+        return {
+            "ok": True,
+            "error": "",
+            "event_id": int(eid),
+            "damage": int(applied),
+            "defeated": bool(defeated),
+        }
+
+    if updated is None:
+        updated = get_event_by_id(eid, conn=conn)
 
     cooldown_until = float(ts + WAVE_COOLDOWN_SEC * int(mult))
     hp_ratio = (float(new_hp) / float(max_hp)) if max_hp > 0 else 0.0
@@ -3331,6 +3349,7 @@ def maybe_fire_ready_auto_attack(
     now: Optional[float] = None,
     ships: Mapping[str, int] | None = None,
     planet_id: Optional[int] = None,
+    lean_response: bool = False,
 ) -> Dict[str, Any]:
     """
     Fire one instant strike when auto-attack is enabled and cooldown is free.
@@ -3408,6 +3427,7 @@ def maybe_fire_ready_auto_attack(
         conn=conn,
         now=ts,
         auto_select=False,
+        lean_response=bool(lean_response),
     )
     if result.get("ok"):
         if result.get("defeated"):
@@ -3646,6 +3666,7 @@ def tick_world_boss_auto_attacks(*, conn, now: Optional[float] = None) -> Dict[s
             int(row["event_id"]),
             conn=conn,
             now=ts,
+            lean_response=True,
         )
         if res.get("fired"):
             fired += 1
