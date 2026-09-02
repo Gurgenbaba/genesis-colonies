@@ -1,0 +1,53 @@
+name: GC Production Ascension Feedback Apply
+
+on:
+  push:
+    branches:
+      - fix/prod-ascension-required-feedback
+
+concurrency:
+  group: gc-prod-ascension-feedback-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: '0'
+      SECRET_KEY: ci-ascension-feedback-secret-key-not-for-production-use
+      GC_SKIP_MIGRATION_CHECK: '1'
+      GC_EMBEDDED_CRON: '0'
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-ascension-required-feedback
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Apply ascension feedback patch
+        run: python scripts/apply_gc_prod_ascension_feedback.py
+      - name: Run focused regressions
+        run: |
+          python -m pytest -q tests/test_gc_prod_ascension_required_feedback.py tests/test_ascension_queue_cap_contract.py
+          node --check static/main.js
+          git diff --check
+      - name: Commit validated source patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/apply_gc_prod_ascension_feedback.py .github/workflows/gc-prod-ascension-feedback-apply.yml
+          git add static/main.js tests/test_gc_prod_ascension_required_feedback.py
+          git commit -m 'fix(buildings): explain ascension-required upgrade gate'
+          git push origin HEAD:fix/prod-ascension-required-feedback
