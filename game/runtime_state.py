@@ -17,11 +17,37 @@ logger = logging.getLogger(__name__)
 QUEUE_TICK_KEY = "queue_tick_last"
 
 
+def _is_missing_runtime_state_table_error(exc: BaseException) -> bool:
+    """True only for the legacy/dev case where migration 015 was not applied yet."""
+    msg = str(exc).lower()
+    return "runtime_state" in msg and any(
+        marker in msg
+        for marker in (
+            "no such table",
+            "does not exist",
+            "undefinedtable",
+        )
+    )
+
+
 def ensure_runtime_state_table(conn=None) -> None:
+    """Explicit/lazy schema repair only; normal hot paths rely on migration 015.
+
+    A ready schema is detected with one read-only probe. This is important for
+    legacy callers such as queue-poll coordination: they may still call this
+    helper, but they must never execute CREATE TABLE / CREATE INDEX in steady
+    state. DDL is reserved for a genuinely missing legacy/dev table.
+    """
     own = conn is None
     if own:
         conn = db()
     try:
+        try:
+            conn.execute("SELECT 1 FROM runtime_state LIMIT 1;").fetchone()
+            return
+        except Exception as exc:
+            if not _is_missing_runtime_state_table_error(exc):
+                raise
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS runtime_state (
@@ -42,16 +68,30 @@ def ensure_runtime_state_table(conn=None) -> None:
             conn.close()
 
 
+def _select_runtime_value(conn, key: str):
+    return conn.execute(
+        "SELECT value FROM runtime_state WHERE key = ? LIMIT 1;",
+        (str(key),),
+    ).fetchone()
+
+
 def get_runtime_value(key: str, conn=None) -> Optional[str]:
+    """Read a runtime value without running schema DDL on every call."""
     own = conn is None
     if own:
         conn = db()
     try:
-        ensure_runtime_state_table(conn)
-        row = conn.execute(
-            "SELECT value FROM runtime_state WHERE key = ? LIMIT 1;",
-            (str(key),),
-        ).fetchone()
+        try:
+            row = _select_runtime_value(conn, key)
+        except Exception as exc:
+            if not _is_missing_runtime_state_table_error(exc):
+                raise
+            # Legacy/test fail-safe. Production startup applies migration 015, so
+            # this branch must never be part of the steady-state request path.
+            ensure_runtime_state_table(conn)
+            if own:
+                commit(conn)
+            row = _select_runtime_value(conn, key)
         return str(row["value"]) if row else None
     finally:
         if own and conn is not None:
@@ -60,6 +100,9 @@ def get_runtime_value(key: str, conn=None) -> Optional[str]:
 
 def set_runtime_value(key: str, value: str, conn=None) -> None:
     """Upsert a runtime metric.
+
+    Steady-state reads/writes never execute CREATE TABLE/CREATE INDEX. Migration
+    015 owns schema creation; lazy repair is retained only for legacy/dev DBs.
 
     On a shared connection, uses a SAVEPOINT so Postgres deadlocks / unique
     conflicts do not abort the caller's larger transaction (page-load TX).
@@ -70,14 +113,16 @@ def set_runtime_value(key: str, value: str, conn=None) -> None:
         conn = db()
     sp = "gc_runtime_state_upsert"
     last_exc: Optional[BaseException] = None
+    schema_repaired = False
     try:
-        ensure_runtime_state_table(conn)
         if own and not in_transaction(conn):
             begin_write_transaction(conn)
-        for attempt in range(2):
+        for attempt in range(3):
+            savepoint_open = False
             try:
                 if not own:
                     conn.execute(f"SAVEPOINT {sp}")
+                    savepoint_open = True
                 conn.execute(
                     """
                     INSERT INTO runtime_state (key, value, updated_at)
@@ -90,12 +135,13 @@ def set_runtime_value(key: str, value: str, conn=None) -> None:
                 )
                 if not own:
                     conn.execute(f"RELEASE SAVEPOINT {sp}")
+                    savepoint_open = False
                 if own:
                     commit(conn)
                 return
             except Exception as exc:
                 last_exc = exc
-                if not own:
+                if not own and savepoint_open:
                     try:
                         conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
                         conn.execute(f"RELEASE SAVEPOINT {sp}")
@@ -106,11 +152,21 @@ def set_runtime_value(key: str, value: str, conn=None) -> None:
                             pass
                 elif own:
                     rollback(conn)
+
+                if _is_missing_runtime_state_table_error(exc) and not schema_repaired:
+                    schema_repaired = True
+                    ensure_runtime_state_table(conn)
+                    if own:
+                        commit(conn)
+                        if not in_transaction(conn):
+                            begin_write_transaction(conn)
+                    continue
+
                 from .db import is_db_lock_error
 
                 msg = str(exc).lower()
                 is_deadlock = "deadlock" in msg
-                if is_deadlock and attempt == 0:
+                if is_deadlock and attempt < 2:
                     time.sleep(0.05)
                     if own and not in_transaction(conn):
                         begin_write_transaction(conn)
@@ -144,32 +200,14 @@ def record_queue_tick_result(tick_result: Dict[str, Any], conn=None) -> None:
         "duration_ms": int(tick_result.get("duration_ms") or tick_result.get("tick_elapsed_ms") or 0),
         "errors": list(tick_result.get("errors") or []),
     }
-    own = conn is None
-    if own:
-        conn = db()
     try:
-        ensure_runtime_state_table(conn)
-        if own and not in_transaction(conn):
-            begin_write_transaction(conn)
-        conn.execute(
-            """
-            INSERT INTO runtime_state (key, value, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(key) DO UPDATE SET
-                value = excluded.value,
-                updated_at = excluded.updated_at;
-            """,
-            (QUEUE_TICK_KEY, json.dumps(payload, ensure_ascii=False), float(time.time())),
+        set_runtime_value(
+            QUEUE_TICK_KEY,
+            json.dumps(payload, ensure_ascii=False),
+            conn=conn,
         )
-        if own:
-            commit(conn)
     except Exception as exc:
-        if own:
-            rollback(conn)
         logger.warning("record_queue_tick_result failed: %s", exc)
-    finally:
-        if own and conn is not None:
-            conn.close()
 
 
 def _empty_queue_tick_status() -> Dict[str, Any]:
