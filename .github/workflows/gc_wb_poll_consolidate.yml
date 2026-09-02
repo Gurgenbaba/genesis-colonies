@@ -1,0 +1,36 @@
+name: GC World Boss Poll Consolidation
+
+on:
+  push:
+    branches:
+      - perf/world-boss-poll-consolidate
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect World Boss GET owners
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('static/main.js').read_text(encoding='utf-8')
+          needle = 'const wbFlushAutoUntilFired ='
+          start = src.index(needle)
+          end = src.index('const bindWorldBossAttackCooldownUnlock', start)
+          print(src[start:end])
+          print('GET /api/world-boss count:', src.count('fetch("/api/world-boss"'))
+          PY
+      - name: Existing World Boss poll regressions
+        run: |
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q tests/test_gc_world_boss_poll_perf.py tests/test_world_boss.py
