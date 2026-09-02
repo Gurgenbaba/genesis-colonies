@@ -197,6 +197,11 @@ class PgCursor:
             self._cur.execute(rewritten, tuple(params))
         self.description = self._cur.description
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        # GC-PERF-PG-SCHEMA-CACHE-001: tests/migrations may execute DDL through
+        # this wrapper. Runtime schema is immutable after migrate, but clearing
+        # on real DDL keeps metadata caches correct for migration/tests too.
+        if rewritten.lstrip().upper().startswith(("CREATE ", "ALTER ", "DROP ")):
+            clear_postgres_schema_metadata_cache()
         # Match sqlite3: lastrowid persists across non-INSERT statements.
         # Resolve lazily — bulk INSERT seeds (game_settings) must not pay lastval RTT.
         if rewritten.lstrip().upper().startswith("INSERT"):
@@ -217,6 +222,8 @@ class PgCursor:
         rewritten = rewrite_sqlite_placeholders(text)
         self._cur.executemany(rewritten, list(seq_of_params))
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        if rewritten.lstrip().upper().startswith(("CREATE ", "ALTER ", "DROP ")):
+            clear_postgres_schema_metadata_cache()
         if rewritten.lstrip().upper().startswith("INSERT"):
             self._lastrowid = None
             self._lastrowid_pending = True
@@ -450,15 +457,33 @@ def close_pool() -> None:
             except Exception:
                 pass
             _POOL = None
+    clear_postgres_schema_metadata_cache()
 
 
 # Schema is immutable mid-process after migrate; cache cuts PG information_schema chatter.
+# table_exists had a cache already; column_exists/table_columns was still issuing a fresh
+# information_schema.columns query on every call. Hot routes call column_exists many times.
+_PG_SCHEMA_CACHE_LOCK = threading.RLock()
 _PG_TABLE_EXISTS_CACHE: dict[str, bool] = {}
+_PG_TABLE_COLUMNS_CACHE: dict[str, frozenset[str]] = {}
+
+
+def clear_postgres_schema_metadata_cache(table_name: str | None = None) -> None:
+    """Invalidate process-local PG schema metadata after DDL or between test databases."""
+    with _PG_SCHEMA_CACHE_LOCK:
+        if table_name is None:
+            _PG_TABLE_EXISTS_CACHE.clear()
+            _PG_TABLE_COLUMNS_CACHE.clear()
+            return
+        key = str(table_name)
+        _PG_TABLE_EXISTS_CACHE.pop(key, None)
+        _PG_TABLE_COLUMNS_CACHE.pop(key, None)
 
 
 def postgres_table_exists(conn: PgConnection, table_name: str) -> bool:
     key = str(table_name)
-    cached = _PG_TABLE_EXISTS_CACHE.get(key)
+    with _PG_SCHEMA_CACHE_LOCK:
+        cached = _PG_TABLE_EXISTS_CACHE.get(key)
     if cached is not None:
         return cached
     cur = conn.execute(
@@ -471,7 +496,8 @@ def postgres_table_exists(conn: PgConnection, table_name: str) -> bool:
         (key,),
     )
     found = cur.fetchone() is not None
-    _PG_TABLE_EXISTS_CACHE[key] = found
+    with _PG_SCHEMA_CACHE_LOCK:
+        _PG_TABLE_EXISTS_CACHE[key] = found
     return found
 
 
@@ -489,12 +515,21 @@ def postgres_index_exists(conn: PgConnection, index_name: str) -> bool:
 
 
 def postgres_table_columns(conn: PgConnection, table_name: str) -> set[str]:
+    key = str(table_name)
+    with _PG_SCHEMA_CACHE_LOCK:
+        cached = _PG_TABLE_COLUMNS_CACHE.get(key)
+    if cached is not None:
+        # Callers historically receive a mutable set. Never expose cache storage.
+        return set(cached)
     cur = conn.execute(
         """
         SELECT column_name AS name
         FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = ?;
         """,
-        (str(table_name),),
+        (key,),
     )
-    return {str(row["name"]) for row in cur.fetchall()}
+    columns = frozenset(str(row["name"]) for row in cur.fetchall())
+    with _PG_SCHEMA_CACHE_LOCK:
+        _PG_TABLE_COLUMNS_CACHE[key] = columns
+    return set(columns)
