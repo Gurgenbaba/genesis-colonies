@@ -726,6 +726,10 @@ def finish_due_work(
     update_scores: bool = True,
     recalc_ranks: bool = True,
     manage_transaction: bool = True,
+    include_planet_queues: bool = True,
+    include_account_research: bool = True,
+    include_fleet: bool = True,
+    include_relocations: bool = True,
 ) -> Dict[str, Any]:
     """
     Central finish pipeline: due build + research jobs, batch score, single rank pass.
@@ -734,6 +738,10 @@ def finish_due_work(
       - planet_id set: that planet (+ owner research)
       - player_id set: all planets of player + their research
       - neither: global (all planets + users in research_queue) — admin/cron
+
+    The ``include_*`` switches let the dedicated queue worker execute the exact
+    scope discovered by its read-only candidate scan. Defaults preserve the
+    historical request/admin behavior.
     """
     started = time.perf_counter()
     result = _empty_result(str(source or "system"))
@@ -750,8 +758,16 @@ def finish_due_work(
     def _execute_finish() -> None:
         nonlocal result, affected_players, affected_planets
 
-        planet_targets = _resolve_planet_targets(conn, player_id, planet_id)
-        research_targets = _resolve_research_targets(conn, player_id, planet_id)
+        planet_targets = (
+            _resolve_planet_targets(conn, player_id, planet_id)
+            if include_planet_queues
+            else []
+        )
+        research_targets = (
+            _resolve_research_targets(conn, player_id, planet_id)
+            if include_account_research
+            else []
+        )
 
         from .options import vacation_freezes_account_progress
 
@@ -885,7 +901,8 @@ def finish_due_work(
                     for err in fleet_result["errors"]:
                         result["errors"].append(f"fleet: {err}")
 
-            _run_finish_step(conn, "fleet", _fleet)
+            if include_fleet:
+                _run_finish_step(conn, "fleet", _fleet)
         except Exception as exc:
             result["ok"] = False
             msg = f"fleet tick: {exc}"
@@ -917,7 +934,8 @@ def finish_due_work(
                             affected_players.add(int(prow["player_id"]))
                             affected_planets.add(int(planet_id))
 
-            _run_finish_step(conn, "reloc", _reloc)
+            if include_relocations:
+                _run_finish_step(conn, "reloc", _reloc)
         except Exception as exc:
             result["ok"] = False
             msg = f"planet relocation: {exc}"

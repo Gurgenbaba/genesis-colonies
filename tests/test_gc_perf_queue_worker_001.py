@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from game.tick_runner import list_players_with_due_work, run_tick
+from game.tick_runner import list_due_work_scopes, list_players_with_due_work, run_tick
 from scripts.run_game_worker import (
     _queue_heartbeat_interval,
     _queue_tick_has_activity,
@@ -53,6 +53,11 @@ def test_due_candidate_scan_covers_all_server_queue_families(monkeypatch):
         conn.commit()
 
         assert list_players_with_due_work(now=101.0, conn=conn) == [1, 2, 3, 4, 5, 6, 7]
+        scopes = list_due_work_scopes(now=101.0, conn=conn)
+        assert scopes[1] == {"planet_ids": {10}, "account_research": False}
+        assert scopes[2] == {"planet_ids": set(), "account_research": True}
+        assert scopes[3] == {"planet_ids": {30}, "account_research": False}
+        assert scopes[7] == {"planet_ids": {70}, "account_research": False}
     finally:
         conn.close()
 
@@ -72,7 +77,7 @@ def test_future_and_inactive_optional_jobs_do_not_trigger_worker(monkeypatch):
 
 
 def test_queue_only_tick_never_runs_global_fleet_or_retention(monkeypatch):
-    monkeypatch.setattr("game.tick_runner.list_players_with_due_work", lambda **_kw: [])
+    monkeypatch.setattr("game.tick_runner.list_due_work_scopes", lambda **_kw: {})
 
     def forbidden(*_a, **_kw):
         raise AssertionError("queue-only worker must not run maintenance tail")
@@ -92,6 +97,47 @@ def test_queue_only_tick_never_runs_global_fleet_or_retention(monkeypatch):
     assert result["finished"]["inbox_purged"] == 0
 
 
+def test_queue_only_tick_finishes_exact_planet_scopes_without_maintenance(monkeypatch):
+    monkeypatch.setattr(
+        "game.tick_runner.list_due_work_scopes",
+        lambda **_kw: {
+            7: {"planet_ids": {72, 71}, "account_research": True},
+        },
+    )
+    calls = []
+
+    def fake_finish(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "finished": {"buildings": 1},
+            "affected_players": [7],
+            "affected_planets": [kwargs.get("planet_id")]
+            if kwargs.get("planet_id")
+            else [],
+            "errors": [],
+        }
+
+    monkeypatch.setattr("game.tick_runner.finish_due_work", fake_finish)
+    result = run_tick(
+        source="queue_worker",
+        persist=False,
+        include_fleet_tail=False,
+        include_inbox_retention=False,
+    )
+
+    assert result["players_processed"] == 1
+    assert result["planet_scopes_processed"] == 2
+    assert result["account_scopes_processed"] == 1
+    assert [call.get("planet_id") for call in calls] == [71, 72, None]
+    for call in calls:
+        assert call["include_fleet"] is False
+        assert call["include_relocations"] is False
+    assert calls[0]["include_account_research"] is False
+    assert calls[1]["include_account_research"] is False
+    assert calls[2]["include_planet_queues"] is False
+
+
 def test_docker_enables_queue_sidecar_only_for_postgres_by_default():
     src = (ROOT / "scripts" / "docker-entrypoint.sh").read_text(encoding="utf-8")
     assert 'GAME_WORKER="${GC_GAME_WORKER:-auto}"' in src
@@ -108,6 +154,8 @@ def test_game_worker_queue_only_passes_tail_kill_switches():
     assert "include_inbox_retention=False" in src
     assert "persist=False" in src
     assert "record_queue_tick_result" in src
+    assert 'f"planet_scopes=' in src
+    assert 'f"account_scopes=' in src
 
 
 def test_idle_queue_worker_heartbeat_defaults_to_fifteen_seconds(monkeypatch):

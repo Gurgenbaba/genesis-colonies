@@ -179,6 +179,8 @@ def main() -> int:
         print(
             f"[{log_prefix}] ok={str(bool(result.get('ok'))).lower()} "
             f"players={int(result.get('players_processed') or 0)} "
+            f"planet_scopes={int(result.get('planet_scopes_processed') or 0)} "
+            f"account_scopes={int(result.get('account_scopes_processed') or 0)} "
             f"buildings={int(finished.get('buildings') or 0)} "
             f"research={int(finished.get('research') or 0)} "
             f"shipyard={int(finished.get('shipyard') or 0)} "
