@@ -24,9 +24,15 @@ def test_duplicate_progress_writes_do_not_abort_postgres(monkeypatch):
     close_pg_pool()
 
     from game.db import db, rollback
-    from game.directives.progress import _record_progress_delta as directive_record
+    import game.directives.progress as directive_progress
     from game.initiation.progress import _record_progress_delta as initiation_record
     from game.story.progress import _record_progress_delta as story_record
+
+    # TEMP tables intentionally do not live in public schema. Force the Directives
+    # helper past its production schema probe so this test exercises the actual
+    # duplicate INSERT path rather than the "schema absent" compatibility branch.
+    monkeypatch.setattr(directive_progress, "progress_schema_ready", lambda _conn: True)
+    directive_record = directive_progress._record_progress_delta
 
     conn = db()
     try:
