@@ -1497,6 +1497,12 @@ def tick_schedules(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
         if not rule.get("enabled"):
             continue
         result, err = materialize_schedule(int(rule["id"]), conn=conn, now=ts)
+        # No window inside the scheduler lookahead is the normal idle state, not
+        # an operational failure. Treat it like an ordinary skipped rule so the
+        # maintenance logs only report actionable LiveOps errors.
+        if err == "no_window":
+            skipped += 1
+            continue
         if err:
             errors.append({"schedule_id": rule["id"], "error": err})
             continue

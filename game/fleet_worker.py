@@ -164,10 +164,17 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
 
             sev = maybe_tick_schedules(conn=conn)
             mats = sev.get("materialized") or []
-            if mats or sev.get("errors"):
+            errs = sev.get("errors") or []
+            if mats or errs:
+                error_summary = ",".join(
+                    f"{int(item.get('schedule_id') or 0)}:{str(item.get('error') or 'unknown')}"
+                    for item in errs[:5]
+                    if isinstance(item, dict)
+                )
+                suffix = f" error_reasons={error_summary}" if error_summary else ""
                 _worker_log(
                     f"liveops_schedules materialized={len(mats)} "
-                    f"skipped={sev.get('skipped')} errors={len(sev.get('errors') or [])}"
+                    f"skipped={sev.get('skipped')} errors={len(errs)}{suffix}"
                 )
 
         def _world_boss() -> None:
