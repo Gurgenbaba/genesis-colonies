@@ -23,13 +23,6 @@ replace_once(
     '''    gate = int(required_level_for_evolution(rank + 1) or 0)\n    if gate <= 0:\n        return max_level\n    # Before the first Ascension, the Nexus-derived normal cap is authoritative\n    # (and tops out at L200). Once Rank I exists, Ascension owns the endgame\n    # gate: I -> 225, II -> 250, ... independent of further Nexus growth.\n    if rank <= 0:\n        return min(max_level, gate)\n    return gate\n''',
 )
 
-# The UI should expose the current real gate instead of pretending Ascension mines are uncapped.
-replace_once(
-    "game/buildings.py",
-    '''    uncapped = is_evolvable_mine(building_type)\n    evo_ranks = None\n    evolution_rank = None\n    if pid is not None and uncapped:\n''',
-    '''    is_evolution_mine = is_evolvable_mine(building_type)\n    uncapped = False\n    evo_ranks = None\n    evolution_rank = None\n    if pid is not None and is_evolution_mine:\n''',
-)
-
 # Preserve the useful user-facing fix from the superseded P0 PR.
 replace_once(
     "static/main.js",
@@ -62,6 +55,18 @@ replace_once(
     "docs/EFFECTS.md",
     '''EPIC-29: production mines uncapped ([MINE_EVOLUTION.md](MINE_EVOLUTION.md)); nexus still raises solar/storage caps''',
     '''production mines are Nexus-limited up to L200, then Mine Ascension owns further +25-level gates ([MINE_EVOLUTION.md](MINE_EVOLUTION.md)); nexus still raises solar/storage caps''',
+)
+
+# Stellar Forge already increases batch capacity in runtime; make the design docs match it.
+replace_once(
+    "docs/STELLAR_FORGE.md",
+    '''4. Grants **capability unlocks per rank**, not raw build-speed multipliers that would blow out ship-count inflation further.\n\nNo second shipyard engine. Stellar Forge reads/writes its own rank state and layers modifiers onto the existing shipyard math in `game/shipyard.py` — it does not reimplement batch capacity, build time, or the build queue.\n''',
+    '''4. Increases **ships built per production cycle** through the existing shipyard batch-capacity math, while also granting capability unlocks.\n\nNo second shipyard engine. Stellar Forge reads/writes its own rank state and layers modifiers onto the existing shipyard math in `game/shipyard.py` — it does not reimplement batch capacity, build time, or the build queue. `orbital_production_batch_capacity(..., forge_rank)` is authoritative for the throughput increase.\n''',
+)
+replace_once(
+    "docs/STELLAR_FORGE.md",
+    '''| Ranks I–III, capability unlocks only (extra queue slot, Ascension HUD, Nanite-Assisted order option) | Specialization (Vanguard/Logistics/Odyssey forge), Redline Overdrive, Capital Hulls |\n''',
+    '''| Ranks I–III: higher ships-per-cycle batch capacity plus capability unlocks (extra queue slot, Ascension HUD, Nanite-Assisted order option) | Specialization (Vanguard/Logistics/Odyssey forge), Redline Overdrive, Capital Hulls |\n''',
 )
 
 print("Applied canonical Nexus -> L200 -> Ascension contract")
