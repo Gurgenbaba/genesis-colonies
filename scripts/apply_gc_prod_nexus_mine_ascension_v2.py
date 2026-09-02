@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    if old not in text:
+        raise SystemExit(f"target not found in {path}: {old[:160]!r}")
+    p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+# Nexus owns the normal mine cap up to L200. Ascension owns progression after L200.
+replace_once(
+    "game/effects/effect_resolver.py",
+    '''    def get_max_building_level(self, building_type: str) -> int:\n        # EPIC-29: production mines are uncapped (soft sentinel); solar keeps nexus formula.\n        if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):\n            from ..mine_evolution import UNCAPPED_BUILDING_LEVEL\n\n            return int(UNCAPPED_BUILDING_LEVEL)\n\n        base_max = self.MAX_BUILDING_LEVEL\n        b = self.buildings\n        core = _bld(b, "planet_core_nexus")\n        geo = _bld(b, "geothermal_nexus")\n\n        if building_type == "solar_plant":\n            return base_max + core + geo * 2\n''',
+    '''    def get_max_building_level(self, building_type: str) -> int:\n        base_max = self.MAX_BUILDING_LEVEL\n        b = self.buildings\n        core = _bld(b, "planet_core_nexus")\n        geo = _bld(b, "geothermal_nexus")\n\n        if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):\n            from ..mine_evolution import FIRST_EVOLUTION_LEVEL\n\n            # Canonical progression: Nexuses unlock normal mine levels, but never\n            # beyond L200. Mine Ascension takes over after that boundary.\n            return min(base_max + core + geo * 2, int(FIRST_EVOLUTION_LEVEL))\n\n        if building_type == "solar_plant":\n            return base_max + core + geo * 2\n''',
+)
+
+replace_once(
+    "game/buildings.py",
+    '''    gate = int(required_level_for_evolution(rank + 1) or 0)\n    if gate <= 0:\n        return max_level\n    return min(max_level, gate)\n''',
+    '''    gate = int(required_level_for_evolution(rank + 1) or 0)\n    if gate <= 0:\n        return max_level\n    # Before the first Ascension, the Nexus-derived normal cap is authoritative\n    # (and tops out at L200). Once Rank I exists, Ascension owns the endgame\n    # gate: I -> 225, II -> 250, ... independent of further Nexus growth.\n    if rank <= 0:\n        return min(max_level, gate)\n    return gate\n''',
+)
+
+# The UI should expose the current real gate instead of pretending Ascension mines are uncapped.
+replace_once(
+    "game/buildings.py",
+    '''    uncapped = is_evolvable_mine(building_type)\n    evo_ranks = None\n    evolution_rank = None\n    if pid is not None and uncapped:\n''',
+    '''    is_evolution_mine = is_evolvable_mine(building_type)\n    uncapped = False\n    evo_ranks = None\n    evolution_rank = None\n    if pid is not None and is_evolution_mine:\n''',
+)
+
+# Preserve the useful user-facing fix from the superseded P0 PR.
+replace_once(
+    "static/main.js",
+    '''  function mapActionError(reason, payload) {\n    if (reason === "not_enough_resources" && payload) {\n''',
+    '''  function mapActionError(reason, payload) {\n    if (reason === "ascension_required") {\n      const progress = t("buildings_mine_evo_progress", "Nächste Ascension");\n      const action = t("buildings_mine_evo_action", "Ascension einleiten");\n      return `${progress}: ${action}`;\n    }\n    if (reason === "not_enough_resources" && payload) {\n''',
+)
+
+# Canonical docs: Nexus -> 200, then fixed 25-level Ascension gates.
+replace_once(
+    "docs/MINE_EVOLUTION.md",
+    '''| Soft-uncapped resolver + **enqueue gate at the next Ascension milestone** | Permanent hard max on mines |\n''',
+    '''| Nexus-limited normal progression to **L200**, then Ascension gates every +25 levels | Permanent hard max on mines |\n''',
+)
+replace_once(
+    "docs/MINE_EVOLUTION.md",
+    '''| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver remains soft-uncapped (`UNCAPPED_BUILDING_LEVEL`), but **new build jobs stop at `required_level(rank+1)` until that Ascension is completed** |\n''',
+    '''| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Nexuses unlock normal levels up to **L200**. At L200 Ascension I is required; each completed Ascension unlocks the next **25 mine levels** (225, 250, 275, ...). |\n''',
+)
+replace_once(
+    "docs/MINE_EVOLUTION.md",
+    '''Nexus no longer raises the **mine** hardcap. The resolver stays uncapped, while the build queue uses the next Ascension milestone as a progression gate. Existing overlevel/catch-up levels are never reduced.\n''',
+    '''**Canonical contract:** Nexuses are the normal building-limit system and can unlock mines only up to L200. Ascension begins exactly there and takes over further mine progression in 25-level steps. Existing overlevel/catch-up levels are never reduced.\n''',
+)
+replace_once(
+    "docs/BUILDINGS_SYSTEM.md",
+    '''| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver soft-uncapped; **Build-Enqueue nur bis zum nächsten Ascension-Milestone `required_level(rank+1)`** |\n''',
+    '''| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Nexus-Limit bis **L200**; danach Mine-Ascension in +25-Level-Gates (225, 250, 275, ...) |\n''',
+)
+replace_once(
+    "docs/EFFECTS.md",
+    '''EPIC-29: production mines uncapped ([MINE_EVOLUTION.md](MINE_EVOLUTION.md)); nexus still raises solar/storage caps''',
+    '''production mines are Nexus-limited up to L200, then Mine Ascension owns further +25-level gates ([MINE_EVOLUTION.md](MINE_EVOLUTION.md)); nexus still raises solar/storage caps''',
+)
+
+print("Applied canonical Nexus -> L200 -> Ascension contract")
