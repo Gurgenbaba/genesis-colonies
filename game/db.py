@@ -192,14 +192,11 @@ def _pin_request_postgres_connection(conn: DbConn) -> bool:
         real_close = conn.close
 
         def _request_local_close() -> None:
-            try:
-                if in_transaction(conn):
-                    rollback(conn)
-            except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
+            # One pooled checkout is shared by the entire Flask request. A nested
+            # helper calling close() must not roll back that shared transaction:
+            # doing so destroys outer queue-engine SAVEPOINTs. The real rollback
+            # and pool-return boundary is teardown_request.
+            return None
 
         conn.close = _request_local_close  # type: ignore[method-assign]
         g.gc_pg_request_connection = conn
