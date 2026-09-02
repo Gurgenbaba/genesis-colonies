@@ -41,6 +41,7 @@ jobs:
         run: |
           python scripts/apply_gc_prod_nexus_mine_ascension_v3.py
           python scripts/apply_gc_prod_nexus_mine_ascension_v3_tests.py
+          python scripts/fix_gc_prod_nexus_mine_panel_fixture_v3.py
       - name: Run focused regressions
         run: |
           python -m pytest -q \
@@ -58,6 +59,7 @@ jobs:
           git rm \
             scripts/apply_gc_prod_nexus_mine_ascension_v3.py \
             scripts/apply_gc_prod_nexus_mine_ascension_v3_tests.py \
+            scripts/fix_gc_prod_nexus_mine_panel_fixture_v3.py \
             .github/workflows/gc-prod-nexus-mine-ascension-v3-apply.yml
           git add \
             game/effects/effect_resolver.py \
