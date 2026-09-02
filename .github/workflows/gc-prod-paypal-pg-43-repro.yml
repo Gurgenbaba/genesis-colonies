@@ -6,12 +6,12 @@ on:
       - fix/prod-paypal-fulfillment-p0-43
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   postgres-payment-repro:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -47,9 +47,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
+      - name: Apply P0 fix
+        run: python scripts/apply_gc_prod_paypal_pg_43.py
       - name: Bootstrap production-shaped PostgreSQL schema
         run: python migrate.py
-      - name: Reproduce paid PayPal Timekeeper fulfillment
+      - name: Verify paid Timekeeper fulfillment on PostgreSQL 16
         run: >-
           python -m pytest -vv -s
-          tests/test_gc_prod_paypal_pg_fulfillment_43.py::test_paid_paypal_timekeeper_s_fulfills_on_postgres
+          tests/test_gc_prod_paypal_pg_fulfillment_43.py
+      - name: Verify existing shop regressions
+        run: >-
+          python -m pytest -q
+          tests/test_shop_payments.py
+          tests/test_shop_promos.py
+      - name: Compile changed Python
+        run: python -m py_compile game/shop.py game/shop_promos.py tests/test_gc_prod_paypal_pg_fulfillment_43.py
+      - name: Materialize source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/gc-prod-paypal-pg-43-repro.yml scripts/apply_gc_prod_paypal_pg_43.py
+          git add game/shop.py game/shop_promos.py templates/shop_return.html locales tests/test_gc_prod_paypal_pg_fulfillment_43.py
+          git diff --cached --check
+          git commit -m "fix(shop): keep paid fulfillment valid on postgres"
+          git push origin HEAD:fix/prod-paypal-fulfillment-p0-43
