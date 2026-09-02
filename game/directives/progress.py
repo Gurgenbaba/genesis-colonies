@@ -171,22 +171,15 @@ def _record_progress_delta(
 ) -> bool:
     if not progress_schema_ready(conn):
         return True
-    try:
-        conn.execute(
-            """
-            INSERT INTO directive_progress (
-                player_directive_id, source_event_id, delta, created_at
-            ) VALUES (?, ?, ?, ?);
-            """,
-            (int(player_directive_id), str(source_event_id), int(delta), int(now)),
-        )
-        return True
-    except Exception as exc:
-        from ..db import is_integrity_error
-
-        if is_integrity_error(exc):
-            return False
-        raise
+    cur = conn.execute(
+        """
+        INSERT OR IGNORE INTO directive_progress (
+            player_directive_id, source_event_id, delta, created_at
+        ) VALUES (?, ?, ?, ?);
+        """,
+        (int(player_directive_id), str(source_event_id), int(delta), int(now)),
+    )
+    return int(cur.rowcount or 0) > 0
 
 
 def gameplay_event_delta(
