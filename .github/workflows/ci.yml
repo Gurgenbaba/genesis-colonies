@@ -43,6 +43,7 @@ jobs:
             tests/test_gc_perf_resource_persist_001.py tests/test_gc_perf_buildings_002.py tests/test_gc_flt_scope_001.py \
             tests/test_gc_perf_002_nav_latency.py \
             tests/test_gc_perf_174_sentinel_nav_matrix.py \
+            tests/test_gc_pjax_resilience.py tests/test_gc861b_pjax_lcp_preload.py \
             tests/test_gc_pg_175_planet_context_hot_row.py \
             tests/test_gc_pg_142_presence_pool_starvation.py \
             tests/test_gc_pg_166_presence_secondary.py \
@@ -93,6 +94,7 @@ jobs:
         run: |
           python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py
           node --check static/main.js
+          node --check static/js/core/gc.js
           node --check static/js/ranking_page.js
           git diff --check
       - name: Big-score regression suite
