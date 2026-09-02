@@ -117,6 +117,17 @@ sock = Sock(app)
 from game.db import DbPoolTimeout
 
 
+@app.teardown_request
+def _return_request_postgres_connections(_exc):
+    """Last-resort PG pool leak guard for every HTTP request."""
+    try:
+        from game.db import close_request_postgres_connections
+
+        close_request_postgres_connections()
+    except Exception:
+        pass
+
+
 @app.errorhandler(DbPoolTimeout)
 def handle_db_pool_timeout(exc):
     """Pool exhausted — 503, not a fake 'postgres not configured' 500."""

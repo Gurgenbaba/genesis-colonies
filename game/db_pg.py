@@ -413,10 +413,17 @@ def connect_postgres() -> PgConnection:
     raw = pool.getconn()
     wrapped = PgConnection(raw)
 
-    # Return to pool on close
-    original_close = wrapped.close
+    # Return to pool on close. This must be idempotent: request teardown may
+    # defensively close a wrapper that a domain helper already closed.
+    returned = False
+    return_lock = threading.Lock()
 
     def _close_and_return() -> None:
+        nonlocal returned
+        with return_lock:
+            if returned:
+                return
+            returned = True
         try:
             if wrapped.in_transaction:
                 wrapped.rollback()
@@ -429,8 +436,6 @@ def connect_postgres() -> PgConnection:
                 raw.close()
             except Exception:
                 pass
-        # avoid double-return
-        wrapped.close = original_close  # type: ignore[method-assign]
 
     wrapped.close = _close_and_return  # type: ignore[method-assign]
     return wrapped
