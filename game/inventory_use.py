@@ -51,22 +51,26 @@ def _finish_inventory_due_work(
     Existing inventory callers may ignore the return value. Mutation paths such
     as Timekeeper use it to prevent consuming value when a due delivery failed.
     """
-    from .queue_engine import finish_due_work_once
+    from .queue_engine import finish_due_work
     from .queue_poll import player_has_due_queue_work
 
     uid = int(user_id)
     pid = int(planet_id) if planet_id is not None else None
     last_result: Dict[str, Any] = {"ok": True, "errors": []}
     for pass_idx in range(_INVENTORY_FINISH_PASSES):
-        result = finish_due_work_once(
+        # GC-FLEET-PG-ABORT-001: inventory/Timekeeper settles economy queues
+        # only. Fleet movement completion belongs to the dedicated Fleet owner;
+        # running it here widens the planet lock and races expedition holding.
+        result = finish_due_work(
             uid,
             pid,
             conn=conn,
             source=source if pass_idx == 0 else f"{source}_retry",
-            dedup=False,
             recalc_ranks=False,
             update_scores=False,
             manage_transaction=False,
+            include_fleet=False,
+            include_relocations=False,
         )
         if isinstance(result, dict):
             last_result = result
