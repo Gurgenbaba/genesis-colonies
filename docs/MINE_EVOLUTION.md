@@ -3,7 +3,7 @@
 Planet-scoped Ascension loop for the three production mines. **Phase 1 = Kern-Loop** (GC-2905 feel-fix: no level reset).
 
 **Owner:** `game/mine_evolution/`  
-**Tickets:** GC-2900…GC-2905  
+**Tickets:** GC-2900…GC-2905 · GC-MINE-ASC-NEXUS-001  
 **Status:** Phase 1 🔄
 
 ---
@@ -12,10 +12,10 @@ Planet-scoped Ascension loop for the three production mines. **Phase 1 = Kern-Lo
 
 Give high-level mines a meaningful cyclic decision without a production cliff:
 
-1. Push mine level toward an Ascension threshold  
-2. Pay a **Tribute** (resources at the rank milestone)  
-3. Keep the mine level; gain a permanent, saturating production bonus  
-4. Face the next linear threshold for the following Ascension  
+1. Raise the mine through the normal **Nexus cap** toward level 200  
+2. At level 200, pay a **Tribute** and complete Ascension I  
+3. Keep the mine level; unlock the next level band for **that mine only** and gain a permanent, saturating production bonus  
+4. Reach the next linear threshold and repeat  
 
 No second production engine. Bonus registers on the existing Ferdi formula via `ProductionContext.building_modifier` **per mine / resource**.
 
@@ -36,10 +36,10 @@ No second production engine. Bonus registers on the existing Ferdi formula via `
 | In | Out |
 |----|-----|
 | `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Evolution trees / skill points |
-| Planet-scoped rank per mine | Account-wide evolution |
+| Planet-scoped rank **per mine** | Account-wide evolution |
 | Tribute at rank milestone (no level reset) | Industrial Core / PE unlocks |
-| Linear thresholds + catch-up | Other buildings (solar, shipyard, …) |
-| Soft-uncapped resolver + **enqueue gate at the next Ascension milestone** | Permanent hard max on mines |
+| Nexus progression through L200 + linear post-200 Ascension bands | Other buildings (solar, shipyard, …) |
+| Existing server-authoritative Buildings queue | Parallel evolution/build queue |
 
 Future (docs only until separate tickets):
 
@@ -49,15 +49,30 @@ Future (docs only until separate tickets):
 
 ---
 
-## Buildings & caps (contract)
+## Buildings & caps (binding contract)
 
-| Building | Cap (Phase 1) |
-|----------|----------------|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Resolver remains soft-uncapped (`UNCAPPED_BUILDING_LEVEL`), but **new build jobs stop at `required_level(rank+1)` until that Ascension is completed** |
-| `solar_plant` | unchanged: `50 + core + 2×geo` |
-| Storages / other | unchanged |
+Before the first Ascension, production mines and Solar use the normal Nexus progression:
 
-Nexus no longer raises the **mine** hardcap. The resolver stays uncapped, while the build queue uses the next Ascension milestone as a progression gate. Existing overlevel/catch-up levels are never reduced.
+```text
+nexus_production_cap = 50 + planet_core_nexus + 2 × geothermal_nexus
+```
+
+Both Nexuses cap at level 50, therefore the normal producer ceiling is **level 200**.
+
+| Building / Rank | Effective build cap |
+|-----------------|---------------------|
+| production mine, Rank 0 | current Nexus cap, maximum L200 |
+| production mine, Rank I | L225 |
+| production mine, Rank II | L250 |
+| production mine, Rank III | L275 |
+| production mine, Rank IV | L300 |
+| further ranks | `required_level(rank+1)` |
+| `solar_plant` | Nexus formula only; no Mine Ascension |
+| Storages / other | existing formulas unchanged |
+
+**Important:** Ascension rank is stored by `(planet_id, building_type)`. Ascending Ferronit does not unlock levels for Crytite or Brennzellen. Each mine has its own progression gate and Tribute.
+
+The resolver owns the structural Nexus cap. `game/buildings.py` owns the rank-aware enqueue cap because only that layer has the selected mine’s persisted Ascension rank. Existing legacy overlevel/catch-up levels are never reduced.
 
 ---
 
@@ -91,7 +106,7 @@ Canonical cost = sum of upgrade costs **to reach** each target level (`get_upgra
 
 Catch-up: a L285 mine buying Evo I pays the **same** Tribute as a L200 milestone purchase. Each further Ascension uses its own higher milestone window.
 
-Ascension blocked while the mine has pending `build_queue` jobs (after `finish_due_work`).
+Ascension blocked while the selected mine has pending `build_queue` jobs (after `finish_due_work`).
 
 ### Modifier isolation
 
@@ -101,7 +116,7 @@ Ascension blocked while the mine has pending `build_queue` jobs (after `finish_d
 | Crytite (`crystal_mine`) | crystal only |
 | Brennzellen (`fuel_cell_plant`) | fuel_cells only |
 
-Forbidden: one shared planet-wide `building_modifier` that buffs all three resources.
+Forbidden: one shared planet-wide `building_modifier` or one shared mine rank that buffs/unlocks all three resources.
 
 ---
 
@@ -112,6 +127,7 @@ L285 · Evo 0 → I(200)✓ → II(225)✓ → III(250)✓ → IV(275)✓ → V(
 - One Ascension per request  
 - Ranks strictly sequential (no skip)  
 - Each Ascension: own milestone Tribute + confirm  
+- Build headroom after an Ascension becomes available immediately on the same mine  
 
 ---
 
@@ -126,7 +142,7 @@ Table `planet_mine_evolution`:
 | `evolution_rank` | Completed Ascensions (0 = never) |
 | `updated_at` | Unix time |
 
-PK: `(planet_id, building_type)`.
+PK: `(planet_id, building_type)` — this is the independence guarantee.
 
 ---
 
@@ -136,19 +152,22 @@ PK: `(planet_id, building_type)`.
 
 Body: `{ "building_type": "metal_mine", "request_id"?: "…" }`
 
-Atomic flow (single write TX):
+Atomic flow (single write TX / single DB checkout):
 
-1. `finish_due_work`  
-2. Re-read rank + level  
-3. Threshold (`level >= required_level(rank+1)`)  
-4. Compute Tribute at milestone  
-5. Spend resources (`try_spend_resources_conn`)  
-6. Rank +1 (level unchanged)  
-7. Commit  
+1. Vacation/safety probe on the mutation connection  
+2. `finish_due_work`  
+3. Re-read selected mine rank + level  
+4. Threshold (`level >= required_level(rank+1)`)  
+5. Compute Tribute at milestone  
+6. Spend resources (`try_spend_resources_conn`)  
+7. Selected mine rank +1 (level unchanged)  
+8. Commit  
 
 Guarantees:
 
 - No Tribute without rank increase and vice versa  
+- No level reset  
+- Other mine ranks are unchanged  
 - Same `request_id` twice → one Tribute, one rank (`get_idempotent_action` / `save_idempotent_action`)  
 - Return `{ ok, state }` → client `applyActionState`  
 
@@ -162,7 +181,19 @@ Guarantees:
 
 ## UI
 
-Building cards (resources tab): evolution badge, progress `current / required`, Ascension confirm modal with benefit + Tribute (no reset warning). Server authority only — no client bonus/tribute math.
+Building cards (resources tab): current Nexus/Ascension max level, evolution badge, progress `current / required`, Ascension confirm modal with benefit + Tribute (no reset warning). After a successful Ascension the selected card must immediately expose the newly unlocked level band. Server authority only — no client bonus/tribute math.
+
+---
+
+## Regression contract
+
+`tests/test_gc_mine_ascension_nexus_001.py` proves the live gameplay chain:
+
+1. Max Nexuses → mine cap L200  
+2. Ferronit L200 / Rank 0 cannot queue L201  
+3. Ferronit Ascension I succeeds without level reset  
+4. Ferronit card/queue cap becomes L225 and L201 can be queued  
+5. Crytite remains Rank 0 / cap L200 at the same time  
 
 ---
 
@@ -171,8 +202,9 @@ Building cards (resources tab): evolution badge, progress `current / required`, 
 | Ticket | Focus |
 |--------|--------|
 | GC-2900 | Master doc + EPICS / CORE §17 / BUILDINGS / PRODUCTION / ROADMAP |
-| GC-2901 | Migration + owner + evolve API + uncapped mines |
+| GC-2901 | Migration + owner + evolve API |
 | GC-2902 | `building_modifier` wire in `production_context_from_resolver` |
 | GC-2903 | Buildings UI + Confirm + Locales |
 | GC-2904 | Integration tests |
 | GC-2905 | No reset; Tribute@milestone; bonus curve; catch-up; atomic/idempotent |
+| GC-MINE-ASC-NEXUS-001 | Restore Nexus→L200 contract + per-mine post-200 unlock bands |
