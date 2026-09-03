@@ -1,0 +1,36 @@
+name: Apply GC Fleet PG Abort 001
+
+on:
+  push:
+    branches: [fix/fleet-pg-abort-cascade-001]
+    paths:
+      - "scripts/apply_gc_fleet_pg_abort_cascade_001.py"
+      - ".github/workflows/apply-gc-fleet-pg-abort-001.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/fleet-pg-abort-cascade-001
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply guarded hotfix
+        run: |
+          python scripts/apply_gc_fleet_pg_abort_cascade_001.py
+          python -m py_compile game/fleet.py game/inventory_use.py
+          git diff --check
+      - name: Commit runtime patch
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/fleet.py game/inventory_use.py .github/workflows/ci.yml
+          git commit -m "fix(fleet): isolate PG movement failures and TK queue finishing"
+          git push origin HEAD:fix/fleet-pg-abort-cascade-001
