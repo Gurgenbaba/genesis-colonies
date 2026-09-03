@@ -8409,6 +8409,10 @@ def build_logistics_page_context(
     planet_id: int,
     planet: Dict[str, Any],
     conn=None,
+    planet_rows: Sequence[Mapping[str, Any]] | None = None,
+    maintenance_prepared: bool = False,
+    fleet_slots: Mapping[str, Any] | None = None,
+    mission_locks: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Logistics Collect UI (GC-900C) — colonies + cargo hulls; no parallel state."""
     from .live_state import current_ssr_perf
@@ -8423,8 +8427,11 @@ def build_logistics_page_context(
         if not fleet_schema_ready(conn):
             return {"ready": False}
 
-        _finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))
-        process_fleet_tick(player_id=int(player_id), conn=conn)
+        # GC-PERF-FLEET-SHARED-004: /fleet already ran these once in the
+        # canonical Send context. Standalone callers keep the historical behavior.
+        if not maintenance_prepared:
+            _finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))
+            process_fleet_tick(player_id=int(player_id), conn=conn)
 
         from .fleet_calc import cargo_ship_count, filter_available_cargo_ships, planet_resource_stock
         from .resources import update_planet_resources
@@ -8450,7 +8457,10 @@ def build_logistics_page_context(
                 ship_row["amount"]
             )
 
-        for p in get_planets_by_player(player_id, conn=conn):
+        shared_planet_rows = planet_rows if planet_rows is not None else get_planets_by_player(
+            player_id, conn=conn
+        )
+        for p in shared_planet_rows:
             pid = int(p["id"])
             try:
                 pc = get_planet_coordinates(p)
@@ -8494,9 +8504,17 @@ def build_logistics_page_context(
             "hub_resources": hub_resources,
             "cargo_ship_defs": cargo_defs,
             "ships": dict(ships_by_planet.get(int(planet_id)) or {}),
-            "fleet_slots": get_fleet_slot_status(player_id, conn=conn),
+            "fleet_slots": (
+                dict(fleet_slots)
+                if fleet_slots is not None
+                else get_fleet_slot_status(player_id, conn=conn)
+            ),
             "server_time": time.time(),
-            "mission_locks": _fleet_mission_locks_for_client(conn=conn),
+            "mission_locks": (
+                dict(mission_locks)
+                if mission_locks is not None
+                else _fleet_mission_locks_for_client(conn=conn)
+            ),
         }
     finally:
         if ssr is not None:
@@ -8611,6 +8629,7 @@ def build_fleet_page_context(
     planet: Dict[str, Any],
     conn=None,
     can_seed_test_ships: bool = False,
+    planet_rows: Sequence[Mapping[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     from .live_state import current_ssr_perf
 
@@ -8628,7 +8647,10 @@ def build_fleet_page_context(
 
         coords = get_planet_coordinates(planet)
         colonies: List[Dict[str, Any]] = []
-        for p in get_planets_by_player(player_id, conn=conn):
+        shared_planet_rows = planet_rows if planet_rows is not None else get_planets_by_player(
+            player_id, conn=conn
+        )
+        for p in shared_planet_rows:
             try:
                 pc = get_planet_coordinates(p)
             except GalaxyCoordinateError:

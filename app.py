@@ -3034,18 +3034,29 @@ def fleet_view():
             from game.live_state import perf_span
 
             planet_dict = dict(planet)
+            player_id = int(player_view["id"])
+            # GC-PERF-FLEET-SHARED-004: both Fleet panels belong to one SSR
+            # request. Reuse its planet list + canonical maintenance results.
+            from game.models import get_planets_by_player
+
+            page_planets = [dict(p) for p in get_planets_by_player(player_id, conn=conn)]
             with perf_span("page_context.fleet"):
                 fleet_ctx = build_fleet_page_context(
-                    player_id=int(player_view["id"]),
+                    player_id=player_id,
                     planet_id=int(planet["id"]),
                     planet=planet_dict,
                     conn=conn,
+                    planet_rows=page_planets,
                 )
                 logistics_ctx = build_logistics_page_context(
-                    player_id=int(player_view["id"]),
+                    player_id=player_id,
                     planet_id=int(planet["id"]),
                     planet=planet_dict,
                     conn=conn,
+                    planet_rows=page_planets,
+                    maintenance_prepared=True,
+                    fleet_slots=fleet_ctx.get("fleet_slots"),
+                    mission_locks=fleet_ctx.get("mission_locks"),
                 )
     finally:
         conn.close()
