@@ -1,0 +1,34 @@
+name: Apply GC Mine Ascension Docs 001
+
+on:
+  push:
+    branches: [fix/mine-ascension-nexus-gates]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mine-ascension-nexus-gates
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply guarded docs patch
+        run: |
+          python scripts/apply_gc_mine_ascension_docs_001.py
+          git diff --check
+      - name: Commit docs patch
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/BUILDINGS_SYSTEM.md docs/EFFECTS.md
+          git commit -m 'docs(mines): align nexus and ascension cap contract'
+          git push origin HEAD:fix/mine-ascension-nexus-gates
