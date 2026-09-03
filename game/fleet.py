@@ -8431,6 +8431,25 @@ def build_logistics_page_context(
 
         colonies: List[Dict[str, Any]] = []
         hub_resources = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+
+        # GC-PERF-FLEET-LOGISTICS-003: one hangar read for all colonies instead
+        # of get_planet_ships() once per colony (+ once again for the hub).
+        ships_by_planet: Dict[int, Dict[str, int]] = {}
+        ships_cur = conn.cursor()
+        ships_cur.execute(
+            """
+            SELECT planet_id, ship_key, amount
+            FROM planet_ships
+            WHERE player_id = ? AND amount > 0;
+            """,
+            (int(player_id),),
+        )
+        for ship_row in ships_cur.fetchall():
+            ship_pid = int(ship_row["planet_id"])
+            ships_by_planet.setdefault(ship_pid, {})[str(ship_row["ship_key"])] = _safe_int(
+                ship_row["amount"]
+            )
+
         for p in get_planets_by_player(player_id, conn=conn):
             pid = int(p["id"])
             try:
@@ -8438,13 +8457,17 @@ def build_logistics_page_context(
             except GalaxyCoordinateError:
                 continue
             # Tick production so Collect cards match live stock (not stale last_update).
+            # GC-PERF-FLEET-LOGISTICS-002: SSR is a read path. Compute live
+            # resource stock for the card, but do not write every colony merely
+            # because /fleet was opened. Actions revalidate/persist authoritatively.
             planet_live, *_rest = update_planet_resources(
                 dict(p),
                 conn=conn,
                 skip_queue_finish=True,
+                persist=False,
             )
             stock = planet_resource_stock(planet_live)
-            ships = get_planet_ships(pid, conn=conn)
+            ships = dict(ships_by_planet.get(pid) or {})
             cargo_ships = filter_available_cargo_ships(ships)
             is_hub = pid == int(planet_id)
             if is_hub:
@@ -8470,7 +8493,7 @@ def build_logistics_page_context(
             "colonies": colonies,
             "hub_resources": hub_resources,
             "cargo_ship_defs": cargo_defs,
-            "ships": get_planet_ships(planet_id, conn=conn),
+            "ships": dict(ships_by_planet.get(int(planet_id)) or {}),
             "fleet_slots": get_fleet_slot_status(player_id, conn=conn),
             "server_time": time.time(),
             "mission_locks": _fleet_mission_locks_for_client(conn=conn),
