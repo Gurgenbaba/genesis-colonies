@@ -6883,6 +6883,33 @@ def _load_movement_row(conn, movement_id: int) -> Optional[Dict[str, Any]]:
     return _row_to_movement(row) if row else None
 
 
+def _run_shared_fleet_step(conn, *, phase: str, movement_id: int, fn):
+    """Isolate one movement inside a caller-owned transaction.
+
+    PostgreSQL leaves the whole transaction aborted after a statement timeout or
+    lock timeout. A movement-level SAVEPOINT lets the shared fallback recover
+    only that movement and continue processing later fleets safely.
+    """
+    safe_phase = str(phase or "movement").replace("-", "_")
+    savepoint = f"gc_fleet_{safe_phase}_{int(movement_id)}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        out = fn()
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        return out
+    except Exception:
+        try:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        except Exception:
+            logger.exception(
+                "fleet shared savepoint recovery failed phase=%s fleet=%s",
+                phase,
+                movement_id,
+            )
+        raise
+
+
 def _process_fleet_tick_shared_tx(
     conn,
     *,
@@ -6909,7 +6936,12 @@ def _process_fleet_tick_shared_tx(
     for row in cur.fetchall():
         mv = _row_to_movement(row)
         try:
-            if _handle_arrival(mv, conn=conn, now=now):
+            if _run_shared_fleet_step(
+                conn,
+                phase="arrival",
+                movement_id=int(mv["id"]),
+                fn=lambda: _handle_arrival(mv, conn=conn, now=now),
+            ):
                 result["processed_arrivals"] += 1
         except Exception as exc:
             result["errors"].append(f"arrival fleet={mv['id']}: {exc}")
@@ -6938,7 +6970,12 @@ def _process_fleet_tick_shared_tx(
     for row in cur.fetchall():
         mv = _row_to_movement(row)
         try:
-            if _handle_holding_end(mv, conn=conn, now=now):
+            if _run_shared_fleet_step(
+                conn,
+                phase="holding",
+                movement_id=int(mv["id"]),
+                fn=lambda: _handle_holding_end(mv, conn=conn, now=now),
+            ):
                 result["processed_holding"] += 1
         except Exception as exc:
             result["errors"].append(f"holding fleet={mv['id']}: {exc}")
@@ -6958,7 +6995,12 @@ def _process_fleet_tick_shared_tx(
     for row in cur.fetchall():
         mv = _row_to_movement(row)
         try:
-            if _handle_return(mv, conn=conn, now=now):
+            if _run_shared_fleet_step(
+                conn,
+                phase="return",
+                movement_id=int(mv["id"]),
+                fn=lambda: _handle_return(mv, conn=conn, now=now),
+            ):
                 result["processed_returns"] += 1
         except Exception as exc:
             result["errors"].append(f"return fleet={mv['id']}: {exc}")
