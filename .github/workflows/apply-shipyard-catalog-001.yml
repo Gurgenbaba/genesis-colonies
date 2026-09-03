@@ -29,6 +29,7 @@ jobs:
           s = s.replace('"def list_buildable_ships(\\n",', '"def list_buildable_ships(",')
           s = s.replace('"def list_locked_ships(\\n",', '"def list_locked_ships(",')
           s = s.replace('"def build_shipyard_api_payload(\\n",', '"def build_shipyard_api_payload(",')
+          s = s.replace('"def build_shipyard_page_context(\\n",', '"def build_shipyard_page_context(",')
           p.write_text(s, encoding='utf-8')
           PY
       - name: Apply focused patch
