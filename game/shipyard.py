@@ -700,65 +700,6 @@ def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
     )
 
 
-def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict[str, Any]]:
-    sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
-    metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
-    from .shipyard_queue import get_shipyard_queue_limit, queue_count, shipyard_queue_table_ready
-
-    queue_full = False
-    if shipyard_queue_table_ready(conn):
-        queue_full = queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(
-            conn=conn, planet_id=planet_id
-        )
-    ships_inv = get_ship_inventory(player_id, planet_id, conn=conn)
-    effect_ctx = None
-    if player_id is not None and conn is not None:
-        from .models import get_planet_buildings, get_research_levels
-        from .technical_data import resolve_unit_effect_context
-
-        try:
-            from .planet_evolution.repository import get_context_planet
-
-            planet_row = get_context_planet(int(player_id), conn=conn)
-        except Exception:
-            planet_row = None
-        buildings = get_planet_buildings(int(planet_id), conn=conn)
-        research = get_research_levels(user_id=int(player_id), conn=conn)
-        effect_ctx = resolve_unit_effect_context(
-            buildings=buildings,
-            research_levels=research,
-            player_id=int(player_id),
-            conn=conn,
-            planet=planet_row,
-        )
-    out: List[Dict[str, Any]] = []
-    for key in sort_ship_keys_by_role(ACTIVE_SHIP_KEYS):
-        if not ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
-            continue
-        entry = _ship_catalog_entry(
-            key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn
-        )
-        if effect_ctx is not None:
-            from .technical_data import apply_combat_stats_to_catalog_entry
-
-            apply_combat_stats_to_catalog_entry(entry, effect_ctx=effect_ctx)
-        entry["max_build"] = max_build_amount_for_planet(
-            metal, crystal, fuel, key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn
-        )
-        if queue_full:
-            entry["block_reason"] = "queue_full"
-            entry["can_build"] = False
-        elif entry["max_build"] <= 0:
-            entry["block_reason"] = "not_enough_resources"
-            entry["can_build"] = False
-        else:
-            entry["block_reason"] = ""
-            entry["can_build"] = True
-        entry["owned_count"] = int(ships_inv.get(key, 0) or 0)
-        out.append(entry)
-    return out
-
-
 def cancel_shipyard_job(
     *,
     player_id: int,
