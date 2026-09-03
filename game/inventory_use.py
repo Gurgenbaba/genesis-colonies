@@ -45,15 +45,20 @@ def _finish_inventory_due_work(
     *,
     planet_id: Optional[int] = None,
     source: str = "inventory_use",
-) -> None:
-    """Finish due queue work on the passed connection — never opens a second conn."""
+) -> Dict[str, Any]:
+    """Finish due queue work and surface the final queue-engine result.
+
+    Existing inventory callers may ignore the return value. Mutation paths such
+    as Timekeeper use it to prevent consuming value when a due delivery failed.
+    """
     from .queue_engine import finish_due_work_once
     from .queue_poll import player_has_due_queue_work
 
     uid = int(user_id)
     pid = int(planet_id) if planet_id is not None else None
+    last_result: Dict[str, Any] = {"ok": True, "errors": []}
     for pass_idx in range(_INVENTORY_FINISH_PASSES):
-        finish_due_work_once(
+        result = finish_due_work_once(
             uid,
             pid,
             conn=conn,
@@ -63,11 +68,14 @@ def _finish_inventory_due_work(
             update_scores=False,
             manage_transaction=False,
         )
+        if isinstance(result, dict):
+            last_result = result
         if pid is not None:
             if not player_has_due_queue_work(uid, conn=conn, planet_id=pid):
                 break
         elif not player_has_due_queue_work(uid, conn=conn):
             break
+    return last_result
 
 
 def unlocks_schema_ready(conn) -> bool:

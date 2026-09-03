@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .db import table_exists
+from .db import lock_planet_for_update, table_exists
 from .inventory_catalog import BOOSTER_QUEUE_TARGET, BOOSTER_TIME_SECONDS
 
 DEPOSIT_DOMAINS = frozenset({"build", "research", "shipyard"})
@@ -319,14 +319,30 @@ def _resolve_apply_seconds(
     return min(bal, rem, req)
 
 
-def _finish_before_apply(conn, user_id: int, planet_id: Optional[int]) -> None:
+def _finish_before_apply(conn, user_id: int, planet_id: Optional[int]) -> Dict[str, Any]:
     from .inventory_use import _finish_inventory_due_work
 
     uid = int(user_id)
     if planet_id is not None:
-        _finish_inventory_due_work(conn, uid, planet_id=int(planet_id), source="timekeeper_apply")
+        result = _finish_inventory_due_work(
+            conn, uid, planet_id=int(planet_id), source="timekeeper_apply"
+        )
     else:
-        _finish_inventory_due_work(conn, uid, source="timekeeper_apply")
+        result = _finish_inventory_due_work(conn, uid, source="timekeeper_apply")
+    return dict(result or {"ok": True, "errors": []})
+
+
+def _tk_savepoint_begin(conn) -> None:
+    conn.execute("SAVEPOINT gc_tk_apply")
+
+
+def _tk_savepoint_release(conn) -> None:
+    conn.execute("RELEASE SAVEPOINT gc_tk_apply")
+
+
+def _tk_savepoint_rollback(conn) -> None:
+    conn.execute("ROLLBACK TO SAVEPOINT gc_tk_apply")
+    conn.execute("RELEASE SAVEPOINT gc_tk_apply")
 
 
 def _apply_domain_shift(
@@ -495,12 +511,24 @@ def apply_timekeeper(
     else:
         pid = int(planet_id) if planet_id is not None else 0
 
+    # GC-TK-ATOMIC-DELIVERY-001: every planet-scoped TK mutation takes the
+    # canonical planet lock before touching queue rows. Shipyard/worker actions
+    # use the same lock, so the background worker can SKIP LOCKED instead of
+    # racing a boost and timing out later on queue/inventory rows.
+    if pid > 0:
+        lock_planet_for_update(conn, pid)
+
     balance = get_balance(uid, conn=conn)
     if balance <= 0:
         return False, "insufficient_timekeeper", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
     now = float(time.time())
-    _finish_before_apply(conn, uid, pid if pid > 0 else None)
+    pre_finish = _finish_before_apply(conn, uid, pid if pid > 0 else None)
+    if pre_finish.get("ok") is False:
+        return False, "queue_finish_failed", {
+            "errors": list(pre_finish.get("errors") or [])[:5],
+            "timekeeper": serialize_for_client(uid, conn=conn),
+        }
     rows, finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
     if not rows:
         return False, "no_queue", {"timekeeper": serialize_for_client(uid, conn=conn)}
@@ -516,36 +544,59 @@ def apply_timekeeper(
     if boost_seconds <= 0:
         return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
-    effect = _apply_domain_shift(
-        dom,
-        uid,
-        pid,
-        boost_seconds,
-        conn=conn,
-        now=now,
-        rows=rows,
-        finish_col_override=finish_col,
-    )
-
-    if not effect:
-        return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
-
-    shifted = int(effect.get("seconds_shifted") or 0)
-    if shifted <= 0:
-        return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
-
+    # Queue shift, resulting due delivery, and TK debit form one savepoint.
+    # Even if the outer caller later commits after a handled failure, the player
+    # can never receive a free shift or lose TK without the authoritative finish.
+    _tk_savepoint_begin(conn)
     try:
-        new_bal = debit(uid, shifted, f"apply:{dom}", conn=conn)
-    except InsufficientTimekeeperBalance:
-        return False, "insufficient_timekeeper", {"timekeeper": serialize_for_client(uid, conn=conn)}
+        effect = _apply_domain_shift(
+            dom,
+            uid,
+            pid,
+            boost_seconds,
+            conn=conn,
+            now=now,
+            rows=rows,
+            finish_col_override=finish_col,
+        )
 
-    _finish_before_apply(conn, uid, pid if pid > 0 else None)
+        if not effect:
+            _tk_savepoint_rollback(conn)
+            return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
-    # GC-TK-PANEL-REFRESH-001: detect real head completion (not rem/shift rounding).
-    now_after = float(time.time())
-    rows_after, _ = _load_domain_rows(dom, uid, pid, conn=conn, now=now_after)
-    head_id_after = _row_field(rows_after[0], "id") if rows_after else None
-    jobs_finished = head_id_before is not None and head_id_before != head_id_after
+        shifted = int(effect.get("seconds_shifted") or 0)
+        if shifted <= 0:
+            _tk_savepoint_rollback(conn)
+            return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
+
+        post_finish = _finish_before_apply(conn, uid, pid if pid > 0 else None)
+        if post_finish.get("ok") is False:
+            _tk_savepoint_rollback(conn)
+            return False, "queue_finish_failed", {
+                "errors": list(post_finish.get("errors") or [])[:5],
+                "timekeeper": serialize_for_client(uid, conn=conn),
+            }
+
+        try:
+            new_bal = debit(uid, shifted, f"apply:{dom}", conn=conn)
+        except InsufficientTimekeeperBalance:
+            _tk_savepoint_rollback(conn)
+            return False, "insufficient_timekeeper", {
+                "timekeeper": serialize_for_client(uid, conn=conn)
+            }
+
+        # GC-TK-PANEL-REFRESH-001: detect real head completion (not rem/shift rounding).
+        now_after = float(time.time())
+        rows_after, _ = _load_domain_rows(dom, uid, pid, conn=conn, now=now_after)
+        head_id_after = _row_field(rows_after[0], "id") if rows_after else None
+        jobs_finished = head_id_before is not None and head_id_before != head_id_after
+        _tk_savepoint_release(conn)
+    except Exception:
+        try:
+            _tk_savepoint_rollback(conn)
+        except Exception:
+            pass
+        raise
 
     return True, "ok", {
         "timekeeper": serialize_for_client(uid, conn=conn),
