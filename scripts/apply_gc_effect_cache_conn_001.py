@@ -5,11 +5,17 @@ ROOT = Path(__file__).resolve().parents[1]
 path = ROOT / "game" / "effects" / "effect_resolver.py"
 src = path.read_text(encoding="utf-8")
 
-call_old = """            planet_position,\n            skip_boosters,\n        )"""
-call_new = """            planet_position,\n            skip_boosters,\n            conn,\n        )"""
-if src.count(call_old) != 2:
-    raise SystemExit(f"expected 2 resolver cache call sites, got {src.count(call_old)}")
-src = src.replace(call_old, call_new)
+call_one_old = """            planet_position,\n            skip_boosters,\n        )"""
+call_one_new = """            planet_position,\n            skip_boosters,\n            conn,\n        )"""
+if src.count(call_one_old) != 1:
+    raise SystemExit(f"expected first resolver cache call site once, got {src.count(call_one_old)}")
+src = src.replace(call_one_old, call_one_new, 1)
+
+call_two_old = """        planet_position,\n        skip_boosters,\n    )"""
+call_two_new = """        planet_position,\n        skip_boosters,\n        conn,\n    )"""
+if src.count(call_two_old) != 1:
+    raise SystemExit(f"expected second resolver cache call site once, got {src.count(call_two_old)}")
+src = src.replace(call_two_old, call_two_new, 1)
 
 sig_old = """    planet_position: Optional[int],\n    skip_inventory_boosters: bool,\n) -> tuple:\n    return ("""
 sig_new = """    planet_position: Optional[int],\n    skip_inventory_boosters: bool,\n    conn,\n) -> tuple:\n    return ("""
