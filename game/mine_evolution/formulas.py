@@ -18,7 +18,8 @@ MINE_TO_RESOURCE: Dict[str, str] = {
 
 RESOURCE_TO_MINE: Dict[str, str] = {v: k for k, v in MINE_TO_RESOURCE.items()}
 
-# Soft sentinel for EffectResolver / enqueue (not a gameplay wall).
+# Legacy/admin safety sentinel only. Normal player mine caps are Nexus-based
+# through L200, then extended per mine by completed Ascension ranks.
 UNCAPPED_BUILDING_LEVEL = 10_000
 
 FIRST_EVOLUTION_LEVEL = 200
