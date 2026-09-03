@@ -445,6 +445,22 @@ def lock_planet_for_update(conn: DbConn, planet_id: int) -> None:
     conn.execute("SELECT id FROM planets WHERE id = ? FOR UPDATE;", (int(planet_id),))
 
 
+def try_lock_planet_for_update(conn: DbConn, planet_id: int) -> bool:
+    """Claim a planet without waiting. Used by background queue workers only.
+
+    PostgreSQL returns ``False`` when another transaction already owns the
+    planet row lock (``FOR UPDATE SKIP LOCKED``). SQLite already serializes
+    writers with ``BEGIN IMMEDIATE`` and therefore always returns ``True``.
+    """
+    if get_db_backend() != "postgres":
+        return True
+    row = conn.execute(
+        "SELECT id FROM planets WHERE id = ? FOR UPDATE SKIP LOCKED;",
+        (int(planet_id),),
+    ).fetchone()
+    return row is not None
+
+
 def lock_player_for_update(conn: DbConn, user_id: int) -> None:
     """Postgres: serialize research queue mutations per player."""
     if get_db_backend() != "postgres":

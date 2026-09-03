@@ -51,6 +51,7 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
         "account_scopes_processed": 0,
         "skipped_due_to_dedup": False,
         "derived_sync_count": 0,
+        "skipped_locked_planets": [],
     }
 
 
@@ -79,6 +80,9 @@ def _merge_tick_results(target: Dict[str, Any], batch: Dict[str, Any]) -> None:
     target["derived_sync_count"] = int(target.get("derived_sync_count", 0)) + int(
         batch.get("derived_sync_count", 0)
     )
+    locked = set(int(pid) for pid in (target.get("skipped_locked_planets") or []))
+    locked.update(int(pid) for pid in (batch.get("skipped_locked_planets") or []))
+    target["skipped_locked_planets"] = sorted(locked)
 
 
 def list_due_work_scopes(
@@ -287,6 +291,7 @@ def run_tick(
                     include_account_research=False,
                     include_fleet=False,
                     include_relocations=False,
+                    skip_locked_planets=True,
                 )
                 _merge_tick_results(result, batch_result)
 
@@ -315,13 +320,14 @@ def run_tick(
     result["duration_ms"] = result["tick_elapsed_ms"]
 
     logger.info(
-        "queue tick done source=%s finished=%s players=%s batches=%s duration_ms=%s errors=%s",
+        "queue tick done source=%s finished=%s players=%s batches=%s duration_ms=%s errors=%s locked_skips=%s",
         source,
         result.get("finished"),
         len(result.get("affected_players") or []),
         result.get("batches"),
         result.get("duration_ms"),
         len(result.get("errors") or []),
+        len(result.get("skipped_locked_planets") or []),
     )
 
     if persist:

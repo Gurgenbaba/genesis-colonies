@@ -3,6 +3,7 @@ name: Queue Worker Performance Gate
 on:
   pull_request:
     paths:
+      - "game/db.py"
       - "game/tick_runner.py"
       - "game/queue_engine.py"
       - "game/queue_poll.py"
@@ -13,6 +14,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "game/db.py"
       - "game/tick_runner.py"
       - "game/queue_engine.py"
       - "game/queue_poll.py"
@@ -45,7 +47,7 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile and shell syntax
         run: |
-          python -m py_compile game/tick_runner.py game/queue_engine.py scripts/run_game_worker.py tests/test_gc_perf_queue_worker_001.py
+          python -m py_compile game/db.py game/tick_runner.py game/queue_engine.py scripts/run_game_worker.py tests/test_gc_perf_queue_worker_001.py
           sh -n scripts/docker-entrypoint.sh
           git diff --check
       - name: Queue worker regression
