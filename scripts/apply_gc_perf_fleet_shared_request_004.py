@@ -1,4 +1,5 @@
 """One-shot GC-PERF-FLEET-SHARED-004 patch helper."""
+# Trigger commit after the branch-local apply workflow exists.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
