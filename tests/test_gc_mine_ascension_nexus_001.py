@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import game.buildings as buildings_mod
+import game.mine_evolution.service as evolution_service
 from game.db import db
 from game.effects.effect_resolver import EffectResolver
 from game.mine_evolution import evolve_mine, get_evolution_rank
@@ -115,6 +116,70 @@ def test_rank_one_unlocks_only_the_ascended_mine_beyond_200(game_client, monkeyp
     assert reason == "ascension_required"
     assert int(crystal_blocked["max_level"]) == 200
     assert int(crystal_blocked["evolution_rank"]) == 0
+
+
+def test_legacy_level_387_can_catch_up_then_build_toward_400(game_client, monkeypatch):
+    _client, uid = game_client
+    planet = get_homeworld(player_id=int(uid))
+    assert planet is not None
+    pid = int(planet["id"])
+
+    levels = get_planet_buildings(pid)
+    levels.update(
+        {
+            "planet_core_nexus": 50,
+            "geothermal_nexus": 50,
+            "metal_mine": 387,
+        }
+    )
+    save_planet_buildings(pid, levels)
+    _fund(pid)
+
+    # Simulate a legacy/high-level mine whose persisted rank still stops at the
+    # L375 milestone. The level is never reduced; one sequential catch-up
+    # Ascension raises this mine's next gate to L400.
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO planet_mine_evolution (planet_id, building_type, evolution_rank, updated_at)
+            VALUES (?, 'metal_mine', 7, 0)
+            ON CONFLICT(planet_id, building_type) DO UPDATE SET evolution_rank = 7;
+            """,
+            (pid,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(evolution_service, "tribute_cost_for_next_rank", lambda *_a, **_k: (1, 1))
+    monkeypatch.setattr(buildings_mod, "get_upgrade_cost", lambda *_a, **_k: (1, 1))
+    monkeypatch.setattr(
+        buildings_mod.BuildingsPanelContext,
+        "build_time_seconds",
+        lambda self, building_type, target_level: 60,
+    )
+
+    ok, reason, blocked = buildings_mod.queue_build_for_planet(
+        dict(planet), get_planet_buildings(pid), "metal_mine", user_id=int(uid)
+    )
+    assert not ok
+    assert reason == "ascension_required"
+    assert int(blocked["max_level"]) == 375
+    assert int(blocked["evolution_rank"]) == 7
+    assert int(get_planet_buildings(pid)["metal_mine"]) == 387
+
+    ok, reason, asc = evolve_mine(int(uid), dict(planet), "metal_mine")
+    assert ok, reason
+    assert int(asc["evolution_rank"]) == 8
+    assert int(get_planet_buildings(pid)["metal_mine"]) == 387
+
+    ok, reason, queued = buildings_mod.queue_build_for_planet(
+        dict(planet), get_planet_buildings(pid), "metal_mine", user_id=int(uid)
+    )
+    assert ok, reason
+    assert int(queued["target_level"]) == 388
+    assert int(queued["max_level"]) == 400
 
 
 def test_rank_progression_extends_exact_next_milestone_per_mine():
