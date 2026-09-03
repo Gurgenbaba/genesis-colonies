@@ -151,6 +151,7 @@ def _empty_result(source: str) -> Dict[str, Any]:
         "skipped_due_to_dedup": False,
         "dedup_scope_key": None,
         "derived_sync_count": 0,
+        "skipped_locked_planets": [],
     }
 
 
@@ -730,6 +731,7 @@ def finish_due_work(
     include_account_research: bool = True,
     include_fleet: bool = True,
     include_relocations: bool = True,
+    skip_locked_planets: bool = False,
 ) -> Dict[str, Any]:
     """
     Central finish pipeline: due build + research jobs, batch score, single rank pass.
@@ -772,6 +774,15 @@ def finish_due_work(
         from .options import vacation_freezes_account_progress
 
         for pid_planet, pid_player in planet_targets:
+            # GC-PG-QUEUE-LOCK-001: background workers must never wait behind
+            # an active request that already owns this planet. Claim the planet
+            # first and let the next heartbeat retry a contended scope.
+            if skip_locked_planets:
+                from .db import try_lock_planet_for_update
+
+                if not try_lock_planet_for_update(conn, pid_planet):
+                    result["skipped_locked_planets"].append(int(pid_planet))
+                    continue
             if vacation_freezes_account_progress(pid_player, conn=conn):
                 continue
             try:
