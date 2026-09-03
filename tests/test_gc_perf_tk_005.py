@@ -7,6 +7,17 @@ from unittest.mock import patch
 from game import timekeeper
 
 
+class _SavepointConn:
+    """Minimal mutation-connection double for TK transaction-boundary tests."""
+
+    def __init__(self):
+        self.sql: list[str] = []
+
+    def execute(self, sql, *_args, **_kwargs):
+        self.sql.append(str(sql))
+        return self
+
+
 def test_apply_domain_shift_reuses_preloaded_queue_rows():
     rows = [
         {
@@ -43,11 +54,13 @@ def test_apply_domain_shift_reuses_preloaded_queue_rows():
 def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
     rows_before = [{"id": 11, "start_time": 100.0, "finish_time": 200.0}]
     rows_after = [{"id": 11, "start_time": 70.0, "finish_time": 170.0}]
+    conn = _SavepointConn()
 
     with patch("game.timekeeper.time.time", return_value=150.0), patch(
         "game.timekeeper.schema_ready", return_value=True
     ), patch("game.timekeeper.get_balance", return_value=120), patch(
-        "game.timekeeper._finish_before_apply"
+        "game.timekeeper._finish_before_apply",
+        return_value={"ok": True, "errors": []},
     ), patch(
         "game.timekeeper._load_domain_rows",
         side_effect=[(rows_before, "finish_time"), (rows_after, "finish_time")],
@@ -66,7 +79,7 @@ def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
             planet_id=2,
             seconds=30,
             mode="partial",
-            conn=object(),
+            conn=conn,
         )
 
     assert ok is True
@@ -77,3 +90,4 @@ def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
     kwargs = apply_shift.call_args.kwargs
     assert kwargs["rows"] is rows_before
     assert kwargs["finish_col_override"] == "finish_time"
+    assert conn.sql == ["SAVEPOINT gc_tk_apply", "RELEASE SAVEPOINT gc_tk_apply"]
