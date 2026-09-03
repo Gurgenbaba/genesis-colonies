@@ -41,6 +41,9 @@ jobs:
             tests/test_fleet_worker.py tests/test_gc_perf_tk_005.py tests/test_gc_perf_fleet_write_001.py \
             tests/test_gc_perf_fleet_idle_001.py tests/test_gc_perf_fleet_tabs_001.py tests/test_gc_perf_fleet_logistics_readonly_002.py tests/test_gc_perf_fleet_shared_request_004.py tests/test_fleet_logistics.py::test_logistics_page_context_shows_funded_colony_resources tests/test_gc_perf_shipyard_catalog_001.py tests/test_shipyard.py::test_buildable_ships_by_level tests/test_gc_perf_state_006.py tests/test_gc_perf_state_007.py tests/test_gc_perf_state_008.py tests/test_gc_perf_state_009.py tests/test_gc_perf_state_010.py tests/test_gc_perf_state_011.py \
             tests/test_gc_perf_resource_persist_001.py tests/test_gc_perf_buildings_002.py tests/test_gc_flt_scope_001.py \
+            tests/test_gc_mine_ascension_nexus_001.py tests/test_gc_effect_cache_conn_001.py tests/test_nexus_building_caps.py tests/test_ascension_queue_cap_contract.py \
+            tests/test_mine_evolution.py::TestMineEvolutionCaps tests/test_mine_evolution.py::TestMineEvolutionAction::test_build_queue_max_stops_at_next_ascension_gate \
+            tests/test_effects.py::TestBuildingEffects::test_geothermal_boosts_solar_and_max_levels tests/test_effects.py::TestBuildingEffects::test_geothermal_and_core_stack_max_levels \
             tests/test_gc_perf_002_nav_latency.py \
             tests/test_gc_perf_174_sentinel_nav_matrix.py \
             tests/test_gc_pjax_resilience.py tests/test_gc861b_pjax_lcp_preload.py \
@@ -92,7 +95,7 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile and browser syntax
         run: |
-          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py game/shipyard.py
+          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py game/shipyard.py game/buildings.py game/effects/effect_resolver.py game/mine_evolution/formulas.py game/mine_evolution/service.py
           node --check static/main.js
           node --check static/js/core/gc.js
           node --check static/js/ranking_page.js

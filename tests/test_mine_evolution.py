@@ -116,7 +116,7 @@ class TestMineEvolutionFormulas:
 
 
 class TestMineEvolutionCaps:
-    def test_mines_uncapped_solar_still_capped(self):
+    def test_mines_and_solar_share_nexus_cap_before_ascension(self):
         from game.effects.effect_resolver import EffectResolver
 
         buildings = {
@@ -128,12 +128,21 @@ class TestMineEvolutionCaps:
             "geothermal_nexus": 3,
         }
         er = EffectResolver(buildings, {})
-        assert er.get_max_building_level("metal_mine") == UNCAPPED_BUILDING_LEVEL
-        assert er.get_max_building_level("crystal_mine") == UNCAPPED_BUILDING_LEVEL
-        assert er.get_max_building_level("fuel_cell_plant") == UNCAPPED_BUILDING_LEVEL
-        assert er.get_max_building_level("solar_plant") == 50 + 5 + 2 * 3
+        producer_cap = 50 + 5 + 2 * 3
+        assert er.get_max_building_level("metal_mine") == producer_cap
+        assert er.get_max_building_level("crystal_mine") == producer_cap
+        assert er.get_max_building_level("fuel_cell_plant") == producer_cap
+        assert er.get_max_building_level("solar_plant") == producer_cap
         assert er.get_max_building_level("metal_storage") == 50 + 2 * 3
         assert er.get_max_building_level("research_lab") == 50
+
+    def test_max_nexuses_unlock_level_200_before_rank_one(self):
+        from game.effects.effect_resolver import EffectResolver
+
+        buildings = {"planet_core_nexus": 50, "geothermal_nexus": 50}
+        er = EffectResolver(buildings, {})
+        for key in ("metal_mine", "crystal_mine", "fuel_cell_plant", "solar_plant"):
+            assert er.get_max_building_level(key) == 200
 
 
 class TestMineEvolutionAction:
@@ -430,17 +439,25 @@ class TestMineEvolutionAction:
         assert int(payload["jobs_queued"]) == 4
         assert len(bmod.get_build_queue_rows(pid)) == 10
 
-    def test_queue_cap_helper_preserves_legacy_overlevel_catchup(self):
+    def test_queue_cap_helper_combines_nexus_phase_and_per_mine_rank(self):
         import game.buildings as bmod
 
+        # Rank 0 follows the actual Nexus cap until the L200 Ascension gate.
         assert bmod._effective_building_queue_cap(
-            "metal_mine", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=0
+            "metal_mine", 137, planet_id=1, evolution_rank=0
+        ) == 137
+        assert bmod._effective_building_queue_cap(
+            "metal_mine", 200, planet_id=1, evolution_rank=0
         ) == 200
+        # Completed ranks extend this mine beyond the Nexus ceiling.
         assert bmod._effective_building_queue_cap(
-            "metal_mine", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=2
+            "metal_mine", 200, planet_id=1, evolution_rank=1
+        ) == 225
+        assert bmod._effective_building_queue_cap(
+            "metal_mine", 200, planet_id=1, evolution_rank=2
         ) == 250
         assert bmod._effective_building_queue_cap(
-            "metal_mine", UNCAPPED_BUILDING_LEVEL, planet_id=1, evolution_rank=4
+            "metal_mine", 200, planet_id=1, evolution_rank=4
         ) == 300
 
 

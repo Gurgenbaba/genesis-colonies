@@ -178,12 +178,14 @@ def evolve_mine(
 
     from ..options import vacation_blocks_outbound
 
-    ok_vacation, vac_reason = vacation_blocks_outbound(int(user_id), conn=db())
-    if not ok_vacation:
-        return False, vac_reason, {}
-
+    # GC-MINE-ASC-NEXUS-001: reuse the mutation connection for the vacation
+    # probe instead of leaking an orphan checkout immediately before the TX.
     conn = db()
     try:
+        ok_vacation, vac_reason = vacation_blocks_outbound(int(user_id), conn=conn)
+        if not ok_vacation:
+            return False, vac_reason, {}
+
         begin_write_transaction(conn)
         lock_planet_for_update(conn, planet_id)
 

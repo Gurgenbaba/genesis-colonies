@@ -1074,7 +1074,7 @@ def _panel_upgrade_effect_fields(
         )
 
     if building_type == "geothermal_nexus":
-        # EPIC-29: mines uncapped — nexus still raises solar + storage caps.
+        # Nexus raises the pre-Ascension mine/solar cap and the storage cap.
         cur_prod = r_now.get_max_building_level("solar_plant")
         nxt_prod = r_next.get_max_building_level("solar_plant")
         cur_store = r_now.get_max_building_level("metal_storage")
@@ -1098,7 +1098,7 @@ def _panel_upgrade_effect_fields(
         return out
 
     if building_type == "planet_core_nexus":
-        # EPIC-29: core raises solar (and formerly mine) cap — mines are uncapped.
+        # Core raises the pre-Ascension production cap (mines + solar).
         cur_max = r_now.get_max_building_level("solar_plant")
         nxt_max = r_next.get_max_building_level("solar_plant")
         return _panel_effect_snapshot(
@@ -1519,7 +1519,13 @@ def build_building_technical_data(
     ratio = _panel_energy_ratio(buildings, research_levels)
     current = int(buildings.get(btype, 0) or 0)
     panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio, conn=conn)
-    max_level = panel_ctx.max_level(btype)
+    base_max_level = panel_ctx.max_level(btype)
+    max_level = _effective_building_queue_cap(
+        btype,
+        base_max_level,
+        planet_id=planet_id,
+        conn=conn,
+    )
     from .technical_data import (
         build_building_technical_summary,
         build_production_milestones,
@@ -1627,7 +1633,12 @@ def _effective_building_queue_cap(
     gate = int(required_level_for_evolution(rank + 1) or 0)
     if gate <= 0:
         return max_level
-    return min(max_level, gate)
+    # Before Rank I, Nexus progression is the real cap (up to L200). Once
+    # this mine ascends, its own rank extends only this mine to the next
+    # milestone (I→225, II→250, ...), independent of the other mines.
+    if rank <= 0:
+        return min(max_level, gate)
+    return gate
 
 
 def _make_panel_row(

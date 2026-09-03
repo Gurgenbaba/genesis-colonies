@@ -1387,19 +1387,22 @@ class EffectResolver:
         }
 
     def get_max_building_level(self, building_type: str) -> int:
-        # EPIC-29: production mines are uncapped (soft sentinel); solar keeps nexus formula.
-        if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):
-            from ..mine_evolution import UNCAPPED_BUILDING_LEVEL
-
-            return int(UNCAPPED_BUILDING_LEVEL)
-
+        # GC-MINE-ASC-NEXUS-001: Nexus levels are the pre-Ascension hard cap.
+        # Ascension is deliberately applied by the Buildings queue owner because
+        # the rank is per (planet_id, building_type), not a global resolver cap.
         base_max = self.MAX_BUILDING_LEVEL
         b = self.buildings
         core = _bld(b, "planet_core_nexus")
         geo = _bld(b, "geothermal_nexus")
+        nexus_production_cap = base_max + core + geo * 2
 
-        if building_type == "solar_plant":
-            return base_max + core + geo * 2
+        if building_type in (
+            "metal_mine",
+            "crystal_mine",
+            "fuel_cell_plant",
+            "solar_plant",
+        ):
+            return nexus_production_cap
         if building_type in ("metal_storage", "crystal_storage", "fuel_storage"):
             return base_max + geo * 2
         return base_max
@@ -1531,6 +1534,7 @@ def get_effect_resolver(
             galaxy_id,
             planet_position,
             skip_boosters,
+            conn,
         )
         if not force_refresh:
             hit = _resolver_cache_get(key)
@@ -1569,6 +1573,7 @@ def get_effect_resolver(
         galaxy_id,
         planet_position,
         skip_boosters,
+        conn,
     )
     if not force_refresh:
         hit = _resolver_cache_get(key)
@@ -1609,6 +1614,7 @@ def _resolver_cache_key(
     galaxy_id: Optional[int],
     planet_position: Optional[int],
     skip_inventory_boosters: bool,
+    conn,
 ) -> tuple:
     return (
         int(player_id),
@@ -1618,6 +1624,10 @@ def _resolver_cache_key(
         int(galaxy_id) if galaxy_id is not None else None,
         int(planet_position) if planet_position is not None else None,
         bool(skip_inventory_boosters),
+        # GC-EFFECT-CACHE-CONN-001: a resolver may retain its DB handle for
+        # optional modifier probes. Never reuse it across DB checkouts; a
+        # closed/returned connection must not leak into the next request/tick.
+        id(conn) if conn is not None else None,
     )
 
 
