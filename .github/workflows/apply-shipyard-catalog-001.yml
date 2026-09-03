@@ -20,6 +20,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Normalize one-line signature markers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply_gc_perf_shipyard_catalog_001.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('"def list_buildable_ships(\\n",', '"def list_buildable_ships(",')
+          s = s.replace('"def list_locked_ships(\\n",', '"def list_locked_ships(",')
+          s = s.replace('"def build_shipyard_api_payload(\\n",', '"def build_shipyard_api_payload(",')
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Apply focused patch
         run: python scripts/apply_gc_perf_shipyard_catalog_001.py
       - name: Verify target diff
@@ -37,6 +48,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git restore scripts/apply_gc_perf_shipyard_catalog_001.py
           git add game/shipyard.py
           git commit -m "perf(shipyard): share catalog context"
           git push origin HEAD:perf/shipyard-shared-catalog-context
