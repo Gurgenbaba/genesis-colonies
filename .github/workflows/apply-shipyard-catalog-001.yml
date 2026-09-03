@@ -1,3 +1,4 @@
+# One-shot branch-local apply workflow; removed after the generated runtime diff lands.
 name: Apply Shipyard Shared Catalog
 
 on:
