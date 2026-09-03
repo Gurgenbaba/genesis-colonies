@@ -696,24 +696,25 @@ def initiation_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
 
 
 def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
-    """Player-wide active fleet slice for /api/game-state (GC-640A)."""
+    """Player-wide active fleet slice for /api/game-state (GC-640A).
+
+    GC-NAV-FLEET-READONLY-001: this payload is strictly read-only. Due movement
+    completion is already owned by ``read_player_live_state_for_poll``'s
+    heartbeat-aware safety net and the dedicated Fleet worker. Running another
+    dirty tick here made every PJAX navigation wait on Fleet DB/lock work.
+    """
     from game.fleet import (
         build_active_fleets_payload,
         build_fleet_incoming_attack_alerts,
         enrich_fleet_alerts_with_radar,
         fleet_schema_ready,
         get_fleet_slot_status,
-        process_fleet_tick,
     )
-    from game.queue_poll import player_fleet_is_dirty
 
     if not fleet_schema_ready(conn):
         return None
 
     uid = int(user_id)
-    with perf_span("fleets.dirty_tick"):
-        if player_fleet_is_dirty(uid, conn=conn):
-            process_fleet_tick(player_id=uid, conn=conn)
 
     with perf_span("fleets.alerts"):
         alerts = build_fleet_incoming_attack_alerts(uid, conn=conn)
