@@ -132,12 +132,3 @@ for old, new in replacements.items():
         raise SystemExit(f"fleet movement anchor mismatch: {old.splitlines()[0]!r}")
     fleet = fleet.replace(old, new, 1)
 fleet_path.write_text(fleet, encoding="utf-8")
-
-# 3) Put the regression in the fast deploy smoke gate.
-ci_path = ROOT / ".github" / "workflows" / "ci.yml"
-ci = ci_path.read_text(encoding="utf-8")
-old_ci = "tests/test_fleet_worker.py tests/test_gc_perf_tk_005.py tests/test_gc_tk_atomic_delivery_001.py tests/test_gc_perf_fleet_write_001.py"
-new_ci = "tests/test_fleet_worker.py tests/test_gc_fleet_pg_abort_001.py tests/test_gc_perf_tk_005.py tests/test_gc_tk_atomic_delivery_001.py tests/test_gc_perf_fleet_write_001.py"
-if ci.count(old_ci) != 1:
-    raise SystemExit("CI smoke anchor mismatch")
-ci_path.write_text(ci.replace(old_ci, new_ci, 1), encoding="utf-8")
