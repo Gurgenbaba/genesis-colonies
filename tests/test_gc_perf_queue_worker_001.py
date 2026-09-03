@@ -116,6 +116,7 @@ def test_queue_only_tick_finishes_exact_planet_scopes_without_maintenance(monkey
             if kwargs.get("planet_id")
             else [],
             "errors": [],
+            "skipped_locked_planets": [],
         }
 
     monkeypatch.setattr("game.tick_runner.finish_due_work", fake_finish)
@@ -135,7 +136,40 @@ def test_queue_only_tick_finishes_exact_planet_scopes_without_maintenance(monkey
         assert call["include_relocations"] is False
     assert calls[0]["include_account_research"] is False
     assert calls[1]["include_account_research"] is False
+    assert calls[0]["skip_locked_planets"] is True
+    assert calls[1]["skip_locked_planets"] is True
     assert calls[2]["include_planet_queues"] is False
+    assert "skip_locked_planets" not in calls[2]
+
+
+def test_postgres_planet_try_lock_is_nonblocking_skip_locked(monkeypatch):
+    import game.db as dbmod
+
+    class _Result:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _FakeConn:
+        def __init__(self, row):
+            self.row = row
+            self.calls = []
+
+        def execute(self, sql, params=()):
+            self.calls.append((sql, params))
+            return _Result(self.row)
+
+    monkeypatch.setattr(dbmod, "get_db_backend", lambda: "postgres")
+    busy = _FakeConn(None)
+    assert dbmod.try_lock_planet_for_update(busy, 175) is False
+    assert len(busy.calls) == 1
+    assert "FOR UPDATE SKIP LOCKED" in busy.calls[0][0]
+    assert busy.calls[0][1] == (175,)
+
+    free = _FakeConn({"id": 175})
+    assert dbmod.try_lock_planet_for_update(free, 175) is True
 
 
 def test_docker_enables_queue_sidecar_only_for_postgres_by_default():
