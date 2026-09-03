@@ -1,0 +1,41 @@
+name: Apply Shipyard Shared Catalog
+
+on:
+  push:
+    branches: [perf/shipyard-shared-catalog-context]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/shipyard-shared-catalog-context
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply focused patch
+        run: python scripts/apply_gc_perf_shipyard_catalog_001.py
+      - name: Verify target diff
+        run: |
+          python -m py_compile game/shipyard.py
+          git diff --check
+          git diff -- game/shipyard.py
+          grep -n "GC-PERF-SHIPYARD-CATALOG-001" game/shipyard.py
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet -- game/shipyard.py; then
+            echo "No patch needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/shipyard.py
+          git commit -m "perf(shipyard): share catalog context"
+          git push origin HEAD:perf/shipyard-shared-catalog-context
