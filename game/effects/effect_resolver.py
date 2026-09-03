@@ -1534,6 +1534,7 @@ def get_effect_resolver(
             galaxy_id,
             planet_position,
             skip_boosters,
+            conn,
         )
         if not force_refresh:
             hit = _resolver_cache_get(key)
@@ -1572,6 +1573,7 @@ def get_effect_resolver(
         galaxy_id,
         planet_position,
         skip_boosters,
+        conn,
     )
     if not force_refresh:
         hit = _resolver_cache_get(key)
@@ -1612,6 +1614,7 @@ def _resolver_cache_key(
     galaxy_id: Optional[int],
     planet_position: Optional[int],
     skip_inventory_boosters: bool,
+    conn,
 ) -> tuple:
     return (
         int(player_id),
@@ -1621,6 +1624,10 @@ def _resolver_cache_key(
         int(galaxy_id) if galaxy_id is not None else None,
         int(planet_position) if planet_position is not None else None,
         bool(skip_inventory_boosters),
+        # GC-EFFECT-CACHE-CONN-001: a resolver may retain its DB handle for
+        # optional modifier probes. Never reuse it across DB checkouts; a
+        # closed/returned connection must not leak into the next request/tick.
+        id(conn) if conn is not None else None,
     )
 
 
