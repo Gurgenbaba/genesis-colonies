@@ -2186,9 +2186,9 @@ def trader_hub_view():
             exchange = get_exchange_status(
                 player_id=uid,
                 planet_id=pid,
-                metal=float(ctx["player_view"]["metal"]),
-                crystal=float(ctx["player_view"]["crystal"]),
-                fuel_cells=float(ctx["player_view"].get("fuel_cells") or 0),
+                metal=int(ctx["player_view"]["metal"] or 0),
+                crystal=int(ctx["player_view"]["crystal"] or 0),
+                fuel_cells=int(ctx["player_view"].get("fuel_cells") or 0),
                 conn=conn,
             )
         scrapyard = scrapyard_status(uid, pid, conn=conn)
@@ -4951,9 +4951,9 @@ def auction_house_view():
         auction_house = build_auction_house_state(
             uid,
             pid,
-            metal=float(ctx["player_view"]["metal"]),
-            crystal=float(ctx["player_view"]["crystal"]),
-            fuel_cells=float(ctx["player_view"].get("fuel_cells") or 0),
+            metal=int(ctx["player_view"]["metal"] or 0),
+            crystal=int(ctx["player_view"]["crystal"] or 0),
+            fuel_cells=int(ctx["player_view"].get("fuel_cells") or 0),
             conn=conn,
             mark_visited=True,
         )
@@ -4989,9 +4989,9 @@ def api_auction_house_state():
         payload = build_auction_house_state(
             user_id,
             int(planet["id"]),
-            metal=float(player_view["metal"]),
-            crystal=float(player_view["crystal"]),
-            fuel_cells=float(player_view.get("fuel_cells") or 0),
+            metal=int(player_view["metal"] or 0),
+            crystal=int(player_view["crystal"] or 0),
+            fuel_cells=int(player_view.get("fuel_cells") or 0),
             conn=conn,
             mark_visited=True,
         )
@@ -5086,9 +5086,9 @@ def api_auction_house_bid():
                 auction_house = build_auction_house_state(
                     user_id,
                     int(planet2["id"]),
-                    metal=float(player_view["metal"]),
-                    crystal=float(player_view["crystal"]),
-                    fuel_cells=float(player_view.get("fuel_cells") or 0),
+                    metal=int(player_view["metal"] or 0),
+                    crystal=int(player_view["crystal"] or 0),
+                    fuel_cells=int(player_view.get("fuel_cells") or 0),
                     conn=conn2,
                 )
                 state = {"ok": True, "server_time": time.time(), "auction_house": auction_house}
@@ -11375,9 +11375,9 @@ def _payload_from_live_context(
                 payload["exchange"] = get_exchange_status(
                     player_id=user_id,
                     planet_id=int(planet["id"]),
-                    metal=float(player_view["metal"]),
-                    crystal=float(player_view["crystal"]),
-                    fuel_cells=float(player_view.get("fuel_cells") or 0),
+                    metal=int(player_view["metal"] or 0),
+                    crystal=int(player_view["crystal"] or 0),
+                    fuel_cells=int(player_view.get("fuel_cells") or 0),
                     conn=conn,
                 )
                 if "exchange" not in panels_built:
@@ -11415,9 +11415,9 @@ def _payload_from_live_context(
                 payload["auction_house"] = build_auction_house_state(
                     user_id,
                     int(planet["id"]),
-                    metal=float(player_view["metal"]),
-                    crystal=float(player_view["crystal"]),
-                    fuel_cells=float(player_view.get("fuel_cells") or 0),
+                    metal=int(player_view["metal"] or 0),
+                    crystal=int(player_view["crystal"] or 0),
+                    fuel_cells=int(player_view.get("fuel_cells") or 0),
                     conn=conn,
                 )
                 if "auction_house" not in panels_built:
@@ -11470,8 +11470,8 @@ def _payload_from_live_context(
 
             payload["planet_teaser"] = get_overview_planet_teaser(
                 user_id,
-                metal=float(player_view["metal"]),
-                crystal=float(player_view["crystal"]),
+                metal=int(player_view["metal"] or 0),
+                crystal=int(player_view["crystal"] or 0),
                 conn=conn,
             )
         except sqlite3.OperationalError:
@@ -11892,9 +11892,9 @@ def api_exchange_rates():
         status = get_exchange_status(
             player_id=user_id,
             planet_id=int(planet["id"]),
-            metal=float(player_view["metal"]),
-            crystal=float(player_view["crystal"]),
-            fuel_cells=float(player_view.get("fuel_cells") or 0),
+            metal=int(player_view["metal"] or 0),
+            crystal=int(player_view["crystal"] or 0),
+            fuel_cells=int(player_view.get("fuel_cells") or 0),
             conn=conn,
         )
         commit(conn)
