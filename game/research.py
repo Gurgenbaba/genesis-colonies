@@ -1189,7 +1189,9 @@ def cancel_research_job(user_id: int, job_id: int):
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, tech_key, start_at, finish_at, cost_metal, cost_crystal
+            SELECT id, tech_key, start_at, finish_at,
+                   cost_metal, cost_crystal,
+                   cost_metal_exact, cost_crystal_exact
             FROM research_queue
             WHERE id = ? AND user_id = ?
             LIMIT 1;
@@ -1201,7 +1203,7 @@ def cancel_research_job(user_id: int, job_id: int):
             rollback(conn)
             return False, "not_found", {"msg": "Research job not found", "job_id": jid}
 
-        from .queue_refund import refund_research_job
+        from .queue_refund import refund_research_job, stored_cost_int
 
         refund = refund_research_job(
             conn,
@@ -1212,8 +1214,8 @@ def cancel_research_job(user_id: int, job_id: int):
             start_time=float(row["start_at"] or row["finish_at"] or now),
             finish_time=float(row["finish_at"] or now),
             now=now,
-            cost_metal=int(row["cost_metal"] or 0),
-            cost_crystal=int(row["cost_crystal"] or 0),
+            cost_metal=stored_cost_int(dict(row), "metal"),
+            cost_crystal=stored_cost_int(dict(row), "crystal"),
         )
 
         delete_research_job(int(row["id"]), conn=conn)
