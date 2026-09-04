@@ -144,9 +144,9 @@ def target_planet_snapshot(planet_id: int, *, conn) -> Dict[str, Any]:
         "owner_name": str(data.get("owner_name") or ""),
         "coords": coords,
         "resources": {
-            "metal": int(float(data.get("metal") or 0)),
-            "crystal": int(float(data.get("crystal") or 0)),
-            "fuel_cells": int(float(data.get("fuel_cells") or 0)),
+            "metal": int(data.get("metal") or 0),
+            "crystal": int(data.get("crystal") or 0),
+            "fuel_cells": int(data.get("fuel_cells") or 0),
         },
         "energy": {
             "total": energy_total,
