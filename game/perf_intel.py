@@ -363,6 +363,7 @@ class RequestSample:
     db_connection_open_count: int = 0
     db_query_ms: float = 0.0
     slow_queries: List[Dict[str, Any]] = field(default_factory=list)
+    sql_signatures: List[Dict[str, Any]] = field(default_factory=list)
     payload_bytes: int = 0
     slow_class: str = ""
     panels_built: str = ""
@@ -469,6 +470,10 @@ class PerfIntelStore:
             "db_connection_open_count": int(sample.db_connection_open_count),
             "db_query_ms": round(float(sample.db_query_ms), 1),
             "slow_queries": list(sample.slow_queries or [])[:5],
+            "sql_signatures": sorted(
+                list(sample.sql_signatures or []),
+                key=lambda row: (-int(row.get("count") or 0), -float(row.get("total_ms") or 0.0)),
+            )[:5],
             "concurrent": int(self._active),
             "payload_bytes": int(sample.payload_bytes or 0),
             "panels_built": str(sample.panels_built or ""),
@@ -938,6 +943,7 @@ def record_request_sample(
     db_connection_open_count: int = 0,
     db_query_ms: float = 0.0,
     slow_queries: Optional[List[Dict[str, Any]]] = None,
+    sql_signatures: Optional[List[Dict[str, Any]]] = None,
     payload_bytes: int = 0,
     error: bool = False,
     panels_built: str = "",
@@ -962,6 +968,7 @@ def record_request_sample(
             db_connection_open_count=int(db_connection_open_count or 0),
             db_query_ms=max(0.0, float(db_query_ms or 0.0)),
             slow_queries=list(slow_queries or [])[:20],
+            sql_signatures=list(sql_signatures or [])[:20],
             payload_bytes=int(payload_bytes or 0),
             slow_class=slow_class,
             panels_built=str(panels_built or ""),
