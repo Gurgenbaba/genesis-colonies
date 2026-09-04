@@ -179,6 +179,7 @@ def test_backend_aware_binder_is_used_for_resource_writes():
             "game/shipyard.py",
             "game/defense.py",
             "game/inactive_autoplay.py",
+            "game/queue_refund.py",
         )
     }
     for rel, source in sources.items():
