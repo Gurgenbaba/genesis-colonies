@@ -1804,6 +1804,7 @@ class RequestPerfState:
         "db_connection_open_count",
         "db_query_ms",
         "slow_queries",
+        "sql_signature_stats",
         "logged",
         "intel_recorded",
         "_write_tx_started_at",
@@ -1822,6 +1823,8 @@ class RequestPerfState:
         self.db_connection_open_count = 0
         self.db_query_ms = 0.0
         self.slow_queries: List[Dict[str, Any]] = []
+        # Bounded request-local frequency map for N+1 diagnosis. No bind values.
+        self.sql_signature_stats: Dict[str, Dict[str, float]] = {}
         self.logged = False
         self.intel_recorded = False
         self._write_tx_started_at: Optional[float] = None
@@ -2064,7 +2067,7 @@ def record_request_perf_sql_statement(sql: str) -> None:
 
 
 def record_request_perf_sql_timing(sql: str, duration_ms: float) -> None:
-    """GC-PERF-AUTO: per-statement timing + slow-query capture (normalized signature)."""
+    """Per-statement timing + bounded frequency signatures for N+1 diagnosis."""
     try:
         state = _request_perf_state()
         if state is None:
@@ -2078,17 +2081,33 @@ def record_request_perf_sql_timing(sql: str, duration_ms: float) -> None:
         normalized = str(sql or "").lstrip().upper()
         if normalized.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
             state.sql_write_count += 1
+
+        from game.perf_intel import normalize_sql_signature
+
+        signature = normalize_sql_signature(sql)
+        if signature:
+            stats = state.sql_signature_stats
+            row = stats.get(signature)
+            if row is not None:
+                row["count"] = float(row.get("count", 0.0)) + 1.0
+                row["total_ms"] = float(row.get("total_ms", 0.0)) + ms
+                row["max_ms"] = max(float(row.get("max_ms", 0.0)), ms)
+            elif len(stats) < 64:
+                stats[signature] = {
+                    "count": 1.0,
+                    "total_ms": ms,
+                    "max_ms": ms,
+                }
+
         try:
             from game.config import get_perf_slow_query_ms
-            from game.perf_intel import normalize_sql_signature
 
             threshold = float(get_perf_slow_query_ms())
         except Exception:
             threshold = 100.0
-            from game.perf_intel import normalize_sql_signature
         if ms >= threshold and len(state.slow_queries) < 20:
             state.slow_queries.append(
-                {"signature": normalize_sql_signature(sql), "ms": round(ms, 2)}
+                {"signature": signature or normalize_sql_signature(sql), "ms": round(ms, 2)}
             )
     except Exception:
         pass
@@ -2104,6 +2123,15 @@ def attach_request_perf_sql_trace(conn) -> None:
         return
     try:
         if getattr(conn, "_gc_perf_sql_wrapped", False):
+            return
+        # PostgreSQL has a sqlite-compatible cursor wrapper. Instrument there so
+        # both conn.execute(...) and cur.execute(...) are counted exactly once.
+        if (
+            type(conn).__module__ == "game.db_pg"
+            and type(conn).__name__ == "PgConnection"
+        ):
+            conn._gc_perf_cursor_timing = True  # type: ignore[attr-defined]
+            conn._gc_perf_sql_wrapped = True  # type: ignore[attr-defined]
             return
         orig_execute = conn.execute
         orig_executemany = getattr(conn, "executemany", None)
@@ -2349,6 +2377,18 @@ def _record_perf_intel_from_state(
             db_connection_open_count=int(state.db_connection_open_count),
             db_query_ms=float(state.db_query_ms or state.phases.get("db_query_ms") or 0.0),
             slow_queries=list(state.slow_queries),
+            sql_signatures=sorted(
+                (
+                    {
+                        "signature": signature,
+                        "count": int(values.get("count", 0.0)),
+                        "total_ms": round(float(values.get("total_ms", 0.0)), 2),
+                        "max_ms": round(float(values.get("max_ms", 0.0)), 2),
+                    }
+                    for signature, values in state.sql_signature_stats.items()
+                ),
+                key=lambda row: (-int(row["count"]), -float(row["total_ms"])),
+            )[:12],
             payload_bytes=int(response_bytes or 0),
             error=bool(had_exception) or int(status) >= 500,
             panels_built=str(state.meta.get("panels_built") or ""),
