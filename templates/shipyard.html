@@ -134,7 +134,7 @@
         </div>
         {{ render_unit_build_time_footer(ship.build_seconds, qty=1, batch_capacity=sy.production_batch_capacity|default(0)) }}
         <footer class="gc-ship-card-action shipyard-ship-actions">
-          <input type="text" inputmode="numeric" value="1" maxlength="20"
+          <input type="text" inputmode="numeric" value="1"
                  class="gc-input shipyard-qty-input gc-num-input" data-shipyard-qty="{{ ship.ship_key }}"
                  {% if ship.max_build is defined and ship.max_build %}data-input-max="{{ ship.max_build }}"{% endif %}
                  aria-label="{{ T('shipyard_amount_label') }}">
