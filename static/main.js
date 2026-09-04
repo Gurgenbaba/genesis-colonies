@@ -3513,6 +3513,12 @@
   GC.getDomPlanetId = getDomPlanetId;
 
   function mapActionError(reason, payload) {
+    if (reason === "ascension_required") {
+      const nextGate = Number(payload?.next_max_level || payload?.required_level || 0);
+      const action = t("buildings_mine_evo_action", "Ascension");
+      const levelLabel = t("buildings_col_level", "Stufe");
+      return nextGate > 0 ? `${action} · ${levelLabel} ${fmtNumber(nextGate)}` : action;
+    }
     if (reason === "not_enough_resources" && payload) {
       let m = 0;
       let c = 0;
