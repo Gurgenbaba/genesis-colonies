@@ -21,7 +21,6 @@ from .models import (
     get_planet_defense,
     get_research_levels,
     lock_planet_for_update,
-    resource_db_param,
 )
 from .queue_refund import refund_summary_percents
 
@@ -639,7 +638,7 @@ def _finish_due_defense_jobs_impl(
     return completed_jobs
 
 
-def _planet_resources(planet_id: int, *, conn) -> Tuple[int, int, int]:
+def _planet_resources(planet_id: int, *, conn) -> Tuple[float, float, float]:
     cur = conn.cursor()
     cur.execute(
         "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
@@ -647,11 +646,11 @@ def _planet_resources(planet_id: int, *, conn) -> Tuple[int, int, int]:
     )
     row = cur.fetchone()
     if not row:
-        return 0, 0, 0
+        return 0.0, 0.0, 0.0
     return (
-        int(row["metal"] or 0),
-        int(row["crystal"] or 0),
-        int(row["fuel_cells"] or 0),
+        float(row["metal"] or 0),
+        float(row["crystal"] or 0),
+        float(row["fuel_cells"] or 0),
     )
 
 
@@ -680,13 +679,13 @@ def _try_spend_build_resources(
           AND fuel_cells >= ?;
         """,
         (
-            resource_db_param(metal),
-            resource_db_param(crystal),
-            resource_db_param(fuel_cells),
+            int(metal),
+            int(crystal),
+            float(fuel_cells),
             int(planet_id),
-            resource_db_param(metal),
-            resource_db_param(crystal),
-            resource_db_param(fuel_cells),
+            int(metal),
+            int(crystal),
+            float(fuel_cells),
         ),
     )
     return cur.rowcount == 1
