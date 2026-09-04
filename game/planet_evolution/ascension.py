@@ -43,9 +43,9 @@ def check_ascension_requirements(
         cur.execute("SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
         prow = cur.fetchone()
         if prow:
-            if float(prow["metal"] or 0) < float(cost.get("metal") or 0):
+            if int(prow["metal"] or 0) < int(cost.get("metal") or 0):
                 missing.append("cost:metal")
-            if float(prow["crystal"] or 0) < float(cost.get("crystal") or 0):
+            if int(prow["crystal"] or 0) < int(cost.get("crystal") or 0):
                 missing.append("cost:crystal")
         for res_key, amount in cost.items():
             if res_key in ("metal", "crystal"):
