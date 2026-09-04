@@ -94,7 +94,7 @@ Vollständige Map: `BUILDING_REQUIREMENTS` in `game/buildings.py`.
 | Tabelle | `build_queue` |
 | Limit | `game_settings.queue_limit` (Default **5**, Code-Fallback **3** wenn Setting fehlt) |
 | Scheduling | Sequenziell; nach Cancel/Enqueue: `recalculate_build_queue_finish_times()` |
-| Zahlung | Sofort metal/crystal via `try_spend_resources_conn`; Kosten-Snapshot auf Row (Migration 076) |
+| Zahlung | Sofort metal/crystal via `try_spend_resources_conn`; Kosten-Snapshot auf Row (Migration 076). **GC-FERRO-L388-001:** ab Kosten > signed i64 liegt der kanonische Snapshot verlustfrei in `cost_metal_exact` / `cost_crystal_exact` (Decimal-TEXT, Migration 163); Legacy-BIGINT bleibt rolling-deploy-kompatibel. |
 | Finish | `queue_engine.finish_player_build_jobs` → Level++ |
 | Cancel | **GC-831 Refund** (100 % pending / 50 % active); Restqueue neu terminiert |
 

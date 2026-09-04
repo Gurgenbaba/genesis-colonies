@@ -10,6 +10,7 @@ Genesis-style (uniform across queue types):
 from __future__ import annotations
 
 import math
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 REFUND_RATIO_PENDING = 1.0
@@ -33,7 +34,13 @@ def refund_percent_for_ratio(ratio: float) -> int:
 
 
 def scaled_refund_amount(base: int | float, ratio: float) -> int:
-    return int(math.floor(max(0.0, float(base)) * max(0.0, float(ratio))))
+    """Exact decimal refund math; never round huge queue costs through binary float."""
+    try:
+        amount = max(Decimal(0), Decimal(str(base)))
+        factor = max(Decimal(0), Decimal(str(ratio)))
+        return int((amount * factor).to_integral_value(rounding=ROUND_FLOOR))
+    except (InvalidOperation, ValueError, TypeError):
+        return int(math.floor(max(0.0, float(base)) * max(0.0, float(ratio))))
 
 
 def apply_planet_refund(
