@@ -44,6 +44,7 @@ from game.models import (
     save_idempotent_action,
 )
 from game.db import begin_write_transaction, commit, rollback
+from game.json_transport import GenesisJSONProvider
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ from game.security import (
 # --------------------------------------------------------------------------
 
 app = Flask(__name__)
+app.json = GenesisJSONProvider(app)
 
 from flask_sock import Sock
 
