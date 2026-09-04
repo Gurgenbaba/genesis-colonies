@@ -155,6 +155,77 @@
     return null;
   }
 
+  function normalizeGameplayInteger(value) {
+    const exact = parseDisplayBigInt(value);
+    if (exact !== null) return exact.toString();
+    const raw = String(value ?? "").trim().replace(/[\s._,'’]/g, "");
+    if (!/^-?\d+$/.test(raw)) return "0";
+    try {
+      return BigInt(raw).toString();
+    } catch (_) {
+      return "0";
+    }
+  }
+
+  function gameplayBigInt(value) {
+    try {
+      return BigInt(normalizeGameplayInteger(value));
+    } catch (_) {
+      return BigInt(0);
+    }
+  }
+
+  function compareGameplayIntegers(a, b) {
+    const left = gameplayBigInt(a);
+    const right = gameplayBigInt(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  }
+
+  function isPositiveGameplayInteger(value) {
+    return gameplayBigInt(value) > BigInt(0);
+  }
+
+  function getGameplayIntegerInputCap(inp) {
+    if (!inp) return null;
+    const candidates = [inp.getAttribute("data-input-max")];
+    if (
+      inp.matches(
+        "[data-ship-input],[data-scrap-qty],.gc-scrapyard-qty,[data-logistics-resource]"
+      )
+    ) {
+      candidates.push(inp.getAttribute("max"));
+    }
+    for (const raw of candidates) {
+      if (raw == null || raw === "") continue;
+      const cap = gameplayBigInt(raw);
+      if (cap >= BigInt(0)) return cap;
+    }
+    return null;
+  }
+
+  function clampGameplayIntegerInput(inp, value) {
+    let exact = gameplayBigInt(value);
+    if (exact < BigInt(0)) exact = BigInt(0);
+    const cap = getGameplayIntegerInputCap(inp);
+    if (cap !== null && exact > cap) exact = cap;
+    return exact;
+  }
+
+  function readGameplayIntegerInput(inp, fallback = "0") {
+    if (!inp) return normalizeGameplayInteger(fallback);
+    const exact = clampGameplayIntegerInput(inp, inp.value ?? "0");
+    if (exact <= BigInt(0) && gameplayBigInt(fallback) > BigInt(0)) {
+      return gameplayBigInt(fallback).toString();
+    }
+    return exact.toString();
+  }
+
+  function setGameplayIntegerInput(inp, value) {
+    if (!inp) return;
+    const exact = clampGameplayIntegerInput(inp, value);
+    inp.value = formatNumber(exact);
+  }
+
   function formatNumber(n) {
     const exact = parseDisplayBigInt(n);
     if (exact !== null) return _deIntFormatter.format(exact);
@@ -253,20 +324,8 @@
       inp.value = "";
       return;
     }
-    let formatted = "";
-    if (inp.id === "gc-exchange-amount") {
-      // Preserve every manually-entered digit. Number/parseInt rounds large
-      // balances; BigInt is display/input-only and the API accepts the amount
-      // as a decimal string before Python int validation.
-      try {
-        formatted = formatNumber(BigInt(digits));
-      } catch (_) {
-        formatted = digits;
-      }
-    } else {
-      const num = clampToNumberInputCap(inp, parseInt(digits, 10));
-      formatted = formatNumber(num);
-    }
+    const exact = clampGameplayIntegerInput(inp, digits);
+    const formatted = formatNumber(exact);
     inp.value = formatted;
     try {
       inp.setSelectionRange(formatted.length, formatted.length);
@@ -281,17 +340,15 @@
       inp.inputMode = "numeric";
       inp.autocomplete = "off";
     }
-    if (!inp.getAttribute("maxlength")) {
-      // Trader values can legitimately exceed the old 20-character UI cap.
-      // Keep other gameplay inputs unchanged; the server remains authoritative.
-      inp.maxLength = inp.id === "gc-exchange-amount" ? 96 : 20;
-    }
+    // No gameplay-value length cap here: backend validation/request-size limits
+    // protect the endpoint, while progression values remain no-max.
+    inp.removeAttribute("maxlength");
     if (inp.matches("[data-shipyard-qty],[data-defense-qty]")) {
       inp.removeAttribute("max");
     }
     const raw = String(inp.value ?? "").trim();
     if (raw && /\d/.test(raw)) {
-      inp.value = formatNumber(parseIntNumber(raw));
+      inp.value = formatNumber(clampGameplayIntegerInput(inp, raw));
     }
   }
 
@@ -1893,6 +1950,12 @@
   GC.initLandingShowcase = initLandingShowcase;
 
   GC.parseIntNumber = parseIntNumber;
+  GC.normalizeGameplayInteger = normalizeGameplayInteger;
+  GC.gameplayBigInt = gameplayBigInt;
+  GC.compareGameplayIntegers = compareGameplayIntegers;
+  GC.isPositiveGameplayInteger = isPositiveGameplayInteger;
+  GC.readGameplayIntegerInput = readGameplayIntegerInput;
+  GC.setGameplayIntegerInput = setGameplayIntegerInput;
   GC.readNumberInput = readNumberInput;
   GC.setNumberInputValue = setNumberInputValue;
   GC.formatNumber = formatNumber;
