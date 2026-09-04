@@ -95,7 +95,7 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile and browser syntax
         run: |
-          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py game/live_state.py game/perf_intel.py game/db_pg.py game/shipyard.py game/buildings.py game/models.py game/queue_refund.py game/effects/effect_resolver.py game/mine_evolution/formulas.py game/mine_evolution/service.py game/timekeeper.py game/inventory_use.py game/json_transport.py scripts/pg_numeric_readiness_audit.py
+          python -m py_compile app.py game/ws_hub.py game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py game/live_state.py game/perf_intel.py game/db_pg.py game/shipyard.py game/buildings.py game/models.py game/queue_refund.py game/effects/effect_resolver.py game/mine_evolution/formulas.py game/mine_evolution/service.py game/timekeeper.py game/inventory_use.py game/json_transport.py scripts/pg_numeric_readiness_audit.py
           node --check static/main.js
           node --check static/admin.js
           node --check static/js/core/gc.js
