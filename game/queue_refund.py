@@ -56,6 +56,8 @@ def apply_planet_refund(
 ) -> None:
     if int(metal) <= 0 and int(crystal) <= 0 and int(fuel_cells) <= 0:
         return
+    from .models import resource_db_param
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -65,7 +67,12 @@ def apply_planet_refund(
             fuel_cells = fuel_cells + ?
         WHERE id = ?;
         """,
-        (int(metal), int(crystal), int(fuel_cells), int(planet_id)),
+        (
+            resource_db_param(metal),
+            resource_db_param(crystal),
+            resource_db_param(fuel_cells),
+            int(planet_id),
+        ),
     )
 
 
