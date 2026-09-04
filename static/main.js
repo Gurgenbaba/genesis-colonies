@@ -19171,17 +19171,20 @@
       }
       const input = page.querySelector(`[data-auction-bid-input="${id}"]`);
       if (input) {
-        const minVal = String(a.min_next_bid || 1);
+        const minVal = normalizeGameplayInteger(a.min_next_bid || "1");
         input.min = minVal;
-        input.placeholder = fmtNumber(a.min_next_bid || 1);
-        if (!input.matches(":focus") && (!input.value || readNumberInput(input) < parseIntNumber(minVal))) {
-          setNumberInputValue(input, minVal);
+        input.placeholder = fmtNumber(minVal);
+        if (
+          !input.matches(":focus") &&
+          (!input.value || compareGameplayIntegers(readGameplayIntegerInput(input), minVal) < 0)
+        ) {
+          setGameplayIntegerInput(input, minVal);
         }
       }
       const card = page.querySelector(`[data-auction-lot-id="${id}"], [data-auction-card="${id}"]`);
       if (card) {
-        card.dataset.minBid = String(a.min_next_bid || 1);
-        card.dataset.currentBid = String(a.current_bid || 0);
+        card.dataset.minBid = normalizeGameplayInteger(a.min_next_bid || "1");
+        card.dataset.currentBid = normalizeGameplayInteger(a.current_bid || "0");
         card.dataset.endsAt = String(a.ends_at || 0);
         card.dataset.currency = String(a.currency || "");
         card.dataset.hasBids = hasBids ? "1" : "0";
@@ -19368,25 +19371,32 @@
         ).trim();
         const input = form.querySelector("[data-auction-bid-input], [name='amount']");
         const btn = form.querySelector("[data-auction-bid-submit], [type='submit']");
-        const amount = readNumberInput(input);
-        const minBid = parseInt(String(card?.dataset.minBid || input?.min || "0"), 10);
+        const amount = readGameplayIntegerInput(input, "0");
+        const minBid = normalizeGameplayInteger(card?.dataset.minBid || input?.min || "0");
 
         setAuctionFormError(listingId, "");
-        if (!listingId || !currency || !amount) {
+        if (!listingId || !currency || !isPositiveGameplayInteger(amount)) {
           const msg = tt("auction_error_invalid_amount", "Enter a valid bid.");
           setAuctionFormError(listingId, msg);
           showNotify(msg, "error");
           return;
         }
-        if (minBid > 0 && amount < minBid) {
+        if (
+          isPositiveGameplayInteger(minBid) &&
+          compareGameplayIntegers(amount, minBid) < 0
+        ) {
           const msg = auctionReasonText({ reason: "bid_too_low", min_bid: minBid });
           setAuctionFormError(listingId, msg);
           showNotify(msg, "error");
           return;
         }
         const isLeading = card?.dataset.isLeading === "1";
-        const currentBid = parseInt(String(card?.dataset.currentBid || "0"), 10);
-        if (isLeading && currentBid > 0 && amount <= currentBid) {
+        const currentBid = normalizeGameplayInteger(card?.dataset.currentBid || "0");
+        if (
+          isLeading &&
+          isPositiveGameplayInteger(currentBid) &&
+          compareGameplayIntegers(amount, currentBid) <= 0
+        ) {
           const msg = auctionReasonText({ reason: "bid_must_raise", min_bid: minBid });
           setAuctionFormError(listingId, msg);
           showNotify(msg, "error");
