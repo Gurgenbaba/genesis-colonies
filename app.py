@@ -1243,13 +1243,28 @@ def api_internal_cron_galactic_directives():
 
 def _load_player_view_with_resources(
     finish_source: str = "page_load",
+    *,
+    read_only: bool = False,
 ) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
     """
     Return:
       (player_view | None, buildings, ratio, energy_total, energy_used, storage_caps)
 
-    Pass a named finish_source for Command Initiation visit_page credit (works on PJAX).
+    read_only=True is for shell-only pages (for example Control Center):
+    project committed resources/energy without finishing gameplay queues.
     """
+    if read_only:
+        user_id = session.get("user_id")
+        if user_id is None:
+            return None, {}, 1.0, 0, 0, {"metal": 0, "crystal": 0}
+        from game.logic import read_player_live_state_for_planet_switch
+
+        conn = db()
+        try:
+            return read_player_live_state_for_planet_switch(int(user_id), conn=conn)
+        finally:
+            conn.close()
+
     ctx = _load_page_live_context(finish_source=str(finish_source or "page_load"))
     if ctx is None:
         return None, {}, 1.0, 0, 0, {"metal": 0, "crystal": 0}
@@ -3722,11 +3737,16 @@ def _inventory_action_message(reason: str) -> str:
 def _inventory_action_context(
     user_id: int, finish_source: str
 ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-    """Build fresh game state + inventory + case battles after mutation connection is closed."""
+    """Fresh post-mutation HUD + inventory reads; never run a second queue/resource mutation."""
     from game.case_battles import build_case_battles_state
     from game.inventory import build_inventory_state
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    # The inventory mutation already committed. Rebuild the shell through the
+    # canonical read-mostly poll path instead of refresh_player_live_state().
+    state, _ = _build_game_state_payload(
+        include_panel=False,
+        finish_source="game_state",
+    )
     conn = db()
     try:
         inventory = build_inventory_state(int(user_id), conn=conn)
@@ -14961,7 +14981,11 @@ def api_planets_colonize():
 @require_login
 @require_admin
 def admin_panel():
-    player_view, buildings, ratio, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    # GC-PERF-COMMON-001: Control Center shell must never finish gameplay queues.
+    player_view, buildings, ratio, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        finish_source="admin_panel",
+        read_only=True,
+    )
     if player_view is None:
         return redirect(url_for("login"))
 
