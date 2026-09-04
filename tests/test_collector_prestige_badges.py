@@ -205,3 +205,47 @@ def test_prestige_progress_before_threshold(prestige_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_badge_sync_bulk_reads_unlock_state_once(prestige_db):
+    """GC-PERF-PLAYERCARD-003: self-card sync must not SELECT unlock state per badge."""
+    uid = _create_player()
+    conn = db()
+    statements: list[str] = []
+    try:
+        begin_write_transaction(conn)
+        ensure_player_card_tables(conn)
+        # Make ordinary score badges eligible so the legacy implementation would
+        # execute its per-badge existence SELECT repeatedly.
+        conn.execute(
+            """
+            UPDATE player_scores
+            SET score_total = ?, score_buildings = ?, score_research = ?,
+                score_fleet = ?, score_defense = ?, score_planet_evolution = ?
+            WHERE player_id = ?;
+            """,
+            (10**12, 10**12, 10**12, 10**12, 10**12, 10**12, uid),
+        )
+        conn.set_trace_callback(statements.append)
+        _sync_badge_unlocks(uid, conn=conn)
+        conn.set_trace_callback(None)
+        commit(conn)
+
+        normalized = [" ".join(str(sql).upper().split()) for sql in statements]
+        per_badge_reads = [
+            sql
+            for sql in normalized
+            if sql.startswith("SELECT 1 FROM PLAYER_CARD_UNLOCKED_BADGES")
+        ]
+        assert per_badge_reads == []
+        assert any(
+            "LEFT JOIN PLAYER_CARD_UNLOCKED_BADGES" in sql
+            and "ALREADY_UNLOCKED" in sql
+            for sql in normalized
+        )
+    finally:
+        try:
+            conn.set_trace_callback(None)
+        except Exception:
+            pass
+        conn.close()
