@@ -208,8 +208,8 @@ def _enrich_research_card(
     cost_m, cost_c = compute_planet_research_cost(tech_key, target)
     duration_seconds = int(compute_planet_research_time(planet_id, tech_key, target, conn))
 
-    metal = float(planet.get("metal") or 0)
-    crystal = float(planet.get("crystal") or 0)
+    metal = int(planet.get("metal") or 0)
+    crystal = int(planet.get("crystal") or 0)
     missing_resources: List[Dict[str, Any]] = []
     if metal < cost_m:
         missing_resources.append(
