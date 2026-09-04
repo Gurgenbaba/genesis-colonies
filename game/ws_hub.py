@@ -17,9 +17,9 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List, Set, Tuple
 
-from .json_transport import js_safe_json_value, List, Set, Tuple
+from .json_transport import js_safe_json_value
 
 logger = logging.getLogger(__name__)
 
