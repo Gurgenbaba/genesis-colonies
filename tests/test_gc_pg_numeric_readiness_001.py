@@ -33,6 +33,16 @@ def test_critical_p0_numeric_domains_are_in_policy():
         ("build_queue", "cost_metal_exact"),
         ("debris_fields", "metal"),
         ("asteroid_fields", "metal"),
+        ("pirate_bases", "max_hp"),
+        ("pirate_base_contributions", "damage"),
+        ("combat_hall_of_fame", "attacker_loss_score"),
+        ("combat_hall_of_fame", "defender_loss_score"),
+        ("player_directives", "target_value"),
+        ("player_directives", "progress_value"),
+        ("directive_progress", "delta"),
+        ("case_battles", "total_battle_value"),
+        ("case_battle_rolls", "reward_amount"),
+        ("case_battle_rolls", "reward_value"),
     }
     assert required <= keys
 
@@ -52,6 +62,85 @@ def test_classifier_distinguishes_int4_bigint_double_numeric_and_text():
     assert mod.classify_type("integer", "at_least_i64")[0] == "not_ready"
     assert mod.classify_type("bigint", "at_least_i64")[0] == "limited"
     assert mod.classify_type("numeric", "at_least_i64")[0] == "ready"
+
+
+def test_classifier_respects_numeric_precision_and_scale():
+    mod = _load_audit_module()
+
+    assert (
+        mod.classify_type(
+            "numeric",
+            "exact_unbounded",
+            numeric_precision=20,
+            numeric_scale=0,
+        )[0]
+        == "limited"
+    )
+    assert (
+        mod.classify_type(
+            "numeric",
+            "exact_snapshot",
+            numeric_precision=30,
+            numeric_scale=0,
+        )[0]
+        == "limited"
+    )
+    assert (
+        mod.classify_type(
+            "numeric",
+            "decimal_rate",
+            numeric_precision=20,
+            numeric_scale=0,
+        )[0]
+        == "not_ready"
+    )
+    assert (
+        mod.classify_type(
+            "numeric",
+            "decimal_rate",
+            numeric_precision=20,
+            numeric_scale=4,
+        )[0]
+        == "ready"
+    )
+    assert (
+        mod.classify_type(
+            "numeric",
+            "at_least_i64",
+            numeric_precision=18,
+            numeric_scale=0,
+        )[0]
+        == "not_ready"
+    )
+    assert (
+        mod.classify_type(
+            "numeric",
+            "at_least_i64",
+            numeric_precision=19,
+            numeric_scale=0,
+        )[0]
+        == "ready"
+    )
+
+
+def test_strict_mode_rejects_limited_exact_contracts_only():
+    mod = _load_audit_module()
+
+    assert mod.is_strict_violation(
+        {"priority": "P0", "contract": "exact_unbounded", "status": "limited"}
+    )
+    assert mod.is_strict_violation(
+        {"priority": "P1", "contract": "exact_snapshot", "status": "limited"}
+    )
+    assert not mod.is_strict_violation(
+        {"priority": "P1", "contract": "at_least_i64", "status": "limited"}
+    )
+    assert not mod.is_strict_violation(
+        {"priority": "P1", "contract": "decimal_rate", "status": "limited"}
+    )
+    assert not mod.is_strict_violation(
+        {"priority": "P2", "contract": "exact_unbounded", "status": "not_ready"}
+    )
 
 
 def test_runtime_auditor_is_schema_metadata_only():
@@ -78,6 +167,9 @@ def test_audit_marks_known_current_types_as_expected():
         ("planet_ships", "amount"): {"data_type": "bigint"},
         ("build_queue", "cost_metal_exact"): {"data_type": "text"},
         ("player_scores", "score_total"): {"data_type": "text"},
+        ("pirate_bases", "max_hp"): {"data_type": "integer"},
+        ("case_battles", "total_battle_value"): {"data_type": "integer"},
+        ("player_directives", "target_value"): {"data_type": "integer"},
     }
     rows = {
         (r["table"], r["column"]): r
@@ -88,3 +180,6 @@ def test_audit_marks_known_current_types_as_expected():
     assert rows[("planet_ships", "amount")]["status"] == "limited"
     assert rows[("build_queue", "cost_metal_exact")]["status"] == "ready"
     assert rows[("player_scores", "score_total")]["status"] == "ready"
+    assert rows[("pirate_bases", "max_hp")]["status"] == "not_ready"
+    assert rows[("case_battles", "total_battle_value")]["status"] == "not_ready"
+    assert rows[("player_directives", "target_value")]["status"] == "not_ready"
