@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 from flask import Flask
 
 from game.json_transport import (
@@ -196,3 +199,49 @@ def test_no_max_quantity_templates_have_no_20_digit_cap():
                 )
             ):
                 assert 'maxlength="20"' not in line
+
+
+def test_auction_bid_path_is_bigint_safe():
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+
+    state_start = main.index('const minEl = page.querySelector(\`[data-auction-min-label="\${id}"]\`)')
+    state_end = main.index("const submitBtn =", state_start)
+    state_block = main[state_start:state_end]
+    assert "normalizeGameplayInteger(a.min_next_bid" in state_block
+    assert "compareGameplayIntegers(readGameplayIntegerInput(input), minVal) < 0" in state_block
+    assert "readNumberInput(input) < parseIntNumber(minVal)" not in state_block
+
+    submit_start = main.index('page.querySelectorAll("[data-auction-bid-form]")')
+    submit_end = main.index("function bindAuctionHouse", submit_start)
+    submit_block = main[submit_start:submit_end]
+    assert 'const amount = readGameplayIntegerInput(input, "0");' in submit_block
+    assert "const minBid = normalizeGameplayInteger" in submit_block
+    assert "const currentBid = normalizeGameplayInteger" in submit_block
+    assert "compareGameplayIntegers(amount, minBid) < 0" in submit_block
+    assert "compareGameplayIntegers(amount, currentBid) <= 0" in submit_block
+    assert "const amount = readNumberInput(input);" not in submit_block
+    assert "const minBid = parseInt(" not in submit_block
+    assert "const currentBid = parseInt(" not in submit_block
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_browser_core_helper_roundtrips_10_pow_30_exactly():
+    core_path = ROOT / "static" / "js" / "core" / "gc.js"
+    script = f"""
+require({json.dumps(str(core_path))});
+const GC = globalThis.GC;
+const huge = {json.dumps(str(HUGE))};
+if (GC.normalizeGameplayInteger(huge) !== huge) process.exit(10);
+if (GC.gameplayBigInt(huge).toString() !== huge) process.exit(11);
+if (GC.compareGameplayIntegers(huge, (BigInt(huge) - 1n).toString()) !== 1) process.exit(12);
+if (!GC.isPositiveGameplayInteger(huge)) process.exit(13);
+if (GC.fmtGameplayInteger(huge).replace(/[^0-9]/g, "") !== huge) process.exit(14);
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
