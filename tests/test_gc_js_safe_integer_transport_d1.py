@@ -225,6 +225,32 @@ def test_auction_bid_path_is_bigint_safe():
     assert "const currentBid = parseInt(" not in submit_block
 
 
+def test_auction_state_never_reintroduces_resource_float_roundtrips():
+    source = (ROOT / "app.py").read_text(encoding="utf-8")
+
+    forbidden = (
+        'metal=float(ctx["player_view"]["metal"])',
+        'crystal=float(ctx["player_view"]["crystal"])',
+        'fuel_cells=float(ctx["player_view"].get("fuel_cells") or 0)',
+        'metal=float(player_view["metal"])',
+        'crystal=float(player_view["crystal"])',
+        'fuel_cells=float(player_view.get("fuel_cells") or 0)',
+    )
+    for token in forbidden:
+        assert token not in source
+
+    assert 'metal=int(ctx["player_view"]["metal"] or 0)' in source
+    assert 'crystal=int(ctx["player_view"]["crystal"] or 0)' in source
+    assert 'metal=int(player_view["metal"] or 0)' in source
+    assert 'crystal=int(player_view["crystal"] or 0)' in source
+
+
+def test_websocket_push_uses_same_js_safe_integer_transport():
+    source = (ROOT / "game" / "ws_hub.py").read_text(encoding="utf-8")
+    assert "from .json_transport import js_safe_json_value" in source
+    assert "json.dumps(js_safe_json_value(payload)" in source
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_browser_core_helper_roundtrips_10_pow_30_exactly():
     core_path = ROOT / "static" / "js" / "core" / "gc.js"
