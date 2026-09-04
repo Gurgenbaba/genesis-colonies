@@ -158,6 +158,10 @@
   function normalizeGameplayInteger(value) {
     const exact = parseDisplayBigInt(value);
     if (exact !== null) return exact.toString();
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return "0";
+      return BigInt(Math.trunc(value)).toString();
+    }
     const raw = String(value ?? "").trim().replace(/[\s._,'’]/g, "");
     if (!/^-?\d+$/.test(raw)) return "0";
     try {
@@ -11283,9 +11287,9 @@
   function patchShellHudLiveResources(metal, crystal, fuelCells) {
     const bar = document.getElementById("resource-bar");
     if (!bar) return;
-    const m = Math.max(0, Math.floor(Number(metal) || 0));
-    const c = Math.max(0, Math.floor(Number(crystal) || 0));
-    const f = Math.max(0, Math.floor(Number(fuelCells) || 0));
+    const m = gameplayBigInt(metal);
+    const c = gameplayBigInt(crystal);
+    const f = gameplayBigInt(fuelCells);
     if (_resourceDisplay.metal !== m) {
       bar.querySelectorAll(".res-value.metal").forEach((el) => {
         _setIfChanged(el, fmtNumber(m));
@@ -14653,25 +14657,39 @@
           data.resources.fuel_cells != null))
     );
 
-    const storageMetal = Math.floor(Number(storage.metal || 0));
-    const storageCrystal = Math.floor(Number(storage.crystal || 0));
-    const storageFuelCells = Math.floor(Number(storage.fuel_cells || 0));
+    const storageMetal = gameplayBigInt(storage.metal || 0);
+    const storageCrystal = gameplayBigInt(storage.crystal || 0);
+    const storageFuelCells = gameplayBigInt(storage.fuel_cells || 0);
 
-    let metal = resourceOverrides && resourceOverrides.metal != null
-      ? Math.floor(Number(resourceOverrides.metal))
-      : Math.floor(Number(p.metal ?? resources.metal ?? 0));
-    let crystal = resourceOverrides && resourceOverrides.crystal != null
-      ? Math.floor(Number(resourceOverrides.crystal))
-      : Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
-    let fuelCells = resourceOverrides && resourceOverrides.fuelCells != null
-      ? Math.floor(Number(resourceOverrides.fuelCells))
-      : Math.floor(Number(p.fuel_cells ?? resources.fuel_cells ?? 0));
+    let metal = gameplayBigInt(
+      resourceOverrides && resourceOverrides.metal != null
+        ? resourceOverrides.metal
+        : (p.metal ?? resources.metal ?? 0)
+    );
+    let crystal = gameplayBigInt(
+      resourceOverrides && resourceOverrides.crystal != null
+        ? resourceOverrides.crystal
+        : (p.crystal ?? resources.crystal ?? 0)
+    );
+    let fuelCells = gameplayBigInt(
+      resourceOverrides && resourceOverrides.fuelCells != null
+        ? resourceOverrides.fuelCells
+        : (p.fuel_cells ?? resources.fuel_cells ?? 0)
+    );
 
     if (!forceResourceBar && !allowResourceRegression) {
       const projected = projectLiveResourceAmounts(getApproxServerNow());
-      metal = Math.max(metal, _last.metal ?? 0, projected?.metal ?? 0);
-      crystal = Math.max(crystal, _last.crystal ?? 0, projected?.crystal ?? 0);
-      fuelCells = Math.max(fuelCells, _last.fuelCells ?? 0, projected?.fuelCells ?? 0);
+      const maxGameplay = (incoming, current, projection) => {
+        let best = gameplayBigInt(incoming);
+        const cur = gameplayBigInt(current ?? 0);
+        const proj = gameplayBigInt(projection ?? 0);
+        if (cur > best) best = cur;
+        if (proj > best) best = proj;
+        return best;
+      };
+      metal = maxGameplay(metal, _last.metal, projected?.metal);
+      crystal = maxGameplay(crystal, _last.crystal, projected?.crystal);
+      fuelCells = maxGameplay(fuelCells, _last.fuelCells, projected?.fuelCells);
     }
     const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
     const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
@@ -14692,11 +14710,11 @@
         _last.crystal = crystal;
         _resourceDisplay.crystal = crystal;
       }
-      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > 0)) {
+      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > BigInt(0))) {
         bar.querySelectorAll(".res-cap.metal").forEach((el) => { _setIfChanged(el, fmtNumber(storageMetal)); });
         _last.storageMetal = storageMetal;
       }
-      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > 0)) {
+      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > BigInt(0))) {
         bar.querySelectorAll(".res-cap.crystal").forEach((el) => { _setIfChanged(el, fmtNumber(storageCrystal)); });
         _last.storageCrystal = storageCrystal;
       }
@@ -14705,7 +14723,7 @@
         _last.fuelCells = fuelCells;
         _resourceDisplay.fuelCells = fuelCells;
       }
-      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
+      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > BigInt(0))) {
         bar.querySelectorAll(".res-cap.fuel_cells").forEach((el) => {
           _setIfChanged(el, fmtNumber(storageFuelCells));
         });
@@ -15497,11 +15515,11 @@
 
         const prodCell = document.querySelector(`.bcell-prod[data-building="${key}"]`);
         if (prodCell) {
-          if (key === "metal_storage" && storageMetal > 0) {
+          if (key === "metal_storage" && storageMetal > BigInt(0)) {
             _setIfChanged(prodCell, `${fmtNumber(metal)} / ${fmtNumber(storageMetal)}`);
-          } else if (key === "crystal_storage" && storageCrystal > 0) {
+          } else if (key === "crystal_storage" && storageCrystal > BigInt(0)) {
             _setIfChanged(prodCell, `${fmtNumber(crystal)} / ${fmtNumber(storageCrystal)}`);
-          } else if (key === "fuel_storage" && storageFuelCells > 0) {
+          } else if (key === "fuel_storage" && storageFuelCells > BigInt(0)) {
             _setIfChanged(prodCell, `${fmtNumber(fuelCells)} / ${fmtNumber(storageFuelCells)}`);
           } else {
             const val = Math.floor(prod[key] || 0);
