@@ -106,6 +106,7 @@
           maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
         );
         if (qtyInpMax && isPositiveGameplayInteger(maxQty)) {
+          qtyInpMax.dataset.inputMax = maxQty;
           setGameplayIntegerInput(qtyInpMax, maxQty);
           var cardMax = maxBtn.closest("[data-ship-card]");
           if (cardMax) {
