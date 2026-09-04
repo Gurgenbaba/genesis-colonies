@@ -58,6 +58,34 @@
     return parseIntNumber(inp && inp.value);
   }
 
+  function normalizeGameplayInteger(v) {
+    if (typeof GC.normalizeGameplayInteger === "function") return GC.normalizeGameplayInteger(v);
+    var raw = String(v == null ? "0" : v).replace(/[\s._,'’]/g, "");
+    return /^-?\d+$/.test(raw) ? raw : "0";
+  }
+
+  function isPositiveGameplayInteger(v) {
+    if (typeof GC.isPositiveGameplayInteger === "function") return GC.isPositiveGameplayInteger(v);
+    try { return BigInt(normalizeGameplayInteger(v)) > BigInt(0); } catch (_) { return false; }
+  }
+
+  function setGameplayIntegerInput(inp, v) {
+    if (typeof GC.setGameplayIntegerInput === "function") return GC.setGameplayIntegerInput(inp, v);
+    if (inp) {
+      var exact = normalizeGameplayInteger(v);
+      inp.value = exact;
+      inp.dataset.inputMax = exact;
+    }
+  }
+
+  function readGameplayIntegerInput(inp) {
+    if (typeof GC.readGameplayIntegerInput === "function") {
+      return GC.readGameplayIntegerInput(inp, "1");
+    }
+    var exact = normalizeGameplayInteger(inp && inp.value);
+    return isPositiveGameplayInteger(exact) ? exact : "1";
+  }
+
   function militaryPageResources(page) {
     if (typeof GC.militaryPageResources === "function") return GC.militaryPageResources(page);
     return (GC.lastState && GC.lastState.resources) || {};
@@ -75,8 +103,9 @@
   }
 
   function fmtTroopNum(n) {
+    if (typeof GC.fmtGameplayInteger === "function") return GC.fmtGameplayInteger(n);
     if (typeof GC.fmtNumber === "function") return GC.fmtNumber(n);
-    return String(Math.max(0, Math.floor(Number(n) || 0)));
+    return normalizeGameplayInteger(n);
   }
 
   function applyTroopsPayload(panel, troops, resourcesOpt) {
@@ -95,13 +124,13 @@
       if (stock) stock.textContent = "×" + fmtTroopNum(u.amount || 0);
       var maxBtn = panel.querySelector('[data-troop-max="' + u.key + '"]');
       if (maxBtn) {
-        var maxQty = Math.max(0, parseIntNumber(u.max_train) || 0);
-        maxBtn.setAttribute("data-max-qty", String(maxQty));
-        maxBtn.dataset.maxQty = String(maxQty);
+        var maxQty = normalizeGameplayInteger(u.max_train);
+        maxBtn.setAttribute("data-max-qty", maxQty);
+        maxBtn.dataset.maxQty = maxQty;
       }
       var amountInp = panel.querySelector('[data-troop-amount="' + u.key + '"]');
       if (amountInp && u.max_train != null) {
-        amountInp.dataset.inputMax = String(Math.max(0, parseIntNumber(u.max_train) || 0));
+        amountInp.dataset.inputMax = normalizeGameplayInteger(u.max_train);
       }
       var trainBtn = panel.querySelector('[data-troop-train="' + u.key + '"]');
       if (trainBtn) {
@@ -114,12 +143,16 @@
       if (card) {
         var costWrap = card.querySelector("[data-troop-cost]");
         if (costWrap) {
-          var cm = Math.max(0, parseIntNumber(u.cost_metal != null ? u.cost_metal : (u.train_cost && u.train_cost.metal)) || 0);
-          var cc = Math.max(0, parseIntNumber(u.cost_crystal != null ? u.cost_crystal : (u.train_cost && u.train_cost.crystal)) || 0);
-          costWrap.dataset.unitCostMetal = String(cm);
-          costWrap.dataset.unitCostCrystal = String(cc);
-          costWrap.setAttribute("data-unit-cost-metal", String(cm));
-          costWrap.setAttribute("data-unit-cost-crystal", String(cc));
+          var cm = normalizeGameplayInteger(
+            u.cost_metal != null ? u.cost_metal : (u.train_cost && u.train_cost.metal)
+          );
+          var cc = normalizeGameplayInteger(
+            u.cost_crystal != null ? u.cost_crystal : (u.train_cost && u.train_cost.crystal)
+          );
+          costWrap.dataset.unitCostMetal = cm;
+          costWrap.dataset.unitCostCrystal = cc;
+          costWrap.setAttribute("data-unit-cost-metal", cm);
+          costWrap.setAttribute("data-unit-cost-crystal", cc);
         }
         syncUnitCardCostPreview(card, resources);
       }
@@ -145,7 +178,7 @@
             domain: "troops",
             owner_key: String(job.troop_key || ""),
             label: "troop_" + String(job.troop_key || ""),
-            amount: Math.max(0, parseIntNumber(job.amount) || 0),
+            amount: normalizeGameplayInteger(job.amount),
             position: idx + 1,
             is_active: idx === 0,
             remaining_seconds: Math.max(0, parseIntNumber(job.remaining_seconds) || 0),
@@ -181,9 +214,9 @@
     var html = '<ul class="barracks-troops-queue-list">';
     rows.forEach(function (job) {
       var key = String(job.troop_key || "");
-      var amount = Math.max(0, parseIntNumber(job.amount) || 0);
+      var amount = normalizeGameplayInteger(job.amount);
       var jobId = Math.max(0, parseIntNumber(job.id) || 0);
-      var label = t("troop_" + key, key) + " ×" + String(amount);
+      var label = t("troop_" + key, key) + " ×" + fmtTroopNum(amount);
       html +=
         '<li class="barracks-troops-queue-item" data-troop-job-id="' +
         jobId +
@@ -239,12 +272,11 @@
         e.preventDefault();
         var maxKey = maxBtn.getAttribute("data-troop-max");
         var qtyInp = panel.querySelector('[data-troop-amount="' + maxKey + '"]');
-        var maxQty = parseIntNumber(
+        var maxQty = normalizeGameplayInteger(
           maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
         );
-        if (qtyInp && maxQty > 0) {
-          qtyInp.dataset.inputMax = String(maxQty);
-          setNumberInputValue(qtyInp, maxQty);
+        if (qtyInp && isPositiveGameplayInteger(maxQty)) {
+          setGameplayIntegerInput(qtyInp, maxQty);
           var card = maxBtn.closest("[data-troop-card], [data-troop-key]");
           if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
         }
@@ -259,7 +291,7 @@
       if (trainBtn) {
         var key = trainBtn.getAttribute("data-troop-train");
         var amountInp = panel.querySelector('[data-troop-amount="' + key + '"]');
-        var amount = Math.max(1, parseIntNumber(amountInp && amountInp.value) || 1);
+        var amount = readGameplayIntegerInput(amountInp);
         trainBtn.disabled = true;
         if (errEl) {
           errEl.hidden = true;
@@ -344,12 +376,11 @@
         e.preventDefault();
         var dk = maxBtn.getAttribute("data-defense-max");
         var qtyInp = page.querySelector('[data-defense-qty="' + dk + '"]');
-        var maxQty = parseIntNumber(
+        var maxQty = normalizeGameplayInteger(
           maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
         );
-        if (qtyInp && maxQty > 0) {
-          qtyInp.dataset.inputMax = String(maxQty);
-          setNumberInputValue(qtyInp, maxQty);
+        if (qtyInp && isPositiveGameplayInteger(maxQty)) {
+          setGameplayIntegerInput(qtyInp, maxQty);
           var card = maxBtn.closest("[data-defense-card]");
           if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
         }
@@ -391,7 +422,7 @@
       e.preventDefault();
       var defenseKey = buildBtn.getAttribute("data-defense-build");
       var qtyInpBuild = page.querySelector('[data-defense-qty="' + defenseKey + '"]');
-      var amount = readNumberInput(qtyInpBuild) || 1;
+      var amount = readGameplayIntegerInput(qtyInpBuild);
       var planetIdBuild = parseInt(page.dataset.planetId || "0", 10);
       buildBtn.dataset.building = "1";
       buildBtn.disabled = true;
