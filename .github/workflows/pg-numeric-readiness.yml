@@ -21,6 +21,12 @@ on:
       - "game/inactive_autoplay.py"
       - "game/planet_evolution/dashboard.py"
       - "game/queue_refund.py"
+      - "game/spy.py"
+      - "game/commander_classes.py"
+      - "game/admin_balance.py"
+      - "game/spy.py"
+      - "game/commander_classes.py"
+      - "game/admin_balance.py"
       - "migrate.py"
       - "migrations/**"
       - "scripts/pg_numeric_readiness_audit.py"
@@ -118,7 +124,8 @@ jobs:
             game/models.py game/resources.py game/exchange.py \
             game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
             game/buildings.py game/research.py game/shipyard.py game/defense.py \
-            game/inactive_autoplay.py game/queue_refund.py
+            game/inactive_autoplay.py game/queue_refund.py \
+            game/spy.py game/commander_classes.py game/admin_balance.py
           git diff --check
 
       - name: Apply full PostgreSQL schema
