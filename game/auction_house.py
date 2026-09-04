@@ -667,9 +667,9 @@ def build_auction_house_state(
     player_id: int,
     planet_id: int,
     *,
-    metal: float = 0,
-    crystal: float = 0,
-    fuel_cells: float = 0,
+    metal: int = 0,
+    crystal: int = 0,
+    fuel_cells: int = 0,
     conn=None,
     mark_visited: bool = False,
 ) -> Dict[str, Any]:
