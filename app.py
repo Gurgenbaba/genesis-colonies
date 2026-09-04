@@ -1706,6 +1706,7 @@ _FLEET_MUTATION_LIVE_SOURCES = frozenset(
         "api_fleet_send",
         "api_fleet_bulk_launch_presets",
         "api_fleet_recall",
+        "api_fleet_mass_expedition",
     }
 )
 
@@ -11609,6 +11610,7 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_fleet_send",
         "api_fleet_bulk_launch_presets",
         "api_fleet_recall",
+        "api_fleet_mass_expedition",
         "api_timekeeper_apply",
         # Meta/reward HUD actions — no buildings/research catalog needed
         "api_login_rewards_claim",
