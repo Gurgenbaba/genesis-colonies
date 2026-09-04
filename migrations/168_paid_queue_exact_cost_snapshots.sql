@@ -1,4 +1,5 @@
 -- 168_paid_queue_exact_cost_snapshots.sql
+-- GC-REQUIRES-TABLES: research_queue, shipyard_queue, defense_queue
 -- P0-C: Research, Shipyard and Defense paid costs must survive values above
 -- signed BIGINT and must never depend on later cost recomputation.
 -- Canonical snapshot = decimal TEXT, mirroring build_queue migration 163.
