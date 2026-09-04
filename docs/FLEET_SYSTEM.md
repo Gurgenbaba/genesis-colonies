@@ -316,6 +316,8 @@ Aufgerufen von:
 | `/api/fleet/presets/<id>` | PUT/PATCH/DELETE | CRUD |
 | `/api/fleet/mass-expedition` | POST | Wave expeditions (GC-981 split; **reserves 3 fleet slots** — uses `free − 3` only) |
 | `/api/fleet/mass-expedition/preview` | POST | Split preview (`usable_slots`, `reserved_slots`) |
+
+**GC-PERF-MASS-EXPO-002:** Mass-Expedition-Preview ist strikt read-only. Ressourcen werden nur in-memory projiziert (`persist_resources=False`), damit parallele Previews keinen Planet-Row-Lock halten. Der Mass-Expedition-Mutations-Response nutzt denselben schlanken Poll-/Action-State-Pfad wie normales Fleet-Send.
 | `/api/fleet/logistics/preview` | POST | Collect/Distribute plan preview |
 | `/api/fleet/logistics/collect` | POST | Multi-colony collect batch |
 | `/api/fleet/logistics/distribute` | POST | Multi-colony distribute batch |

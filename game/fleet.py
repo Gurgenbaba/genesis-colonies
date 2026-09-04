@@ -7373,6 +7373,7 @@ def preview_mass_expedition_slot_split(
                 resources={},
                 speed_percent=100,
                 conn=conn,
+                persist_resources=False,
             )
             if not ok_send:
                 meta["started_count"] = 0
