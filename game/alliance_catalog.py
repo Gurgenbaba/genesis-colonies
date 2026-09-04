@@ -6,6 +6,7 @@ Owner: game/alliance.py consumes these definitions; no duplicate math elsewhere.
 
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 ALLIANCE_ROLES = frozenset({"leader", "officer", "member"})
@@ -189,12 +190,26 @@ def alliance_level_from_xp(xp: int) -> int:
 
 
 def _scale_cost(base: Mapping[str, int], factor: float, target_level: int) -> Dict[str, int]:
-    mult = float(factor) ** max(0, int(target_level) - 1)
-    return {
-        "metal": max(1, int(round(int(base["metal"]) * mult))),
-        "crystal": max(1, int(round(int(base["crystal"]) * mult))),
-        "fuel_cells": max(1, int(round(int(base["fuel_cells"]) * mult))),
-    }
+    exponent = max(0, int(target_level) - 1)
+    factor_d = Decimal(str(factor))
+    max_digits = max(
+        len(str(abs(int(base.get(key) or 0))))
+        for key in ("metal", "crystal", "fuel_cells")
+    )
+    with localcontext() as ctx:
+        ctx.prec = max(64, max_digits + exponent * 16 + 64)
+        mult = factor_d ** exponent
+        return {
+            key: max(
+                1,
+                int(
+                    (Decimal(int(base[key])) * mult).to_integral_value(
+                        rounding=ROUND_HALF_EVEN
+                    )
+                ),
+            )
+            for key in ("metal", "crystal", "fuel_cells")
+        }
 
 
 def _project_duration(cfg: Mapping[str, Any], target_level: int) -> int:
@@ -322,8 +337,21 @@ def pool_cap_from_projects(available: List[Dict[str, Any]], *, cap_bonus_pct: fl
         for res, amt in (proj.get("cost") or {}).items():
             if res in cap:
                 cap[res] += int(amt)
-    bonus = 1.0 + max(0.0, float(cap_bonus_pct))
-    return {k: max(1, int(round(v * bonus))) for k, v in cap.items()}
+    bonus = Decimal("1") + max(Decimal("0"), Decimal(str(cap_bonus_pct)))
+    max_digits = max((len(str(abs(int(v)))) for v in cap.values()), default=1)
+    with localcontext() as ctx:
+        ctx.prec = max(64, max_digits + 64)
+        return {
+            key: max(
+                1,
+                int(
+                    (Decimal(int(value)) * bonus).to_integral_value(
+                        rounding=ROUND_HALF_EVEN
+                    )
+                ),
+            )
+            for key, value in cap.items()
+        }
 
 
 def compute_bonus_chips(techs: Mapping[str, int]) -> List[Dict[str, Any]]:
