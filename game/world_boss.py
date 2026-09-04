@@ -869,8 +869,21 @@ def select_world_boss_auto_attack_ships(
     return dict(selected), meta
 
 
+def hp_phase_from_values(current_hp: int, max_hp: int) -> int:
+    """Exact HP phase without converting huge boss HP through IEEE-754."""
+    current = max(0, int(current_hp or 0))
+    maximum = max(1, int(max_hp or 1))
+    if current <= 0:
+        return 0
+    if current * 4 <= maximum:
+        return 3
+    if current * 2 <= maximum:
+        return 2
+    return 1
+
+
 def hp_phase_from_ratio(hp_ratio: float) -> int:
-    """UI/combat phase from remaining HP ratio (1 cyan / 2 orange / 3 red / 0 dead)."""
+    """Compatibility helper for already-normalized bounded ratios."""
     pct = float(hp_ratio) * 100.0
     if pct <= 0:
         return 0
