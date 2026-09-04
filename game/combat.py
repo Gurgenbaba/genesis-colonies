@@ -6,6 +6,7 @@ import math
 import random
 import time
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_FLOOR, localcontext
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .combat_models import (
@@ -893,8 +894,28 @@ def calculate_debris_from_losses(losses: Mapping[str, int]) -> Tuple[int, int]:
         if lost <= 0:
             continue
         unit_metal, unit_crystal = unit_build_cost_for_debris(str(raw_key))
-        metal += int(unit_metal * lost * DEBRIS_METAL_FRACTION)
-        crystal += int(unit_crystal * lost * DEBRIS_CRYSTAL_FRACTION)
+        precision = max(
+            64,
+            len(str(abs(int(lost))))
+            + max(len(str(abs(int(unit_metal)))), len(str(abs(int(unit_crystal)))))
+            + 32,
+        )
+        with localcontext() as ctx:
+            ctx.prec = precision
+            metal += int(
+                (
+                    Decimal(unit_metal)
+                    * Decimal(lost)
+                    * Decimal(str(DEBRIS_METAL_FRACTION))
+                ).to_integral_value(rounding=ROUND_FLOOR)
+            )
+            crystal += int(
+                (
+                    Decimal(unit_crystal)
+                    * Decimal(lost)
+                    * Decimal(str(DEBRIS_CRYSTAL_FRACTION))
+                ).to_integral_value(rounding=ROUND_FLOOR)
+            )
     return metal, crystal
 
 
@@ -996,10 +1017,12 @@ def add_debris_field(
         row = cur.fetchone()
         if row:
             return {
-                "metal": max(0, int(float(row["metal"]))),
-                "crystal": max(0, int(float(row["crystal"]))),
+                "metal": max(0, int(row["metal"] or 0)),
+                "crystal": max(0, int(row["crystal"] or 0)),
             }
         return {"metal": 0, "crystal": 0}
+
+    from .models import resource_db_param
 
     now = int(time.time())
     cutoff = now - int(DEBRIS_FIELD_TTL_SECONDS)
@@ -1022,7 +1045,14 @@ def add_debris_field(
             crystal = debris_fields.crystal + excluded.crystal,
             updated_at = excluded.updated_at;
         """,
-        (g, s, p, float(add_metal), float(add_crystal), now),
+        (
+            g,
+            s,
+            p,
+            resource_db_param(add_metal),
+            resource_db_param(add_crystal),
+            now,
+        ),
     )
     cur.execute(
         """
@@ -1036,8 +1066,8 @@ def add_debris_field(
     if not row:
         return {"metal": add_metal, "crystal": add_crystal}
     return {
-        "metal": max(0, int(float(row["metal"]))),
-        "crystal": max(0, int(float(row["crystal"]))),
+        "metal": max(0, int(row["metal"] or 0)),
+        "crystal": max(0, int(row["crystal"] or 0)),
     }
 
 
@@ -1086,8 +1116,8 @@ def get_debris_at_field(
     if not row:
         return {"metal": 0, "crystal": 0}
     return {
-        "metal": max(0, int(float(row["metal"]))),
-        "crystal": max(0, int(float(row["crystal"]))),
+        "metal": max(0, int(row["metal"] or 0)),
+        "crystal": max(0, int(row["crystal"] or 0)),
     }
 
 
@@ -1108,6 +1138,8 @@ def harvest_debris_at_field(
         return True
     from .galaxy import validate_coordinates
 
+    from .models import resource_db_param
+
     g, s, p = int(galaxy), int(system), int(position)
     validate_coordinates(g, s, p)
     now = int(time.time())
@@ -1122,14 +1154,14 @@ def harvest_debris_at_field(
           AND metal >= ? AND crystal >= ?;
         """,
         (
-            float(metal_take),
-            float(crystal_take),
+            resource_db_param(metal_take),
+            resource_db_param(crystal_take),
             now,
             g,
             s,
             p,
-            float(metal_take),
-            float(crystal_take),
+            resource_db_param(metal_take),
+            resource_db_param(crystal_take),
         ),
     )
     if cur.rowcount != 1:
