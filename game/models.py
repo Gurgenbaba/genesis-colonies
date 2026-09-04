@@ -5,6 +5,7 @@ import threading
 import time
 import hashlib
 import math
+from decimal import Decimal
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List, Mapping
 
@@ -1165,15 +1166,15 @@ def ensure_player_and_homeworld(
             _pg_init_progress("homeworld: assign coords + insert …")
             now = time.time()
 
-            start_metal = float(DEFAULT_GAME_SETTINGS["start_metal"])
-            start_crystal = float(DEFAULT_GAME_SETTINGS["start_crystal"])
-            start_fuel_cells = float(DEFAULT_GAME_SETTINGS.get("start_fuel_cells", 500))
+            start_metal = int(Decimal(DEFAULT_GAME_SETTINGS["start_metal"]))
+            start_crystal = int(Decimal(DEFAULT_GAME_SETTINGS["start_crystal"]))
+            start_fuel_cells = int(Decimal(DEFAULT_GAME_SETTINGS.get("start_fuel_cells", "500")))
             try:
                 # Reuse caller conn — nested db() checkout can deadlock the PG pool.
                 settings = get_game_settings(conn)
-                start_metal = float(settings.get("start_metal", start_metal))
-                start_crystal = float(settings.get("start_crystal", start_crystal))
-                start_fuel_cells = float(settings.get("start_fuel_cells", start_fuel_cells))
+                start_metal = int(Decimal(str(settings.get("start_metal", start_metal))))
+                start_crystal = int(Decimal(str(settings.get("start_crystal", start_crystal))))
+                start_fuel_cells = int(Decimal(str(settings.get("start_fuel_cells", start_fuel_cells))))
             except Exception:
                 pass
 
@@ -1217,9 +1218,9 @@ def ensure_player_and_homeworld(
                             (
                                 int(player_id),
                                 "Genesis Ark",
-                                start_metal,
-                                start_crystal,
-                                start_fuel_cells,
+                                resource_db_param(start_metal),
+                                resource_db_param(start_crystal),
+                                resource_db_param(start_fuel_cells),
                                 now,
                                 int(galaxy),
                                 int(system),
@@ -1527,7 +1528,7 @@ def resource_db_param(value: Any) -> int | float:
     resource columns cannot bind Python ints outside signed i64, so only that
     backend retains the historical float fallback until SQLite is retired.
     """
-    amount = int(value or 0)
+    amount = int(Decimal(str(value or 0)))
     from .db import get_db_backend
 
     if get_db_backend() == "postgres":
