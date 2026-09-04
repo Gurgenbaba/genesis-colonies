@@ -120,6 +120,40 @@ def test_mega_belt_pool_uses_decimal_capacity_average(monkeypatch):
     assert all(value == expected for value in got.values())
 
 
+def test_salvage_runtime_has_no_authoritative_resource_float_roundtrip():
+    combat = (ROOT / "game" / "combat.py").read_text(encoding="utf-8")
+    asteroids = (ROOT / "game" / "asteroids.py").read_text(encoding="utf-8")
+    galaxy = (ROOT / "game" / "galaxy.py").read_text(encoding="utf-8")
+
+    forbidden = {
+        "combat": (
+            'float(add_metal)',
+            'float(add_crystal)',
+            'int(float(row["metal"]))',
+            'int(float(row["crystal"]))',
+            'float(metal_take)',
+            'float(crystal_take)',
+        ),
+        "asteroids": (
+            'float(loot["metal"])',
+            'float(loot["crystal"])',
+            'float(loot["fuel_cells"])',
+            'int(cap * metal / total)',
+            'int(cap * crystal / total)',
+        ),
+        "galaxy": (
+            'int(float(row["metal"] or 0))',
+            'int(float(row["crystal"] or 0))',
+        ),
+    }
+    for token in forbidden["combat"]:
+        assert token not in combat
+    for token in forbidden["asteroids"]:
+        assert token not in asteroids
+    for token in forbidden["galaxy"]:
+        assert token not in galaxy
+
+
 @requires_postgres
 def test_live_postgres_salvage_roundtrip_above_i64(pg_parity_db):
     from migrate import main as migrate_main
