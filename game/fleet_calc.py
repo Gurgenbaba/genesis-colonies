@@ -284,9 +284,9 @@ def calculate_total_cargo(
 
 def calculate_loaded_resources(resources: Mapping[str, Any] | None) -> Dict[str, int]:
     raw = resources or {}
-    metal = max(0, int(float(raw.get("metal") or 0)))
-    crystal = max(0, int(float(raw.get("crystal") or 0)))
-    fuel_cells = max(0, int(float(raw.get("fuel_cells") or 0)))
+    metal = max(0, int(raw.get("metal") or 0))
+    crystal = max(0, int(raw.get("crystal") or 0))
+    fuel_cells = max(0, int(raw.get("fuel_cells") or 0))
     return {"metal": metal, "crystal": crystal, "fuel_cells": fuel_cells}
 
 
@@ -305,11 +305,11 @@ def validate_departure_balances(
     """Validate loaded cargo + fuel cells against planet balances."""
     loaded = calculate_loaded_resources(resources)
     fuel = max(0, int(fuel_cost))
-    # Same int truncation as planet_resource_stock / route planning — float dust
-    # must not flip loaded==stock into not_enough_resources.
-    metal_have_i = max(0, int(float(metal_have or 0)))
-    crystal_have_i = max(0, int(float(crystal_have or 0)))
-    fuel_cells_have_i = max(0, int(float(fuel_cells_have or 0)))
+    # Gameplay resources are integer-exact. PostgreSQL NUMERIC values arrive as
+    # Decimal and convert directly to Python int without an IEEE-754 detour.
+    metal_have_i = max(0, int(metal_have or 0))
+    crystal_have_i = max(0, int(crystal_have or 0))
+    fuel_cells_have_i = max(0, int(fuel_cells_have or 0))
 
     if loaded["metal"] > metal_have_i or loaded["crystal"] > crystal_have_i:
         return False, "not_enough_resources"
@@ -343,12 +343,12 @@ def apply_departure_deduction(
     fuel_cells_have: float,
     resources: Mapping[str, Any] | None,
     fuel_cost: int,
-) -> tuple[float, float, float]:
+) -> tuple[int, int, int]:
     loaded = calculate_loaded_resources(resources)
     fuel = max(0, int(fuel_cost))
-    new_metal = float(metal_have) - loaded["metal"]
-    new_crystal = float(crystal_have) - loaded["crystal"]
-    new_fuel_cells = float(fuel_cells_have) - loaded["fuel_cells"]
+    new_metal = int(metal_have or 0) - loaded["metal"]
+    new_crystal = int(crystal_have or 0) - loaded["crystal"]
+    new_fuel_cells = int(fuel_cells_have or 0) - loaded["fuel_cells"]
     if FLEET_FUEL_RESOURCE == "fuel_cells":
         new_fuel_cells -= fuel
     elif FLEET_FUEL_RESOURCE == "crystal":
@@ -374,7 +374,7 @@ def build_flight_preview_payload(
     loaded = calculate_loaded_resources(resources)
     loaded_total = loaded["metal"] + loaded["crystal"] + loaded["fuel_cells"]
     fuel = max(0, int(fuel_cost))
-    available = max(0, int(float(fuel_cells_have)))
+    available = max(0, int(fuel_cells_have or 0))
     fuel_needed = fuel
     if FLEET_FUEL_RESOURCE == "fuel_cells":
         fuel_needed = loaded["fuel_cells"] + fuel
@@ -465,9 +465,9 @@ def planet_resource_stock(planet_row: Mapping[str, Any] | None) -> Dict[str, int
     if not planet_row:
         return {"metal": 0, "crystal": 0, "fuel_cells": 0}
     return {
-        "metal": max(0, int(float(planet_row.get("metal") or 0))),
-        "crystal": max(0, int(float(planet_row.get("crystal") or 0))),
-        "fuel_cells": max(0, int(float(planet_row.get("fuel_cells") or 0))),
+        "metal": max(0, int(planet_row.get("metal") or 0)),
+        "crystal": max(0, int(planet_row.get("crystal") or 0)),
+        "fuel_cells": max(0, int(planet_row.get("fuel_cells") or 0)),
     }
 
 
