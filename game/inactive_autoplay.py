@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import time
+from decimal import Decimal, ROUND_FLOOR, localcontext
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo
@@ -25,6 +26,7 @@ from .db import begin_write_transaction, column_exists, commit, in_transaction, 
 from .ranking import RANKING_INACTIVE_AFTER_SEC
 from .presence_store import effective_last_seen_scalar_sql, touch_presence_bulk
 from .runtime_state import get_runtime_value, set_runtime_value
+from .models import resource_db_param
 
 logger = logging.getLogger(__name__)
 
@@ -648,16 +650,31 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
         farm_mult = max(1.0, float(active_inactive_farm_mult(conn=conn) or 1.0))
     except Exception:
         farm_mult = 1.0
-    floor_metal = float(INACTIVE_RESOURCE_FLOOR["metal"]) * farm_mult
-    floor_crystal = float(INACTIVE_RESOURCE_FLOOR["crystal"]) * farm_mult
-    floor_fuel = float(INACTIVE_RESOURCE_FLOOR["fuel_cells"]) * farm_mult
-    metal = max(float(row["metal"] or 0), floor_metal)
-    crystal = max(float(row["crystal"] or 0), floor_crystal)
-    fuel = max(float(row["fuel_cells"] or 0), floor_fuel)
+    mult_d = Decimal(str(farm_mult))
+    with localcontext() as ctx:
+        ctx.prec = 64
+        floor_metal = int(
+            (Decimal(int(INACTIVE_RESOURCE_FLOOR["metal"])) * mult_d)
+            .to_integral_value(rounding=ROUND_FLOOR)
+        )
+        floor_crystal = int(
+            (Decimal(int(INACTIVE_RESOURCE_FLOOR["crystal"])) * mult_d)
+            .to_integral_value(rounding=ROUND_FLOOR)
+        )
+        floor_fuel = int(
+            (Decimal(int(INACTIVE_RESOURCE_FLOOR["fuel_cells"])) * mult_d)
+            .to_integral_value(rounding=ROUND_FLOOR)
+        )
+    current_metal = int(row["metal"] or 0)
+    current_crystal = int(row["crystal"] or 0)
+    current_fuel = int(row["fuel_cells"] or 0)
+    metal = max(current_metal, floor_metal)
+    crystal = max(current_crystal, floor_crystal)
+    fuel = max(current_fuel, floor_fuel)
     raised = (
-        metal > float(row["metal"] or 0)
-        or crystal > float(row["crystal"] or 0)
-        or fuel > float(row["fuel_cells"] or 0)
+        metal > current_metal
+        or crystal > current_crystal
+        or fuel > current_fuel
     )
     if raised:
         conn.execute(
@@ -666,7 +683,7 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
             SET metal = ?, crystal = ?, fuel_cells = ?
             WHERE id = ?;
             """,
-            (metal, crystal, fuel, int(planet_id)),
+            (resource_db_param(metal), resource_db_param(crystal), resource_db_param(fuel), int(planet_id)),
         )
     return {
         "metal": int(metal),
@@ -781,9 +798,9 @@ def _stockpile_snapshot(conn, planet_id: int) -> Dict[str, int]:
     if not row:
         return {}
     return {
-        "metal": int(float(row["metal"] or 0)),
-        "crystal": int(float(row["crystal"] or 0)),
-        "fuel_cells": int(float(row["fuel_cells"] or 0)),
+        "metal": int(row["metal"] or 0),
+        "crystal": int(row["crystal"] or 0),
+        "fuel_cells": int(row["fuel_cells"] or 0),
         "raised": 0,
     }
 
