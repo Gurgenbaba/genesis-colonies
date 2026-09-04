@@ -342,7 +342,17 @@ def _definition_from_row(row) -> Dict[str, Any]:
 def _event_from_row(row, *, definition: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     max_hp = int(row["max_hp"])
     current_hp = int(row["current_hp"])
-    hp_ratio = (float(current_hp) / float(max_hp)) if max_hp > 0 else 0.0
+    if max_hp > 0:
+        with localcontext() as ctx:
+            ctx.prec = max(64, len(str(abs(max_hp))) + 32)
+            hp_ratio_decimal = max(
+                Decimal("0"),
+                min(Decimal("1"), Decimal(current_hp) / Decimal(max_hp)),
+            )
+        # hp_ratio is display-only and intentionally bounded to [0, 1].
+        hp_ratio = float(hp_ratio_decimal)
+    else:
+        hp_ratio = 0.0
     boss_key = str(row["boss_key"])
     defn = definition or {}
     discovered_by = None
@@ -664,27 +674,45 @@ def _resolve_phase_stacks(
     current_stacks: Mapping[str, int],
 ) -> Tuple[int, Dict[str, int]]:
     phases = list(definition.get("phases") or [])
-    ratio = (float(current_hp) / float(max_hp)) if max_hp > 0 else 0.0
-    phase_index = 0
-    chosen_stacks = dict(current_stacks or {})
-    for idx, phase in enumerate(phases):
-        if not isinstance(phase, Mapping):
-            continue
-        threshold = float(phase.get("hp_ratio") or 0.0)
-        if ratio <= threshold + 1e-9:
-            phase_index = idx
-            override = phase.get("stacks")
-            if isinstance(override, Mapping) and override:
-                chosen_stacks = {str(k): max(0, int(v or 0)) for k, v in override.items()}
-    if not chosen_stacks:
-        chosen_stacks = {
-            str(k): max(0, int(v or 0))
-            for k, v in dict(definition.get("fleet_stacks") or {}).items()
-        }
-    # Scale surviving stacks by remaining HP so later waves are weaker.
-    scaled: Dict[str, int] = {}
-    for key, qty in chosen_stacks.items():
-        scaled[key] = max(0, int(round(int(qty) * max(0.05, ratio))))
+    current = max(0, int(current_hp or 0))
+    maximum = max(1, int(max_hp or 1))
+    with localcontext() as ctx:
+        ctx.prec = max(64, len(str(abs(maximum))) + 32)
+        ratio = max(
+            Decimal("0"),
+            min(Decimal("1"), Decimal(current) / Decimal(maximum)),
+        )
+        phase_index = 0
+        chosen_stacks = dict(current_stacks or {})
+        for idx, phase in enumerate(phases):
+            if not isinstance(phase, Mapping):
+                continue
+            threshold = Decimal(str(phase.get("hp_ratio") or 0))
+            if ratio <= threshold + Decimal("1e-9"):
+                phase_index = idx
+                override = phase.get("stacks")
+                if isinstance(override, Mapping) and override:
+                    chosen_stacks = {
+                        str(k): max(0, int(v or 0))
+                        for k, v in override.items()
+                    }
+        if not chosen_stacks:
+            chosen_stacks = {
+                str(k): max(0, int(v or 0))
+                for k, v in dict(definition.get("fleet_stacks") or {}).items()
+            }
+        # Scale surviving stacks by remaining HP so later waves are weaker.
+        scaled: Dict[str, int] = {}
+        scale = max(Decimal("0.05"), ratio)
+        for key, qty in chosen_stacks.items():
+            scaled[key] = max(
+                0,
+                int(
+                    (Decimal(int(qty)) * scale).to_integral_value(
+                        rounding=ROUND_HALF_EVEN
+                    )
+                ),
+            )
     return phase_index, scaled
 
 
@@ -811,7 +839,13 @@ def select_world_boss_auto_attack_ships(
         pool, defender_ships, max_hp, rng_seed=seed, conn=conn
     )
     hp_budget = max(0, int(max_hp))
-    damage_cap = int(float(hp_budget) * float(MAX_WAVE_HP_FRACTION)) if hp_budget > 0 else 0
+    with localcontext() as ctx:
+        ctx.prec = max(64, len(str(abs(hp_budget))) + 32)
+        damage_cap = (
+            int(Decimal(hp_budget) * Decimal(str(MAX_WAVE_HP_FRACTION)))
+            if hp_budget > 0
+            else 0
+        )
     # Target = boss wave max HP damage (8% cap) when hangar can reach it; else best effort.
     target = int(min(d_full, damage_cap)) if damage_cap > 0 else int(d_full)
     meta["damage_full"] = int(d_full)
@@ -1872,22 +1906,44 @@ def compute_world_boss_hp_damage(
     if full_score <= 0:
         return 1 if lost_score > 0 or losses else 0
 
-    fraction = min(1.0, float(lost_score) / float(full_score))
     atk = {
         str(k): max(0, int(v or 0))
         for k, v in dict(attacker_ships_before or {}).items()
         if int(v or 0) > 0
     }
     attacker_score = int(compute_destroyed_raw_from_losses(atk)) if atk else 0
-    force_ratio = float(attacker_score) / float(max(full_score, 1))
-    # Even fight (ratio≈1) stays at 1.0; only larger fleets gain soft overkill.
-    overkill_mult = max(
-        1.0,
-        1.0 + float(OVERKILL_LOG_SCALE) * math.log2(max(1.0, force_ratio)),
-    )
-    base = float(hp_budget) * float(WAVE_HP_FRACTION) * fraction * overkill_mult
-    cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
-    damage = int(min(cap, max(0.0, base)))
+    precision = max(
+        64,
+        len(str(abs(hp_budget))),
+        len(str(abs(lost_score))),
+        len(str(abs(full_score))),
+        len(str(abs(attacker_score))),
+    ) + 64
+    with localcontext() as ctx:
+        ctx.prec = precision
+        fraction = min(
+            Decimal("1"),
+            Decimal(lost_score) / Decimal(full_score),
+        )
+        force_ratio = Decimal(attacker_score) / Decimal(max(full_score, 1))
+        # Even fight (ratio≈1) stays at 1.0; only larger fleets gain soft overkill.
+        if force_ratio > 1:
+            log2_ratio = force_ratio.ln() / Decimal(2).ln()
+            overkill_mult = max(
+                Decimal("1"),
+                Decimal("1")
+                + Decimal(str(OVERKILL_LOG_SCALE)) * log2_ratio,
+            )
+        else:
+            overkill_mult = Decimal("1")
+        base = (
+            Decimal(hp_budget)
+            * Decimal(str(WAVE_HP_FRACTION))
+            * fraction
+            * overkill_mult
+        )
+        cap = Decimal(hp_budget) * Decimal(str(MAX_WAVE_HP_FRACTION))
+        damage = int(min(cap, max(Decimal("0"), base)))
     if damage <= 0 and lost_score > 0:
         return 1
     return max(0, damage)
