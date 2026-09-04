@@ -1,4 +1,5 @@
 -- GC-FERRO-L388-001
+-- GC-REQUIRES-TABLES: build_queue
 -- Build upgrade costs exceed signed BIGINT from Ferronit Mine L388 onward.
 -- Preserve the canonical paid snapshot losslessly while keeping legacy i64
 -- columns for rolling-deploy compatibility (overflow rows store legacy 0).
