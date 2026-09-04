@@ -559,6 +559,8 @@ def init_db() -> None:
     for stmt in (
         "ALTER TABLE build_queue ADD COLUMN cost_metal INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE build_queue ADD COLUMN cost_crystal INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE build_queue ADD COLUMN cost_metal_exact TEXT NOT NULL DEFAULT '0'",
+        "ALTER TABLE build_queue ADD COLUMN cost_crystal_exact TEXT NOT NULL DEFAULT '0'",
         "ALTER TABLE research_queue ADD COLUMN cost_metal INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE research_queue ADD COLUMN cost_crystal INTEGER NOT NULL DEFAULT 0",
     ):
@@ -1516,6 +1518,23 @@ def try_spend_resources(planet_id: int, metal_cost: int, crystal_cost: int) -> b
         conn.close()
 
 
+_SQL_SIGNED_I64_MAX = 9_223_372_036_854_775_807
+
+
+def _resource_cost_db_param(value: int) -> int | float:
+    """Bind huge costs safely to REAL/DOUBLE resource columns on both DB backends."""
+    amount = int(value)
+    if -_SQL_SIGNED_I64_MAX <= amount <= _SQL_SIGNED_I64_MAX:
+        return amount
+    return float(amount)
+
+
+def _legacy_i64_cost_snapshot(value: int) -> int:
+    """Legacy queue columns are BIGINT/i64; zero means recompute for old processes."""
+    amount = max(0, int(value))
+    return amount if amount <= _SQL_SIGNED_I64_MAX else 0
+
+
 def try_spend_resources_conn(
     conn: sqlite3.Connection,
     planet_id: int,
@@ -1528,6 +1547,8 @@ def try_spend_resources_conn(
     if metal_cost == 0 and crystal_cost == 0:
         return True
 
+    metal_db = _resource_cost_db_param(int(metal_cost))
+    crystal_db = _resource_cost_db_param(int(crystal_cost))
     cur = conn.cursor()
     cur.execute(
         """
@@ -1538,7 +1559,7 @@ def try_spend_resources_conn(
           AND metal   >= ?
           AND crystal >= ?;
         """,
-        (int(metal_cost), int(crystal_cost), int(planet_id), int(metal_cost), int(crystal_cost)),
+        (metal_db, crystal_db, int(planet_id), metal_db, crystal_db),
     )
     return cur.rowcount == 1
 
@@ -1831,20 +1852,25 @@ def add_build_job(
         if own_conn:
             begin_write_transaction(conn)
 
+        exact_metal = max(0, int(cost_metal))
+        exact_crystal = max(0, int(cost_crystal))
         cur.execute(
             """
             INSERT INTO build_queue (
-                planet_id, building_type, start_time, finish_time, cost_metal, cost_crystal
+                planet_id, building_type, start_time, finish_time,
+                cost_metal, cost_crystal, cost_metal_exact, cost_crystal_exact
             )
-            VALUES (?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 int(planet_id),
                 str(btype),
                 float(start),
                 float(finish),
-                int(cost_metal),
-                int(cost_crystal),
+                _legacy_i64_cost_snapshot(exact_metal),
+                _legacy_i64_cost_snapshot(exact_crystal),
+                str(exact_metal),
+                str(exact_crystal),
             ),
         )
         job_id = cur.lastrowid
