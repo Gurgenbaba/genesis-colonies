@@ -41,19 +41,32 @@
     if (typeof GC.showNotify === "function") GC.showNotify(msg, category);
   }
 
-  function parseIntNumber(v) {
-    if (typeof GC.parseIntNumber === "function") return GC.parseIntNumber(v);
-    return parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  function normalizeGameplayInteger(v) {
+    if (typeof GC.normalizeGameplayInteger === "function") return GC.normalizeGameplayInteger(v);
+    var raw = String(v == null ? "0" : v).replace(/[\s._,'’]/g, "");
+    return /^-?\d+$/.test(raw) ? raw : "0";
   }
 
-  function setNumberInputValue(inp, n) {
-    if (typeof GC.setNumberInputValue === "function") GC.setNumberInputValue(inp, n);
-    else if (inp) inp.value = String(n);
+  function isPositiveGameplayInteger(v) {
+    if (typeof GC.isPositiveGameplayInteger === "function") return GC.isPositiveGameplayInteger(v);
+    try { return BigInt(normalizeGameplayInteger(v)) > BigInt(0); } catch (_) { return false; }
   }
 
-  function readNumberInput(inp) {
-    if (typeof GC.readNumberInput === "function") return GC.readNumberInput(inp);
-    return parseIntNumber(inp && inp.value);
+  function setGameplayIntegerInput(inp, v) {
+    if (typeof GC.setGameplayIntegerInput === "function") return GC.setGameplayIntegerInput(inp, v);
+    if (inp) {
+      var exact = normalizeGameplayInteger(v);
+      inp.value = exact;
+      inp.dataset.inputMax = exact;
+    }
+  }
+
+  function readGameplayIntegerInput(inp) {
+    if (typeof GC.readGameplayIntegerInput === "function") {
+      return GC.readGameplayIntegerInput(inp, "1");
+    }
+    var exact = normalizeGameplayInteger(inp && inp.value);
+    return isPositiveGameplayInteger(exact) ? exact : "1";
   }
 
   function militaryPageResources(page) {
@@ -89,12 +102,12 @@
         e.preventDefault();
         var shipKeyMax = maxBtn.getAttribute("data-shipyard-max");
         var qtyInpMax = page.querySelector('[data-shipyard-qty="' + shipKeyMax + '"]');
-        var maxQty = parseIntNumber(
+        var maxQty = normalizeGameplayInteger(
           maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
         );
-        if (qtyInpMax && maxQty > 0) {
-          qtyInpMax.dataset.inputMax = String(maxQty);
-          setNumberInputValue(qtyInpMax, maxQty);
+        if (qtyInpMax && isPositiveGameplayInteger(maxQty)) {
+          qtyInpMax.dataset.inputMax = maxQty;
+          setGameplayIntegerInput(qtyInpMax, maxQty);
           var cardMax = maxBtn.closest("[data-ship-card]");
           if (cardMax) {
             syncUnitCardCostPreview(cardMax, militaryPageResources(page));
@@ -190,7 +203,7 @@
       e.preventDefault();
       var shipKey = buildBtn.getAttribute("data-shipyard-build");
       var qtyInp = page.querySelector('[data-shipyard-qty="' + shipKey + '"]');
-      var amount = readNumberInput(qtyInp) || 1;
+      var amount = readGameplayIntegerInput(qtyInp);
       var planetId = parseInt(page.dataset.planetId || "0", 10);
       buildBtn.dataset.building = "1";
       buildBtn.disabled = true;

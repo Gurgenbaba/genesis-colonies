@@ -74,7 +74,7 @@
       </div>
       {{ render_unit_build_time_footer(unit.train_seconds) }}
       <footer class="gc-ship-card-action shipyard-ship-actions barracks-troop-card-actions">
-        <input type="text" inputmode="numeric" value="1" maxlength="20"
+        <input type="text" inputmode="numeric" value="1"
                class="gc-input shipyard-qty-input gc-num-input" data-troop-amount="{{ unit.key }}"
                {% if unit.max_train %}data-input-max="{{ unit.max_train }}"{% endif %}
                aria-label="{{ T('barracks_troops_amount', 'Anzahl') }}">

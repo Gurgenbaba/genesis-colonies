@@ -155,6 +155,81 @@
     return null;
   }
 
+  function normalizeGameplayInteger(value) {
+    const exact = parseDisplayBigInt(value);
+    if (exact !== null) return exact.toString();
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return "0";
+      return BigInt(Math.trunc(value)).toString();
+    }
+    const raw = String(value ?? "").trim().replace(/[\s._,'’]/g, "");
+    if (!/^-?\d+$/.test(raw)) return "0";
+    try {
+      return BigInt(raw).toString();
+    } catch (_) {
+      return "0";
+    }
+  }
+
+  function gameplayBigInt(value) {
+    try {
+      return BigInt(normalizeGameplayInteger(value));
+    } catch (_) {
+      return BigInt(0);
+    }
+  }
+
+  function compareGameplayIntegers(a, b) {
+    const left = gameplayBigInt(a);
+    const right = gameplayBigInt(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  }
+
+  function isPositiveGameplayInteger(value) {
+    return gameplayBigInt(value) > BigInt(0);
+  }
+
+  function getGameplayIntegerInputCap(inp) {
+    if (!inp) return null;
+    const candidates = [inp.getAttribute("data-input-max")];
+    if (
+      inp.matches(
+        "[data-ship-input],[data-scrap-qty],.gc-scrapyard-qty,[data-logistics-resource]"
+      )
+    ) {
+      candidates.push(inp.getAttribute("max"));
+    }
+    for (const raw of candidates) {
+      if (raw == null || raw === "") continue;
+      const cap = gameplayBigInt(raw);
+      if (cap >= BigInt(0)) return cap;
+    }
+    return null;
+  }
+
+  function clampGameplayIntegerInput(inp, value) {
+    let exact = gameplayBigInt(value);
+    if (exact < BigInt(0)) exact = BigInt(0);
+    const cap = getGameplayIntegerInputCap(inp);
+    if (cap !== null && exact > cap) exact = cap;
+    return exact;
+  }
+
+  function readGameplayIntegerInput(inp, fallback = "0") {
+    if (!inp) return normalizeGameplayInteger(fallback);
+    const exact = clampGameplayIntegerInput(inp, inp.value ?? "0");
+    if (exact <= BigInt(0) && gameplayBigInt(fallback) > BigInt(0)) {
+      return gameplayBigInt(fallback).toString();
+    }
+    return exact.toString();
+  }
+
+  function setGameplayIntegerInput(inp, value) {
+    if (!inp) return;
+    const exact = clampGameplayIntegerInput(inp, value);
+    inp.value = formatNumber(exact);
+  }
+
   function formatNumber(n) {
     const exact = parseDisplayBigInt(n);
     if (exact !== null) return _deIntFormatter.format(exact);
@@ -253,20 +328,8 @@
       inp.value = "";
       return;
     }
-    let formatted = "";
-    if (inp.id === "gc-exchange-amount") {
-      // Preserve every manually-entered digit. Number/parseInt rounds large
-      // balances; BigInt is display/input-only and the API accepts the amount
-      // as a decimal string before Python int validation.
-      try {
-        formatted = formatNumber(BigInt(digits));
-      } catch (_) {
-        formatted = digits;
-      }
-    } else {
-      const num = clampToNumberInputCap(inp, parseInt(digits, 10));
-      formatted = formatNumber(num);
-    }
+    const exact = clampGameplayIntegerInput(inp, digits);
+    const formatted = formatNumber(exact);
     inp.value = formatted;
     try {
       inp.setSelectionRange(formatted.length, formatted.length);
@@ -281,17 +344,15 @@
       inp.inputMode = "numeric";
       inp.autocomplete = "off";
     }
-    if (!inp.getAttribute("maxlength")) {
-      // Trader values can legitimately exceed the old 20-character UI cap.
-      // Keep other gameplay inputs unchanged; the server remains authoritative.
-      inp.maxLength = inp.id === "gc-exchange-amount" ? 96 : 20;
-    }
+    // No gameplay-value length cap here: backend validation/request-size limits
+    // protect the endpoint, while progression values remain no-max.
+    inp.removeAttribute("maxlength");
     if (inp.matches("[data-shipyard-qty],[data-defense-qty]")) {
       inp.removeAttribute("max");
     }
     const raw = String(inp.value ?? "").trim();
     if (raw && /\d/.test(raw)) {
-      inp.value = formatNumber(parseIntNumber(raw));
+      inp.value = formatNumber(clampGameplayIntegerInput(inp, raw));
     }
   }
 
@@ -1393,19 +1454,20 @@
   function productionRatesFromState(state) {
     const prod = (state && state.production_per_hour) || {};
     return {
-      prodMetal: Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0)),
-      prodCrystal: Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0)),
-      prodFuelCells: Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0)),
+      prodMetal: gameplayBigInt(prod.metal_mine ?? prod.metal ?? 0),
+      prodCrystal: gameplayBigInt(prod.crystal_mine ?? prod.crystal ?? 0),
+      prodFuelCells: gameplayBigInt(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0),
     };
   }
 
   function parseDomResRate(key) {
     const el = document.querySelector(`#resource-bar [data-res-rate="${key}"]`);
-    if (!el) return 0;
+    if (!el) return BigInt(0);
     const text = String(el.textContent || "").replace(/\s/g, "");
     const m = text.match(/([+-]?\d[\d.,]*)/);
-    if (!m) return 0;
-    return Math.max(0, parseIntNumber(m[1]));
+    if (!m) return BigInt(0);
+    const value = gameplayBigInt(m[1]);
+    return value > BigInt(0) ? value : BigInt(0);
   }
 
   function resolveBootstrapProductionRates(planetId) {
@@ -1427,12 +1489,12 @@
       && (_resourceLive.prodMetal || _resourceLive.prodCrystal || _resourceLive.prodFuelCells)
     ) {
       return {
-        prodMetal: Math.floor(Number(_resourceLive.prodMetal || 0)),
-        prodCrystal: Math.floor(Number(_resourceLive.prodCrystal || 0)),
-        prodFuelCells: Math.floor(Number(_resourceLive.prodFuelCells || 0)),
+        prodMetal: gameplayBigInt(_resourceLive.prodMetal || 0),
+        prodCrystal: gameplayBigInt(_resourceLive.prodCrystal || 0),
+        prodFuelCells: gameplayBigInt(_resourceLive.prodFuelCells || 0),
       };
     }
-    return { prodMetal: 0, prodCrystal: 0, prodFuelCells: 0 };
+    return { prodMetal: BigInt(0), prodCrystal: BigInt(0), prodFuelCells: BigInt(0) };
   }
 
   function bootstrapResourceLiveFromDom() {
@@ -1440,8 +1502,8 @@
     if (!planetId) return false;
     const readVal = (selector) => {
       const el = document.querySelector(selector);
-      if (!el) return 0;
-      return parseIntNumber(el.textContent);
+      if (!el) return BigInt(0);
+      return gameplayBigInt(el.textContent);
     };
     const rates = resolveBootstrapProductionRates(planetId);
     const metal = readVal("#resource-bar .res-value.metal");
@@ -1893,6 +1955,12 @@
   GC.initLandingShowcase = initLandingShowcase;
 
   GC.parseIntNumber = parseIntNumber;
+  GC.normalizeGameplayInteger = normalizeGameplayInteger;
+  GC.gameplayBigInt = gameplayBigInt;
+  GC.compareGameplayIntegers = compareGameplayIntegers;
+  GC.isPositiveGameplayInteger = isPositiveGameplayInteger;
+  GC.readGameplayIntegerInput = readGameplayIntegerInput;
+  GC.setGameplayIntegerInput = setGameplayIntegerInput;
   GC.readNumberInput = readNumberInput;
   GC.setNumberInputValue = setNumberInputValue;
   GC.formatNumber = formatNumber;
@@ -4965,10 +5033,11 @@
   }
 
   function computeHudCapacityState(current, max) {
-    const cur = Math.max(0, Number(current) || 0);
-    const cap = Math.max(0, Number(max) || 0);
-    if (cap <= 0) return { pct: 0, filled: 0, tier: "tier-green" };
-    const pct = Math.min(100, Math.round((cur / cap) * 100));
+    const cur = gameplayBigInt(current);
+    const cap = gameplayBigInt(max);
+    if (cap <= BigInt(0)) return { pct: 0, filled: 0, tier: "tier-green" };
+    const roundedPct = (cur * BigInt(100) + cap / BigInt(2)) / cap;
+    const pct = Math.min(100, Number(roundedPct));
     const filled = Math.round((pct / 100) * 10);
     let tier = "tier-green";
     if (pct >= 80) tier = "tier-red";
@@ -5039,11 +5108,11 @@
       const panel = document.querySelector(`[data-hud-res="${key}"]`);
       const warnEl = panel?.querySelector(`[data-hud-res-warn="${key}"]`);
       if (!panel || !warnEl) return;
-      const v = Number(val) || 0;
-      const c = Number(cap) || 0;
+      const v = gameplayBigInt(val);
+      const c = gameplayBigInt(cap);
       let level = "";
-      if (c > 0 && v >= c) level = "full";
-      else if (c > 0 && v >= c * STORAGE_WARN_RATIO) level = "warn";
+      if (c > BigInt(0) && v >= c) level = "full";
+      else if (c > BigInt(0) && v * BigInt(10) >= c * BigInt(9)) level = "warn";
       panel.classList.toggle("hud-res-panel--storage-warn", level === "warn");
       panel.classList.toggle("hud-res-panel--storage-full", level === "full");
       if (level) {
@@ -11220,9 +11289,9 @@
   function patchShellHudLiveResources(metal, crystal, fuelCells) {
     const bar = document.getElementById("resource-bar");
     if (!bar) return;
-    const m = Math.max(0, Math.floor(Number(metal) || 0));
-    const c = Math.max(0, Math.floor(Number(crystal) || 0));
-    const f = Math.max(0, Math.floor(Number(fuelCells) || 0));
+    const m = gameplayBigInt(metal);
+    const c = gameplayBigInt(crystal);
+    const f = gameplayBigInt(fuelCells);
     if (_resourceDisplay.metal !== m) {
       bar.querySelectorAll(".res-value.metal").forEach((el) => {
         _setIfChanged(el, fmtNumber(m));
@@ -11256,11 +11325,14 @@
   }
 
   function monotonicResourceBaseline(incoming, current, projected, allowRegression) {
-    const inc = Math.max(0, Math.floor(Number(incoming) || 0));
-    if (allowRegression) return inc;
-    const cur = Math.max(0, Math.floor(Number(current) || 0));
-    const proj = Math.max(0, Math.floor(Number(projected) || 0));
-    return Math.max(inc, cur, proj);
+    const inc = gameplayBigInt(incoming);
+    if (allowRegression) return inc > BigInt(0) ? inc : BigInt(0);
+    const cur = gameplayBigInt(current);
+    const proj = gameplayBigInt(projected);
+    let best = inc > BigInt(0) ? inc : BigInt(0);
+    if (cur > best) best = cur;
+    if (proj > best) best = proj;
+    return best;
   }
 
   function syncResourceLiveBaseline(snapshot, opts) {
@@ -11290,12 +11362,12 @@
       projected ? projected.fuelCells : 0,
       allowRegression
     );
-    _resourceLive.prodMetal = Math.max(0, Math.floor(Number(snapshot.prodMetal) || 0));
-    _resourceLive.prodCrystal = Math.max(0, Math.floor(Number(snapshot.prodCrystal) || 0));
-    _resourceLive.prodFuelCells = Math.max(0, Math.floor(Number(snapshot.prodFuelCells) || 0));
-    _resourceLive.capMetal = Math.max(0, Math.floor(Number(snapshot.storageMetal) || 0));
-    _resourceLive.capCrystal = Math.max(0, Math.floor(Number(snapshot.storageCrystal) || 0));
-    _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
+    _resourceLive.prodMetal = gameplayBigInt(snapshot.prodMetal || 0);
+    _resourceLive.prodCrystal = gameplayBigInt(snapshot.prodCrystal || 0);
+    _resourceLive.prodFuelCells = gameplayBigInt(snapshot.prodFuelCells || 0);
+    _resourceLive.capMetal = gameplayBigInt(snapshot.storageMetal || 0);
+    _resourceLive.capCrystal = gameplayBigInt(snapshot.storageCrystal || 0);
+    _resourceLive.capFuelCells = gameplayBigInt(snapshot.storageFuelCells || 0);
     _resourceLive.energyUsed = Math.max(0, Math.floor(Number(snapshot.energyUsed) || 0));
     _resourceLive.energyTotal = Math.max(0, Math.floor(Number(snapshot.energyTotal) || 0));
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
@@ -11347,32 +11419,36 @@
     });
   }
 
-  function projectLiveResourceAmount(current, prodPerHour, cap, hours) {
-    const cur = Math.max(0, Math.floor(Number(current) || 0));
-    const prod = Math.max(0, Math.floor(Number(prodPerHour) || 0));
-    const h = Math.max(0, Number(hours) || 0);
-    const capN = Math.floor(Number(cap) || 0);
-    if (capN <= 0) return Math.floor(cur + prod * h);
+  function projectLiveResourceAmount(current, prodPerHour, cap, elapsedMs) {
+    const cur = gameplayBigInt(current);
+    const prod = gameplayBigInt(prodPerHour);
+    const capN = gameplayBigInt(cap);
+    const ms = BigInt(Math.max(0, Math.floor(Number(elapsedMs) || 0)));
+    const gain = prod > BigInt(0) ? (prod * ms) / BigInt(3_600_000) : BigInt(0);
+    const projected = cur + gain;
+    if (capN <= BigInt(0)) return projected;
     // Overflow (trader/scrapyard/rewards): never clamp existing stock; production only fills to cap.
     if (cur >= capN) return cur;
-    return Math.min(capN, Math.floor(cur + prod * h));
+    return projected < capN ? projected : capN;
   }
 
   function projectLiveResourceAmounts(nowSec) {
     if (!_resourceLive.planetId || !_resourceLive.syncedAt) return null;
-    const elapsed = Math.max(0, Number(nowSec) - _resourceLive.syncedAt);
-    if (elapsed <= 0) {
+    const elapsedMs = Math.max(
+      0,
+      Math.floor((Number(nowSec) - _resourceLive.syncedAt) * 1000)
+    );
+    if (elapsedMs <= 0) {
       return {
         metal: _resourceLive.metal,
         crystal: _resourceLive.crystal,
         fuelCells: _resourceLive.fuelCells,
       };
     }
-    const hours = elapsed / 3600;
     return {
-      metal: projectLiveResourceAmount(_resourceLive.metal, _resourceLive.prodMetal, _resourceLive.capMetal, hours),
-      crystal: projectLiveResourceAmount(_resourceLive.crystal, _resourceLive.prodCrystal, _resourceLive.capCrystal, hours),
-      fuelCells: projectLiveResourceAmount(_resourceLive.fuelCells, _resourceLive.prodFuelCells, _resourceLive.capFuelCells, hours),
+      metal: projectLiveResourceAmount(_resourceLive.metal, _resourceLive.prodMetal, _resourceLive.capMetal, elapsedMs),
+      crystal: projectLiveResourceAmount(_resourceLive.crystal, _resourceLive.prodCrystal, _resourceLive.capCrystal, elapsedMs),
+      fuelCells: projectLiveResourceAmount(_resourceLive.fuelCells, _resourceLive.prodFuelCells, _resourceLive.capFuelCells, elapsedMs),
     };
   }
 
@@ -14590,32 +14666,46 @@
           data.resources.fuel_cells != null))
     );
 
-    const storageMetal = Math.floor(Number(storage.metal || 0));
-    const storageCrystal = Math.floor(Number(storage.crystal || 0));
-    const storageFuelCells = Math.floor(Number(storage.fuel_cells || 0));
+    const storageMetal = gameplayBigInt(storage.metal || 0);
+    const storageCrystal = gameplayBigInt(storage.crystal || 0);
+    const storageFuelCells = gameplayBigInt(storage.fuel_cells || 0);
 
-    let metal = resourceOverrides && resourceOverrides.metal != null
-      ? Math.floor(Number(resourceOverrides.metal))
-      : Math.floor(Number(p.metal ?? resources.metal ?? 0));
-    let crystal = resourceOverrides && resourceOverrides.crystal != null
-      ? Math.floor(Number(resourceOverrides.crystal))
-      : Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
-    let fuelCells = resourceOverrides && resourceOverrides.fuelCells != null
-      ? Math.floor(Number(resourceOverrides.fuelCells))
-      : Math.floor(Number(p.fuel_cells ?? resources.fuel_cells ?? 0));
+    let metal = gameplayBigInt(
+      resourceOverrides && resourceOverrides.metal != null
+        ? resourceOverrides.metal
+        : (p.metal ?? resources.metal ?? 0)
+    );
+    let crystal = gameplayBigInt(
+      resourceOverrides && resourceOverrides.crystal != null
+        ? resourceOverrides.crystal
+        : (p.crystal ?? resources.crystal ?? 0)
+    );
+    let fuelCells = gameplayBigInt(
+      resourceOverrides && resourceOverrides.fuelCells != null
+        ? resourceOverrides.fuelCells
+        : (p.fuel_cells ?? resources.fuel_cells ?? 0)
+    );
 
     if (!forceResourceBar && !allowResourceRegression) {
       const projected = projectLiveResourceAmounts(getApproxServerNow());
-      metal = Math.max(metal, _last.metal ?? 0, projected?.metal ?? 0);
-      crystal = Math.max(crystal, _last.crystal ?? 0, projected?.crystal ?? 0);
-      fuelCells = Math.max(fuelCells, _last.fuelCells ?? 0, projected?.fuelCells ?? 0);
+      const maxGameplay = (incoming, current, projection) => {
+        let best = gameplayBigInt(incoming);
+        const cur = gameplayBigInt(current ?? 0);
+        const proj = gameplayBigInt(projection ?? 0);
+        if (cur > best) best = cur;
+        if (proj > best) best = proj;
+        return best;
+      };
+      metal = maxGameplay(metal, _last.metal, projected?.metal);
+      crystal = maxGameplay(crystal, _last.crystal, projected?.crystal);
+      fuelCells = maxGameplay(fuelCells, _last.fuelCells, projected?.fuelCells);
     }
     const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
     const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
 
-    const prodMetal = Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0));
-    const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
-    const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
+    const prodMetal = gameplayBigInt(prod.metal_mine ?? prod.metal ?? 0);
+    const prodCrystal = gameplayBigInt(prod.crystal_mine ?? prod.crystal ?? 0);
+    const prodFuelCells = gameplayBigInt(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0);
 
     const bar = document.getElementById("resource-bar");
     if (bar && hasResourceSnapshot) {
@@ -14629,11 +14719,11 @@
         _last.crystal = crystal;
         _resourceDisplay.crystal = crystal;
       }
-      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > 0)) {
+      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > BigInt(0))) {
         bar.querySelectorAll(".res-cap.metal").forEach((el) => { _setIfChanged(el, fmtNumber(storageMetal)); });
         _last.storageMetal = storageMetal;
       }
-      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > 0)) {
+      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > BigInt(0))) {
         bar.querySelectorAll(".res-cap.crystal").forEach((el) => { _setIfChanged(el, fmtNumber(storageCrystal)); });
         _last.storageCrystal = storageCrystal;
       }
@@ -14642,7 +14732,7 @@
         _last.fuelCells = fuelCells;
         _resourceDisplay.fuelCells = fuelCells;
       }
-      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
+      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > BigInt(0))) {
         bar.querySelectorAll(".res-cap.fuel_cells").forEach((el) => {
           _setIfChanged(el, fmtNumber(storageFuelCells));
         });
@@ -14650,10 +14740,10 @@
       }
 
       const rateLabel = (key, perHour) => {
-        const ph = Math.floor(Number(perHour) || 0);
+        const ph = gameplayBigInt(perHour);
         bar.querySelectorAll(`[data-res-rate="${key}"]`).forEach((el) => {
-          if (ph > 0) {
-            const sign = ph >= 0 ? "+" : "";
+          if (ph > BigInt(0)) {
+            const sign = ph >= BigInt(0) ? "+" : "";
             _setIfChanged(el, `${sign}${fmtNumber(ph)}/h`);
             el.style.visibility = "visible";
             el.removeAttribute("hidden");
@@ -15434,11 +15524,11 @@
 
         const prodCell = document.querySelector(`.bcell-prod[data-building="${key}"]`);
         if (prodCell) {
-          if (key === "metal_storage" && storageMetal > 0) {
+          if (key === "metal_storage" && storageMetal > BigInt(0)) {
             _setIfChanged(prodCell, `${fmtNumber(metal)} / ${fmtNumber(storageMetal)}`);
-          } else if (key === "crystal_storage" && storageCrystal > 0) {
+          } else if (key === "crystal_storage" && storageCrystal > BigInt(0)) {
             _setIfChanged(prodCell, `${fmtNumber(crystal)} / ${fmtNumber(storageCrystal)}`);
-          } else if (key === "fuel_storage" && storageFuelCells > 0) {
+          } else if (key === "fuel_storage" && storageFuelCells > BigInt(0)) {
             _setIfChanged(prodCell, `${fmtNumber(fuelCells)} / ${fmtNumber(storageFuelCells)}`);
           } else {
             const val = Math.floor(prod[key] || 0);
@@ -19081,17 +19171,20 @@
       }
       const input = page.querySelector(`[data-auction-bid-input="${id}"]`);
       if (input) {
-        const minVal = String(a.min_next_bid || 1);
+        const minVal = normalizeGameplayInteger(a.min_next_bid || "1");
         input.min = minVal;
-        input.placeholder = fmtNumber(a.min_next_bid || 1);
-        if (!input.matches(":focus") && (!input.value || readNumberInput(input) < parseIntNumber(minVal))) {
-          setNumberInputValue(input, minVal);
+        input.placeholder = fmtNumber(minVal);
+        if (
+          !input.matches(":focus") &&
+          (!input.value || compareGameplayIntegers(readGameplayIntegerInput(input), minVal) < 0)
+        ) {
+          setGameplayIntegerInput(input, minVal);
         }
       }
       const card = page.querySelector(`[data-auction-lot-id="${id}"], [data-auction-card="${id}"]`);
       if (card) {
-        card.dataset.minBid = String(a.min_next_bid || 1);
-        card.dataset.currentBid = String(a.current_bid || 0);
+        card.dataset.minBid = normalizeGameplayInteger(a.min_next_bid || "1");
+        card.dataset.currentBid = normalizeGameplayInteger(a.current_bid || "0");
         card.dataset.endsAt = String(a.ends_at || 0);
         card.dataset.currency = String(a.currency || "");
         card.dataset.hasBids = hasBids ? "1" : "0";
@@ -19278,25 +19371,32 @@
         ).trim();
         const input = form.querySelector("[data-auction-bid-input], [name='amount']");
         const btn = form.querySelector("[data-auction-bid-submit], [type='submit']");
-        const amount = readNumberInput(input);
-        const minBid = parseInt(String(card?.dataset.minBid || input?.min || "0"), 10);
+        const amount = readGameplayIntegerInput(input, "0");
+        const minBid = normalizeGameplayInteger(card?.dataset.minBid || input?.min || "0");
 
         setAuctionFormError(listingId, "");
-        if (!listingId || !currency || !amount) {
+        if (!listingId || !currency || !isPositiveGameplayInteger(amount)) {
           const msg = tt("auction_error_invalid_amount", "Enter a valid bid.");
           setAuctionFormError(listingId, msg);
           showNotify(msg, "error");
           return;
         }
-        if (minBid > 0 && amount < minBid) {
+        if (
+          isPositiveGameplayInteger(minBid) &&
+          compareGameplayIntegers(amount, minBid) < 0
+        ) {
           const msg = auctionReasonText({ reason: "bid_too_low", min_bid: minBid });
           setAuctionFormError(listingId, msg);
           showNotify(msg, "error");
           return;
         }
         const isLeading = card?.dataset.isLeading === "1";
-        const currentBid = parseInt(String(card?.dataset.currentBid || "0"), 10);
-        if (isLeading && currentBid > 0 && amount <= currentBid) {
+        const currentBid = normalizeGameplayInteger(card?.dataset.currentBid || "0");
+        if (
+          isLeading &&
+          isPositiveGameplayInteger(currentBid) &&
+          compareGameplayIntegers(amount, currentBid) <= 0
+        ) {
           const msg = auctionReasonText({ reason: "bid_must_raise", min_bid: minBid });
           setAuctionFormError(listingId, msg);
           showNotify(msg, "error");
@@ -23066,27 +23166,32 @@
     if (!page) return;
     const fmt = typeof GC.fmtIntFull === "function" ? GC.fmtIntFull : (n) => String(n ?? 0);
     ["metal", "crystal", "fuel_cells"].forEach((res) => {
-      const val = Number(state.pool?.[res] ?? 0);
-      const cap = Number(state.pool_cap?.[res] ?? 0);
-      const maxVal = Number(state.donation_limits?.[res] ?? Math.max(0, cap - val));
-      const needRem = Number(state.project_need_remaining?.[res] ?? 0);
+      const val = gameplayBigInt(state.pool?.[res] ?? 0);
+      const cap = gameplayBigInt(state.pool_cap?.[res] ?? 0);
+      const defaultMax = cap > val ? cap - val : BigInt(0);
+      const maxVal = gameplayBigInt(state.donation_limits?.[res] ?? defaultMax);
+      const needRem = gameplayBigInt(state.project_need_remaining?.[res] ?? 0);
       const tile = page.querySelector(`.alliance-hub-pool-tile[data-resource="${res}"]`);
       const valEl = page.querySelector(`[data-pool-val="${res}"]`);
       const capEl = page.querySelector(`[data-pool-cap="${res}"]`);
       const fillEl = page.querySelector(`[data-pool-fill="${res}"]`);
       const needEl = page.querySelector(`[data-pool-need="${res}"]`);
       const actions = page.querySelector(`[data-pool-actions="${res}"]`);
-      if (tile) tile.classList.toggle("is-full", maxVal <= 0);
+      if (tile) tile.classList.toggle("is-full", maxVal <= BigInt(0));
       if (valEl) valEl.textContent = fmt(val);
       if (capEl) capEl.textContent = fmt(cap);
       if (fillEl) {
-        const pct = cap > 0 ? Math.min(100, (val / cap) * 100) : 0;
+        let pct = 0;
+        if (cap > BigInt(0)) {
+          const basisPoints = (val * BigInt(10000)) / cap;
+          pct = Math.min(100, Number(basisPoints) / 100);
+        }
         fillEl.style.width = `${pct}%`;
       }
       if (needEl) {
         if (state.active_project) {
           needEl.textContent = t("alliance_donate_need_active", "Projekt aktiv");
-        } else if (needRem > 0) {
+        } else if (needRem > BigInt(0)) {
           needEl.textContent = t("alliance_donate_need_remaining", "Projekt braucht noch %(amt)s").replace(
             "%(amt)s",
             fmt(needRem)
@@ -23096,7 +23201,7 @@
         }
       }
       if (actions) {
-        if (maxVal <= 0) {
+        if (maxVal <= BigInt(0)) {
           actions.innerHTML = `<span class="alliance-hub-pool-full-badge" data-pool-full="${res}">${escapeHtml(
             t("alliance_donate_complete", "Vollständig")
           )}</span>`;
@@ -23104,9 +23209,9 @@
           let input = actions.querySelector(`[data-donate-amount="${res}"]`);
           if (!input) {
             actions.innerHTML = `
-              <input type="text" inputmode="numeric" autocomplete="off" maxlength="20"
+              <input type="text" inputmode="numeric" autocomplete="off"
                 class="gc-input gc-num-input alliance-hub-donate-input"
-                data-donate-amount="${res}" data-input-max="${maxVal}"
+                data-donate-amount="${res}" data-input-max="${maxVal.toString()}"
                 placeholder="${escapeHtml(t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal)))}">
               <div class="alliance-hub-pool-action-btns">
                 <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="${res}">${escapeHtml(t("alliance_donate_max_btn", "Max"))}</button>
@@ -23115,11 +23220,14 @@
             input = actions.querySelector(`[data-donate-amount="${res}"]`);
             if (typeof bindFormattedNumberInputs === "function") bindFormattedNumberInputs(actions);
           } else {
-            input.dataset.inputMax = String(maxVal);
+            input.dataset.inputMax = maxVal.toString();
             input.disabled = false;
             input.placeholder = t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal));
-            if (!input.matches(":focus") && readNumberInput(input) > maxVal) {
-              setNumberInputValue(input, maxVal);
+            if (
+              !input.matches(":focus") &&
+              compareGameplayIntegers(readGameplayIntegerInput(input), maxVal) > 0
+            ) {
+              setGameplayIntegerInput(input, maxVal);
             }
             const btn = actions.querySelector(`[data-donate-btn="${res}"]`);
             const maxBtn = actions.querySelector(`[data-donate-max="${res}"]`);
@@ -23171,7 +23279,7 @@
                   nameStyle: d.name_style || "none",
                 })
               : escapeHtml(String(d.player_name || ""));
-          const amt = fmt(Number(d.amount || 0));
+          const amt = fmt(d.amount || 0);
           const resKey = String(d.resource || "");
           const label = escapeHtml(resLabel(resKey));
           return `<li class="alliance-hub-donation-row"><span>${name}</span><span class="alliance-hub-donation-amount gc-mono">${amt}</span><span class="alliance-hub-donation-res">${resIcon(resKey)}<span class="alliance-hub-donation-res-name">${label}</span></span></li>`;
@@ -23586,8 +23694,8 @@
         const res = donateMaxBtn.dataset.donateMax;
         const input = page.querySelector(`[data-donate-amount="${res}"]`);
         if (!input || input.disabled) return;
-        const maxVal = Number(input.dataset.inputMax || 0);
-        if (maxVal > 0) setNumberInputValue(input, maxVal);
+        const maxVal = normalizeGameplayInteger(input.dataset.inputMax || "0");
+        if (isPositiveGameplayInteger(maxVal)) setGameplayIntegerInput(input, maxVal);
         return;
       }
 
@@ -23596,8 +23704,8 @@
         ev.preventDefault();
         const res = donateBtn.dataset.donateBtn;
         const input = page.querySelector(`[data-donate-amount="${res}"]`);
-        const amount = readNumberInput(input);
-        if (!amount) return;
+        const amount = readGameplayIntegerInput(input, "0");
+        if (!isPositiveGameplayInteger(amount)) return;
         const out = await allianceAction(
           "/api/alliance/donate",
           { resource: res, amount },
@@ -23605,7 +23713,7 @@
         );
         if (!out?.ok) showNotify(allianceErrorMessage(out, "Spende fehlgeschlagen"), "error");
         else {
-          if (input) setNumberInputValue(input, 0);
+          if (input) setGameplayIntegerInput(input, "0");
           showNotify(t("alliance_donate_ok", "Spende eingegangen."), "success");
         }
         return;
@@ -30558,33 +30666,30 @@
   }
 
   function resolveUnitCardPreviewQty(qtyInp) {
-    if (!qtyInp) return 1;
-    const raw = String(qtyInp.value ?? "").trim();
-    if (!raw) return 1;
-    const n = readNumberInput(qtyInp);
-    return n > 0 ? n : 1;
+    if (!qtyInp) return "1";
+    return readGameplayIntegerInput(qtyInp, "1");
   }
 
   function storeUnitCardUnitCosts(costWrap, unitCosts) {
     if (!costWrap || !unitCosts) return;
-    costWrap.dataset.unitCostMetal = String(Math.max(0, Math.floor(Number(unitCosts.cost_metal) || 0)));
-    costWrap.dataset.unitCostCrystal = String(Math.max(0, Math.floor(Number(unitCosts.cost_crystal) || 0)));
-    costWrap.dataset.unitCostFuel = String(Math.max(0, Math.floor(Number(unitCosts.cost_fuel_cells) || 0)));
+    costWrap.dataset.unitCostMetal = normalizeGameplayInteger(unitCosts.cost_metal || 0);
+    costWrap.dataset.unitCostCrystal = normalizeGameplayInteger(unitCosts.cost_crystal || 0);
+    costWrap.dataset.unitCostFuel = normalizeGameplayInteger(unitCosts.cost_fuel_cells || 0);
   }
 
   function readUnitCardUnitCosts(costWrap) {
     if (!costWrap) {
-      return { cost_metal: 0, cost_crystal: 0, cost_fuel_cells: 0 };
+      return { cost_metal: "0", cost_crystal: "0", cost_fuel_cells: "0" };
     }
     return {
-      cost_metal: parseIntNumber(costWrap.dataset.unitCostMetal || "0"),
-      cost_crystal: parseIntNumber(costWrap.dataset.unitCostCrystal || "0"),
-      cost_fuel_cells: parseIntNumber(costWrap.dataset.unitCostFuel || "0"),
+      cost_metal: normalizeGameplayInteger(costWrap.dataset.unitCostMetal || "0"),
+      cost_crystal: normalizeGameplayInteger(costWrap.dataset.unitCostCrystal || "0"),
+      cost_fuel_cells: normalizeGameplayInteger(costWrap.dataset.unitCostFuel || "0"),
     };
   }
 
   function renderUnitCostStackHtml(unitCosts, resources, amount) {
-    const qty = Math.max(1, Math.floor(Number(amount) || 0));
+    const qty = gameplayBigInt(amount);
     const specs = [
       ["metal", "cost_metal"],
       ["crystal", "cost_crystal"],
@@ -30592,10 +30697,10 @@
     ];
     return specs
       .map(([resKey, costKey]) => {
-        const unit = Number(unitCosts[costKey]) || 0;
-        const need = unit * qty;
-        if (need <= 0) return "";
-        const have = Number(resources[resKey]) || 0;
+        const unit = gameplayBigInt(unitCosts[costKey]);
+        const need = unit * (qty > BigInt(0) ? qty : BigInt(1));
+        if (need <= BigInt(0)) return "";
+        const have = gameplayBigInt(resources[resKey]);
         return renderResourceCostChipHtml(resKey, need, have < need);
       })
       .filter(Boolean)
@@ -30605,28 +30710,24 @@
   function militaryPageResources(_page) {
     const fromState = GC.lastState?.resources;
     if (fromState && typeof fromState === "object") {
-      const metal = Number(fromState.metal);
-      const crystal = Number(fromState.crystal);
-      if (Number.isFinite(metal) || Number.isFinite(crystal)) {
-        return {
-          metal: Math.max(0, Math.floor(Number.isFinite(metal) ? metal : 0)),
-          crystal: Math.max(0, Math.floor(Number.isFinite(crystal) ? crystal : 0)),
-          fuel_cells: Math.max(0, Math.floor(Number(fromState.fuel_cells) || 0)),
-        };
-      }
+      return {
+        metal: normalizeGameplayInteger(fromState.metal || 0),
+        crystal: normalizeGameplayInteger(fromState.crystal || 0),
+        fuel_cells: normalizeGameplayInteger(fromState.fuel_cells || 0),
+      };
     }
     // Hard-reload: page init runs before the first /api/game-state poll.
     // Prefer the already-rendered HUD over treating missing state as 0 (all costs red).
     if (_resourceDisplay.metal != null || _resourceDisplay.crystal != null) {
       return {
-        metal: Math.max(0, Math.floor(Number(_resourceDisplay.metal) || 0)),
-        crystal: Math.max(0, Math.floor(Number(_resourceDisplay.crystal) || 0)),
-        fuel_cells: Math.max(0, Math.floor(Number(_resourceDisplay.fuelCells) || 0)),
+        metal: normalizeGameplayInteger(_resourceDisplay.metal || 0),
+        crystal: normalizeGameplayInteger(_resourceDisplay.crystal || 0),
+        fuel_cells: normalizeGameplayInteger(_resourceDisplay.fuelCells || 0),
       };
     }
     const readHud = (cls) => {
       const el = document.querySelector(`#resource-bar .res-value.${cls}`);
-      return el ? parseIntNumber(el.textContent) : 0;
+      return el ? normalizeGameplayInteger(el.textContent) : "0";
     };
     return {
       metal: readHud("metal"),

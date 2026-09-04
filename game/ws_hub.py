@@ -19,6 +19,8 @@ import threading
 import time
 from typing import Any, Dict, List, Set, Tuple
 
+from .json_transport import js_safe_json_value
+
 logger = logging.getLogger(__name__)
 
 MAX_WS_CONNECTIONS = 2000
@@ -86,7 +88,7 @@ def publish(topic: str, payload: Dict[str, Any]) -> int:
         targets = list(_subscribers.get(topic, ()))
     if not targets:
         return 0
-    msg = json.dumps(payload, separators=(",", ":"))
+    msg = json.dumps(js_safe_json_value(payload), separators=(",", ":"))
     sent = 0
     dead: List["WSClient"] = []
     for client in targets:
