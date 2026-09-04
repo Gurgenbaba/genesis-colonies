@@ -749,9 +749,15 @@ def _maybe_join_world_boss(conn, player_id: int, *, now: float) -> Dict[str, Any
             return {"ok": True, "joined": False, "reason": "no_combat_ships"}
         for event in list_active_events(conn=conn, now=float(now), limit=3):
             max_hp = max(1, int(event.get("max_hp") or 1))
-            hp_ratio = float(event.get("current_hp") or 0) / float(max_hp)
-            if hp_ratio <= INACTIVE_WORLD_BOSS_SAFE_HP_RATIO:
-                continue
+            current_hp = max(0, int(event.get("current_hp") or 0))
+            with localcontext() as ctx:
+                ctx.prec = max(64, len(str(max_hp)) + 32)
+                safe_hp = (
+                    Decimal(max_hp)
+                    * Decimal(str(INACTIVE_WORLD_BOSS_SAFE_HP_RATIO))
+                )
+                if Decimal(current_hp) <= safe_hp:
+                    continue
             ok, _reason, meta = can_player_attack_boss(
                 int(player_id),
                 int(event["id"]),

@@ -363,13 +363,13 @@ def build_catch_info_for_event(
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Server-authored catch CTA state for one event card."""
-    from .world_boss import STATUS_ACTIVE, hp_phase_from_ratio
+    from .world_boss import STATUS_ACTIVE, hp_phase_from_values
 
     ts = float(now if now is not None else _now())
     boss_key = str(event.get("boss_key") or "")
     max_hp = max(1, int(event.get("max_hp") or 1))
     current_hp = max(0, int(event.get("current_hp") or 0))
-    phase = int(hp_phase_from_ratio(float(current_hp) / float(max_hp)))
+    phase = int(hp_phase_from_values(current_hp, max_hp))
     info: Dict[str, Any] = {
         "ready": companions_schema_ready(conn),
         "boss_key": boss_key,
@@ -440,7 +440,7 @@ def attempt_tame(
 ) -> Dict[str, Any]:
     """Spend TK, roll catch, optionally grant companion. Server RNG only."""
     from .timekeeper import InsufficientTimekeeperBalance, debit
-    from .world_boss import STATUS_ACTIVE, get_event_by_id, hp_phase_from_ratio
+    from .world_boss import STATUS_ACTIVE, get_event_by_id, hp_phase_from_values
 
     if not companions_schema_ready(conn):
         return {"ok": False, "error": "companions_unavailable"}
@@ -472,7 +472,7 @@ def attempt_tame(
 
     max_hp = max(1, int(event.get("max_hp") or 1))
     current_hp = max(0, int(event.get("current_hp") or 0))
-    phase = int(hp_phase_from_ratio(float(current_hp) / float(max_hp)))
+    phase = int(hp_phase_from_values(current_hp, max_hp))
     if phase != 3:
         return {"ok": False, "error": "phase_locked", "phase": phase}
 
