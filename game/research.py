@@ -858,23 +858,23 @@ def preview_max_queueable_research_jobs(
     *,
     current_level: int,
     queued_same: int,
-    metal: int,
-    crystal: int,
+    metal: float,
+    crystal: float,
     queue_free_slots: int,
 ) -> int:
     """How many +1 research jobs can be queued for one tech."""
     if tech_key not in RESEARCH_TECHS or int(queue_free_slots) <= 0:
         return 0
     count = 0
-    m = int(metal or 0)
-    c = int(crystal or 0)
+    m = float(metal or 0)
+    c = float(crystal or 0)
     while count < int(queue_free_slots):
         target = int(current_level) + int(queued_same) + count + 1
         cost_m, cost_c = get_research_cost(tech_key, target)
-        if m < int(cost_m) or c < int(cost_c):
+        if m < float(cost_m) or c < float(cost_c):
             break
-        m -= int(cost_m)
-        c -= int(cost_c)
+        m -= float(cost_m)
+        c -= float(cost_c)
         count += 1
     return count
 
@@ -884,8 +884,8 @@ def summarize_max_queueable_research_jobs(
     *,
     current_level: int,
     queued_same: int,
-    metal: int,
-    crystal: int,
+    metal: float,
+    crystal: float,
     queue_free_slots: int,
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
@@ -1007,8 +1007,8 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
                 rollback(conn)
                 return False, "no_homeworld", None
 
-            planet_metal = int(prow["metal"] or 0)
-            planet_crystal = int(prow["crystal"] or 0)
+            planet_metal = float(prow["metal"] or 0)
+            planet_crystal = float(prow["crystal"] or 0)
 
             buildings = resolve_buildings_for_research(
                 get_planet_buildings(planet_id, conn=conn),
@@ -1042,7 +1042,7 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
 
             cost_m, cost_c = get_research_cost(tech_key, target)
 
-            if planet_metal < int(cost_m) or planet_crystal < int(cost_c):
+            if planet_metal < float(cost_m) or planet_crystal < float(cost_c):
                 last_reason = "not_enough_resources"
                 last_fail = _research_not_enough_payload(
                     planet_metal=planet_metal,
@@ -1071,8 +1071,8 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
                     (planet_id,),
                 )
                 after = cur.fetchone()
-                avail_m = int(after["metal"] or 0) if after else planet_metal
-                avail_c = int(after["crystal"] or 0) if after else planet_crystal
+                avail_m = float(after["metal"] or 0) if after else planet_metal
+                avail_c = float(after["crystal"] or 0) if after else planet_crystal
                 last_fail = _research_not_enough_payload(
                     planet_metal=avail_m,
                     planet_crystal=avail_c,
@@ -1304,8 +1304,8 @@ def get_research_status(
         else:
             complete_finished_research(uid)
 
-    planet_metal = int(resource_planet.get("metal") or 0)
-    planet_crystal = int(resource_planet.get("crystal") or 0)
+    planet_metal = float(resource_planet.get("metal") or 0)
+    planet_crystal = float(resource_planet.get("crystal") or 0)
 
     if buildings is None:
         buildings = get_planet_buildings(int(resource_planet["id"]), conn=conn)
@@ -1452,7 +1452,7 @@ def get_research_status(
 
             req = cfg.get("requirements") or {}
             req_met = _check_requirements(req, buildings, levels)
-            can_afford = planet_metal >= int(cost_m) and planet_crystal >= int(cost_c)
+            can_afford = planet_metal >= float(cost_m) and planet_crystal >= float(cost_c)
             max_queue_preview: Dict[str, Any] = {"jobs": 0}
             if req_met:
                 max_queue_preview = summarize_max_queueable_research_jobs(
@@ -1497,14 +1497,14 @@ def get_research_status(
                         "key": "metal",
                         "need": int(cost_m),
                         "have": int(planet_metal),
-                        "met": planet_metal >= int(cost_m),
+                        "met": planet_metal >= float(cost_m),
                     },
                     {
                         "kind": "resource",
                         "key": "crystal",
                         "need": int(cost_c),
                         "have": int(planet_crystal),
-                        "met": planet_crystal >= int(cost_c),
+                        "met": planet_crystal >= float(cost_c),
                     },
                 ],
                 "icon": cfg.get("icon"),
