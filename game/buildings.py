@@ -2792,8 +2792,14 @@ def cancel_build_job_for_planet(
             start_time=float(row["start_time"] or now),
             finish_time=float(row["finish_time"] or now),
             now=now,
-            cost_metal=int(row["cost_metal_exact"] or row["cost_metal"] or 0),
-            cost_crystal=int(row["cost_crystal_exact"] or row["cost_crystal"] or 0),
+            cost_metal=(
+                int(row["cost_metal_exact"] or 0)
+                or int(row["cost_metal"] or 0)
+            ),
+            cost_crystal=(
+                int(row["cost_crystal_exact"] or 0)
+                or int(row["cost_crystal"] or 0)
+            ),
             user_id=int(owner_id),
         )
 
