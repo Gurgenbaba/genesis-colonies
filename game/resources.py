@@ -16,7 +16,7 @@ WICHTIG:
 from __future__ import annotations
 
 import time
-from decimal import Decimal, ROUND_FLOOR
+from decimal import Decimal, ROUND_FLOOR, localcontext
 from typing import Any, Dict, Mapping, Tuple, Optional
 
 from .models import (
@@ -697,10 +697,18 @@ def calculate_plunder_pool(
     stock = normalize_resource_stock(available)
     if frac <= 0:
         return {key: 0 for key in LOOT_RESOURCE_KEYS}
-    return {
-        key: int((Decimal(stock[key]) * frac).to_integral_value(rounding=ROUND_FLOOR))
-        for key in LOOT_RESOURCE_KEYS
-    }
+    precision = max(
+        64,
+        max((len(str(stock[key])) for key in LOOT_RESOURCE_KEYS), default=1) + 64,
+    )
+    with localcontext() as ctx:
+        ctx.prec = precision
+        return {
+            key: int(
+                (Decimal(stock[key]) * frac).to_integral_value(rounding=ROUND_FLOOR)
+            )
+            for key in LOOT_RESOURCE_KEYS
+        }
 
 
 def load_resources_up_to_cargo(
