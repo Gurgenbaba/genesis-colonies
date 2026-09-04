@@ -53,6 +53,15 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 
 **Spike ring:** last ~48 slow requests (`≥ max(GC_PERF_SLOW_MS, 500)` — debug `=0` does **not** flood spikes) as `spikes[]` on admin API + **LETZTE SPIKES** UI (route + top costs + SQL). No always-on full tracing.
 
+### GC-PERF-SQL-HOT-002 — Frequency signatures for N+1
+
+Slow individual statements are not enough to diagnose N+1: 200 queries at 2–4ms each can dominate a request without entering `slow_queries`.
+
+- Sampled requests keep a bounded (max 64 distinct) normalized SQL-signature map: count, cumulative DB time, max statement time. Bind/literal values are removed by `normalize_sql_signature`.
+- PostgreSQL timing is attached at the sqlite-compatible `PgCursor` so both `conn.execute` and `cur.execute` are measured exactly once.
+- Slow-request spike rows expose the top repeated signatures (max 5 in payload, top 3 rendered) directly under Top Costs.
+- This is diagnostic-only process memory; no gameplay state, persistence, or cache authority is introduced.
+
 ### GC-PERF-AUTO-007B — Evidence-driven cut (partial)
 
 - Removed double-count: `_load_page_live_context` no longer records `page_context_ms` for live-refresh wall time (was twin of `live_context_ms`).
