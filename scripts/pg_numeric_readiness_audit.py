@@ -98,7 +98,20 @@ POLICIES: tuple[NumericPolicy, ...] = (
     NumericPolicy("world_boss_events", "max_hp", "at_least_i64", "P1", "boss event HP"),
     NumericPolicy("world_boss_events", "current_hp", "at_least_i64", "P1", "boss event HP"),
     NumericPolicy("world_boss_contributions", "damage", "at_least_i64", "P1", "boss lifetime event damage"),
+    NumericPolicy("pirate_bases", "max_hp", "at_least_i64", "P1", "pirate boss max HP"),
+    NumericPolicy("pirate_bases", "current_hp", "at_least_i64", "P1", "pirate boss current HP"),
+    NumericPolicy("pirate_base_contributions", "damage", "at_least_i64", "P1", "pirate boss damage"),
+    NumericPolicy("combat_hall_of_fame", "attacker_loss_score", "at_least_i64", "P1", "combat loss value"),
+    NumericPolicy("combat_hall_of_fame", "defender_loss_score", "at_least_i64", "P1", "combat loss value"),
     NumericPolicy("combat_hall_of_fame", "total_destroyed_score", "at_least_i64", "P1", "combat value"),
+
+    # Imperial Directives / Case Battle values mentioned by the binding audit doc.
+    NumericPolicy("player_directives", "target_value", "at_least_i64", "P1", "directive target"),
+    NumericPolicy("player_directives", "progress_value", "at_least_i64", "P1", "directive progress"),
+    NumericPolicy("directive_progress", "delta", "at_least_i64", "P1", "directive progress event delta"),
+    NumericPolicy("case_battles", "total_battle_value", "at_least_i64", "P1", "case battle aggregate value"),
+    NumericPolicy("case_battle_rolls", "reward_amount", "at_least_i64", "P1", "case battle reward quantity"),
+    NumericPolicy("case_battle_rolls", "reward_value", "at_least_i64", "P1", "case battle reward value"),
 
     # Existing widened aggregates.
     NumericPolicy("expedition_daily_value", "expo_value_total", "at_least_i64", "P1", "expedition aggregate"),
@@ -129,8 +142,14 @@ def normalize_type(data_type: str | None) -> str:
     return str(data_type or "").strip().lower()
 
 
-def classify_type(data_type: str | None, contract: str) -> tuple[str, str]:
-    """Return (status, reason) from information_schema.data_type."""
+def classify_type(
+    data_type: str | None,
+    contract: str,
+    *,
+    numeric_precision: int | None = None,
+    numeric_scale: int | None = None,
+) -> tuple[str, str]:
+    """Return (status, reason) from information_schema numeric metadata."""
     t = normalize_type(data_type)
     exact = {"numeric", "decimal"}
     bigint = {"bigint", "int8"}
@@ -140,9 +159,33 @@ def classify_type(data_type: str | None, contract: str) -> tuple[str, str]:
     if not t:
         return "missing", "column missing"
 
+    if t in exact:
+        constrained = numeric_precision is not None
+        scale = None if numeric_scale is None else int(numeric_scale)
+        precision = None if numeric_precision is None else int(numeric_precision)
+
+        if contract in {"exact_unbounded", "exact_snapshot"}:
+            if constrained:
+                return (
+                    "limited",
+                    f"exact but finite NUMERIC({precision},{scale if scale is not None else '?'}) ceiling",
+                )
+            return "ready", "unconstrained exact SQL numeric"
+
+        if contract == "at_least_i64":
+            if not constrained:
+                return "ready", "unconstrained exact SQL numeric"
+            integer_digits = precision - max(scale or 0, 0)
+            if integer_digits >= 19:
+                return "ready", f"exact NUMERIC with {integer_digits} integer digits"
+            return "not_ready", f"NUMERIC provides only {integer_digits} integer digits (<19)"
+
+        if contract == "decimal_rate":
+            if scale == 0:
+                return "not_ready", "NUMERIC scale 0 rounds intended fractional rates"
+            return "ready", "exact decimal rate"
+
     if contract == "exact_unbounded":
-        if t in exact:
-            return "ready", "exact SQL numeric"
         if t == "text":
             return "limited", "exact storage but SQL arithmetic needs casts/Python"
         if t in bigint:
@@ -154,7 +197,7 @@ def classify_type(data_type: str | None, contract: str) -> tuple[str, str]:
         return "review", f"unclassified type {t}"
 
     if contract == "exact_snapshot":
-        if t in exact or t == "text":
+        if t == "text":
             return "ready", "lossless exact snapshot"
         if t in bigint:
             return "limited", "exact but finite signed 64-bit ceiling"
@@ -165,7 +208,7 @@ def classify_type(data_type: str | None, contract: str) -> tuple[str, str]:
         return "review", f"unclassified type {t}"
 
     if contract == "at_least_i64":
-        if t in exact or t == "text":
+        if t == "text":
             return "ready", "meets/exceeds i64 floor"
         if t in bigint:
             return "limited", "meets i64 floor but remains finite"
@@ -176,8 +219,6 @@ def classify_type(data_type: str | None, contract: str) -> tuple[str, str]:
         return "review", f"unclassified type {t}"
 
     if contract == "decimal_rate":
-        if t in exact:
-            return "ready", "exact decimal rate"
         if t in floating:
             return "limited", "fractional rate works but is approximate"
         if t in bigint or t in int4:
@@ -185,7 +226,6 @@ def classify_type(data_type: str | None, contract: str) -> tuple[str, str]:
         return "review", f"unclassified type {t}"
 
     return "review", f"unknown contract {contract}"
-
 
 def _load_schema_columns(conn) -> dict[tuple[str, str], dict[str, Any]]:
     cur = conn.cursor()
@@ -209,7 +249,12 @@ def audit_schema(columns: dict[tuple[str, str], dict[str, Any]]) -> list[dict[st
     for policy in POLICIES:
         meta = columns.get((policy.table, policy.column))
         data_type = str((meta or {}).get("data_type") or "")
-        status, reason = classify_type(data_type, policy.contract)
+        status, reason = classify_type(
+            data_type,
+            policy.contract,
+            numeric_precision=(meta or {}).get("numeric_precision"),
+            numeric_scale=(meta or {}).get("numeric_scale"),
+        )
         rows.append(
             {
                 **asdict(policy),
@@ -253,13 +298,26 @@ def _print_human(rows: list[dict[str, Any]]) -> None:
         print()
 
 
+def is_strict_violation(row: dict[str, Any]) -> bool:
+    """Strict mode fails every P0/P1 contract that is not actually satisfied."""
+    if row.get("priority") not in {"P0", "P1"}:
+        return False
+    status = str(row.get("status") or "")
+    contract = str(row.get("contract") or "")
+    if status in {"not_ready", "missing", "review"}:
+        return True
+    if status == "limited" and contract in {"exact_unbounded", "exact_snapshot"}:
+        return True
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit 2 when a P0/P1 policy is not_ready/missing/review",
+        help="exit 2 when a P0/P1 numeric contract is not fully satisfied",
     )
     args = parser.parse_args()
 
@@ -283,11 +341,7 @@ def main() -> int:
     else:
         _print_human(rows)
 
-    if args.strict and any(
-        row["priority"] in {"P0", "P1"}
-        and row["status"] in {"not_ready", "missing", "review"}
-        for row in rows
-    ):
+    if args.strict and any(is_strict_violation(row) for row in rows):
         return 2
     return 0
 
