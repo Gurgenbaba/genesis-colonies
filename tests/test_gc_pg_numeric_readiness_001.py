@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,11 +10,7 @@ SCRIPT = ROOT / "scripts" / "pg_numeric_readiness_audit.py"
 
 
 def _load_audit_module():
-    spec = importlib.util.spec_from_file_location("gc_pg_numeric_audit", SCRIPT)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return importlib.import_module("scripts.pg_numeric_readiness_audit")
 
 
 def test_critical_p0_numeric_domains_are_in_policy():
