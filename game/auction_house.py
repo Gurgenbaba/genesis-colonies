@@ -21,7 +21,7 @@ from .db import (
 )
 from .inventory import grant_inventory_item, inventory_schema_ready
 from .inventory_catalog import ITEM_CATALOG, item_catalog_entry
-from .models import table_exists
+from .models import resource_db_param, table_exists
 from .player_display import commander_display_name
 
 AUCTION_CURRENCIES = ("metal", "crystal", "fuel_cells")
@@ -30,7 +30,8 @@ ACTIVE_AUCTION_TARGET = 3
 MIN_DURATION_SEC = 6 * 3600
 MAX_DURATION_SEC = 12 * 3600
 ROTATION_INTERVAL_SECONDS = 6 * 3600
-MIN_BID_INCREASE_PCT = 0.05
+MIN_BID_INCREASE_BPS = 500
+MIN_BID_INCREASE_PCT = MIN_BID_INCREASE_BPS / 10_000
 MAX_BIDS_PER_PLAYER_PER_LISTING = 25
 
 # Ticket box keys → canonical inventory container keys (GC-540).
@@ -257,7 +258,11 @@ def _min_next_bid(listing: Mapping[str, Any]) -> int:
     current = int(listing["current_bid"] or 0)
     if current <= 0:
         return max(1, start)
-    return max(start, int(math.ceil(current * (1.0 + MIN_BID_INCREASE_PCT))))
+    # Exact ceil(current * 1.05) without routing huge bids through float.
+    scaled = (
+        current * (10_000 + MIN_BID_INCREASE_BPS) + 9_999
+    ) // 10_000
+    return max(start, scaled)
 
 
 def _hint_key_for_reward(rtype: str, rkey: str) -> Optional[str]:
@@ -446,7 +451,7 @@ def _credit_planet_resource(
         return False
     cur.execute(
         f"UPDATE planets SET {col} = {col} + ? WHERE id = ?;",
-        (int(amount), int(planet_id)),
+        (resource_db_param(amount), int(planet_id)),
     )
     return True
 
@@ -475,7 +480,7 @@ def _debit_planet_resource(
         return False
     cur.execute(
         f"UPDATE planets SET {col} = {col} - ? WHERE id = ?;",
-        (int(amount), int(planet_id)),
+        (resource_db_param(amount), int(planet_id)),
     )
     return True
 
@@ -584,7 +589,14 @@ def generate_auction_rotation(*, conn=None, now: Optional[float] = None, seed: O
                     box_key, currency, start_price, current_bid, starts_at, ends_at, status, created_at
                 ) VALUES (?, ?, ?, 0, ?, ?, 'active', ?);
                 """,
-                (box_key, currency, start_price, now_i, now_i + duration, now_i),
+                (
+                    box_key,
+                    currency,
+                    resource_db_param(start_price),
+                    now_i,
+                    now_i + duration,
+                    now_i,
+                ),
             )
             created += 1
         commit(conn)
@@ -835,7 +847,12 @@ def place_bid(
             SET current_bid = ?, current_bidder_id = ?, current_bid_planet_id = ?
             WHERE id = ?;
             """,
-            (bid_amount, int(player_id), int(planet_id), int(listing_id)),
+            (
+                resource_db_param(bid_amount),
+                int(player_id),
+                int(planet_id),
+                int(listing_id),
+            ),
         )
         cur.execute(
             """
@@ -843,7 +860,13 @@ def place_bid(
                 listing_id, player_id, planet_id, amount, created_at, refunded
             ) VALUES (?, ?, ?, ?, ?, 0);
             """,
-            (int(listing_id), int(player_id), int(planet_id), bid_amount, now_i),
+            (
+                int(listing_id),
+                int(player_id),
+                int(planet_id),
+                resource_db_param(bid_amount),
+                now_i,
+            ),
         )
         commit(conn)
         return True, "bid_placed", {
