@@ -413,7 +413,11 @@ def enqueue_troop_train(
     conn,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     from .db import begin_write_transaction, commit, in_transaction, lock_planet_for_update, rollback
-    from .models import get_planet_buildings, try_spend_resources_conn
+    from .models import (
+        _legacy_i64_cost_snapshot,
+        get_planet_buildings,
+        try_spend_resources_conn,
+    )
 
     if not troop_queue_table_ready(conn) or not troops_schema_ready(conn):
         return False, "troops_unavailable", None
@@ -479,8 +483,9 @@ def enqueue_troop_train(
             INSERT INTO troop_queue (
                 player_id, planet_id, troop_key, amount, status,
                 started_at, finish_at, created_at, queue_position,
-                cost_metal, cost_crystal
-            ) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?);
+                cost_metal, cost_crystal,
+                cost_metal_exact, cost_crystal_exact
+            ) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 int(player_id),
@@ -491,8 +496,10 @@ def enqueue_troop_train(
                 ts + duration,
                 ts,
                 pos,
-                cost_m,
-                cost_c,
+                _legacy_i64_cost_snapshot(cost_m),
+                _legacy_i64_cost_snapshot(cost_c),
+                str(cost_m),
+                str(cost_c),
             ),
         )
         sync_troop_queue_finish_times(planet_id, conn=conn, now=ts)
@@ -553,23 +560,22 @@ def cancel_troop_job(player_id: int, job_id: int, *, conn) -> Tuple[bool, str]:
             if began_tx:
                 rollback(conn)
             return False, "not_found"
-        # 50% refund if already started (first in queue), else 100%
+        # 50% refund if already started (first in queue), else 100%.
+        # Exact paid snapshots are authoritative; legacy columns are fallback only.
+        from .queue_refund import apply_planet_refund, scaled_refund_amount, stored_cost_int
+
         rows = list_troop_queue_rows(planet_id, conn=conn)
         is_head = bool(rows) and int(rows[0]["id"]) == int(job_id)
-        refund_m = int(row["cost_metal"] or 0)
-        refund_c = int(row["cost_crystal"] or 0)
-        if is_head:
-            refund_m = refund_m // 2
-            refund_c = refund_c // 2
-        if refund_m or refund_c:
-            cur.execute(
-                """
-                UPDATE planets
-                SET metal = metal + ?, crystal = crystal + ?
-                WHERE id = ?;
-                """,
-                (int(refund_m), int(refund_c), int(planet_id)),
-            )
+        paid = dict(row)
+        ratio = 0.5 if is_head else 1.0
+        refund_m = scaled_refund_amount(stored_cost_int(paid, "metal"), ratio)
+        refund_c = scaled_refund_amount(stored_cost_int(paid, "crystal"), ratio)
+        apply_planet_refund(
+            conn,
+            int(planet_id),
+            metal=refund_m,
+            crystal=refund_c,
+        )
         cur.execute("DELETE FROM troop_queue WHERE id = ?;", (int(job_id),))
         sync_troop_queue_finish_times(planet_id, conn=conn)
         if began_tx:
@@ -582,8 +588,8 @@ def cancel_troop_job(player_id: int, job_id: int, *, conn) -> Tuple[bool, str]:
 
 
 def max_train_amount_for_planet(
-    metal_have: float,
-    crystal_have: float,
+    metal_have: int,
+    crystal_have: int,
     troop_key: str,
     barracks_level: int,
     *,
@@ -647,11 +653,11 @@ def build_troops_state(planet_id: int, *, barracks_level: int, conn) -> Dict[str
     )
     prow = cur.fetchone()
     try:
-        metal_have = float((prow["metal"] if prow is not None else 0) or 0)
-        crystal_have = float((prow["crystal"] if prow is not None else 0) or 0)
+        metal_have = int((prow["metal"] if prow is not None else 0) or 0)
+        crystal_have = int((prow["crystal"] if prow is not None else 0) or 0)
     except (TypeError, ValueError, KeyError, IndexError):
-        metal_have = 0.0
-        crystal_have = 0.0
+        metal_have = 0
+        crystal_have = 0
 
     total = sum(stock.values())
     cap = barracks_troop_capacity(barracks_level)
