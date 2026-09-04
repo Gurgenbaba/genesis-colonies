@@ -4665,7 +4665,17 @@
         const panelHint = panels
           ? `panels=${esc(panels)}${page ? ` @${esc(page)}` : ""}`
           : (page ? `page=${esc(page)}` : "");
-        const costsCell = [costs, panelHint].filter(Boolean).join(" · ") || "—";
+        const sqlHot = (s.sql_signatures || [])
+          .slice(0, 3)
+          .map(
+            (q) =>
+              `<span title="${esc(q.total_ms || 0)}ms">${esc(q.count || 0)}× <code>${esc(q.signature || "")}</code></span>`
+          )
+          .join("<br>");
+        const baseCosts = [costs, panelHint].filter(Boolean).join(" · ") || "—";
+        const costsCell = sqlHot
+          ? `${baseCosts}<div class="admin-small-hint">SQL: ${sqlHot}</div>`
+          : baseCosts;
         return `<tr><td>${esc(when)}</td><td>${esc(s.slow_class || "")}</td><td>${esc(s.route)}</td><td>${esc(s.total_ms)}</td><td class="admin-small-hint">${costsCell}</td><td title="db_ms=${dbMs}">${sqlOpens}</td></tr>`;
       })
       .join("");
