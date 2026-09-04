@@ -10,6 +10,7 @@ import logging
 import math
 import random
 import time
+from decimal import Decimal, ROUND_FLOOR, localcontext
 from statistics import median
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
@@ -597,10 +598,14 @@ def _roll_loot(
         out[key] = int(lo_i + round(span * t))
         out[key] = max(lo_i, min(hi_i, out[key]))
         if scale_map:
-            out[key] = max(
-                lo_i,
-                int(round(out[key] * float(scale_map.get(key, 1.0) or 1.0))),
-            )
+            scale = Decimal(str(scale_map.get(key, 1.0) or 1.0))
+            with localcontext() as ctx:
+                ctx.prec = max(64, len(str(abs(int(out[key])))) + 64)
+                scaled = int(
+                    (Decimal(out[key]) * scale)
+                    .to_integral_value(rounding=ROUND_FLOOR)
+                )
+            out[key] = max(lo_i, scaled)
     return out
 
 
@@ -696,11 +701,22 @@ def _mega_belt_resource_pool(conn) -> Dict[str, int]:
             n=MEGA_BELT_TOP_N_STORAGE,
         )
         if levels:
-            capacities = [storage_capacity_at_depot_level(lvl) for lvl in levels]
-            avg_capacity = sum(capacities) / len(capacities)
+            capacities = [int(storage_capacity_at_depot_level(lvl)) for lvl in levels]
+            precision = max(
+                64,
+                max((len(str(abs(value))) for value in capacities), default=1) + 64,
+            )
+            with localcontext() as ctx:
+                ctx.prec = precision
+                avg_capacity = Decimal(sum(capacities)) / Decimal(len(capacities))
+                pool = int(
+                    (
+                        avg_capacity
+                        * Decimal(str(MEGA_BELT_STORAGE_FRACTION))
+                    ).to_integral_value(rounding=ROUND_FLOOR)
+                )
         else:
-            avg_capacity = 0.0
-        pool = int(avg_capacity * MEGA_BELT_STORAGE_FRACTION)
+            pool = 0
         out[resource] = max(MEGA_BELT_MIN_POOL_PER_RESOURCE, pool)
     return out
 
@@ -1040,6 +1056,8 @@ def insert_asteroid(
         if key not in ASTEROID_CATALOG:
             key = "mixed_belt"
         loot = _roll_loot(key, rng=rng, conn=conn)
+    from .models import resource_db_param
+
     expires = ts + float(ttl_seconds)
     cur = conn.execute(
         """
@@ -1054,9 +1072,9 @@ def insert_asteroid(
             int(galaxy),
             int(system),
             int(position),
-            float(loot["metal"]),
-            float(loot["crystal"]),
-            float(loot["fuel_cells"]),
+            resource_db_param(loot["metal"]),
+            resource_db_param(loot["crystal"]),
+            resource_db_param(loot["fuel_cells"]),
             STATUS_ACTIVE,
             ts,
             expires,
@@ -1385,8 +1403,9 @@ def _split_load(pool: Mapping[str, int], cargo_total: int) -> Dict[str, int]:
     if total <= cap:
         return {"metal": metal, "crystal": crystal, "fuel_cells": fuel}
     # Prefer filling in catalog order metal → crystal → fuel for remainder.
-    take_m = int(cap * metal / total)
-    take_c = int(cap * crystal / total)
+    # Integer floor division avoids IEEE-754 precision loss for huge public pools.
+    take_m = (cap * metal) // total
+    take_c = (cap * crystal) // total
     take_f = max(0, cap - take_m - take_c)
     # Clamp to available
     take_m = min(metal, take_m)
@@ -1598,6 +1617,8 @@ def _claim_mega_harvest(
     the SQLite write mutex (BEGIN IMMEDIATE), so no lost updates across
     concurrent claimers.
     """
+    from .models import resource_db_param
+
     cur = conn.execute(
         """
         UPDATE asteroid_fields
@@ -1607,9 +1628,9 @@ def _claim_mega_harvest(
         WHERE id = ? AND status = ?;
         """,
         (
-            int(harvested["metal"]),
-            int(harvested["crystal"]),
-            int(harvested["fuel_cells"]),
+            resource_db_param(harvested["metal"]),
+            resource_db_param(harvested["crystal"]),
+            resource_db_param(harvested["fuel_cells"]),
             aid,
             STATUS_ACTIVE,
         ),
@@ -1631,9 +1652,9 @@ def _claim_mega_harvest(
             aid,
             int(player_id),
             ts,
-            int(harvested["metal"]),
-            int(harvested["crystal"]),
-            int(harvested["fuel_cells"]),
+            resource_db_param(harvested["metal"]),
+            resource_db_param(harvested["crystal"]),
+            resource_db_param(harvested["fuel_cells"]),
         ),
     )
 
