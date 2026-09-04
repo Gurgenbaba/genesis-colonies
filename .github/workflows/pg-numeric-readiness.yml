@@ -36,6 +36,7 @@ on:
       - "tests/test_gc_pg_numeric_salvage_a2.py"
       - "tests/test_gc_pg_numeric_resource_consumers_a3.py"
       - "tests/test_gc_pg_numeric_money_amounts_b1.py"
+      - "tests/test_gc_pg_numeric_unit_amounts_b2.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -73,6 +74,7 @@ on:
       - "tests/test_gc_pg_numeric_salvage_a2.py"
       - "tests/test_gc_pg_numeric_resource_consumers_a3.py"
       - "tests/test_gc_pg_numeric_money_amounts_b1.py"
+      - "tests/test_gc_pg_numeric_unit_amounts_b2.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -151,4 +153,5 @@ jobs:
             tests/test_gc_pg_numeric_core_resources_a1.py \
             tests/test_gc_pg_numeric_salvage_a2.py \
             tests/test_gc_pg_numeric_resource_consumers_a3.py \
-            tests/test_gc_pg_numeric_money_amounts_b1.py
+            tests/test_gc_pg_numeric_money_amounts_b1.py \
+            tests/test_gc_pg_numeric_unit_amounts_b2.py
