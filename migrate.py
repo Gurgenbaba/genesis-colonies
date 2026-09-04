@@ -311,6 +311,26 @@ def _is_idempotent_sqlite_error(e: sqlite3.Error) -> bool:
     return False
 
 
+def _required_backend(sql_text: str) -> Optional[str]:
+    """Read an optional backend-only migration directive.
+
+    Syntax: -- GC-BACKEND: postgres or -- GC-BACKEND: sqlite.
+    Non-target migrations are recorded as applied for that backend. Migration
+    history is never copied by the SQLite→PostgreSQL importer, so a later
+    PostgreSQL cutover will still execute PostgreSQL-only migrations.
+    """
+    prefix = "-- GC-BACKEND:"
+    for line in strip_bom(sql_text).splitlines()[:20]:
+        stripped = line.strip()
+        if not stripped.upper().startswith(prefix):
+            continue
+        backend = stripped[len(prefix):].strip().lower()
+        if backend not in ("sqlite", "postgres"):
+            raise ValueError(f"invalid GC-BACKEND value: {backend!r}")
+        return backend
+    return None
+
+
 def _required_tables(sql_text: str) -> List[str]:
     """Read an optional migration table-precondition directive.
 
@@ -365,6 +385,12 @@ def apply_migration(conn: Any, filename: str, sql_text: str) -> None:
     - idempotente Fehler pro Statement werden übersprungen
     """
     print(f"  -> wende Migration an: {filename}")
+
+    required_backend = _required_backend(sql_text)
+    if required_backend and required_backend != _backend():
+        print(f"     [skip not-applicable] backend={required_backend}")
+        mark_migration_applied(conn, filename)
+        return
 
     required_tables = _required_tables(sql_text)
     if required_tables:
