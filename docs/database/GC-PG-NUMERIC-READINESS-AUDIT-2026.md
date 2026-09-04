@@ -127,6 +127,9 @@ The main research tree deliberately has no generic hard max; e.g. navigation fle
 | Alliance donations/projects | INTEGER | 🟡 CAP | bounded by alliance pool/project catalog today | cap regression required |
 | Inventory quantities | INTEGER | 🟡/P1 | most catalog items are naturally small, but no universal numeric-domain contract | classify each high-volume item family or enforce cap |
 | Case battle reward amount/value | INTEGER | 🟡/P1 | catalog-driven today; not economy-authoritative | explicit catalog upper bound |
+| Timekeeper balance / ledger seconds | INTEGER/int4 | 🟠 P1 | no hard account-balance cap; positive int4 range is ~68 years | BIGINT at minimum or explicit lifetime cap; JS-safe transport if ever large |
+| Space Lottery pool / wager ledger | INTEGER/int4 | 🟠 P1 LOW | per-bet/daily caps exist, but weekly pool has no global player-count hard cap | document bounded horizon or widen |
+| Pirate bounty credits | INTEGER/int4 | 🟠 P1 | cumulative damage/destroy rewards have no lifetime cap | BIGINT/NUMERIC or explicit bounty cap |
 
 ---
 
@@ -337,18 +340,19 @@ Do not rely on SQLite NUMERIC affinity alone.
 16. Fleet fuel/resource transport exactness.
 17. Chronicle / expedition / Stellar Forge large scalar fields.
 18. Review inventory/high-volume reward amount domains.
+19. Widen or explicitly cap Timekeeper / Lottery / Pirate Bounty cumulative counters.
 
 ## P2 — Contract enforcement
 
-19. Add a numeric-domain registry:
+20. Add a numeric-domain registry:
     - `arbitrary_exact`
     - `bounded_int4`
     - `bounded_int8`
     - `fractional_double`
     - `timestamp_double`
-20. CI rejects new numeric gameplay columns that are not classified.
-21. CI verifies all “bounded” domains have a tested upstream cap.
-22. Add PostgreSQL parity tests using values:
+21. CI rejects new numeric gameplay columns that are not classified.
+22. CI verifies all “bounded” domains have a tested upstream cap.
+23. Add PostgreSQL parity tests using values:
     - > int4
     - > JS safe integer
     - > int8
