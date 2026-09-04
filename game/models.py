@@ -564,6 +564,8 @@ def init_db() -> None:
         "ALTER TABLE build_queue ADD COLUMN cost_crystal_exact TEXT NOT NULL DEFAULT '0'",
         "ALTER TABLE research_queue ADD COLUMN cost_metal INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE research_queue ADD COLUMN cost_crystal INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE research_queue ADD COLUMN cost_metal_exact TEXT NOT NULL DEFAULT '0'",
+        "ALTER TABLE research_queue ADD COLUMN cost_crystal_exact TEXT NOT NULL DEFAULT '0'",
     ):
         try:
             cur.execute(f"{stmt};")
@@ -2137,20 +2139,26 @@ def add_research_job(
         if own_conn:
             begin_write_transaction(conn)
 
+        exact_metal = max(0, int(cost_metal))
+        exact_crystal = max(0, int(cost_crystal))
         cur.execute(
             """
             INSERT INTO research_queue (
-                user_id, tech_key, start_at, finish_at, cost_metal, cost_crystal
+                user_id, tech_key, start_at, finish_at,
+                cost_metal, cost_crystal,
+                cost_metal_exact, cost_crystal_exact
             )
-            VALUES (?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 int(user_id),
                 str(tech_key),
                 float(start_at),
                 float(finish_at),
-                int(cost_metal),
-                int(cost_crystal),
+                _legacy_i64_cost_snapshot(exact_metal),
+                _legacy_i64_cost_snapshot(exact_crystal),
+                str(exact_metal),
+                str(exact_crystal),
             ),
         )
         job_id = int(cur.lastrowid)
