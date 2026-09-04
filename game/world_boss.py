@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import time
+from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from .db import table_exists
@@ -950,20 +951,39 @@ def compute_instant_hp_damage(
     if wave_score <= 0:
         # No defender stacks — still allow a capped strike from attacker force.
         wave_score = max(1, atk_score)
-    fraction = min(1.0, float(atk_score) / float(wave_score))
-    force_ratio = float(atk_score) / float(max(wave_score, 1))
-    overkill_mult = max(
-        1.0,
-        1.0 + float(OVERKILL_LOG_SCALE) * math.log2(max(1.0, force_ratio)),
-    )
-    base = float(hp_budget) * float(WAVE_HP_FRACTION) * fraction * overkill_mult
-    if critical:
-        base *= float(INSTANT_CRIT_MULT)
-    if apply_wave_cap:
-        cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
-        damage = int(min(cap, max(0.0, base)))
-    else:
-        damage = int(max(0.0, base))
+    precision = max(
+        64,
+        len(str(abs(hp_budget))),
+        len(str(abs(atk_score))),
+        len(str(abs(wave_score))),
+    ) + 64
+    with localcontext() as ctx:
+        ctx.prec = precision
+        ratio = Decimal(atk_score) / Decimal(max(wave_score, 1))
+        fraction = min(Decimal("1"), ratio)
+        force_ratio = max(Decimal("1"), ratio)
+        if force_ratio > 1:
+            log2_ratio = force_ratio.ln() / Decimal(2).ln()
+            overkill_mult = max(
+                Decimal("1"),
+                Decimal("1")
+                + Decimal(str(OVERKILL_LOG_SCALE)) * log2_ratio,
+            )
+        else:
+            overkill_mult = Decimal("1")
+        base = (
+            Decimal(hp_budget)
+            * Decimal(str(WAVE_HP_FRACTION))
+            * fraction
+            * overkill_mult
+        )
+        if critical:
+            base *= Decimal(str(INSTANT_CRIT_MULT))
+        if apply_wave_cap:
+            cap = Decimal(hp_budget) * Decimal(str(MAX_WAVE_HP_FRACTION))
+            damage = int(min(cap, max(Decimal("0"), base)))
+        else:
+            damage = int(max(Decimal("0"), base))
     if damage <= 0 and atk_score > 0:
         return 1
     return max(0, damage)
@@ -987,20 +1007,51 @@ def scale_instant_hit_damage(
     if mult <= 1 or dmg <= 0:
         return dmg
     hp_budget = max(0, int(max_hp))
-    wave_cap = int(float(hp_budget) * float(MAX_WAVE_HP_FRACTION)) if hp_budget > 0 else 0
-    # Prefer uncapped-feeling scale from the (already capped) base hit.
-    scaled = float(dmg) * float(mult)
-    # Jitter ±8% so capped fleets never land on exactly 5× wave_cap.
-    jitter = 0.92 + (float(rng.random()) * 0.16) if rng is not None else 0.97
-    scaled *= jitter
-    # Soft ceiling: allow well past wave cap, but not a full one-shot via ×5 alone.
-    soft_cap = int(float(hp_budget) * float(RAID_MULTI_ACTION_CAP_FRACTION)) if hp_budget > 0 else int(scaled)
-    out = int(max(1, min(soft_cap, round(scaled))))
-    exact_five_cap = int(wave_cap) * int(mult) if wave_cap > 0 else 0
-    if exact_five_cap > 0 and out == exact_five_cap:
-        # Nudge off the exact 5×-cap value (never fake a lower hit below ×4.5).
-        nudge = max(1, int(round(exact_five_cap * 0.03)))
-        out = min(soft_cap, exact_five_cap + nudge) if jitter >= 1.0 else max(1, exact_five_cap - nudge)
+    precision = max(
+        64,
+        len(str(abs(hp_budget))),
+        len(str(abs(dmg))),
+    ) + 64
+    with localcontext() as ctx:
+        ctx.prec = precision
+        wave_cap = (
+            int(Decimal(hp_budget) * Decimal(str(MAX_WAVE_HP_FRACTION)))
+            if hp_budget > 0
+            else 0
+        )
+        # Prefer uncapped-feeling scale from the (already capped) base hit.
+        # Randomness remains float-originated by design, but the huge integer
+        # multiplication is Decimal so no HP bits are discarded.
+        jitter = (
+            Decimal(str(0.92 + (float(rng.random()) * 0.16)))
+            if rng is not None
+            else Decimal("0.97")
+        )
+        scaled = Decimal(dmg) * Decimal(mult) * jitter
+        # Soft ceiling: allow well past wave cap, but not a full one-shot via ×5 alone.
+        soft_cap = (
+            int(Decimal(hp_budget) * Decimal(str(RAID_MULTI_ACTION_CAP_FRACTION)))
+            if hp_budget > 0
+            else int(scaled)
+        )
+        rounded_scaled = int(scaled.to_integral_value(rounding=ROUND_HALF_EVEN))
+        out = max(1, min(soft_cap, rounded_scaled))
+        exact_five_cap = int(wave_cap) * int(mult) if wave_cap > 0 else 0
+        if exact_five_cap > 0 and out == exact_five_cap:
+            # Nudge off the exact 5×-cap value (never fake a lower hit below ×4.5).
+            nudge = max(
+                1,
+                int(
+                    (Decimal(exact_five_cap) * Decimal("0.03")).to_integral_value(
+                        rounding=ROUND_HALF_EVEN
+                    )
+                ),
+            )
+            out = (
+                min(soft_cap, exact_five_cap + nudge)
+                if jitter >= Decimal("1")
+                else max(1, exact_five_cap - nudge)
+            )
     return max(0, int(out))
 
 
