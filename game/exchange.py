@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from decimal import Decimal, InvalidOperation, ROUND_FLOOR
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR, localcontext
 from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,11 @@ def _decimal_value(value: Any, default: str = "0") -> Decimal:
 
 def _floor_decimal(value: Decimal) -> int:
     return int(value.to_integral_value(rounding=ROUND_FLOOR))
+
+
+def _decimal_precision_for_int(*values: int, extra: int = 64) -> int:
+    digits = [len(str(abs(int(value)))) for value in values if int(value) != 0]
+    return max(64, max(digits, default=1) + max(16, int(extra)))
 
 
 def _float_setting(settings: Dict[str, Any], key: str, default: str) -> float:
@@ -210,8 +215,10 @@ def would_roundtrip_profit(amount: int, buy_cost: float, sell_return: float) -> 
         return False
     buy = max(Decimal("0.001"), _decimal_value(buy_cost, "0.001"))
     sell = max(Decimal("0"), _decimal_value(sell_return, "0"))
-    crytite = _floor_decimal(Decimal(start) / buy)
-    ferronite_back = _floor_decimal(Decimal(crytite) * sell)
+    with localcontext() as ctx:
+        ctx.prec = _decimal_precision_for_int(start)
+        crytite = _floor_decimal(Decimal(start) / buy)
+        ferronite_back = _floor_decimal(Decimal(crytite) * sell)
     return ferronite_back > start
 
 
@@ -295,21 +302,30 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
     if give_amount <= 0:
         return 0
     give = Decimal(give_amount)
+    precision = _decimal_precision_for_int(give_amount)
     if from_resource == "metal" and to_resource == "crystal":
         buy_cost = max(Decimal("0.001"), _decimal_value(cfg["rate_metal_to_crystal"], "0.001"))
-        return max(0, _floor_decimal(give / buy_cost))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give / buy_cost))
     if from_resource == "crystal" and to_resource == "metal":
         sell_return = max(Decimal("0"), _decimal_value(cfg["rate_crystal_to_metal"], "0"))
-        return max(0, _floor_decimal(give * sell_return))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give * sell_return))
     if from_resource == "metal" and to_resource == "fuel_cells":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_metal_per_unit"), "1"))
-        return max(0, _floor_decimal(give / per))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give / per))
     if from_resource == "crystal" and to_resource == "fuel_cells":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_crystal_per_unit"), "1"))
         return max(0, _floor_decimal(give / per))
     if from_resource == "fuel_cells" and to_resource == "metal":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_metal_per_unit"), "1"))
-        return max(0, _floor_decimal(give * per))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give * per))
     if from_resource == "fuel_cells" and to_resource == "crystal":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_crystal_per_unit"), "1"))
         return max(0, _floor_decimal(give * per))
@@ -407,7 +423,11 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
         pct_decimal = max(Decimal("0"), _decimal_value(cfg["daily_limit_pct"], "0"))
         min_lim = int(cfg["daily_limit_min"])
         empire_day_total = int(prod["total_per_day"])
-        scaled = _floor_decimal(Decimal(empire_day_total) * pct_decimal / Decimal("100"))
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision_for_int(empire_day_total)
+            scaled = _floor_decimal(
+                Decimal(empire_day_total) * pct_decimal / Decimal("100")
+            )
         final = max(min_lim, scaled) if min_lim > 0 else scaled
         # GC-720J: logistics directive may raise trader daily volume.
         try:
@@ -420,7 +440,9 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
                 flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
                 mult = _decimal_value(flags.get("trader_daily_limit_mult") or 1.0, "1")
                 if mult > 0:
-                    final = _floor_decimal(Decimal(final) * mult)
+                    with localcontext() as ctx:
+                        ctx.prec = _decimal_precision_for_int(final)
+                        final = _floor_decimal(Decimal(final) * mult)
         except Exception:
             pass
         return {
