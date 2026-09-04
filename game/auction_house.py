@@ -480,7 +480,7 @@ def _debit_planet_resource(
         return False
     cur.execute(
         f"UPDATE planets SET {col} = {col} - ? WHERE id = ?;",
-        (int(amount), int(planet_id)),
+        (resource_db_param(amount), int(planet_id)),
     )
     return True
 
