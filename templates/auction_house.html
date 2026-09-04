@@ -242,3 +242,9 @@
   </div>
 </div>
 {% endblock %}
+
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/pages/auction_house.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+{% endblock %}
