@@ -204,9 +204,9 @@ def _compute_resources_score(player_id: int, conn) -> int:
     total_crystal = 0
     total_fuel = 0
     for planet in get_planets_by_player(int(player_id), conn=conn):
-        total_metal += int(float(planet.get("metal") or 0))
-        total_crystal += int(float(planet.get("crystal") or 0))
-        total_fuel += int(float(planet.get("fuel_cells") or 0))
+        total_metal += int(planet.get("metal") or 0)
+        total_crystal += int(planet.get("crystal") or 0)
+        total_fuel += int(planet.get("fuel_cells") or 0)
     return score_from_resources(total_metal, total_crystal, total_fuel)
 
 
