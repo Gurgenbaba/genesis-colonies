@@ -2502,7 +2502,11 @@ def queue_build_for_planet(
         )
         rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))
 
-        from .mine_evolution import get_evolution_rank, is_evolvable_mine
+        from .mine_evolution import (
+            get_evolution_rank,
+            is_evolvable_mine,
+            required_level_for_evolution,
+        )
 
         is_evolution_mine = is_evolvable_mine(building_type)
         evolution_rank = (
@@ -2536,10 +2540,14 @@ def queue_build_for_planet(
                 payload["target_level"] = int(target_level)
             if is_evolution_mine:
                 rank = max(0, int(evolution_rank or 0))
+                next_rank = rank + 1
+                next_gate = int(required_level_for_evolution(next_rank + 1) or 0)
                 payload.update({
                     "evolution_rank": rank,
-                    "next_evolution_rank": rank + 1,
+                    "next_evolution_rank": next_rank,
                     "required_level": int(max_level),
+                    "next_max_level": max(int(max_level), next_gate),
+                    "level": int(current_level_initial),
                 })
             return payload
 
@@ -2761,7 +2769,8 @@ def cancel_build_job_for_planet(
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, building_type, start_time, finish_time, cost_metal, cost_crystal
+            SELECT id, building_type, start_time, finish_time,
+                   cost_metal, cost_crystal, cost_metal_exact, cost_crystal_exact
             FROM build_queue
             WHERE id = ? AND planet_id = ?
             LIMIT 1;
@@ -2783,8 +2792,8 @@ def cancel_build_job_for_planet(
             start_time=float(row["start_time"] or now),
             finish_time=float(row["finish_time"] or now),
             now=now,
-            cost_metal=int(row["cost_metal"] or 0),
-            cost_crystal=int(row["cost_crystal"] or 0),
+            cost_metal=int(row["cost_metal_exact"] or row["cost_metal"] or 0),
+            cost_crystal=int(row["cost_crystal_exact"] or row["cost_crystal"] or 0),
             user_id=int(owner_id),
         )
 
