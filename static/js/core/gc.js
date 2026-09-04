@@ -18,6 +18,10 @@
    */
   GC.normalizeGameplayInteger = function normalizeGameplayInteger(value) {
     if (typeof value === "bigint") return value.toString();
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return "0";
+      return BigInt(Math.trunc(value)).toString();
+    }
     if (value === null || value === undefined || value === "") return "0";
 
     var raw = String(value).trim();
