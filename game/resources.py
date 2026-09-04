@@ -16,12 +16,14 @@ WICHTIG:
 from __future__ import annotations
 
 import time
+from decimal import Decimal, ROUND_FLOOR, localcontext
 from typing import Any, Dict, Mapping, Tuple, Optional
 
 from .models import (
     get_planet_buildings,
     get_research_levels,
     get_game_settings,
+    resource_db_param,
     save_planet,
 )
 from .queue_engine import finish_due_work_once
@@ -168,7 +170,7 @@ def apply_fuel_production_delta(
         return
     caps = get_storage_capacity(buildings, research=research, mods=mods)
     fuel_cap = int(caps.get("fuel_cells") or 0)
-    current_fuel = max(0, int(float(planet.get("fuel_cells") or 0)))
+    current_fuel = max(0, int(planet.get("fuel_cells") or 0))
     if fuel_cap > 0 and current_fuel >= fuel_cap:
         return
     if fuel_cap > 0:
@@ -176,7 +178,7 @@ def apply_fuel_production_delta(
         delta_fuel_cells = min(int(delta_fuel_cells), free_fuel)
     if delta_fuel_cells <= 0:
         return
-    planet["fuel_cells"] = max(0.0, float(current_fuel) + delta_fuel_cells)
+    planet["fuel_cells"] = max(0, current_fuel + int(delta_fuel_cells))
 
 
 def apply_resource_delta_unbounded(
@@ -678,9 +680,9 @@ def normalize_resource_stock(raw: Mapping[str, Any] | None) -> Dict[str, int]:
     """Normalize planet or pool amounts to non-negative integer resource dict."""
     src = raw or {}
     return {
-        "metal": max(0, int(float(src.get("metal") or 0))),
-        "crystal": max(0, int(float(src.get("crystal") or 0))),
-        "fuel_cells": max(0, int(float(src.get("fuel_cells") or 0))),
+        "metal": max(0, int(src.get("metal") or 0)),
+        "crystal": max(0, int(src.get("crystal") or 0)),
+        "fuel_cells": max(0, int(src.get("fuel_cells") or 0)),
     }
 
 
@@ -690,11 +692,23 @@ def calculate_plunder_pool(
     plunder_fraction: float = 0.5,
 ) -> Dict[str, int]:
     """Maximum stealable resources from a planet stock (before cargo cap)."""
-    frac = max(0.0, min(1.0, float(plunder_fraction)))
+    frac = Decimal(str(plunder_fraction))
+    frac = max(Decimal("0"), min(Decimal("1"), frac))
     stock = normalize_resource_stock(available)
     if frac <= 0:
         return {key: 0 for key in LOOT_RESOURCE_KEYS}
-    return {key: int(stock[key] * frac) for key in LOOT_RESOURCE_KEYS}
+    precision = max(
+        64,
+        max((len(str(stock[key])) for key in LOOT_RESOURCE_KEYS), default=1) + 64,
+    )
+    with localcontext() as ctx:
+        ctx.prec = precision
+        return {
+            key: int(
+                (Decimal(stock[key]) * frac).to_integral_value(rounding=ROUND_FLOOR)
+            )
+            for key in LOOT_RESOURCE_KEYS
+        }
 
 
 def load_resources_up_to_cargo(
@@ -775,13 +789,18 @@ def debit_planet_resources(
     row = cur.fetchone()
     if not row:
         return False
-    new_metal = float(row["metal"]) - loaded["metal"]
-    new_crystal = float(row["crystal"]) - loaded["crystal"]
-    new_fuel_cells = float(row["fuel_cells"] or 0) - loaded["fuel_cells"]
+    new_metal = int(row["metal"] or 0) - loaded["metal"]
+    new_crystal = int(row["crystal"] or 0) - loaded["crystal"]
+    new_fuel_cells = int(row["fuel_cells"] or 0) - loaded["fuel_cells"]
     if new_metal < 0 or new_crystal < 0 or new_fuel_cells < 0:
         return False
     cur.execute(
         "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
-        (new_metal, new_crystal, new_fuel_cells, int(planet_id)),
+        (
+            resource_db_param(new_metal),
+            resource_db_param(new_crystal),
+            resource_db_param(new_fuel_cells),
+            int(planet_id),
+        ),
     )
     return True

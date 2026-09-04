@@ -27,6 +27,7 @@ from .inventory_catalog import (
 )
 from . import inventory_loot
 from .db import begin_write_transaction, column_exists, commit, db, lock_planet_for_update, rollback, table_exists
+from .models import resource_db_param
 
 LootEntry = Dict[str, Any]
 Reward = Dict[str, Any]
@@ -883,9 +884,9 @@ def _credit_planet_resources(
     cur.execute(
         "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
         (
-            float(row["metal"]) + float(metal),
-            float(row["crystal"]) + float(crystal),
-            float(row["fuel_cells"] or 0) + float(fuel_cells),
+            resource_db_param(int(row["metal"] or 0) + int(metal)),
+            resource_db_param(int(row["crystal"] or 0) + int(crystal)),
+            resource_db_param(int(row["fuel_cells"] or 0) + int(fuel_cells)),
             int(planet_id),
         ),
     )

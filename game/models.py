@@ -5,6 +5,7 @@ import threading
 import time
 import hashlib
 import math
+from decimal import Decimal
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List, Mapping
 
@@ -1165,15 +1166,15 @@ def ensure_player_and_homeworld(
             _pg_init_progress("homeworld: assign coords + insert …")
             now = time.time()
 
-            start_metal = float(DEFAULT_GAME_SETTINGS["start_metal"])
-            start_crystal = float(DEFAULT_GAME_SETTINGS["start_crystal"])
-            start_fuel_cells = float(DEFAULT_GAME_SETTINGS.get("start_fuel_cells", 500))
+            start_metal = int(Decimal(DEFAULT_GAME_SETTINGS["start_metal"]))
+            start_crystal = int(Decimal(DEFAULT_GAME_SETTINGS["start_crystal"]))
+            start_fuel_cells = int(Decimal(DEFAULT_GAME_SETTINGS.get("start_fuel_cells", "500")))
             try:
                 # Reuse caller conn — nested db() checkout can deadlock the PG pool.
                 settings = get_game_settings(conn)
-                start_metal = float(settings.get("start_metal", start_metal))
-                start_crystal = float(settings.get("start_crystal", start_crystal))
-                start_fuel_cells = float(settings.get("start_fuel_cells", start_fuel_cells))
+                start_metal = int(Decimal(str(settings.get("start_metal", start_metal))))
+                start_crystal = int(Decimal(str(settings.get("start_crystal", start_crystal))))
+                start_fuel_cells = int(Decimal(str(settings.get("start_fuel_cells", start_fuel_cells))))
             except Exception:
                 pass
 
@@ -1217,9 +1218,9 @@ def ensure_player_and_homeworld(
                             (
                                 int(player_id),
                                 "Genesis Ark",
-                                start_metal,
-                                start_crystal,
-                                start_fuel_cells,
+                                resource_db_param(start_metal),
+                                resource_db_param(start_crystal),
+                                resource_db_param(start_fuel_cells),
                                 now,
                                 int(galaxy),
                                 int(system),
@@ -1240,9 +1241,9 @@ def ensure_player_and_homeworld(
                             (
                                 int(player_id),
                                 "Genesis Ark",
-                                start_metal,
-                                start_crystal,
-                                start_fuel_cells,
+                                resource_db_param(start_metal),
+                                resource_db_param(start_crystal),
+                                resource_db_param(start_fuel_cells),
                                 now,
                                 int(galaxy),
                                 int(system),
@@ -1467,13 +1468,12 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
             WHERE id = ?;
             """,
             (
-                # Resource columns use SQLite REAL. Bind explicitly as float so
-                # Python's sqlite3 adapter does not try to coerce late-game
-                # balances above signed INT64 into SQLite INTEGER first.
-                # Do not clamp: existing overflow balances remain intact.
-                float(planet["metal"]),
-                float(planet["crystal"]),
-                float(planet.get("fuel_cells", 0)),
+                # PostgreSQL NUMERIC receives Python ints losslessly. SQLite keeps
+                # the legacy REAL fallback only when a value exceeds signed i64.
+                # Do not clamp here: SQL preserves the existing non-negative contract.
+                resource_db_param(planet["metal"]),
+                resource_db_param(planet["crystal"]),
+                resource_db_param(planet.get("fuel_cells", 0)),
                 float(planet.get("last_update", time.time())),
                 int(planet.get("energy_total", 0)),
                 int(planet.get("energy_used", 0)),
@@ -1521,12 +1521,26 @@ def try_spend_resources(planet_id: int, metal_cost: int, crystal_cost: int) -> b
 _SQL_SIGNED_I64_MAX = 9_223_372_036_854_775_807
 
 
-def _resource_cost_db_param(value: int) -> int | float:
-    """Bind huge costs safely to REAL/DOUBLE resource columns on both DB backends."""
-    amount = int(value)
+def resource_db_param(value: Any) -> int | float:
+    """Bind integer gameplay resources without losing precision on PostgreSQL.
+
+    PostgreSQL NUMERIC accepts arbitrary-size Python ints. SQLite's legacy REAL
+    resource columns cannot bind Python ints outside signed i64, so only that
+    backend retains the historical float fallback until SQLite is retired.
+    """
+    amount = int(Decimal(str(value or 0)))
+    from .db import get_db_backend
+
+    if get_db_backend() == "postgres":
+        return amount
     if -_SQL_SIGNED_I64_MAX <= amount <= _SQL_SIGNED_I64_MAX:
         return amount
     return float(amount)
+
+
+def _resource_cost_db_param(value: int) -> int | float:
+    """Compatibility wrapper for atomic resource spends."""
+    return resource_db_param(value)
 
 
 def _legacy_i64_cost_snapshot(value: int) -> int:

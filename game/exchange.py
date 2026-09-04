@@ -5,12 +5,20 @@ from __future__ import annotations
 import logging
 import math
 import time
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR, localcontext
 from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 from .db import begin_write_transaction, commit, db, lock_planet_for_update, lock_player_for_update, rollback
-from .models import column_exists, get_game_settings, get_planet_buildings, get_research_levels, table_exists
+from .models import (
+    column_exists,
+    get_game_settings,
+    get_planet_buildings,
+    get_research_levels,
+    resource_db_param,
+    table_exists,
+)
 from .resources import get_storage_capacity
 
 DAY_SECONDS = 86400
@@ -56,6 +64,22 @@ def exchange_schema_ready(conn) -> bool:
     )
 
 
+def _decimal_value(value: Any, default: str = "0") -> Decimal:
+    try:
+        return value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(default)
+
+
+def _floor_decimal(value: Decimal) -> int:
+    return int(value.to_integral_value(rounding=ROUND_FLOOR))
+
+
+def _decimal_precision_for_int(*values: int, extra: int = 64) -> int:
+    digits = [len(str(abs(int(value)))) for value in values if int(value) != 0]
+    return max(64, max(digits, default=1) + max(16, int(extra)))
+
+
 def _float_setting(settings: Dict[str, Any], key: str, default: str) -> float:
     raw = settings.get(key, _EXCHANGE_SETTING_DEFAULTS.get(key, default))
     try:
@@ -65,7 +89,8 @@ def _float_setting(settings: Dict[str, Any], key: str, default: str) -> float:
 
 
 def _int_setting(settings: Dict[str, Any], key: str, default: str) -> int:
-    return max(0, int(_float_setting(settings, key, default)))
+    raw = settings.get(key, _EXCHANGE_SETTING_DEFAULTS.get(key, default))
+    return max(0, int(_decimal_value(raw, default)))
 
 
 def validate_exchange_rates(buy_cost: float, sell_return: float) -> Tuple[bool, Optional[str]]:
@@ -188,10 +213,12 @@ def would_roundtrip_profit(amount: int, buy_cost: float, sell_return: float) -> 
     start = max(0, int(amount))
     if start <= 0:
         return False
-    buy = max(0.001, float(buy_cost))
-    sell = max(0.0, float(sell_return))
-    crytite = int(math.floor(start / buy))
-    ferronite_back = int(math.floor(crytite * sell))
+    buy = max(Decimal("0.001"), _decimal_value(buy_cost, "0.001"))
+    sell = max(Decimal("0"), _decimal_value(sell_return, "0"))
+    with localcontext() as ctx:
+        ctx.prec = _decimal_precision_for_int(start)
+        crytite = _floor_decimal(Decimal(start) / buy)
+        ferronite_back = _floor_decimal(Decimal(crytite) * sell)
     return ferronite_back > start
 
 
@@ -257,12 +284,12 @@ def _next_daily_reset(now: float) -> float:
     return float(int(now // DAY_SECONDS) * DAY_SECONDS + DAY_SECONDS)
 
 
-def _daily_used(player_row: Dict[str, Any], now: float) -> float:
+def _daily_used(player_row: Dict[str, Any], now: float) -> int:
     reset_at = float(player_row.get("exchange_daily_reset_at") or 0)
-    used = float(player_row.get("exchange_daily_used") or 0)
+    used = int(player_row.get("exchange_daily_used") or 0)
     if now >= reset_at:
-        return 0.0
-    return max(0.0, used)
+        return 0
+    return max(0, used)
 
 
 def _fuel_unit_cost(cfg: Dict[str, Any], from_resource: str) -> float:
@@ -274,22 +301,38 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
     give_amount = int(amount)
     if give_amount <= 0:
         return 0
+    give = Decimal(give_amount)
+    precision = _decimal_precision_for_int(give_amount)
     if from_resource == "metal" and to_resource == "crystal":
-        buy_cost = max(0.001, float(cfg["rate_metal_to_crystal"]))
-        return max(0, int(math.floor(give_amount / buy_cost)))
+        buy_cost = max(Decimal("0.001"), _decimal_value(cfg["rate_metal_to_crystal"], "0.001"))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give / buy_cost))
     if from_resource == "crystal" and to_resource == "metal":
-        sell_return = max(0.0, float(cfg["rate_crystal_to_metal"]))
-        return max(0, int(math.floor(give_amount * sell_return)))
+        sell_return = max(Decimal("0"), _decimal_value(cfg["rate_crystal_to_metal"], "0"))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give * sell_return))
     if from_resource == "metal" and to_resource == "fuel_cells":
-        per = _fuel_unit_cost(cfg, "metal")
-        return max(0, int(math.floor(give_amount / per)))
+        per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_metal_per_unit"), "1"))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give / per))
     if from_resource == "crystal" and to_resource == "fuel_cells":
-        per = _fuel_unit_cost(cfg, "crystal")
-        return max(0, int(math.floor(give_amount / per)))
+        per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_crystal_per_unit"), "1"))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give / per))
     if from_resource == "fuel_cells" and to_resource == "metal":
-        return max(0, int(math.floor(give_amount * _fuel_unit_cost(cfg, "metal"))))
+        per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_metal_per_unit"), "1"))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give * per))
     if from_resource == "fuel_cells" and to_resource == "crystal":
-        return max(0, int(math.floor(give_amount * _fuel_unit_cost(cfg, "crystal"))))
+        per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_crystal_per_unit"), "1"))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give * per))
     return 0
 
 
@@ -381,10 +424,14 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
     try:
         cfg = get_exchange_config(conn=conn)
         prod = get_empire_production_aggregate(int(player_id), conn=conn)
-        pct = float(cfg["daily_limit_pct"])
+        pct_decimal = max(Decimal("0"), _decimal_value(cfg["daily_limit_pct"], "0"))
         min_lim = int(cfg["daily_limit_min"])
         empire_day_total = int(prod["total_per_day"])
-        scaled = int(empire_day_total * pct / 100.0)
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision_for_int(empire_day_total)
+            scaled = _floor_decimal(
+                Decimal(empire_day_total) * pct_decimal / Decimal("100")
+            )
         final = max(min_lim, scaled) if min_lim > 0 else scaled
         # GC-720J: logistics directive may raise trader daily volume.
         try:
@@ -395,9 +442,11 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
             galaxy = int(hw.get("galaxy") or 0)
             if galaxy > 0:
                 flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
-                mult = float(flags.get("trader_daily_limit_mult") or 1.0)
+                mult = _decimal_value(flags.get("trader_daily_limit_mult") or 1.0, "1")
                 if mult > 0:
-                    final = int(final * mult)
+                    with localcontext() as ctx:
+                        ctx.prec = _decimal_precision_for_int(final)
+                        final = _floor_decimal(Decimal(final) * mult)
         except Exception:
             pass
         return {
@@ -409,7 +458,7 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
                 "crystal": int(prod["crystal_per_day"]),
                 "fuel_cells": int(prod["fuel_cells_per_day"]),
             },
-            "limit_pct": pct,
+            "limit_pct": float(pct_decimal),
             "limit_min": min_lim,
         }
     finally:
@@ -568,9 +617,9 @@ def execute_exchange(
             rollback(conn)
             return False, "planet_not_found", None
 
-        current_metal = int(float(planet["metal"] or 0))
-        current_crystal = int(float(planet["crystal"] or 0))
-        current_fuel = int(float(planet["fuel_cells"] or 0))
+        current_metal = int(planet["metal"] or 0)
+        current_crystal = int(planet["crystal"] or 0)
+        current_fuel = int(planet["fuel_cells"] or 0)
         if trade_would_increase_score(
             metal=current_metal,
             crystal=current_crystal,
@@ -596,7 +645,7 @@ def execute_exchange(
         )
         player_row = dict(cur.fetchone() or {})
         used = _daily_used(player_row, now)
-        if used + give_amount > float(daily_limit):
+        if used + give_amount > daily_limit:
             rollback(conn)
             return False, "daily_limit_exceeded", {
                 "daily_limit": int(daily_limit),
@@ -604,9 +653,9 @@ def execute_exchange(
                 "daily_remaining": max(0, int(daily_limit - used)),
             }
 
-        current_metal = float(planet["metal"] or 0)
-        current_crystal = float(planet["crystal"] or 0)
-        current_fuel = float(planet["fuel_cells"] or 0)
+        current_metal = int(planet["metal"] or 0)
+        current_crystal = int(planet["crystal"] or 0)
+        current_fuel = int(planet["fuel_cells"] or 0)
 
         balances = {
             "metal": current_metal,
@@ -642,9 +691,9 @@ def execute_exchange(
             WHERE id = ?;
             """,
             (
-                max(0.0, new_metal),
-                max(0.0, new_crystal),
-                max(0.0, new_fuel),
+                resource_db_param(max(0, new_metal)),
+                resource_db_param(max(0, new_crystal)),
+                resource_db_param(max(0, new_fuel)),
                 now,
                 int(planet_id),
             ),
@@ -657,7 +706,7 @@ def execute_exchange(
             SET exchange_daily_used = ?, exchange_daily_reset_at = ?
             WHERE id = ?;
             """,
-            (used + float(give_amount), next_reset, int(player_id)),
+            (resource_db_param(used + give_amount), next_reset, int(player_id)),
         )
 
         cur.execute(
@@ -671,9 +720,9 @@ def execute_exchange(
                 int(player_id),
                 int(planet_id),
                 give_resource,
-                float(give_amount),
+                resource_db_param(give_amount),
                 receive_resource,
-                float(receive_amount),
+                resource_db_param(receive_amount),
                 now,
             ),
         )
