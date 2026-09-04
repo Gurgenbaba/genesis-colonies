@@ -30629,33 +30629,30 @@
   }
 
   function resolveUnitCardPreviewQty(qtyInp) {
-    if (!qtyInp) return 1;
-    const raw = String(qtyInp.value ?? "").trim();
-    if (!raw) return 1;
-    const n = readNumberInput(qtyInp);
-    return n > 0 ? n : 1;
+    if (!qtyInp) return "1";
+    return readGameplayIntegerInput(qtyInp, "1");
   }
 
   function storeUnitCardUnitCosts(costWrap, unitCosts) {
     if (!costWrap || !unitCosts) return;
-    costWrap.dataset.unitCostMetal = String(Math.max(0, Math.floor(Number(unitCosts.cost_metal) || 0)));
-    costWrap.dataset.unitCostCrystal = String(Math.max(0, Math.floor(Number(unitCosts.cost_crystal) || 0)));
-    costWrap.dataset.unitCostFuel = String(Math.max(0, Math.floor(Number(unitCosts.cost_fuel_cells) || 0)));
+    costWrap.dataset.unitCostMetal = normalizeGameplayInteger(unitCosts.cost_metal || 0);
+    costWrap.dataset.unitCostCrystal = normalizeGameplayInteger(unitCosts.cost_crystal || 0);
+    costWrap.dataset.unitCostFuel = normalizeGameplayInteger(unitCosts.cost_fuel_cells || 0);
   }
 
   function readUnitCardUnitCosts(costWrap) {
     if (!costWrap) {
-      return { cost_metal: 0, cost_crystal: 0, cost_fuel_cells: 0 };
+      return { cost_metal: "0", cost_crystal: "0", cost_fuel_cells: "0" };
     }
     return {
-      cost_metal: parseIntNumber(costWrap.dataset.unitCostMetal || "0"),
-      cost_crystal: parseIntNumber(costWrap.dataset.unitCostCrystal || "0"),
-      cost_fuel_cells: parseIntNumber(costWrap.dataset.unitCostFuel || "0"),
+      cost_metal: normalizeGameplayInteger(costWrap.dataset.unitCostMetal || "0"),
+      cost_crystal: normalizeGameplayInteger(costWrap.dataset.unitCostCrystal || "0"),
+      cost_fuel_cells: normalizeGameplayInteger(costWrap.dataset.unitCostFuel || "0"),
     };
   }
 
   function renderUnitCostStackHtml(unitCosts, resources, amount) {
-    const qty = Math.max(1, Math.floor(Number(amount) || 0));
+    const qty = gameplayBigInt(amount);
     const specs = [
       ["metal", "cost_metal"],
       ["crystal", "cost_crystal"],
@@ -30663,10 +30660,10 @@
     ];
     return specs
       .map(([resKey, costKey]) => {
-        const unit = Number(unitCosts[costKey]) || 0;
-        const need = unit * qty;
-        if (need <= 0) return "";
-        const have = Number(resources[resKey]) || 0;
+        const unit = gameplayBigInt(unitCosts[costKey]);
+        const need = unit * (qty > BigInt(0) ? qty : BigInt(1));
+        if (need <= BigInt(0)) return "";
+        const have = gameplayBigInt(resources[resKey]);
         return renderResourceCostChipHtml(resKey, need, have < need);
       })
       .filter(Boolean)
@@ -30676,28 +30673,24 @@
   function militaryPageResources(_page) {
     const fromState = GC.lastState?.resources;
     if (fromState && typeof fromState === "object") {
-      const metal = Number(fromState.metal);
-      const crystal = Number(fromState.crystal);
-      if (Number.isFinite(metal) || Number.isFinite(crystal)) {
-        return {
-          metal: Math.max(0, Math.floor(Number.isFinite(metal) ? metal : 0)),
-          crystal: Math.max(0, Math.floor(Number.isFinite(crystal) ? crystal : 0)),
-          fuel_cells: Math.max(0, Math.floor(Number(fromState.fuel_cells) || 0)),
-        };
-      }
+      return {
+        metal: normalizeGameplayInteger(fromState.metal || 0),
+        crystal: normalizeGameplayInteger(fromState.crystal || 0),
+        fuel_cells: normalizeGameplayInteger(fromState.fuel_cells || 0),
+      };
     }
     // Hard-reload: page init runs before the first /api/game-state poll.
     // Prefer the already-rendered HUD over treating missing state as 0 (all costs red).
     if (_resourceDisplay.metal != null || _resourceDisplay.crystal != null) {
       return {
-        metal: Math.max(0, Math.floor(Number(_resourceDisplay.metal) || 0)),
-        crystal: Math.max(0, Math.floor(Number(_resourceDisplay.crystal) || 0)),
-        fuel_cells: Math.max(0, Math.floor(Number(_resourceDisplay.fuelCells) || 0)),
+        metal: normalizeGameplayInteger(_resourceDisplay.metal || 0),
+        crystal: normalizeGameplayInteger(_resourceDisplay.crystal || 0),
+        fuel_cells: normalizeGameplayInteger(_resourceDisplay.fuelCells || 0),
       };
     }
     const readHud = (cls) => {
       const el = document.querySelector(`#resource-bar .res-value.${cls}`);
-      return el ? parseIntNumber(el.textContent) : 0;
+      return el ? normalizeGameplayInteger(el.textContent) : "0";
     };
     return {
       metal: readHud("metal"),
