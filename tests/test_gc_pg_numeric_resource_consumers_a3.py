@@ -94,6 +94,7 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             "game/spy.py",
             "game/commander_classes.py",
             "game/admin_balance.py",
+            "game/overview_page.py",
         )
     }
 
@@ -178,6 +179,14 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             'int(float(player_view.get("metal")',
             'int(float(player_view.get("crystal")',
             'int(float(player_view.get("fuel_cells")',
+        ),
+        "game/overview_page.py": (
+            '"metal": float(player_view.get("metal")',
+            '"crystal": float(player_view.get("crystal")',
+            '"fuel_cells": float(player_view.get("fuel_cells")',
+            'metal=float(player_view.get("metal")',
+            'crystal=float(player_view.get("crystal")',
+            'fuel_cells=float(player_view.get("fuel_cells")',
         ),
     }
 
