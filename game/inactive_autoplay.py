@@ -26,7 +26,6 @@ from .db import begin_write_transaction, column_exists, commit, in_transaction, 
 from .ranking import RANKING_INACTIVE_AFTER_SEC
 from .presence_store import effective_last_seen_scalar_sql, touch_presence_bulk
 from .runtime_state import get_runtime_value, set_runtime_value
-from .models import resource_db_param
 
 logger = logging.getLogger(__name__)
 
@@ -677,6 +676,8 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
         or fuel > current_fuel
     )
     if raised:
+        from .models import resource_db_param
+
         conn.execute(
             """
             UPDATE planets
