@@ -204,7 +204,7 @@ def test_no_max_quantity_templates_have_no_20_digit_cap():
 def test_auction_bid_path_is_bigint_safe():
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
 
-    state_start = main.index('const minEl = page.querySelector(\`[data-auction-min-label="\${id}"]\`)')
+    state_start = main.index('const minEl = page.querySelector(`[data-auction-min-label="${id}"]`)')
     state_end = main.index("const submitBtn =", state_start)
     state_block = main[state_start:state_end]
     assert "normalizeGameplayInteger(a.min_next_bid" in state_block
