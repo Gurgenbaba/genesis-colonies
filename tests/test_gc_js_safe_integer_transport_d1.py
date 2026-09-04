@@ -108,6 +108,36 @@ def test_shipyard_defense_and_troops_submit_exact_decimal_strings():
     assert "amount: amount" in defense_build
 
 
+def test_resource_hud_and_live_ticker_keep_bigint_exactness():
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+
+    hud_start = main.index("function patchShellHudLiveResources")
+    hud_end = main.index("function resourceLiveRatesAreZero", hud_start)
+    hud = main[hud_start:hud_end]
+    assert "const m = gameplayBigInt(metal);" in hud
+    assert "const storageMetal = gameplayBigInt(storage.metal || 0);" in hud
+    assert "function monotonicResourceBaseline" in hud
+    assert "const inc = gameplayBigInt(incoming);" in hud
+    assert "_resourceLive.prodMetal = gameplayBigInt(snapshot.prodMetal || 0);" in hud
+    assert "_resourceLive.capMetal = gameplayBigInt(snapshot.storageMetal || 0);" in hud
+    assert "Math.floor(Number(metal)" not in hud
+
+    projection_start = main.index("function projectLiveResourceAmount")
+    projection_end = main.index("function tickLiveResourceBar", projection_start)
+    projection = main[projection_start:projection_end]
+    assert "const cur = gameplayBigInt(current);" in projection
+    assert "const prod = gameplayBigInt(prodPerHour);" in projection
+    assert "(prod * ms) / BigInt(3_600_000)" in projection
+    assert "const hours = elapsed / 3600" not in projection
+
+    capacity_start = main.index("function computeHudCapacityState")
+    capacity_end = main.index("function syncHeaderVacationBanner", capacity_start)
+    capacity = main[capacity_start:capacity_end]
+    assert "const cur = gameplayBigInt(current);" in capacity
+    assert "const cap = gameplayBigInt(max);" in capacity
+    assert "v * BigInt(10) >= c * BigInt(9)" in capacity
+
+
 def test_military_cost_preview_uses_exact_bigint_arithmetic():
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
 
