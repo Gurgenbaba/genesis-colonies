@@ -63,9 +63,7 @@
 
   GC.setGameplayIntegerInput = function setGameplayIntegerInput(input, value) {
     if (!input) return;
-    var normalized = GC.normalizeGameplayInteger(value);
-    input.value = normalized;
-    input.dataset.inputMax = normalized;
+    input.value = GC.normalizeGameplayInteger(value);
   };
 
   GC.fmtGameplayInteger = function fmtGameplayInteger(value, locale) {
