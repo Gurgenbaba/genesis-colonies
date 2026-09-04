@@ -1241,9 +1241,9 @@ def ensure_player_and_homeworld(
                             (
                                 int(player_id),
                                 "Genesis Ark",
-                                start_metal,
-                                start_crystal,
-                                start_fuel_cells,
+                                resource_db_param(start_metal),
+                                resource_db_param(start_crystal),
+                                resource_db_param(start_fuel_cells),
                                 now,
                                 int(galaxy),
                                 int(system),
