@@ -20,6 +20,12 @@ on:
       - "game/shipyard_queue.py"
       - "game/defense.py"
       - "game/inactive_autoplay.py"
+      - "game/world_boss.py"
+      - "game/world_boss_companions.py"
+      - "game/pirates/bases.py"
+      - "game/combat_hof.py"
+      - "game/directives/**"
+      - "game/case_battles.py"
       - "game/planet_evolution/dashboard.py"
       - "game/planet_evolution/ascension.py"
       - "game/queue_refund.py"
@@ -39,6 +45,7 @@ on:
       - "tests/test_gc_pg_numeric_money_amounts_b1.py"
       - "tests/test_gc_pg_numeric_unit_amounts_b2.py"
       - "tests/test_gc_pg_exact_paid_queue_snapshots_c1.py"
+      - "tests/test_gc_pg_numeric_p1_combat_progression.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -60,6 +67,12 @@ on:
       - "game/shipyard_queue.py"
       - "game/defense.py"
       - "game/inactive_autoplay.py"
+      - "game/world_boss.py"
+      - "game/world_boss_companions.py"
+      - "game/pirates/bases.py"
+      - "game/combat_hof.py"
+      - "game/directives/**"
+      - "game/case_battles.py"
       - "game/planet_evolution/dashboard.py"
       - "game/planet_evolution/ascension.py"
       - "game/queue_refund.py"
@@ -79,6 +92,7 @@ on:
       - "tests/test_gc_pg_numeric_money_amounts_b1.py"
       - "tests/test_gc_pg_numeric_unit_amounts_b2.py"
       - "tests/test_gc_pg_exact_paid_queue_snapshots_c1.py"
+      - "tests/test_gc_pg_numeric_p1_combat_progression.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -142,7 +156,9 @@ jobs:
             game/models.py game/resources.py game/exchange.py \
             game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
             game/buildings.py game/research.py game/shipyard.py game/shipyard_queue.py game/defense.py \
-            game/inactive_autoplay.py game/queue_refund.py \
+            game/inactive_autoplay.py game/world_boss.py game/world_boss_companions.py \
+            game/pirates/bases.py game/combat_hof.py game/directives/progress.py game/directives/generator.py game/case_battles.py \
+            game/queue_refund.py \
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
             game/planet_evolution/ascension.py
@@ -159,4 +175,5 @@ jobs:
             tests/test_gc_pg_numeric_resource_consumers_a3.py \
             tests/test_gc_pg_numeric_money_amounts_b1.py \
             tests/test_gc_pg_numeric_unit_amounts_b2.py \
-            tests/test_gc_pg_exact_paid_queue_snapshots_c1.py
+            tests/test_gc_pg_exact_paid_queue_snapshots_c1.py \
+            tests/test_gc_pg_numeric_p1_combat_progression.py
