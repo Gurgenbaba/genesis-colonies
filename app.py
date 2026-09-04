@@ -4975,13 +4975,14 @@ def api_auction_house_state():
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
 
     from game.auction_house import build_auction_house_state
+    from game.logic import read_player_live_state_for_poll
     from game.planet_evolution.repository import get_context_planet
 
     conn = db()
     try:
         planet = get_context_planet(user_id, conn=conn)
-        player_view, _, _, _, _, _ = refresh_player_live_state(
-            user_id, conn=conn, finish_source="api_auction_house_state", close_conn=False
+        player_view, _, _, _, _, _ = read_player_live_state_for_poll(
+            user_id, conn=conn
         )
         payload = build_auction_house_state(
             user_id,
@@ -5071,13 +5072,14 @@ def api_auction_house_bid():
         logger.exception("auction-house bid: game-state build failed user_id=%s", user_id)
         try:
             from game.auction_house import build_auction_house_state
+            from game.logic import read_player_live_state_for_poll
             from game.planet_evolution.repository import get_context_planet as _gcp
 
             conn2 = db()
             try:
                 planet2 = _gcp(user_id, conn=conn2)
-                player_view, _, _, _, _, _ = refresh_player_live_state(
-                    user_id, conn=conn2, finish_source="api_auction_house_bid_fallback", close_conn=False
+                player_view, _, _, _, _, _ = read_player_live_state_for_poll(
+                    user_id, conn=conn2
                 )
                 auction_house = build_auction_house_state(
                     user_id,
