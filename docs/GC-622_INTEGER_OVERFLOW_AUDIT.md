@@ -1,5 +1,8 @@
 # GC-622 — Integer Overflow Audit
 
+> **2026-09-04 superseded for production numeric readiness:** PostgreSQL is now production-authoritative and live Genesis values have crossed the old IEEE-754 warning range. The binding cross-backend audit is [GC_PG_NUMERIC_READINESS_001.md](GC_PG_NUMERIC_READINESS_001.md). This document remains historical context for the original SQLite-era INT32 audit.
+
+
 **Status:** ✅ Abgeschlossen (Tech-Audit, kein Hotfix)  
 **Stand:** 2026-06-17  
 **Kontext:** Community-Vergleich mit InFlames (Spieler ~1,2 Mrd. Ressourcen; signed INT32-Maximum 2.147.483.647)

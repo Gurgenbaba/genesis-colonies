@@ -1,5 +1,8 @@
 # GC-622B — Resource INTEGER Migration (Backlog)
 
+> **2026-09-04 target superseded:** The old generic `REAL → INTEGER` proposal is not a valid PostgreSQL big-number contract (`INTEGER` is int4 and BIGINT is finite). Use [GC_PG_NUMERIC_READINESS_001.md](GC_PG_NUMERIC_READINESS_001.md) for the binding NUMERIC / exact-snapshot migration plan. This document remains historical backlog context.
+
+
 > **Status:** 💡 Backlog — kein Hotfix, nicht vor Completion-First-Bugs  
 > **Parent:** [GC-622 Integer Overflow Audit](GC-622_INTEGER_OVERFLOW_AUDIT.md) ✅  
 > **Epic:** — (reine Tech Debt)
