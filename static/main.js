@@ -23129,27 +23129,32 @@
     if (!page) return;
     const fmt = typeof GC.fmtIntFull === "function" ? GC.fmtIntFull : (n) => String(n ?? 0);
     ["metal", "crystal", "fuel_cells"].forEach((res) => {
-      const val = Number(state.pool?.[res] ?? 0);
-      const cap = Number(state.pool_cap?.[res] ?? 0);
-      const maxVal = Number(state.donation_limits?.[res] ?? Math.max(0, cap - val));
-      const needRem = Number(state.project_need_remaining?.[res] ?? 0);
+      const val = gameplayBigInt(state.pool?.[res] ?? 0);
+      const cap = gameplayBigInt(state.pool_cap?.[res] ?? 0);
+      const defaultMax = cap > val ? cap - val : BigInt(0);
+      const maxVal = gameplayBigInt(state.donation_limits?.[res] ?? defaultMax);
+      const needRem = gameplayBigInt(state.project_need_remaining?.[res] ?? 0);
       const tile = page.querySelector(`.alliance-hub-pool-tile[data-resource="${res}"]`);
       const valEl = page.querySelector(`[data-pool-val="${res}"]`);
       const capEl = page.querySelector(`[data-pool-cap="${res}"]`);
       const fillEl = page.querySelector(`[data-pool-fill="${res}"]`);
       const needEl = page.querySelector(`[data-pool-need="${res}"]`);
       const actions = page.querySelector(`[data-pool-actions="${res}"]`);
-      if (tile) tile.classList.toggle("is-full", maxVal <= 0);
+      if (tile) tile.classList.toggle("is-full", maxVal <= BigInt(0));
       if (valEl) valEl.textContent = fmt(val);
       if (capEl) capEl.textContent = fmt(cap);
       if (fillEl) {
-        const pct = cap > 0 ? Math.min(100, (val / cap) * 100) : 0;
+        let pct = 0;
+        if (cap > BigInt(0)) {
+          const basisPoints = (val * BigInt(10000)) / cap;
+          pct = Math.min(100, Number(basisPoints) / 100);
+        }
         fillEl.style.width = `${pct}%`;
       }
       if (needEl) {
         if (state.active_project) {
           needEl.textContent = t("alliance_donate_need_active", "Projekt aktiv");
-        } else if (needRem > 0) {
+        } else if (needRem > BigInt(0)) {
           needEl.textContent = t("alliance_donate_need_remaining", "Projekt braucht noch %(amt)s").replace(
             "%(amt)s",
             fmt(needRem)
@@ -23159,7 +23164,7 @@
         }
       }
       if (actions) {
-        if (maxVal <= 0) {
+        if (maxVal <= BigInt(0)) {
           actions.innerHTML = `<span class="alliance-hub-pool-full-badge" data-pool-full="${res}">${escapeHtml(
             t("alliance_donate_complete", "Vollständig")
           )}</span>`;
@@ -23167,9 +23172,9 @@
           let input = actions.querySelector(`[data-donate-amount="${res}"]`);
           if (!input) {
             actions.innerHTML = `
-              <input type="text" inputmode="numeric" autocomplete="off" maxlength="20"
+              <input type="text" inputmode="numeric" autocomplete="off"
                 class="gc-input gc-num-input alliance-hub-donate-input"
-                data-donate-amount="${res}" data-input-max="${maxVal}"
+                data-donate-amount="${res}" data-input-max="${maxVal.toString()}"
                 placeholder="${escapeHtml(t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal)))}">
               <div class="alliance-hub-pool-action-btns">
                 <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="${res}">${escapeHtml(t("alliance_donate_max_btn", "Max"))}</button>
@@ -23178,11 +23183,14 @@
             input = actions.querySelector(`[data-donate-amount="${res}"]`);
             if (typeof bindFormattedNumberInputs === "function") bindFormattedNumberInputs(actions);
           } else {
-            input.dataset.inputMax = String(maxVal);
+            input.dataset.inputMax = maxVal.toString();
             input.disabled = false;
             input.placeholder = t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal));
-            if (!input.matches(":focus") && readNumberInput(input) > maxVal) {
-              setNumberInputValue(input, maxVal);
+            if (
+              !input.matches(":focus") &&
+              compareGameplayIntegers(readGameplayIntegerInput(input), maxVal) > 0
+            ) {
+              setGameplayIntegerInput(input, maxVal);
             }
             const btn = actions.querySelector(`[data-donate-btn="${res}"]`);
             const maxBtn = actions.querySelector(`[data-donate-max="${res}"]`);
@@ -23234,7 +23242,7 @@
                   nameStyle: d.name_style || "none",
                 })
               : escapeHtml(String(d.player_name || ""));
-          const amt = fmt(Number(d.amount || 0));
+          const amt = fmt(d.amount || 0);
           const resKey = String(d.resource || "");
           const label = escapeHtml(resLabel(resKey));
           return `<li class="alliance-hub-donation-row"><span>${name}</span><span class="alliance-hub-donation-amount gc-mono">${amt}</span><span class="alliance-hub-donation-res">${resIcon(resKey)}<span class="alliance-hub-donation-res-name">${label}</span></span></li>`;
@@ -23649,8 +23657,8 @@
         const res = donateMaxBtn.dataset.donateMax;
         const input = page.querySelector(`[data-donate-amount="${res}"]`);
         if (!input || input.disabled) return;
-        const maxVal = Number(input.dataset.inputMax || 0);
-        if (maxVal > 0) setNumberInputValue(input, maxVal);
+        const maxVal = normalizeGameplayInteger(input.dataset.inputMax || "0");
+        if (isPositiveGameplayInteger(maxVal)) setGameplayIntegerInput(input, maxVal);
         return;
       }
 
@@ -23659,8 +23667,8 @@
         ev.preventDefault();
         const res = donateBtn.dataset.donateBtn;
         const input = page.querySelector(`[data-donate-amount="${res}"]`);
-        const amount = readNumberInput(input);
-        if (!amount) return;
+        const amount = readGameplayIntegerInput(input, "0");
+        if (!isPositiveGameplayInteger(amount)) return;
         const out = await allianceAction(
           "/api/alliance/donate",
           { resource: res, amount },
@@ -23668,7 +23676,7 @@
         );
         if (!out?.ok) showNotify(allianceErrorMessage(out, "Spende fehlgeschlagen"), "error");
         else {
-          if (input) setNumberInputValue(input, 0);
+          if (input) setGameplayIntegerInput(input, "0");
           showNotify(t("alliance_donate_ok", "Spende eingegangen."), "success");
         }
         return;
