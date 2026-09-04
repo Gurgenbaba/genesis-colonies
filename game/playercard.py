@@ -1588,6 +1588,18 @@ def _try_unlock_badge_row(
     badge_key = str(badge_row.get("badge_key") or "")
     if not badge_key:
         return None
+
+    # GC-PERF-PLAYERCARD-003: bulk sync supplies unlock state via LEFT JOIN.
+    # Skip already-unlocked badges before collector/metric probes. Single-badge
+    # callers omit this marker and retain the canonical existence fallback below.
+    known_unlock_state = badge_row.get("already_unlocked")
+    if known_unlock_state is not None:
+        try:
+            if int(known_unlock_state or 0) > 0:
+                return None
+        except (TypeError, ValueError):
+            pass
+
     if not _badge_requirement_met(
         int(player_id),
         req_type,
@@ -1597,16 +1609,17 @@ def _try_unlock_badge_row(
     ):
         return None
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT 1 FROM player_card_unlocked_badges
-        WHERE player_id = ? AND badge_id = ?
-        LIMIT 1;
-        """,
-        (int(player_id), badge_id),
-    )
-    if cur.fetchone():
-        return None
+    if known_unlock_state is None:
+        cur.execute(
+            """
+            SELECT 1 FROM player_card_unlocked_badges
+            WHERE player_id = ? AND badge_id = ?
+            LIMIT 1;
+            """,
+            (int(player_id), badge_id),
+        )
+        if cur.fetchone():
+            return None
     cur.execute(
         """
         INSERT INTO player_card_unlocked_badges (player_id, badge_id, unlocked_at)
@@ -1647,10 +1660,14 @@ def _sync_badge_unlocks(player_id: int, conn=None) -> None:
     cur = c.cursor()
     cur.execute(
         """
-        SELECT id, badge_key, requirement_type, requirement_value
-        FROM player_card_badges
-        WHERE is_active = 1 AND requirement_type IS NOT NULL;
-        """
+        SELECT b.id, b.badge_key, b.requirement_type, b.requirement_value,
+               CASE WHEN u.badge_id IS NULL THEN 0 ELSE 1 END AS already_unlocked
+        FROM player_card_badges b
+        LEFT JOIN player_card_unlocked_badges u
+          ON u.player_id = ? AND u.badge_id = b.id
+        WHERE b.is_active = 1 AND b.requirement_type IS NOT NULL;
+        """,
+        (int(player_id),),
     )
     badges = cur.fetchall()
     now = _now_ts()
