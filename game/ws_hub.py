@@ -17,7 +17,9 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict
+
+from .json_transport import js_safe_json_value, List, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +88,7 @@ def publish(topic: str, payload: Dict[str, Any]) -> int:
         targets = list(_subscribers.get(topic, ()))
     if not targets:
         return 0
-    msg = json.dumps(payload, separators=(",", ":"))
+    msg = json.dumps(js_safe_json_value(payload), separators=(",", ":"))
     sent = 0
     dead: List["WSClient"] = []
     for client in targets:
