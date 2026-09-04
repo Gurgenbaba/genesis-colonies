@@ -745,8 +745,8 @@ def get_debris_for_system(
     )
     for row in cur.fetchall():
         pos = int(row["position"])
-        metal = max(0, int(float(row["metal"] or 0)))
-        crystal = max(0, int(float(row["crystal"] or 0)))
+        metal = max(0, int(row["metal"] or 0))
+        crystal = max(0, int(row["crystal"] or 0))
         if metal <= 0 and crystal <= 0:
             continue
         updated_at = float(row["updated_at"]) if row["updated_at"] is not None else None
