@@ -181,8 +181,8 @@ def classify_type(
             return "not_ready", f"NUMERIC provides only {integer_digits} integer digits (<19)"
 
         if contract == "decimal_rate":
-            if scale == 0:
-                return "not_ready", "NUMERIC scale 0 rounds intended fractional rates"
+            if constrained and (scale is None or scale <= 0):
+                return "not_ready", "NUMERIC scale must be > 0 for intended fractional rates"
             return "ready", "exact decimal rate"
 
     if contract == "exact_unbounded":
