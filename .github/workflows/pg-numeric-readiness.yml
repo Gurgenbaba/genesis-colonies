@@ -26,12 +26,16 @@ on:
       - "game/commander_classes.py"
       - "game/admin_balance.py"
       - "game/overview_page.py"
+      - "game/auction_house.py"
+      - "game/alliance.py"
+      - "game/alliance_catalog.py"
       - "migrate.py"
       - "migrations/**"
       - "scripts/pg_numeric_readiness_audit.py"
       - "tests/test_gc_pg_numeric_core_resources_a1.py"
       - "tests/test_gc_pg_numeric_salvage_a2.py"
       - "tests/test_gc_pg_numeric_resource_consumers_a3.py"
+      - "tests/test_gc_pg_numeric_money_amounts_b1.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -59,12 +63,16 @@ on:
       - "game/commander_classes.py"
       - "game/admin_balance.py"
       - "game/overview_page.py"
+      - "game/auction_house.py"
+      - "game/alliance.py"
+      - "game/alliance_catalog.py"
       - "migrate.py"
       - "migrations/**"
       - "scripts/pg_numeric_readiness_audit.py"
       - "tests/test_gc_pg_numeric_core_resources_a1.py"
       - "tests/test_gc_pg_numeric_salvage_a2.py"
       - "tests/test_gc_pg_numeric_resource_consumers_a3.py"
+      - "tests/test_gc_pg_numeric_money_amounts_b1.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -130,6 +138,7 @@ jobs:
             game/buildings.py game/research.py game/shipyard.py game/defense.py \
             game/inactive_autoplay.py game/queue_refund.py \
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
+            game/auction_house.py game/alliance.py game/alliance_catalog.py \
             game/planet_evolution/ascension.py
           git diff --check
 
@@ -141,4 +150,5 @@ jobs:
           python -m pytest -q -s --tb=line \
             tests/test_gc_pg_numeric_core_resources_a1.py \
             tests/test_gc_pg_numeric_salvage_a2.py \
-            tests/test_gc_pg_numeric_resource_consumers_a3.py
+            tests/test_gc_pg_numeric_resource_consumers_a3.py \
+            tests/test_gc_pg_numeric_money_amounts_b1.py
