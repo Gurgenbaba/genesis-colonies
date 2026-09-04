@@ -93,7 +93,7 @@ from .messages import (
     notify_transport,
     _notify_player_idempotent_fleet,
 )
-from .models import get_planets_by_player, get_research_levels
+from .models import get_planets_by_player, get_research_levels, resource_db_param
 from .spy import (
     SPY_INTEL_TIER_ACTIVITY,
     SPY_INTEL_TIER_BUILDINGS,
@@ -1649,9 +1649,9 @@ def validate_fleet_send(
         fleet_modifiers=mods,
     )
     fuel_cost = int(preview["fuel_cost"])
-    metal_have = float(origin_planet.get("metal") or 0)
-    crystal_have = float(origin_planet.get("crystal") or 0)
-    fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
+    metal_have = int(origin_planet.get("metal") or 0)
+    crystal_have = int(origin_planet.get("crystal") or 0)
+    fuel_cells_have = int(origin_planet.get("fuel_cells") or 0)
 
     ok_bal, bal_reason = validate_departure_balances(
         metal_have, crystal_have, fuel_cells_have, resources_n, fuel_cost
@@ -2047,7 +2047,7 @@ def preview_fleet_flight(
             )
         else:
             cargo_total = calculate_total_cargo(ships, cargo_multiplier=cargo_mult)
-        fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
+        fuel_cells_have = int(origin_planet.get("fuel_cells") or 0)
         from .technical_data import build_effective_stat
 
         speed_bonus_pct = int(
@@ -3906,9 +3906,9 @@ def send_fleet(
                     rollback(conn)
                 return False, "not_enough_troops", None
 
-        metal_have = float(origin_planet.get("metal") or 0)
-        crystal_have = float(origin_planet.get("crystal") or 0)
-        fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
+        metal_have = int(origin_planet.get("metal") or 0)
+        crystal_have = int(origin_planet.get("crystal") or 0)
+        fuel_cells_have = int(origin_planet.get("fuel_cells") or 0)
         fuel_cost = int(preview["fuel_cost"])
         new_metal, new_crystal, new_fuel_cells = apply_departure_deduction(
             metal_have, crystal_have, fuel_cells_have, resources_n, fuel_cost
@@ -3920,7 +3920,12 @@ def send_fleet(
 
         cur.execute(
             "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
-            (new_metal, new_crystal, new_fuel_cells, int(origin_planet_id)),
+            (
+                resource_db_param(new_metal),
+                resource_db_param(new_crystal),
+                resource_db_param(new_fuel_cells),
+                int(origin_planet_id),
+            ),
         )
 
         resources_store = dict(resources_n)
@@ -4330,9 +4335,9 @@ def _credit_planet_resources(planet_id: int, resources: Mapping[str, Any], *, co
     cur.execute(
         "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
         (
-            float(row["metal"]) + loaded["metal"],
-            float(row["crystal"]) + loaded["crystal"],
-            float(row["fuel_cells"] or 0) + loaded["fuel_cells"],
+            resource_db_param(int(row["metal"] or 0) + loaded["metal"]),
+            resource_db_param(int(row["crystal"] or 0) + loaded["crystal"]),
+            resource_db_param(int(row["fuel_cells"] or 0) + loaded["fuel_cells"]),
             int(planet_id),
         ),
     )
@@ -8341,9 +8346,9 @@ def distribute_resources(
                 rollback(conn)
             return False, "origin_not_found", None
         if (
-            float(hub_res["metal"]) < delivered_total["metal"]
-            or float(hub_res["crystal"]) < delivered_total["crystal"]
-            or float(hub_res["fuel_cells"] or 0) < delivered_total["fuel_cells"]
+            int(hub_res["metal"] or 0) < delivered_total["metal"]
+            or int(hub_res["crystal"] or 0) < delivered_total["crystal"]
+            or int(hub_res["fuel_cells"] or 0) < delivered_total["fuel_cells"]
         ):
             if own:
                 rollback(conn)
@@ -8681,9 +8686,9 @@ def get_fleet_live_state(
             "ships": ships,
             "has_ships": sum(int(v) for v in ships.values()) > 0,
             "resources": {
-                "metal": int(float(planet.get("metal") or 0)),
-                "crystal": int(float(planet.get("crystal") or 0)),
-                "fuel_cells": int(float(planet.get("fuel_cells") or 0)),
+                "metal": int(planet.get("metal") or 0),
+                "crystal": int(planet.get("crystal") or 0),
+                "fuel_cells": int(planet.get("fuel_cells") or 0),
             },
             "fleet_slots": get_fleet_slot_status(player_id, conn=conn),
             "active_fleets": build_active_fleets_payload(player_id, conn=conn),
@@ -8846,9 +8851,9 @@ def build_fleet_page_context(
                 "fuel_bonus_pct": fuel_bonus_pct,
             },
             "resources": {
-                "metal": int(float(planet.get("metal") or 0)),
-                "crystal": int(float(planet.get("crystal") or 0)),
-                "fuel_cells": int(float(planet.get("fuel_cells") or 0)),
+                "metal": int(planet.get("metal") or 0),
+                "crystal": int(planet.get("crystal") or 0),
+                "fuel_cells": int(planet.get("fuel_cells") or 0),
             },
             "fleet_slots": slots,
             "active_fleets": movements,

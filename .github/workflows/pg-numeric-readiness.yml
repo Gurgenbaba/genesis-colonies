@@ -1,0 +1,144 @@
+name: PostgreSQL Numeric Readiness
+
+on:
+  pull_request:
+    paths:
+      - "game/models.py"
+      - "game/resources.py"
+      - "game/inventory.py"
+      - "game/exchange.py"
+      - "game/combat.py"
+      - "game/asteroids.py"
+      - "game/galaxy.py"
+      - "game/fleet.py"
+      - "game/fleet_calc.py"
+      - "game/ranking.py"
+      - "game/scrapyard.py"
+      - "game/buildings.py"
+      - "game/research.py"
+      - "game/shipyard.py"
+      - "game/defense.py"
+      - "game/inactive_autoplay.py"
+      - "game/planet_evolution/dashboard.py"
+      - "game/planet_evolution/ascension.py"
+      - "game/queue_refund.py"
+      - "game/spy.py"
+      - "game/commander_classes.py"
+      - "game/admin_balance.py"
+      - "game/overview_page.py"
+      - "migrate.py"
+      - "migrations/**"
+      - "scripts/pg_numeric_readiness_audit.py"
+      - "tests/test_gc_pg_numeric_core_resources_a1.py"
+      - "tests/test_gc_pg_numeric_salvage_a2.py"
+      - "tests/test_gc_pg_numeric_resource_consumers_a3.py"
+      - ".github/workflows/pg-numeric-readiness.yml"
+  push:
+    branches: [main]
+    paths:
+      - "game/models.py"
+      - "game/resources.py"
+      - "game/inventory.py"
+      - "game/exchange.py"
+      - "game/combat.py"
+      - "game/asteroids.py"
+      - "game/galaxy.py"
+      - "game/fleet.py"
+      - "game/fleet_calc.py"
+      - "game/ranking.py"
+      - "game/scrapyard.py"
+      - "game/buildings.py"
+      - "game/research.py"
+      - "game/shipyard.py"
+      - "game/defense.py"
+      - "game/inactive_autoplay.py"
+      - "game/planet_evolution/dashboard.py"
+      - "game/planet_evolution/ascension.py"
+      - "game/queue_refund.py"
+      - "game/spy.py"
+      - "game/commander_classes.py"
+      - "game/admin_balance.py"
+      - "game/overview_page.py"
+      - "migrate.py"
+      - "migrations/**"
+      - "scripts/pg_numeric_readiness_audit.py"
+      - "tests/test_gc_pg_numeric_core_resources_a1.py"
+      - "tests/test_gc_pg_numeric_salvage_a2.py"
+      - "tests/test_gc_pg_numeric_resource_consumers_a3.py"
+      - ".github/workflows/pg-numeric-readiness.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pg-numeric-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pg-numeric-core:
+    name: pg-numeric-core
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: genesis
+          POSTGRES_PASSWORD: genesis
+          POSTGRES_DB: genesis_numeric
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U genesis -d genesis_numeric"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-pg-numeric-secret-key-not-for-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: postgres
+      DATABASE_URL: postgresql://genesis:genesis@127.0.0.1:5432/genesis_numeric
+      GC_TEST_POSTGRES_URL: postgresql://genesis:genesis@127.0.0.1:5432/genesis_numeric
+      GC_PG_CONNECT_TIMEOUT: "10"
+      GC_PG_POOL_TIMEOUT: "20"
+      GC_PG_STATEMENT_TIMEOUT: "45s"
+      GC_PG_LOCK_TIMEOUT: "10s"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+
+      - name: Compile numeric owners
+        run: |
+          python -m py_compile \
+            migrate.py \
+            scripts/pg_numeric_readiness_audit.py \
+            game/models.py game/resources.py game/exchange.py \
+            game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
+            game/buildings.py game/research.py game/shipyard.py game/defense.py \
+            game/inactive_autoplay.py game/queue_refund.py \
+            game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
+            game/planet_evolution/ascension.py
+          git diff --check
+
+      - name: Apply full PostgreSQL schema
+        run: python migrate.py
+
+      - name: Run exact numeric core contract
+        run: |
+          python -m pytest -q -s --tb=line \
+            tests/test_gc_pg_numeric_core_resources_a1.py \
+            tests/test_gc_pg_numeric_salvage_a2.py \
+            tests/test_gc_pg_numeric_resource_consumers_a3.py

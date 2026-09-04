@@ -272,9 +272,9 @@ def build_overview_warnings(
     user_id: int,
     ratio: float,
     energy_total: int,
-    metal: float,
-    crystal: float,
-    fuel_cells: float = 0,
+    metal: int,
+    crystal: int,
+    fuel_cells: int = 0,
     storage_caps: Dict[str, Any],
     build_queue: Dict[str, Any],
     research: Dict[str, Any],
@@ -290,14 +290,14 @@ def build_overview_warnings(
     elif r < 1.0:
         warnings.append({"key": "energy_low", "severity": "warning", "label_key": "overview_hint_energy_low"})
 
-    cap_m = float(storage_caps.get("metal") or 0)
-    cap_c = float(storage_caps.get("crystal") or 0)
-    cap_f = float(storage_caps.get("fuel_cells") or 0)
-    if cap_m > 0 and float(metal or 0) >= cap_m * 0.92:
+    cap_m = int(storage_caps.get("metal") or 0)
+    cap_c = int(storage_caps.get("crystal") or 0)
+    cap_f = int(storage_caps.get("fuel_cells") or 0)
+    if cap_m > 0 and int(metal or 0) * 100 >= cap_m * 92:
         warnings.append({"key": "storage_metal", "severity": "warning", "label_key": "overview_warning_storage_metal"})
-    if cap_c > 0 and float(crystal or 0) >= cap_c * 0.92:
+    if cap_c > 0 and int(crystal or 0) * 100 >= cap_c * 92:
         warnings.append({"key": "storage_crystal", "severity": "warning", "label_key": "overview_warning_storage_crystal"})
-    if cap_f > 0 and float(fuel_cells or 0) >= cap_f * 0.92:
+    if cap_f > 0 and int(fuel_cells or 0) * 100 >= cap_f * 92:
         warnings.append({"key": "storage_fuel_cells", "severity": "warning", "label_key": "overview_warning_storage_fuel_cells"})
 
     bq_summary = build_queue.get("summary") if isinstance(build_queue, dict) else {}
@@ -753,9 +753,9 @@ def build_overview_status(
             "name": str(player_view.get("name") or "Commander"),
         },
         "resources": {
-            "metal": float(player_view.get("metal") or 0),
-            "crystal": float(player_view.get("crystal") or 0),
-            "fuel_cells": float(player_view.get("fuel_cells") or 0),
+            "metal": int(player_view.get("metal") or 0),
+            "crystal": int(player_view.get("crystal") or 0),
+            "fuel_cells": int(player_view.get("fuel_cells") or 0),
             "metal_cap": _safe_int(storage_caps.get("metal") if isinstance(storage_caps, dict) else 0),
             "crystal_cap": _safe_int(storage_caps.get("crystal") if isinstance(storage_caps, dict) else 0),
             "fuel_cells_cap": _safe_int(storage_caps.get("fuel_cells") if isinstance(storage_caps, dict) else 0),
@@ -782,9 +782,9 @@ def build_overview_status(
             user_id=int(user_id),
             ratio=float(ratio or 1.0),
             energy_total=int(energy_total or 0),
-            metal=float(player_view.get("metal") or 0),
-            crystal=float(player_view.get("crystal") or 0),
-            fuel_cells=float(player_view.get("fuel_cells") or 0),
+            metal=int(player_view.get("metal") or 0),
+            crystal=int(player_view.get("crystal") or 0),
+            fuel_cells=int(player_view.get("fuel_cells") or 0),
             storage_caps=storage_caps if isinstance(storage_caps, dict) else {},
             build_queue=build_queue if isinstance(build_queue, dict) else {},
             research=research if isinstance(research, dict) else {},

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import random
+from decimal import Decimal, ROUND_FLOOR, localcontext
 from typing import Any, Dict, List, Mapping, Tuple
 
 from .db import begin_write_transaction, commit, db, rollback
 from .fleet import deduct_planet_ships, get_planet_ships
 from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key, ship_icon_static_path
-from .models import lock_planet_for_update
+from .models import lock_planet_for_update, resource_db_param
 from .shipyard import _unit_build_cost
 
 SCRAP_REFUND_MIN = 0.50
@@ -32,11 +33,22 @@ def scrap_value_for_ship(
     qty = max(0, int(amount))
     r = max(SCRAP_REFUND_MIN, min(SCRAP_REFUND_MAX, float(ratio)))
     mult = max(0.0, float(yield_mult or 1.0))
-    return {
-        "metal": int(cost["metal"] * qty * r * mult),
-        "crystal": int(cost["crystal"] * qty * r * mult),
-        "fuel_cells": int(cost["fuel_cells"] * qty * r * mult),
-    }
+    precision = max(64, len(str(abs(qty))) + 64)
+    with localcontext() as ctx:
+        ctx.prec = precision
+        ratio_d = Decimal(str(r))
+        mult_d = Decimal(str(mult))
+        return {
+            key: int(
+                (
+                    Decimal(int(cost[key]))
+                    * Decimal(qty)
+                    * ratio_d
+                    * mult_d
+                ).to_integral_value(rounding=ROUND_FLOOR)
+            )
+            for key in ("metal", "crystal", "fuel_cells")
+        }
 
 
 def _scrapyard_yield_mult(planet_id: int, *, conn) -> float:
@@ -153,9 +165,9 @@ def recycle_ships(
                 WHERE id = ?;
                 """,
                 (
-                    refund["metal"],
-                    refund["crystal"],
-                    float(refund["fuel_cells"]),
+                    resource_db_param(refund["metal"]),
+                    resource_db_param(refund["crystal"]),
+                    resource_db_param(refund["fuel_cells"]),
                     int(planet_id),
                 ),
             )
@@ -198,9 +210,9 @@ def scrapyard_status(player_id: int, planet_id: int, *, conn=None) -> Dict[str, 
             "refund_max_percent": int(SCRAP_REFUND_MAX * 100),
             "ships": list_scrapyard_ships(player_id, planet_id, conn=conn),
             "resources": {
-                "metal": int(float(planet["metal"] or 0)),
-                "crystal": int(float(planet["crystal"] or 0)),
-                "fuel_cells": int(float(planet["fuel_cells"] or 0)),
+                "metal": int(planet["metal"] or 0),
+                "crystal": int(planet["crystal"] or 0),
+                "fuel_cells": int(planet["fuel_cells"] or 0),
             },
         }
     finally:

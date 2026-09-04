@@ -1710,7 +1710,11 @@ def adjust_homeworld_resources(
                     fuel_cells = MAX(0, fuel_cells + ?)
                 WHERE is_homeworld = 1;
                 """,
-                (int(metal_delta), int(crystal_delta), int(fuel_cells_delta)),
+                (
+                    resource_db_param(metal_delta),
+                    resource_db_param(crystal_delta),
+                    resource_db_param(fuel_cells_delta),
+                ),
             )
         else:
             cur.execute(
@@ -1722,7 +1726,12 @@ def adjust_homeworld_resources(
                 WHERE player_id = ?
                   AND is_homeworld = 1;
                 """,
-                (int(metal_delta), int(crystal_delta), int(fuel_cells_delta), int(player_id)),
+                (
+                    resource_db_param(metal_delta),
+                    resource_db_param(crystal_delta),
+                    resource_db_param(fuel_cells_delta),
+                    int(player_id),
+                ),
             )
 
         commit(conn)

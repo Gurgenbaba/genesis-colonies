@@ -219,9 +219,9 @@ def build_balance_hud_snapshot(player_id: int) -> Optional[Dict[str, Any]]:
             user_id=uid,
             conn=conn,
         )
-        metal = int(float(player_view.get("metal") or 0))
-        crystal = int(float(player_view.get("crystal") or 0))
-        fuel_cells = int(float(player_view.get("fuel_cells") or 0))
+        metal = int(player_view.get("metal") or 0)
+        crystal = int(player_view.get("crystal") or 0)
+        fuel_cells = int(player_view.get("fuel_cells") or 0)
         payload: Dict[str, Any] = {
             "ok": True,
             "active_planet_id": planet_id,
