@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .db import begin_write_transaction, commit, db, rollback, table_columns
 from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key
-from .models import lock_planet_for_update
-from .queue_refund import refund_from_stored_costs, refund_summary_percents
+from .models import _legacy_i64_cost_snapshot, lock_planet_for_update
+from .queue_refund import refund_from_stored_costs, refund_summary_percents, stored_cost_int
 
 MAX_SHIPYARD_QUEUE = 3  # fallback default; prefer get_shipyard_queue_limit()
 QUEUE_STATUS_QUEUED = "queued"
@@ -264,9 +264,9 @@ def _job_row_for_client(
         "total_seconds": max(1, progress_total),
         "order_total_seconds": order_total_seconds,
         "is_active": is_active,
-        "cost_metal": int(row.get("cost_metal") or 0),
-        "cost_crystal": int(row.get("cost_crystal") or 0),
-        "cost_fuel_cells": int(float(row.get("cost_fuel_cells") or 0)),
+        "cost_metal": stored_cost_int(row, "metal"),
+        "cost_crystal": stored_cost_int(row, "crystal"),
+        "cost_fuel_cells": stored_cost_int(row, "fuel_cells"),
         **timer_fields,
     }
 
@@ -536,13 +536,18 @@ def enqueue_ship_build(
     )
     next_pos = int(cur.fetchone()["next_pos"] or 0)
 
+    exact_metal = max(0, int(cost.get("metal") or 0))
+    exact_crystal = max(0, int(cost.get("crystal") or 0))
+    exact_fuel = max(0, int(cost.get("fuel_cells") or 0))
     cur.execute(
         """
         INSERT INTO shipyard_queue (
             player_id, planet_id, ship_key, amount, status,
             started_at, finish_at, created_at,
-            queue_position, cost_metal, cost_crystal, cost_fuel_cells
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            queue_position,
+            cost_metal, cost_crystal, cost_fuel_cells,
+            cost_metal_exact, cost_crystal_exact, cost_fuel_cells_exact
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             int(player_id),
@@ -554,9 +559,12 @@ def enqueue_ship_build(
             now,
             now,
             next_pos,
-            int(cost.get("metal") or 0),
-            int(cost.get("crystal") or 0),
-            float(cost.get("fuel_cells") or 0),
+            _legacy_i64_cost_snapshot(exact_metal),
+            _legacy_i64_cost_snapshot(exact_crystal),
+            _legacy_i64_cost_snapshot(exact_fuel),
+            str(exact_metal),
+            str(exact_crystal),
+            str(exact_fuel),
         ),
     )
     job_id = int(cur.lastrowid)
