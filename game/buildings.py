@@ -716,8 +716,8 @@ def get_building_requirements_items(
 def get_building_resource_items(
     cost_metal: int,
     cost_crystal: int,
-    planet_metal: int,
-    planet_crystal: int,
+    planet_metal: float,
+    planet_crystal: float,
 ) -> List[Dict[str, Any]]:
     return [
         {
@@ -725,14 +725,14 @@ def get_building_resource_items(
             "key": "metal",
             "need": int(cost_metal),
             "have": int(planet_metal),
-            "met": planet_metal >= int(cost_metal),
+            "met": planet_metal >= float(cost_metal),
         },
         {
             "kind": "resource",
             "key": "crystal",
             "need": int(cost_crystal),
             "have": int(planet_crystal),
-            "met": planet_crystal >= int(cost_crystal),
+            "met": planet_crystal >= float(cost_crystal),
         },
     ]
 
@@ -1606,8 +1606,8 @@ def _mine_bulk_upgrade_meta(
         building_type,
         int(current_level),
         int(max_level),
-        metal_available=int(planet.get("metal", 0) or 0),
-        crystal_available=int(planet.get("crystal", 0) or 0),
+        metal_available=float(planet.get("metal", 0) or 0),
+        crystal_available=float(planet.get("crystal", 0) or 0),
     )
 
 
@@ -1714,8 +1714,8 @@ def _make_panel_row(
         )
 
     req_met = has_building_requirements(buildings, research_levels, building_type)
-    planet_metal = int(planet.get("metal", 0) or 0)
-    planet_crystal = int(planet.get("crystal", 0) or 0)
+    planet_metal = float(planet.get("metal", 0) or 0)
+    planet_crystal = float(planet.get("crystal", 0) or 0)
     can_afford = planet_metal >= cost_metal and planet_crystal >= cost_crystal
     max_queue_preview: Dict[str, Any] = {"jobs": 0}
     if req_met and not at_queue_max and can_afford and int(queue_free_slots) > 0:
@@ -2109,26 +2109,26 @@ def preview_max_queueable_build_jobs(
     current_level: int,
     queued_same: int,
     max_level: int,
-    metal: int,
-    crystal: int,
+    metal: float,
+    crystal: float,
     queue_free_slots: int,
 ) -> int:
     """How many +1 build jobs can be queued (resources, cap, queue slots)."""
     if building_type not in BASE_COST or int(queue_free_slots) <= 0:
         return 0
     count = 0
-    m = int(metal or 0)
-    c = int(crystal or 0)
+    m = float(metal or 0)
+    c = float(crystal or 0)
     while count < int(queue_free_slots):
         eff = int(current_level) + int(queued_same) + count
         target = eff + 1
         if target > int(max_level):
             break
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
-        if m < int(cost_m) or c < int(cost_c):
+        if m < float(cost_m) or c < float(cost_c):
             break
-        m -= int(cost_m)
-        c -= int(cost_c)
+        m -= float(cost_m)
+        c -= float(cost_c)
         count += 1
     return count
 
@@ -2139,8 +2139,8 @@ def summarize_max_queueable_build_jobs(
     current_level: int,
     queued_same: int,
     max_level: int,
-    metal: int,
-    crystal: int,
+    metal: float,
+    crystal: float,
     queue_free_slots: int,
     user_id: Optional[int] = None,
     buildings: Optional[Dict[str, int]] = None,
@@ -2578,8 +2578,8 @@ def queue_build_for_planet(
             _record_mutate_perf()
             rollback(conn)
             return False, "invalid", {"msg": "Planet not found"}
-        planet_metal = int(prow["metal"] or 0)
-        planet_crystal = int(prow["crystal"] or 0)
+        planet_metal = float(prow["metal"] or 0)
+        planet_crystal = float(prow["crystal"] or 0)
 
         for _ in range(max_attempts):
             current_level = int(buildings.get(building_type, 0) or 0)
@@ -2672,8 +2672,8 @@ def queue_build_for_planet(
                     "finish_time": float(finish_time),
                 }
             )
-            planet_metal -= int(cost_metal)
-            planet_crystal -= int(cost_crystal)
+            planet_metal -= float(cost_metal)
+            planet_crystal -= float(cost_crystal)
 
             if not want_max:
                 break
