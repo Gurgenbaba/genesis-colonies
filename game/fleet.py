@@ -963,7 +963,7 @@ def _fleet_speed_multiplier(
     return _fleet_galactic_modifiers(player_id, conn, galaxy=galaxy)["fleet_speed_multiplier"]
 
 
-def admin_fleet_speed_multiplier(mission_type: str) -> float:
+def admin_fleet_speed_multiplier(mission_type: str, *, conn=None) -> float:
     """Admin balance knob: higher multiplier = shorter flight legs."""
     from .models import get_game_settings
 
@@ -974,7 +974,10 @@ def admin_fleet_speed_multiplier(mission_type: str) -> float:
         key = "fleet_speed_holding"
     else:
         key = "fleet_speed_peaceful"
-    settings = get_game_settings() or {}
+    try:
+        settings = get_game_settings(conn=conn) or {}
+    except TypeError:
+        settings = get_game_settings() or {}
     try:
         return max(0.01, float(settings.get(key, 1.0) or 1.0))
     except (TypeError, ValueError):
@@ -1447,6 +1450,7 @@ def validate_fleet_send(
     conn,
     world_key: str | None = None,
     persist_resources: bool = True,
+    fleet_modifiers: Mapping[str, float] | None = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Full pre-send validation including target resolution and balances preview.
 
@@ -1618,7 +1622,15 @@ def validate_fleet_send(
         return False, ship_reason, {"target": target_info}
 
     origin_galaxy = int(origin_planet.get("galaxy") or 0) or None
-    cargo = _fleet_cargo_capacity(ships_n, player_id, conn, galaxy=origin_galaxy)
+    mods = (
+        dict(fleet_modifiers)
+        if fleet_modifiers is not None
+        else _fleet_galactic_modifiers(player_id, conn, galaxy=origin_galaxy)
+    )
+    cargo = calculate_total_cargo(
+        ships_n,
+        cargo_multiplier=float(mods.get("cargo_multiplier", 1.0) or 1.0),
+    )
     loaded_total = loaded_resource_total(resources_n)
     if loaded_total > 0 and loaded_total > cargo:
         return False, "not_enough_cargo", {"target": target_info}
@@ -1634,6 +1646,7 @@ def validate_fleet_send(
         player_id=player_id,
         mission_type=mission,
         conn=conn,
+        fleet_modifiers=mods,
     )
     fuel_cost = int(preview["fuel_cost"])
     metal_have = float(origin_planet.get("metal") or 0)
@@ -1775,6 +1788,10 @@ def build_fleet_send_preview(
         if mission_locked:
             mission_ok = False
             mission_reason = "mission_locked"
+        origin_galaxy = int(origin_planet.get("galaxy") or 0) or None
+        fleet_modifiers = _fleet_galactic_modifiers(
+            int(player_id), conn, galaxy=origin_galaxy
+        )
         flight_tp = EXPEDITION_POSITION if mission == "expedition" else tp
         flight = preview_fleet_flight(
             origin_planet=origin_planet,
@@ -1787,6 +1804,7 @@ def build_fleet_send_preview(
             player_id=player_id,
             mission_type=mission,
             conn=conn,
+            fleet_modifiers=fleet_modifiers,
         )
         now = _now()
         flight_seconds = int(flight.get("flight_seconds") or 0)
@@ -1816,6 +1834,7 @@ def build_fleet_send_preview(
                 conn=conn,
                 world_key=wk,
                 persist_resources=False,
+                fleet_modifiers=fleet_modifiers,
             )
             can_send = ok
             block_reason = reason or ""
@@ -1989,6 +2008,7 @@ def preview_fleet_flight(
     player_id: int,
     mission_type: str = "transport",
     conn=None,
+    fleet_modifiers: Mapping[str, float] | None = None,
 ) -> Dict[str, Any]:
     own = conn is None
     if own:
@@ -1998,17 +2018,21 @@ def preview_fleet_flight(
         target = (int(target_galaxy), int(target_system), int(target_position))
         distance = calculate_distance(origin, target)
         origin_galaxy = int(origin_planet.get("galaxy") or origin[0] or 0) or None
-        speed_mult = _fleet_speed_multiplier(player_id, conn, galaxy=origin_galaxy)
+        mods = (
+            dict(fleet_modifiers)
+            if fleet_modifiers is not None
+            else _fleet_galactic_modifiers(player_id, conn, galaxy=origin_galaxy)
+        )
+        speed_mult = float(mods.get("fleet_speed_multiplier", 1.0) or 1.0)
+        fuel_eff_factor = float(mods.get("fuel_efficiency_factor", 1.0) or 1.0)
+        cargo_mult = float(mods.get("cargo_multiplier", 1.0) or 1.0)
         fleet_speed = calculate_fleet_speed(ships, speed_multiplier=speed_mult)
-        admin_speed = admin_fleet_speed_multiplier(mission_type)
+        admin_speed = admin_fleet_speed_multiplier(mission_type, conn=conn)
         flight_seconds = calculate_flight_seconds(
             distance,
             fleet_speed,
             speed_percent,
             admin_speed_multiplier=admin_speed,
-        )
-        fuel_eff_factor = _fuel_efficiency_factor_for_fleet(
-            player_id, conn, galaxy=origin_galaxy
         )
         fuel_cost = calculate_fuel_cost(
             ships,
@@ -2017,7 +2041,6 @@ def preview_fleet_flight(
             fuel_efficiency_factor_override=fuel_eff_factor,
         )
         mission = str(mission_type or "").strip().lower()
-        cargo_mult = _fleet_cargo_multiplier(player_id, conn, galaxy=origin_galaxy)
         if mission == "expedition":
             cargo_total = int(
                 math.floor(float(calculate_expedition_loot_cap(ships)) * cargo_mult + 1e-9)
@@ -3724,6 +3747,8 @@ def send_fleet(
     expedition_hours: int | None = None,
     departure_at: int | None = None,
     conn=None,
+    fleet_modifiers: Mapping[str, float] | None = None,
+    compact_result: bool = False,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     mission = str(mission_type or "").strip().lower()
     if mission not in MISSION_TYPES:
@@ -3846,6 +3871,7 @@ def send_fleet(
             speed_percent=pct,
             conn=conn,
             world_key=wk,
+            fleet_modifiers=fleet_modifiers,
         )
         if not ok_send:
             if own:
@@ -4075,6 +4101,12 @@ def send_fleet(
                 player_id,
                 fleet_id,
             )
+
+        if compact_result:
+            return True, "", {
+                "fleet": {"id": int(fleet_id)},
+                "fuel_cost": int(fuel_cost),
+            }
 
         result = {
             "fleet": enrich_movement_timing(
@@ -7454,19 +7486,17 @@ def mass_expedition_from_ships(
         tg, ts, _ = origin_coords
         target_position = EXPEDITION_POSITION
 
+        # GC-PERF-MASS-EXPO-003: all waves share one origin and one atomic
+        # transaction, so resolve fleet effects once for the whole batch.
+        batch_fleet_modifiers = _fleet_galactic_modifiers(
+            int(player_id),
+            conn,
+            galaxy=int(origin_planet.get("galaxy") or tg or 0) or None,
+        )
+
         for wave in range(slot_count):
             if len(started) >= max_start:
                 skipped.append({"wave": wave + 1, "reason": "fleet_slots_full"})
-                continue
-
-            available = get_planet_ships(int(origin_planet_id), conn=conn)
-            can_send = True
-            for sk, need in per_slot.items():
-                if int(available.get(sk, 0)) < int(need):
-                    can_send = False
-                    break
-            if not can_send:
-                skipped.append({"wave": wave + 1, "reason": "not_enough_ships"})
                 continue
 
             ok, send_reason, payload = send_fleet(
@@ -7482,6 +7512,8 @@ def mass_expedition_from_ships(
                 batch_id=batch_id,
                 departure_at=int(now) + len(started) * MASS_EXPEDITION_STAGGER_SECONDS,
                 conn=conn,
+                fleet_modifiers=batch_fleet_modifiers,
+                compact_result=True,
             )
             if ok and payload:
                 started.append({"wave": wave + 1, "fleet_id": payload["fleet"]["id"]})
@@ -7601,19 +7633,16 @@ def mass_expedition(
         tg, ts, _ = origin_coords
         target_position = EXPEDITION_POSITION
 
+        # GC-PERF-MASS-EXPO-003: one immutable effect snapshot per atomic batch.
+        batch_fleet_modifiers = _fleet_galactic_modifiers(
+            int(player_id),
+            conn,
+            galaxy=int(origin_planet.get("galaxy") or tg or 0) or None,
+        )
+
         for wave in range(wave_count):
             if len(started) >= max_start:
                 skipped.append({"wave": wave + 1, "reason": "fleet_slots_full"})
-                continue
-
-            available = get_planet_ships(int(origin_planet_id), conn=conn)
-            can_send = True
-            for sk, need in ships.items():
-                if int(available.get(sk, 0)) < int(need):
-                    can_send = False
-                    break
-            if not can_send:
-                skipped.append({"wave": wave + 1, "reason": "not_enough_ships"})
                 continue
 
             ok, reason, payload = send_fleet(
@@ -7630,6 +7659,8 @@ def mass_expedition(
                 batch_id=batch_id,
                 departure_at=int(now) + len(started) * MASS_EXPEDITION_STAGGER_SECONDS,
                 conn=conn,
+                fleet_modifiers=batch_fleet_modifiers,
+                compact_result=True,
             )
             if ok and payload:
                 started.append({"wave": wave + 1, "fleet_id": payload["fleet"]["id"]})
