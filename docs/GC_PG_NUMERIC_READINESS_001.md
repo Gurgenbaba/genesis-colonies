@@ -453,6 +453,21 @@ The production acceptance report must record only schema metadata/types — neve
 
 ---
 
+# 11.1 Audit hardening after merged baseline
+
+The first merged runtime auditor deliberately started as a focused schema-policy check. Post-merge review exposed several ways it could report a false green. These are now part of the binding audit contract:
+
+- PostgreSQL constrained `NUMERIC(p,s)` must be classified using `numeric_precision` / `numeric_scale`, not only `data_type`.
+- `NUMERIC(..., 0)` is **not** valid for a fractional `decimal_rate` contract.
+- `--strict` must fail `LIMITED` for `exact_unbounded` and `exact_snapshot`; BIGINT remains acceptable only where the policy explicitly asks for an `at_least_i64` floor.
+- Pirate boss HP/damage from migration 107 is part of the runtime policy inventory.
+- Combat Hall of Fame attacker/defender loss values are audited alongside total destroyed value.
+- Imperial Directive target/progress/delta fields and Case Battle aggregate/reward values are audited at runtime, not merely mentioned in this document.
+
+This keeps the runtime report aligned with the migration inventory: a known risk documented here must not be invisible to `--strict`.
+
+---
+
 # 12. Definition of PostgreSQL numeric-ready
 
 Genesis Colonies is only "numeric PostgreSQL ready" when:
