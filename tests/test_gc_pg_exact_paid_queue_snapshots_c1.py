@@ -16,6 +16,8 @@ HUGE = 10**30 + 246_813_579
 def test_paid_queue_exact_migration_is_additive_and_backfills_legacy_rows():
     sql = MIGRATION.read_text(encoding="utf-8")
 
+    assert "-- GC-REQUIRES-TABLES: research_queue, shipyard_queue, defense_queue" in sql
+
     for table, resources in (
         ("research_queue", ("metal", "crystal")),
         ("shipyard_queue", ("metal", "crystal", "fuel_cells")),
