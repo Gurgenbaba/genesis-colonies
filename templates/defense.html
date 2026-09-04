@@ -144,7 +144,7 @@
         </div>
         {{ render_unit_build_time_footer(unit.build_seconds) }}
         <footer class="gc-ship-card-action shipyard-ship-actions">
-          <input type="text" inputmode="numeric" value="1" maxlength="20"
+          <input type="text" inputmode="numeric" value="1"
                  class="gc-input shipyard-qty-input gc-num-input" data-defense-qty="{{ unit.defense_key }}"
                  {% if unit.max_build %}data-input-max="{{ unit.max_build }}"{% endif %}
                  aria-label="{{ T('defense_amount_label') }}">
