@@ -108,6 +108,23 @@ def test_shipyard_defense_and_troops_submit_exact_decimal_strings():
     assert "amount: amount" in defense_build
 
 
+def test_military_cost_preview_uses_exact_bigint_arithmetic():
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+
+    start = main.index("function resolveUnitCardPreviewQty")
+    end = main.index("function initMilitaryUnitCostPreviewDelegation", start)
+    block = main[start:end]
+
+    assert 'return readGameplayIntegerInput(qtyInp, "1");' in block
+    assert "costWrap.dataset.unitCostMetal = normalizeGameplayInteger" in block
+    assert "const qty = gameplayBigInt(amount);" in block
+    assert "const unit = gameplayBigInt(unitCosts[costKey]);" in block
+    assert "const need = unit * (qty > BigInt(0) ? qty : BigInt(1));" in block
+    assert "const have = gameplayBigInt(resources[resKey]);" in block
+    assert "Number(unitCosts[costKey])" not in block
+    assert "Number(resources[resKey])" not in block
+
+
 def test_alliance_donation_path_is_bigint_safe():
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
 
