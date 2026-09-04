@@ -276,6 +276,7 @@
           maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
         );
         if (qtyInp && isPositiveGameplayInteger(maxQty)) {
+          qtyInp.dataset.inputMax = maxQty;
           setGameplayIntegerInput(qtyInp, maxQty);
           var card = maxBtn.closest("[data-troop-card], [data-troop-key]");
           if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
