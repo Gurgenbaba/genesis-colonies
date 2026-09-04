@@ -82,7 +82,14 @@ def _read_player_live_state_no_writes(
     )
     energy_total, energy_used = resolver.compute_energy()
     ratio = EffectResolver.energy_ratio(energy_total, energy_used)
-    storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
+    # GC-PERF-COMMON-001: reuse the canonical request-local effect snapshot.
+    storage_caps = get_storage_capacity(
+        buildings,
+        user_id=uid,
+        research=research,
+        mods=resolver.get_modifiers(),
+        conn=conn,
+    )
 
     player_view = dict(player)
     player_view["metal"] = planet_accrued["metal"]
@@ -639,6 +646,7 @@ def get_storage_capacity(
     buildings: Dict[str, int],
     user_id: Optional[int] = None,
     research: Optional[Dict[str, int]] = None,
+    mods: Optional[Dict[str, float]] = None,
     conn=None,
 ) -> Dict[str, int]:
     """
@@ -656,7 +664,8 @@ def get_storage_capacity(
         else:
             research = {}
 
-    mods = _get_research_modifiers(user_id_int, conn=conn) if user_id_int is not None else None
+    if mods is None:
+        mods = _get_research_modifiers(user_id_int, conn=conn) if user_id_int is not None else None
 
     return _core_get_storage_capacity(
         buildings=buildings,

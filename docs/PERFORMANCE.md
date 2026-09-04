@@ -66,6 +66,15 @@ Breaks opaque `state_build` (`payload_ms`) into children via `perf_span`:
 - Meta/reward actions (login rewards, battle pass, vote, politics, referrals) use `_hud_only_game_state` — no full `payload.panel`.
 - Further cuts only after spike samples show the next child hotspot (N≥20).
 
+### GC-PERF-COMMON-001 — Read-only shell/action hotpaths
+
+Prod evidence: `admin_panel` 4.87s / 1017 SQL and `api_inventory_open_container` 4.09s / 691 SQL; both spent most time in DB-backed live refresh, queue finish and resource sync after no additional gameplay finish was required.
+
+- Control Center shell projects committed player resources/energy read-only; opening `/admin` never owns queue finishing.
+- Inventory / Case-Battle post-mutation responses rebuild their global HUD through the canonical read-mostly `game_state` path after the mutation transaction has committed; inventory + battle state are then freshly read.
+- `_read_player_live_state_no_writes` reuses the already loaded research + EffectResolver modifier snapshot for storage caps instead of rebuilding the full DB-backed effect stack.
+- No gameplay formulas, queue authority or mutation ordering changed.
+
 ### GC-PERF-PANEL-SCOPE-001 + GC-WAKE-001 — Idle wake hang
 
 Spike evidence: `api_game_state` p95 ~2s with `panel.buildings_rows` + `hud.research` on every `include_panel=1` (also concurrent TK apply).
