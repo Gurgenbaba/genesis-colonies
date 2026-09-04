@@ -363,13 +363,13 @@ def build_catch_info_for_event(
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Server-authored catch CTA state for one event card."""
-    from .world_boss import STATUS_ACTIVE, hp_phase_from_ratio
+    from .world_boss import STATUS_ACTIVE, hp_phase_from_values
 
     ts = float(now if now is not None else _now())
     boss_key = str(event.get("boss_key") or "")
     max_hp = max(1, int(event.get("max_hp") or 1))
     current_hp = max(0, int(event.get("current_hp") or 0))
-    phase = int(hp_phase_from_ratio(float(current_hp) / float(max_hp)))
+    phase = int(hp_phase_from_values(current_hp, max_hp))
     info: Dict[str, Any] = {
         "ready": companions_schema_ready(conn),
         "boss_key": boss_key,
