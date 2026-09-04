@@ -2124,6 +2124,11 @@ def update_recruitment_mode(
 
 
 def _try_spend_planet(conn, planet_id: int, metal: int, crystal: int, fuel_cells: int) -> bool:
+    from .models import resource_db_param
+
+    m = int(metal)
+    c = int(crystal)
+    f = int(fuel_cells)
     cur = conn.cursor()
     cur.execute(
         """
@@ -2137,13 +2142,13 @@ def _try_spend_planet(conn, planet_id: int, metal: int, crystal: int, fuel_cells
           AND fuel_cells >= ?;
         """,
         (
-            int(metal),
-            int(crystal),
-            float(fuel_cells),
+            resource_db_param(m),
+            resource_db_param(c),
+            resource_db_param(f),
             int(planet_id),
-            int(metal),
-            int(crystal),
-            float(fuel_cells),
+            resource_db_param(m),
+            resource_db_param(c),
+            resource_db_param(f),
         ),
     )
     return cur.rowcount == 1
@@ -2223,16 +2228,25 @@ def donate_to_alliance(player_id: int, resource: str, amount: int, conn=None) ->
             raise ValueError("insufficient_resources")
 
         col = {"metal": "pool_metal", "crystal": "pool_crystal", "fuel_cells": "pool_fuel_cells"}[res]
+        from .models import resource_db_param
+
         conn.execute(
             f"UPDATE alliances SET {col} = {col} + ?, updated_at = ? WHERE id = ?;",
-            (amt, _now(), aid),
+            (resource_db_param(amt), _now(), aid),
         )
         conn.execute(
             """
             INSERT INTO alliance_donations (alliance_id, player_id, resource, amount, xp_granted, created_at)
             VALUES (?, ?, ?, ?, ?, ?);
             """,
-            (aid, int(player_id), res, amt, int(xp_grant), _now()),
+            (
+                aid,
+                int(player_id),
+                res,
+                resource_db_param(amt),
+                int(xp_grant),
+                _now(),
+            ),
         )
         if xp_grant > 0:
             _grant_alliance_xp(conn, aid, int(xp_grant))
@@ -2281,6 +2295,11 @@ def grant_alliance_xp(alliance_id: int, xp: int, *, conn) -> int:
 
 
 def _deduct_pool(conn, alliance_id: int, cost: Mapping[str, int]) -> None:
+    from .models import resource_db_param
+
+    metal = int(cost.get("metal") or 0)
+    crystal = int(cost.get("crystal") or 0)
+    fuel = int(cost.get("fuel_cells") or 0)
     cur = conn.cursor()
     cur.execute(
         """
@@ -2295,14 +2314,14 @@ def _deduct_pool(conn, alliance_id: int, cost: Mapping[str, int]) -> None:
           AND pool_fuel_cells >= ?;
         """,
         (
-            int(cost.get("metal") or 0),
-            int(cost.get("crystal") or 0),
-            int(cost.get("fuel_cells") or 0),
+            resource_db_param(metal),
+            resource_db_param(crystal),
+            resource_db_param(fuel),
             _now(),
             int(alliance_id),
-            int(cost.get("metal") or 0),
-            int(cost.get("crystal") or 0),
-            int(cost.get("fuel_cells") or 0),
+            resource_db_param(metal),
+            resource_db_param(crystal),
+            resource_db_param(fuel),
         ),
     )
     if cur.rowcount != 1:
@@ -2373,9 +2392,9 @@ def start_alliance_project(player_id: int, project_kind: str, target_key: str, c
                 target_level,
                 now,
                 now + int(duration),
-                int(cost["metal"]),
-                int(cost["crystal"]),
-                int(cost["fuel_cells"]),
+                resource_db_param(cost["metal"]),
+                resource_db_param(cost["crystal"]),
+                resource_db_param(cost["fuel_cells"]),
                 int(player_id),
             ),
         )
