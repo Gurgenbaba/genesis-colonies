@@ -320,7 +320,9 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
             return max(0, _floor_decimal(give / per))
     if from_resource == "crystal" and to_resource == "fuel_cells":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_crystal_per_unit"), "1"))
-        return max(0, _floor_decimal(give / per))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give / per))
     if from_resource == "fuel_cells" and to_resource == "metal":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_metal_per_unit"), "1"))
         with localcontext() as ctx:
@@ -328,7 +330,9 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
             return max(0, _floor_decimal(give * per))
     if from_resource == "fuel_cells" and to_resource == "crystal":
         per = max(Decimal("0.001"), _decimal_value(cfg.get("fuel_crystal_per_unit"), "1"))
-        return max(0, _floor_decimal(give * per))
+        with localcontext() as ctx:
+            ctx.prec = precision
+            return max(0, _floor_decimal(give * per))
     return 0
 
 
