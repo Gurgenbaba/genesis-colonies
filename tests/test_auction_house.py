@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
+from pathlib import Path
 import time
 import uuid
 
@@ -533,3 +534,39 @@ def test_nav_attention_outbid_and_clears_new_on_visit(auction_db):
     conn.commit()
     assert count_auction_nav_attention(uid1, conn=conn) >= 1
     conn.close()
+
+
+def test_auction_house_state_endpoint_uses_read_path_and_returns_200(auction_db):
+    import game.db as dbmod
+    import game.models as models
+
+    db_path = os.environ.get("GC_DB_PATH")
+    dbmod.DB_PATH = db_path
+    models.DB_PATH = db_path
+    import app as app_module
+
+    importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
+
+    conn = db()
+    uid = _player(conn=conn)
+    uname = conn.execute(
+        "SELECT username FROM users WHERE id = ?;", (uid,)
+    ).fetchone()["username"]
+    conn.close()
+
+    client = app_module.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    res = client.get("/api/auction-house/state")
+    assert res.status_code == 200
+    payload = res.get_json() or {}
+    assert payload.get("ok") is True
+    assert isinstance(payload.get("auction_house"), dict)
+
+    src = Path("app.py").read_text(encoding="utf-8")
+    block = src.split("def api_auction_house_state():", 1)[1].split(
+        '@app.route("/api/auction-house/bid"', 1
+    )[0]
+    assert "read_player_live_state_for_poll" in block
+    assert "refresh_player_live_state(" not in block
