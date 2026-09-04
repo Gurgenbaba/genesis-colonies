@@ -95,6 +95,7 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             "game/commander_classes.py",
             "game/admin_balance.py",
             "game/overview_page.py",
+            "game/planet_evolution/ascension.py",
         )
     }
 
@@ -187,6 +188,10 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             'metal=float(player_view.get("metal")',
             'crystal=float(player_view.get("crystal")',
             'fuel_cells=float(player_view.get("fuel_cells")',
+        ),
+        "game/planet_evolution/ascension.py": (
+            'float(prow["metal"]',
+            'float(prow["crystal"]',
         ),
     }
 
