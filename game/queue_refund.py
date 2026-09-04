@@ -10,7 +10,7 @@ Genesis-style (uniform across queue types):
 from __future__ import annotations
 
 import math
-from decimal import Decimal, InvalidOperation, ROUND_FLOOR, localcontext
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 REFUND_RATIO_PENDING = 1.0
@@ -38,10 +38,7 @@ def scaled_refund_amount(base: int | float, ratio: float) -> int:
     try:
         amount = max(Decimal(0), Decimal(str(base)))
         factor = max(Decimal(0), Decimal(str(ratio)))
-        precision = max(64, len(str(abs(int(amount)))) + 64)
-        with localcontext() as ctx:
-            ctx.prec = precision
-            return int((amount * factor).to_integral_value(rounding=ROUND_FLOOR))
+        return int((amount * factor).to_integral_value(rounding=ROUND_FLOOR))
     except (InvalidOperation, ValueError, TypeError):
         return int(math.floor(max(0.0, float(base)) * max(0.0, float(ratio))))
 
@@ -52,12 +49,10 @@ def apply_planet_refund(
     *,
     metal: int = 0,
     crystal: int = 0,
-    fuel_cells: int = 0,
+    fuel_cells: float = 0,
 ) -> None:
-    if int(metal) <= 0 and int(crystal) <= 0 and int(fuel_cells) <= 0:
+    if int(metal) <= 0 and int(crystal) <= 0 and float(fuel_cells) <= 0:
         return
-    from .models import resource_db_param
-
     cur = conn.cursor()
     cur.execute(
         """
@@ -67,12 +62,7 @@ def apply_planet_refund(
             fuel_cells = fuel_cells + ?
         WHERE id = ?;
         """,
-        (
-            resource_db_param(metal),
-            resource_db_param(crystal),
-            resource_db_param(fuel_cells),
-            int(planet_id),
-        ),
+        (int(metal), int(crystal), float(fuel_cells), int(planet_id)),
     )
 
 
@@ -94,12 +84,12 @@ def refund_from_stored_costs(
         int(planet_id),
         metal=refund_m,
         crystal=refund_c,
-        fuel_cells=refund_f,
+        fuel_cells=float(refund_f),
     )
     return {
         "refund_metal": refund_m,
         "refund_crystal": refund_c,
-        "refund_fuel_cells": refund_f,
+        "refund_fuel_cells": float(refund_f),
         "refund_ratio": ratio,
     }
 
