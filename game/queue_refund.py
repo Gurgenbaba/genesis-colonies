@@ -76,6 +76,28 @@ def apply_planet_refund(
     )
 
 
+def stored_cost_int(costs: Mapping[str, Any], resource: str) -> int:
+    """Canonical paid-cost snapshot reader: exact decimal TEXT first, legacy fallback."""
+    key = str(resource or "").strip()
+    exact_key = f"cost_{key}_exact"
+    legacy_key = f"cost_{key}"
+
+    raw_exact = costs.get(exact_key)
+    if raw_exact not in (None, "", "0", 0):
+        try:
+            return max(0, int(Decimal(str(raw_exact))))
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+
+    raw_legacy = costs.get(legacy_key)
+    if raw_legacy is None:
+        raw_legacy = costs.get(key)
+    try:
+        return max(0, int(Decimal(str(raw_legacy or 0))))
+    except (InvalidOperation, ValueError, TypeError):
+        return 0
+
+
 def refund_from_stored_costs(
     conn,
     planet_id: int,
@@ -86,9 +108,9 @@ def refund_from_stored_costs(
     now: float,
 ) -> Dict[str, Any]:
     ratio = refund_ratio_for_job(start_time=start_time, finish_time=finish_time, now=now)
-    refund_m = scaled_refund_amount(costs.get("cost_metal") or costs.get("metal") or 0, ratio)
-    refund_c = scaled_refund_amount(costs.get("cost_crystal") or costs.get("crystal") or 0, ratio)
-    refund_f = scaled_refund_amount(costs.get("cost_fuel_cells") or costs.get("fuel_cells") or 0, ratio)
+    refund_m = scaled_refund_amount(stored_cost_int(costs, "metal"), ratio)
+    refund_c = scaled_refund_amount(stored_cost_int(costs, "crystal"), ratio)
+    refund_f = scaled_refund_amount(stored_cost_int(costs, "fuel_cells"), ratio)
     apply_planet_refund(
         conn,
         int(planet_id),
