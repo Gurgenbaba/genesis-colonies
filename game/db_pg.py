@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from typing import Any, Iterable, Optional, Sequence
 
 
@@ -191,10 +192,24 @@ class PgCursor:
                 return self
             text = dialect
         rewritten = rewrite_sqlite_placeholders(text)
-        if params is None:
-            self._cur.execute(rewritten)
-        else:
-            self._cur.execute(rewritten, tuple(params))
+        perf_timing = bool(getattr(self.connection, "_gc_perf_cursor_timing", False))
+        perf_t0 = time.perf_counter() if perf_timing else 0.0
+        try:
+            if params is None:
+                self._cur.execute(rewritten)
+            else:
+                self._cur.execute(rewritten, tuple(params))
+        finally:
+            if perf_timing:
+                try:
+                    from game.live_state import record_request_perf_sql_timing
+
+                    record_request_perf_sql_timing(
+                        text,
+                        (time.perf_counter() - perf_t0) * 1000.0,
+                    )
+                except Exception:
+                    pass
         self.description = self._cur.description
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
         # GC-PERF-PG-SCHEMA-CACHE-001: tests/migrations may execute DDL through
@@ -220,7 +235,21 @@ class PgCursor:
                 return self
             text = dialect
         rewritten = rewrite_sqlite_placeholders(text)
-        self._cur.executemany(rewritten, list(seq_of_params))
+        perf_timing = bool(getattr(self.connection, "_gc_perf_cursor_timing", False))
+        perf_t0 = time.perf_counter() if perf_timing else 0.0
+        try:
+            self._cur.executemany(rewritten, list(seq_of_params))
+        finally:
+            if perf_timing:
+                try:
+                    from game.live_state import record_request_perf_sql_timing
+
+                    record_request_perf_sql_timing(
+                        text,
+                        (time.perf_counter() - perf_t0) * 1000.0,
+                    )
+                except Exception:
+                    pass
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
         if rewritten.lstrip().upper().startswith(("CREATE ", "ALTER ", "DROP ")):
             clear_postgres_schema_metadata_cache()
