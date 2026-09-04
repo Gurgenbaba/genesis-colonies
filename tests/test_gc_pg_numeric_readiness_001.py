@@ -99,6 +99,15 @@ def test_classifier_respects_numeric_precision_and_scale():
             "numeric",
             "decimal_rate",
             numeric_precision=20,
+            numeric_scale=-2,
+        )[0]
+        == "not_ready"
+    )
+    assert (
+        mod.classify_type(
+            "numeric",
+            "decimal_rate",
+            numeric_precision=20,
             numeric_scale=4,
         )[0]
         == "ready"
