@@ -348,6 +348,8 @@ Katalog: `COLLECTOR_PRESTIGE_MILESTONES` in `game/collector_catalog.py`.
 
 Unlock läuft beim Grant (Lifetime-Hook) und beim Öffnen der eigenen Player Card. Belohnung ist idempotent (nur beim ersten Badge-Unlock). Inventar zeigt `prestige_progress` (`12/25 → Genesis-Kurator` + Reward-Hint) und Inbox-Notify.
 
+**GC-PERF-PLAYERCARD-003:** Der Player-Card-Bulk-Sync liest den Unlock-Status aller aktiven Badges in einem `LEFT JOIN`. Bereits freigeschaltete Badges werden vor weiteren Requirement-Probes übersprungen; der gezielte Lifetime-Hook behält seinen Einzelbadge-Fallback. Dadurch entsteht beim Öffnen der eigenen Player Card kein `SELECT unlocked?` pro Badge.
+
 ---
 
 ## Neue Items (Katalog-Erweiterung)
