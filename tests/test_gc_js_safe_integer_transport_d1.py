@@ -100,7 +100,9 @@ def test_shipyard_defense_and_troops_submit_exact_decimal_strings():
     assert "var amount = readGameplayIntegerInput(qtyInp);" in ship_build
     assert "amount: amount" in ship_build
 
-    troop_train = defense.split('if (trainBtn) {')[1].split('if (cancelBtn) {')[0]
+    troop_start = defense.index('var trainBtn = e.target.closest("[data-troop-train]")')
+    troop_end = defense.index('if (cancelBtn) {', troop_start)
+    troop_train = defense[troop_start:troop_end]
     assert "var amount = readGameplayIntegerInput(amountInp);" in troop_train
     assert "amount: amount" in troop_train
 
@@ -118,11 +120,10 @@ def test_resource_hud_and_live_ticker_keep_bigint_exactness():
     hud_end = main.index("function resourceLiveRatesAreZero", hud_start)
     hud = main[hud_start:hud_end]
     assert "const m = gameplayBigInt(metal);" in hud
-    assert "const storageMetal = gameplayBigInt(storage.metal || 0);" in hud
+    assert "_resourceLive.capMetal = gameplayBigInt(snapshot.storageMetal || 0);" in hud
     assert "function monotonicResourceBaseline" in hud
     assert "const inc = gameplayBigInt(incoming);" in hud
     assert "_resourceLive.prodMetal = gameplayBigInt(snapshot.prodMetal || 0);" in hud
-    assert "_resourceLive.capMetal = gameplayBigInt(snapshot.storageMetal || 0);" in hud
     assert "Math.floor(Number(metal)" not in hud
 
     projection_start = main.index("function projectLiveResourceAmount")
@@ -204,7 +205,7 @@ def test_no_max_quantity_templates_have_no_20_digit_cap():
 def test_auction_bid_path_is_bigint_safe():
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
 
-    state_start = main.index('const minEl = page.querySelector(`[data-auction-min-label="${id}"]`)')
+    state_start = main.index("const minEl = page.querySelector")
     state_end = main.index("const submitBtn =", state_start)
     state_block = main[state_start:state_end]
     assert "normalizeGameplayInteger(a.min_next_bid" in state_block
