@@ -158,6 +158,8 @@ def _prereq_satisfied(skill: Dict[str, Any], ranks: Dict[str, int]) -> bool:
 
 
 def _try_spend_planet(conn, planet_id: int, metal: int, crystal: int, fuel_cells: int) -> bool:
+    from .models import resource_db_param
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -171,13 +173,13 @@ def _try_spend_planet(conn, planet_id: int, metal: int, crystal: int, fuel_cells
           AND fuel_cells >= ?;
         """,
         (
-            int(metal),
-            int(crystal),
-            float(fuel_cells),
+            resource_db_param(metal),
+            resource_db_param(crystal),
+            resource_db_param(fuel_cells),
             int(planet_id),
-            int(metal),
-            int(crystal),
-            float(fuel_cells),
+            resource_db_param(metal),
+            resource_db_param(crystal),
+            resource_db_param(fuel_cells),
         ),
     )
     return int(cur.rowcount or 0) == 1
