@@ -95,10 +95,12 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile and browser syntax
         run: |
-          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py game/live_state.py game/perf_intel.py game/db_pg.py game/shipyard.py game/buildings.py game/models.py game/queue_refund.py game/effects/effect_resolver.py game/mine_evolution/formulas.py game/mine_evolution/service.py game/timekeeper.py game/inventory_use.py scripts/pg_numeric_readiness_audit.py
+          python -m py_compile game/ranking.py game/scoring.py game/number_format.py game/pirates/threat.py game/fleet.py game/live_state.py game/perf_intel.py game/db_pg.py game/shipyard.py game/buildings.py game/models.py game/queue_refund.py game/effects/effect_resolver.py game/mine_evolution/formulas.py game/mine_evolution/service.py game/timekeeper.py game/inventory_use.py game/json_transport.py scripts/pg_numeric_readiness_audit.py
           node --check static/main.js
           node --check static/admin.js
           node --check static/js/core/gc.js
+          node --check static/js/pages/shipyard.js
+          node --check static/js/pages/defense.js
           node --check static/js/ranking_page.js
           git diff --check
       - name: Big-score regression suite
@@ -107,7 +109,8 @@ jobs:
             tests/test_ranking.py tests/test_number_format.py tests/test_playercard_exact_scores.py tests/test_noob_protection.py \
             tests/test_big_score_migration.py \
             tests/test_gc622_integer_overflow.py::TestGC622SchemaTypes::test_player_scores_use_decimal_text \
-            tests/test_gc622_integer_overflow.py::TestGC622Ranking
+            tests/test_gc622_integer_overflow.py::TestGC622Ranking \
+            tests/test_gc_js_safe_integer_transport_d1.py
 
   i18n:
     name: i18n-hardening
