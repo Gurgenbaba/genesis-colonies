@@ -91,6 +91,9 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             "game/inactive_autoplay.py",
             "game/planet_evolution/dashboard.py",
             "game/queue_refund.py",
+            "game/spy.py",
+            "game/commander_classes.py",
+            "game/admin_balance.py",
         )
     }
 
@@ -163,6 +166,19 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             'fuel_cells=float(refund_f)',
             '"refund_fuel_cells": float(refund_f)',
         ),
+        "game/spy.py": (
+            'int(float(data.get("metal")',
+            'int(float(data.get("crystal")',
+            'int(float(data.get("fuel_cells")',
+        ),
+        "game/commander_classes.py": (
+            'float(fuel_cells),',
+        ),
+        "game/admin_balance.py": (
+            'int(float(player_view.get("metal")',
+            'int(float(player_view.get("crystal")',
+            'int(float(player_view.get("fuel_cells")',
+        ),
     }
 
     for rel, forbidden in forbidden_by_file.items():
@@ -180,6 +196,7 @@ def test_backend_aware_binder_is_used_for_resource_writes():
             "game/defense.py",
             "game/inactive_autoplay.py",
             "game/queue_refund.py",
+            "game/commander_classes.py",
         )
     }
     for rel, source in sources.items():
