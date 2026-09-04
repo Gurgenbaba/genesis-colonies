@@ -1454,19 +1454,20 @@
   function productionRatesFromState(state) {
     const prod = (state && state.production_per_hour) || {};
     return {
-      prodMetal: Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0)),
-      prodCrystal: Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0)),
-      prodFuelCells: Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0)),
+      prodMetal: gameplayBigInt(prod.metal_mine ?? prod.metal ?? 0),
+      prodCrystal: gameplayBigInt(prod.crystal_mine ?? prod.crystal ?? 0),
+      prodFuelCells: gameplayBigInt(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0),
     };
   }
 
   function parseDomResRate(key) {
     const el = document.querySelector(`#resource-bar [data-res-rate="${key}"]`);
-    if (!el) return 0;
+    if (!el) return BigInt(0);
     const text = String(el.textContent || "").replace(/\s/g, "");
     const m = text.match(/([+-]?\d[\d.,]*)/);
-    if (!m) return 0;
-    return Math.max(0, parseIntNumber(m[1]));
+    if (!m) return BigInt(0);
+    const value = gameplayBigInt(m[1]);
+    return value > BigInt(0) ? value : BigInt(0);
   }
 
   function resolveBootstrapProductionRates(planetId) {
@@ -1488,12 +1489,12 @@
       && (_resourceLive.prodMetal || _resourceLive.prodCrystal || _resourceLive.prodFuelCells)
     ) {
       return {
-        prodMetal: Math.floor(Number(_resourceLive.prodMetal || 0)),
-        prodCrystal: Math.floor(Number(_resourceLive.prodCrystal || 0)),
-        prodFuelCells: Math.floor(Number(_resourceLive.prodFuelCells || 0)),
+        prodMetal: gameplayBigInt(_resourceLive.prodMetal || 0),
+        prodCrystal: gameplayBigInt(_resourceLive.prodCrystal || 0),
+        prodFuelCells: gameplayBigInt(_resourceLive.prodFuelCells || 0),
       };
     }
-    return { prodMetal: 0, prodCrystal: 0, prodFuelCells: 0 };
+    return { prodMetal: BigInt(0), prodCrystal: BigInt(0), prodFuelCells: BigInt(0) };
   }
 
   function bootstrapResourceLiveFromDom() {
@@ -1501,8 +1502,8 @@
     if (!planetId) return false;
     const readVal = (selector) => {
       const el = document.querySelector(selector);
-      if (!el) return 0;
-      return parseIntNumber(el.textContent);
+      if (!el) return BigInt(0);
+      return gameplayBigInt(el.textContent);
     };
     const rates = resolveBootstrapProductionRates(planetId);
     const metal = readVal("#resource-bar .res-value.metal");
@@ -5032,10 +5033,11 @@
   }
 
   function computeHudCapacityState(current, max) {
-    const cur = Math.max(0, Number(current) || 0);
-    const cap = Math.max(0, Number(max) || 0);
-    if (cap <= 0) return { pct: 0, filled: 0, tier: "tier-green" };
-    const pct = Math.min(100, Math.round((cur / cap) * 100));
+    const cur = gameplayBigInt(current);
+    const cap = gameplayBigInt(max);
+    if (cap <= BigInt(0)) return { pct: 0, filled: 0, tier: "tier-green" };
+    const roundedPct = (cur * BigInt(100) + cap / BigInt(2)) / cap;
+    const pct = Math.min(100, Number(roundedPct));
     const filled = Math.round((pct / 100) * 10);
     let tier = "tier-green";
     if (pct >= 80) tier = "tier-red";
@@ -5106,11 +5108,11 @@
       const panel = document.querySelector(`[data-hud-res="${key}"]`);
       const warnEl = panel?.querySelector(`[data-hud-res-warn="${key}"]`);
       if (!panel || !warnEl) return;
-      const v = Number(val) || 0;
-      const c = Number(cap) || 0;
+      const v = gameplayBigInt(val);
+      const c = gameplayBigInt(cap);
       let level = "";
-      if (c > 0 && v >= c) level = "full";
-      else if (c > 0 && v >= c * STORAGE_WARN_RATIO) level = "warn";
+      if (c > BigInt(0) && v >= c) level = "full";
+      else if (c > BigInt(0) && v * BigInt(10) >= c * BigInt(9)) level = "warn";
       panel.classList.toggle("hud-res-panel--storage-warn", level === "warn");
       panel.classList.toggle("hud-res-panel--storage-full", level === "full");
       if (level) {
@@ -11323,11 +11325,14 @@
   }
 
   function monotonicResourceBaseline(incoming, current, projected, allowRegression) {
-    const inc = Math.max(0, Math.floor(Number(incoming) || 0));
-    if (allowRegression) return inc;
-    const cur = Math.max(0, Math.floor(Number(current) || 0));
-    const proj = Math.max(0, Math.floor(Number(projected) || 0));
-    return Math.max(inc, cur, proj);
+    const inc = gameplayBigInt(incoming);
+    if (allowRegression) return inc > BigInt(0) ? inc : BigInt(0);
+    const cur = gameplayBigInt(current);
+    const proj = gameplayBigInt(projected);
+    let best = inc > BigInt(0) ? inc : BigInt(0);
+    if (cur > best) best = cur;
+    if (proj > best) best = proj;
+    return best;
   }
 
   function syncResourceLiveBaseline(snapshot, opts) {
@@ -11357,12 +11362,12 @@
       projected ? projected.fuelCells : 0,
       allowRegression
     );
-    _resourceLive.prodMetal = Math.max(0, Math.floor(Number(snapshot.prodMetal) || 0));
-    _resourceLive.prodCrystal = Math.max(0, Math.floor(Number(snapshot.prodCrystal) || 0));
-    _resourceLive.prodFuelCells = Math.max(0, Math.floor(Number(snapshot.prodFuelCells) || 0));
-    _resourceLive.capMetal = Math.max(0, Math.floor(Number(snapshot.storageMetal) || 0));
-    _resourceLive.capCrystal = Math.max(0, Math.floor(Number(snapshot.storageCrystal) || 0));
-    _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
+    _resourceLive.prodMetal = gameplayBigInt(snapshot.prodMetal || 0);
+    _resourceLive.prodCrystal = gameplayBigInt(snapshot.prodCrystal || 0);
+    _resourceLive.prodFuelCells = gameplayBigInt(snapshot.prodFuelCells || 0);
+    _resourceLive.capMetal = gameplayBigInt(snapshot.storageMetal || 0);
+    _resourceLive.capCrystal = gameplayBigInt(snapshot.storageCrystal || 0);
+    _resourceLive.capFuelCells = gameplayBigInt(snapshot.storageFuelCells || 0);
     _resourceLive.energyUsed = Math.max(0, Math.floor(Number(snapshot.energyUsed) || 0));
     _resourceLive.energyTotal = Math.max(0, Math.floor(Number(snapshot.energyTotal) || 0));
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
@@ -11414,32 +11419,36 @@
     });
   }
 
-  function projectLiveResourceAmount(current, prodPerHour, cap, hours) {
-    const cur = Math.max(0, Math.floor(Number(current) || 0));
-    const prod = Math.max(0, Math.floor(Number(prodPerHour) || 0));
-    const h = Math.max(0, Number(hours) || 0);
-    const capN = Math.floor(Number(cap) || 0);
-    if (capN <= 0) return Math.floor(cur + prod * h);
+  function projectLiveResourceAmount(current, prodPerHour, cap, elapsedMs) {
+    const cur = gameplayBigInt(current);
+    const prod = gameplayBigInt(prodPerHour);
+    const capN = gameplayBigInt(cap);
+    const ms = BigInt(Math.max(0, Math.floor(Number(elapsedMs) || 0)));
+    const gain = prod > BigInt(0) ? (prod * ms) / BigInt(3_600_000) : BigInt(0);
+    const projected = cur + gain;
+    if (capN <= BigInt(0)) return projected;
     // Overflow (trader/scrapyard/rewards): never clamp existing stock; production only fills to cap.
     if (cur >= capN) return cur;
-    return Math.min(capN, Math.floor(cur + prod * h));
+    return projected < capN ? projected : capN;
   }
 
   function projectLiveResourceAmounts(nowSec) {
     if (!_resourceLive.planetId || !_resourceLive.syncedAt) return null;
-    const elapsed = Math.max(0, Number(nowSec) - _resourceLive.syncedAt);
-    if (elapsed <= 0) {
+    const elapsedMs = Math.max(
+      0,
+      Math.floor((Number(nowSec) - _resourceLive.syncedAt) * 1000)
+    );
+    if (elapsedMs <= 0) {
       return {
         metal: _resourceLive.metal,
         crystal: _resourceLive.crystal,
         fuelCells: _resourceLive.fuelCells,
       };
     }
-    const hours = elapsed / 3600;
     return {
-      metal: projectLiveResourceAmount(_resourceLive.metal, _resourceLive.prodMetal, _resourceLive.capMetal, hours),
-      crystal: projectLiveResourceAmount(_resourceLive.crystal, _resourceLive.prodCrystal, _resourceLive.capCrystal, hours),
-      fuelCells: projectLiveResourceAmount(_resourceLive.fuelCells, _resourceLive.prodFuelCells, _resourceLive.capFuelCells, hours),
+      metal: projectLiveResourceAmount(_resourceLive.metal, _resourceLive.prodMetal, _resourceLive.capMetal, elapsedMs),
+      crystal: projectLiveResourceAmount(_resourceLive.crystal, _resourceLive.prodCrystal, _resourceLive.capCrystal, elapsedMs),
+      fuelCells: projectLiveResourceAmount(_resourceLive.fuelCells, _resourceLive.prodFuelCells, _resourceLive.capFuelCells, elapsedMs),
     };
   }
 
@@ -14694,9 +14703,9 @@
     const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
     const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
 
-    const prodMetal = Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0));
-    const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
-    const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
+    const prodMetal = gameplayBigInt(prod.metal_mine ?? prod.metal ?? 0);
+    const prodCrystal = gameplayBigInt(prod.crystal_mine ?? prod.crystal ?? 0);
+    const prodFuelCells = gameplayBigInt(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0);
 
     const bar = document.getElementById("resource-bar");
     if (bar && hasResourceSnapshot) {
@@ -14731,10 +14740,10 @@
       }
 
       const rateLabel = (key, perHour) => {
-        const ph = Math.floor(Number(perHour) || 0);
+        const ph = gameplayBigInt(perHour);
         bar.querySelectorAll(`[data-res-rate="${key}"]`).forEach((el) => {
-          if (ph > 0) {
-            const sign = ph >= 0 ? "+" : "";
+          if (ph > BigInt(0)) {
+            const sign = ph >= BigInt(0) ? "+" : "";
             _setIfChanged(el, `${sign}${fmtNumber(ph)}/h`);
             el.style.visibility = "visible";
             el.removeAttribute("hidden");
