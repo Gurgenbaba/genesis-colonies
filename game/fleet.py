@@ -19,6 +19,7 @@ from .db import (
     table_columns,
     table_exists,
 )
+from .exact_math import scale_int
 from .fleet_calc import (
     allocate_auto_cargo_ships_for_targets,
     apply_departure_deduction,
@@ -2042,9 +2043,7 @@ def preview_fleet_flight(
         )
         mission = str(mission_type or "").strip().lower()
         if mission == "expedition":
-            cargo_total = int(
-                math.floor(float(calculate_expedition_loot_cap(ships)) * cargo_mult + 1e-9)
-            )
+            cargo_total = scale_int(calculate_expedition_loot_cap(ships), cargo_mult)
         else:
             cargo_total = calculate_total_cargo(ships, cargo_multiplier=cargo_mult)
         fuel_cells_have = int(origin_planet.get("fuel_cells") or 0)
