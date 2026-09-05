@@ -6,6 +6,7 @@ import math
 import random
 from typing import Any, Dict, Mapping, MutableMapping, Sequence, Tuple
 
+from .exact_math import bounded_ratio_float, mul_div_floor, scale_int, sqrt_scaled_int, sum_products_floor
 from .fleet_defs import SHIPS, VALID_RESOURCE_KEYS, ship_has_role, ship_roles, ship_score_value
 
 EXPEDITION_REPORT_VERSION = 2
@@ -530,7 +531,7 @@ def _scale_resource_rewards(rewards: MutableMapping[str, int], mult: float) -> N
         return
     for key in VALID_RESOURCE_KEYS:
         if key in rewards:
-            rewards[key] = max(0, int(int(rewards.get(key) or 0) * m))
+            rewards[key] = max(0, scale_int(rewards.get(key) or 0, m))
 
 
 def record_expedition_daily_value(
@@ -604,7 +605,7 @@ def calculate_expo_value(ships: Mapping[str, int]) -> int:
     """Σ count × (per_hull_build_cost ** EXPEDITION_LOOT_EXPONENT); escorts/cargo excluded."""
     from .fleet_defs import canonical_ship_key
 
-    total = 0.0
+    terms = []
     for key, qty in ships.items():
         amount = int(qty or 0)
         if amount <= 0:
@@ -613,15 +614,13 @@ def calculate_expo_value(ships: Mapping[str, int]) -> int:
         per_hull_expo = expedition_ship_expo_loot_unit(canon)
         if per_hull_expo <= 0:
             continue
-        total += amount * per_hull_expo
-    return max(0, int(total))
+        terms.append((amount, per_hull_expo))
+    return max(0, sum_products_floor(terms))
 
 
-def calculate_base_expedition_loot(expo_value: int) -> float:
+def calculate_base_expedition_loot(expo_value: int) -> int:
     """Reference base loot before random/event factors (expo_value already per-hull exponent sum)."""
-    if expo_value <= 0:
-        return 0.0
-    return float(max(0, int(expo_value)))
+    return max(0, int(expo_value))
 
 
 def _expo_value_for_outcome(
@@ -635,7 +634,7 @@ def _expo_value_for_outcome(
     hulls = max(0, int(expedition_ship_count))
     if hulls <= 0:
         return 0
-    return int(hulls * expedition_ship_expo_loot_unit("solar_skiff"))
+    return scale_int(hulls, expedition_ship_expo_loot_unit("solar_skiff"))
 
 
 def calculate_expedition_hull_value(ships: Mapping[str, int]) -> int:
@@ -711,7 +710,11 @@ def build_expedition_fleet_rating(ships: Mapping[str, int]) -> Dict[str, Any]:
     escort_val = calculate_expedition_escort_value(ships)
     fighting, recyclers = split_expedition_pirate_fleets(ships or {})
     fighting_score = calculate_fleet_value(fighting)
-    ratio = escort_val / max(1, hull_val) if hull_val > 0 else 0.0
+    ratio = (
+        bounded_ratio_float(escort_val, hull_val, maximum="1e300")
+        if hull_val > 0
+        else 0.0
+    )
     eff = _escort_effectiveness(ratio)
     void_bonus = _voidrunner_discovery_bonus(ships)
     return {
@@ -830,7 +833,7 @@ def _split_loot_total(total: int, split: Mapping[str, float]) -> Dict[str, int]:
         if idx == len(ordered) - 1:
             amount = max(0, total - allocated)
         else:
-            amount = int(total * share)
+            amount = scale_int(total, share)
             allocated += amount
         rewards[resource] = amount
     return rewards
@@ -861,7 +864,13 @@ def _compute_event_loot(
     base_loot = calculate_base_expedition_loot(int(expo_value))
     total_loot = max(
         0,
-        int(base_loot * random_factor * profile_mult * global_event_factor * quality_mult),
+        scale_int(
+            base_loot,
+            random_factor,
+            profile_mult,
+            global_event_factor,
+            quality_mult,
+        ),
     )
     cargo_cap = max(0, int(cargo_total))
     if cargo_cap > 0:
@@ -979,9 +988,12 @@ def _scale_rewards_to_cargo(rewards: MutableMapping[str, int], cargo_total: int)
     loaded = sum(int(rewards.get(k) or 0) for k in VALID_RESOURCE_KEYS)
     if cargo_total <= 0 or loaded <= cargo_total:
         return
-    scale = cargo_total / max(1, loaded)
     for key in VALID_RESOURCE_KEYS:
-        rewards[key] = int(int(rewards.get(key) or 0) * scale)
+        rewards[key] = mul_div_floor(
+            int(rewards.get(key) or 0),
+            int(cargo_total),
+            max(1, int(loaded)),
+        )
 
 
 def _apply_cargo_cap(
@@ -1011,7 +1023,7 @@ def _apply_directive_reward_modifiers(
     if mult == 1.0:
         return
     for key in VALID_RESOURCE_KEYS:
-        rewards[key] = int(int(rewards.get(key) or 0) * mult)
+        rewards[key] = scale_int(int(rewards.get(key) or 0), mult)
 
 
 def _loss_role_priority(ship_key: str) -> int:
@@ -1056,7 +1068,7 @@ def apply_expedition_ship_losses(
     if total <= floor:
         return cleaned, {}
 
-    loss_budget = min(total - floor, int(math.floor(total * loss_pct / 100.0)))
+    loss_budget = min(total - floor, mul_div_floor(total, loss_pct, 100))
     if loss_budget <= 0:
         return cleaned, {}
 
@@ -1114,14 +1126,17 @@ def roll_pirate_salvage_rewards(
     fleet_pts = max(1, int(fleet_points))
     score_cap = max(
         ship_score_value("spark_drone"),
-        int(pirate_pts * _PIRATE_SALVAGE_SCORE_CAP_RATIO),
+        scale_int(pirate_pts, _PIRATE_SALVAGE_SCORE_CAP_RATIO),
     )
     if tier == "rare":
-        score_cap = min(int(score_cap * 1.8), int(pirate_pts * 0.20))
+        score_cap = min(
+            scale_int(score_cap, "1.8"),
+            scale_int(pirate_pts, "0.20"),
+        )
 
     pool = list(_PIRATE_SALVAGE_SHIP_LIGHT if tier == "small" else _PIRATE_SALVAGE_SHIP_MID)
     max_hulls = 2 if tier == "small" else 3
-    if pirate_pts < int(fleet_pts * 0.85):
+    if pirate_pts < scale_int(fleet_pts, "0.85"):
         max_hulls = min(max_hulls, 1)
 
     target_hulls = rng.randint(1, max(1, max_hulls))
@@ -1162,7 +1177,7 @@ def _roll_convoy_ship_salvage(rng: random.Random, fleet_value: int) -> Dict[str,
     fleet_pts = max(1, int(fleet_value))
     score_cap = max(
         ship_score_value("solar_skiff"),
-        int(fleet_pts * _CONVoy_SALVAGE_SCORE_CAP_RATIO),
+        scale_int(fleet_pts, _CONVoy_SALVAGE_SCORE_CAP_RATIO),
     )
     pool = list(_PIRATE_SALVAGE_SHIP_LIGHT) + list(_PIRATE_SALVAGE_SHIP_MID)
     target_hulls = rng.randint(1, 3)
@@ -1254,7 +1269,7 @@ def resolve_spatial_rift_legendary(
         )
         ampl = rng.uniform(_SPATIAL_RIFT_AMPL_MULT_RANGE[0], _SPATIAL_RIFT_AMPL_MULT_RANGE[1])
         for key in VALID_RESOURCE_KEYS:
-            rewards[key] = int(int(rewards.get(key) or 0) * ampl)
+            rewards[key] = scale_int(rewards.get(key) or 0, ampl)
         _apply_cargo_cap(rewards, int(cargo_total))
         return {
             "variant": "amplified",
@@ -1306,7 +1321,10 @@ def resolve_time_anomaly_legendary(
                 event_factor=event_factor,
             )
             for key in VALID_RESOURCE_KEYS:
-                rewards[key] = int(int(rewards.get(key) or 0) * _TIME_ANOMALY_BONUS_LOOT_SCALE)
+                rewards[key] = scale_int(
+                    rewards.get(key) or 0,
+                    _TIME_ANOMALY_BONUS_LOOT_SCALE,
+                )
             _apply_cargo_cap(rewards, int(cargo_total))
     else:
         variant = "dilated"
@@ -1325,7 +1343,10 @@ def resolve_time_anomaly_legendary(
                 event_factor=event_factor,
             )
             for key in VALID_RESOURCE_KEYS:
-                rewards[key] = int(int(rewards.get(key) or 0) * _TIME_ANOMALY_BONUS_LOOT_SCALE)
+                rewards[key] = scale_int(
+                    rewards.get(key) or 0,
+                    _TIME_ANOMALY_BONUS_LOOT_SCALE,
+                )
             _apply_cargo_cap(rewards, int(cargo_total))
     return {
         "variant": variant,
@@ -1516,7 +1537,7 @@ def soft_cap_pirate_budget(fighting_score: int) -> int:
     if score <= soft:
         return score
     over = score - soft
-    return soft + int(math.sqrt(float(over)) * float(_PIRATE_BUDGET_SOFT_SQRT_SCALE))
+    return soft + sqrt_scaled_int(over, _PIRATE_BUDGET_SOFT_SQRT_SCALE)
 
 
 def roll_void_pirate_combat_research(
@@ -1623,13 +1644,17 @@ def resolve_pirate_encounter(
             else calculate_expedition_escort_value(ships)
         ),
     )
-    escort_ratio = escort_pts / max(1, expo_risk) if expo_risk > 0 else 0.0
+    escort_ratio = (
+        bounded_ratio_float(escort_pts, expo_risk, maximum="1e300")
+        if expo_risk > 0
+        else 0.0
+    )
     escort_eff = _escort_effectiveness(escort_ratio)
 
     fighting_score = max(0, calculate_fleet_value(fighting))
     budget = soft_cap_pirate_budget(fighting_score)
     enemy_factor = rng.uniform(_PIRATE_ENEMY_FACTOR_RANGE[0], _PIRATE_ENEMY_FACTOR_RANGE[1])
-    pirate_points = max(1, int(budget * enemy_factor)) if budget > 0 else 1
+    pirate_points = max(1, scale_int(budget, enemy_factor)) if budget > 0 else 1
 
     seed = int(movement_id) if movement_id is not None else int(rng.random() * 1_000_000_000)
     pirate_ships = virtual_pirate_fleet(pirate_points, seed=seed)
@@ -1753,16 +1778,19 @@ def virtual_pirate_fleet(pirate_points: int, *, seed: int) -> Dict[str, int]:
     if pts <= 0:
         return {"spark_drone": 1}
     rng = random.Random(int(seed) ^ 0xA5A5)
-    remaining = float(pts)
+    remaining = pts
     out: Dict[str, int] = {}
     for key, share in _VIRTUAL_PIRATE_HULL_MIX:
-        budget = remaining * share if key != _VIRTUAL_PIRATE_HULL_MIX[-1][0] else remaining
         per = max(1, ship_score_value(key))
         jitter = 0.85 + rng.random() * 0.3
-        count = max(0, int((budget * jitter) / per))
+        if key != _VIRTUAL_PIRATE_HULL_MIX[-1][0]:
+            weighted = scale_int(remaining, share, jitter)
+        else:
+            weighted = scale_int(remaining, jitter)
+        count = max(0, weighted // per)
         if count > 0:
             out[key] = count
-            remaining = max(0.0, remaining - count * per)
+            remaining = max(0, remaining - count * per)
     if not out:
         out["spark_drone"] = max(1, pts // max(1, ship_score_value("spark_drone")))
     return out
