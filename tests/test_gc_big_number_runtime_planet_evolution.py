@@ -34,7 +34,7 @@ def test_pe_special_resource_owners_have_no_balance_float_binds():
     ):
         assert forbidden not in ascension
 
-    assert "decimal_value(row["amount"] if row else 0)" in ascension
+    assert 'decimal_value(row["amount"] if row else 0)' in ascension
     assert "amount - CAST(? AS NUMERIC)" in ascension
     assert "amount >= CAST(? AS NUMERIC)" in ascension
 
