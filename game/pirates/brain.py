@@ -19,6 +19,7 @@ from .bases import LIVE_STATUSES, list_live_bases
 from .heat import HEAT_THRESHOLDS, get_galaxy_heat
 from .log import log_pirate_action
 from .settings import is_pirates_ai_enabled
+from ..exact_math import bounded_ratio_float, scale_int
 from .threat import get_player_threat, recompute_player_threat
 
 logger = logging.getLogger(__name__)
@@ -111,9 +112,12 @@ def _score_opportunity(
     """OGX-like opportunity 0–100 from loot vs defense + inactivity + bounty."""
     loot = max(0, int(metal) + int(crystal) + int(fuel) // 2)
     risk = max(1, int(defense_score) + int(fleet_score) // 2)
-    # Turtle factions treat defended worlds as higher risk.
-    risk = int(risk * (1.0 + 0.6 * max(0.0, min(1.0, float(turtle)))))
-    raw = (float(loot) / float(risk)) * 12.0
+    # Turtle factions treat defended worlds as higher risk. The faction factor
+    # is bounded, but the military/resource values are not.
+    turtle_factor = 1.0 + 0.6 * max(0.0, min(1.0, float(turtle)))
+    risk = max(1, scale_int(risk, turtle_factor))
+    loot_risk_ratio = bounded_ratio_float(loot, risk, maximum="1000")
+    raw = loot_risk_ratio * 12.0
     raw += min(30.0, max(0.0, offline_hours) * 1.5)
     # Famous / high-threat players draw elite attention (not ignored).
     if threat >= 70:
@@ -220,9 +224,9 @@ def _raid_fleet_from_hangar(
         total = int(v or 0)
         if total <= 0:
             continue
-        keep = int(max(0, round(total * keep_ratio)))
+        keep = max(0, scale_int(total, keep_ratio, rounding="half_even"))
         available = max(0, total - keep)
-        n = int(max(0, round(available * float(fraction))))
+        n = max(0, scale_int(available, fraction, rounding="half_even"))
         if n > 0:
             fleet[key] = n
     return fleet
