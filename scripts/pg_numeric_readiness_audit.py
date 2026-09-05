@@ -127,6 +127,8 @@ POLICIES: tuple[NumericPolicy, ...] = (
     NumericPolicy("planet_special_resources", "consumption_per_hour", "decimal_rate", "P1", "special resource rate"),
     NumericPolicy("planet_trade_routes", "amount_per_hour", "decimal_rate", "P1", "trade rate"),
     NumericPolicy("planet_import_demands", "required_per_hour", "decimal_rate", "P1", "import demand rate"),
+    NumericPolicy("pe_special_resource_definitions", "base_cap", "exact_unbounded", "P1", "special resource definition cap"),
+    NumericPolicy("pe_production_chain_definitions", "base_output_per_hour", "decimal_rate", "P1", "production chain definition rate"),
 
     # Known good arbitrary score persistence.
     NumericPolicy("player_scores", "score_total", "exact_snapshot", "P1", "arbitrary score"),
