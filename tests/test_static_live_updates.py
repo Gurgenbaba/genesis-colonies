@@ -3201,7 +3201,7 @@ def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
     assert "preserveScroll" in scroll
 
 def test_main_js_trader_hub_exchange_live_preview():
-    """Trader Hub: preview runs after formatted number input; locale parsing covers grouped ints."""
+    """Trader Hub: preview and submit preserve grouped integers beyond JS safe Number."""
     src = _read("static/main.js")
     parse_fn = src.split("function parseIntNumber(n)")[1].split("function formatNumber")[0]
     assert r"^-?\d{1,3}(,\d{3})+$" in parse_fn
@@ -3212,9 +3212,11 @@ def test_main_js_trader_hub_exchange_live_preview():
     assert 'amountInput.addEventListener("input", scheduleUpdatePreview)' in exchange
     assert 'amountInput.addEventListener("change", scheduleUpdatePreview)' in exchange
     assert 'amountInput.addEventListener("paste"' in exchange
-    assert "readNumberInput(amountInput)" in exchange
-    assert "parseIntNumber(amount)" in exchange
-    assert "setNumberInputValue(amountInput, minNow)" in exchange
+    assert "readGameplayIntegerInput(amountInput" in exchange
+    assert "gameplayBigInt(amount)" in exchange
+    assert "compareGameplayIntegers" in exchange
+    assert "setGameplayIntegerInput(amountInput, minNow)" in exchange
+    assert "parseIntNumber(amount)" not in exchange
 
 
 def test_main_js_imperial_directives_full_state_endpoint():

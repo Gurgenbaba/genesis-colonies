@@ -31548,6 +31548,44 @@
       fuelMin: parseInt(panel.dataset.fuelMin || "10", 10),
     });
 
+    const parseExchangeRateRatio = (value, fallback = "1") => {
+      let raw = String(value ?? fallback).trim();
+      let match = raw.match(/^([+-]?)(\d+)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/);
+      if (!match) {
+        raw = String(fallback).trim();
+        match = raw.match(/^([+-]?)(\d+)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/);
+      }
+      if (!match) return { num: BigInt(1), den: BigInt(1) };
+      const negative = match[1] === "-";
+      const whole = match[2] || "0";
+      const fraction = match[3] || "";
+      const exponent = parseInt(match[4] || "0", 10) || 0;
+      const digits = (whole + fraction).replace(/^0+(?=\d)/, "") || "0";
+      let num = BigInt(digits);
+      let den = BigInt(1);
+      const scale = fraction.length - exponent;
+      if (scale > 0) den = BigInt(10) ** BigInt(scale);
+      else if (scale < 0) num *= BigInt(10) ** BigInt(-scale);
+      if (negative) num = -num;
+      return { num, den };
+    };
+
+    const clampExchangeRateMin = (ratio, minNum = BigInt(1), minDen = BigInt(1000)) => {
+      if (!ratio || ratio.den <= BigInt(0)) return { num: minNum, den: minDen };
+      if (ratio.num * minDen < minNum * ratio.den) return { num: minNum, den: minDen };
+      return ratio;
+    };
+
+    const multiplyByExchangeRate = (amount, ratio) => {
+      if (!ratio || ratio.num <= BigInt(0) || ratio.den <= BigInt(0)) return BigInt(0);
+      return (amount * ratio.num) / ratio.den;
+    };
+
+    const divideByExchangeRate = (amount, ratio) => {
+      if (!ratio || ratio.num <= BigInt(0) || ratio.den <= BigInt(0)) return BigInt(0);
+      return (amount * ratio.den) / ratio.num;
+    };
+
     const reasonText = (reason) => tt(`exchange_error_${reason}`, tt("exchange_error_generic", "Exchange failed."));
 
     const selectedDirection = () => panel.dataset.dir || routeSelect?.value || "metal_to_crystal";
@@ -31604,19 +31642,34 @@
     };
 
     const computeReceive = (dir, amount) => {
-      const cfg = readRates();
       const { from, to } = routeParts(dir);
-      const raw = parseIntNumber(amount);
-      if (!raw || raw <= 0) return 0;
+      const raw = gameplayBigInt(amount);
+      if (raw <= BigInt(0)) return BigInt(0);
       if (from === "metal" && to === "crystal") {
-        return Math.floor(raw / Math.max(0.001, cfg.m2c));
+        const rate = clampExchangeRateMin(parseExchangeRateRatio(panel.dataset.rateM2c || "0.8"));
+        return divideByExchangeRate(raw, rate);
       }
-      if (from === "crystal" && to === "metal") return Math.floor(raw * Math.max(0, cfg.c2m));
-      if (from === "metal" && to === "fuel_cells") return Math.floor(raw / Math.max(0.001, cfg.fuelMetalPer));
-      if (from === "crystal" && to === "fuel_cells") return Math.floor(raw / Math.max(0.001, cfg.fuelCrystalPer));
-      if (from === "fuel_cells" && to === "metal") return Math.floor(raw * Math.max(0.001, cfg.fuelMetalPer));
-      if (from === "fuel_cells" && to === "crystal") return Math.floor(raw * Math.max(0.001, cfg.fuelCrystalPer));
-      return 0;
+      if (from === "crystal" && to === "metal") {
+        const rate = parseExchangeRateRatio(panel.dataset.rateC2m || "0.8", "0");
+        return multiplyByExchangeRate(raw, rate);
+      }
+      if (from === "metal" && to === "fuel_cells") {
+        const rate = clampExchangeRateMin(parseExchangeRateRatio(panel.dataset.fuelMetalPer || "45"));
+        return divideByExchangeRate(raw, rate);
+      }
+      if (from === "crystal" && to === "fuel_cells") {
+        const rate = clampExchangeRateMin(parseExchangeRateRatio(panel.dataset.fuelCrystalPer || "28"));
+        return divideByExchangeRate(raw, rate);
+      }
+      if (from === "fuel_cells" && to === "metal") {
+        const rate = clampExchangeRateMin(parseExchangeRateRatio(panel.dataset.fuelMetalPer || "45"));
+        return multiplyByExchangeRate(raw, rate);
+      }
+      if (from === "fuel_cells" && to === "crystal") {
+        const rate = clampExchangeRateMin(parseExchangeRateRatio(panel.dataset.fuelCrystalPer || "28"));
+        return multiplyByExchangeRate(raw, rate);
+      }
+      return BigInt(0);
     };
 
     const displayRate = (dir) => {
@@ -31645,62 +31698,72 @@
 
     const formatRate = (rate) => (rate >= 1 ? String(Math.round(rate)) : rate.toFixed(3).replace(/\.?0+$/, ""));
 
+    const nonNegativeExchangeInteger = (value) => {
+      const exact = gameplayBigInt(value);
+      return exact > BigInt(0) ? exact : BigInt(0);
+    };
+
     const readExchangeGiveBalance = (resource) => {
       const ex = GC.lastState?.exchange;
-      if (ex?.balances && typeof ex.balances[resource] === "number") {
-        return Math.max(0, Math.floor(ex.balances[resource]));
+      if (ex?.balances && ex.balances[resource] != null) {
+        return nonNegativeExchangeInteger(ex.balances[resource]);
       }
       const dsMap = {
         metal: panel.dataset.balanceMetal,
         crystal: panel.dataset.balanceCrystal,
         fuel_cells: panel.dataset.balanceFuelCells,
       };
-      const fromDs = parseIntNumber(dsMap[resource]);
-      if (Number.isFinite(fromDs) && fromDs >= 0) return fromDs;
+      if (dsMap[resource] != null && dsMap[resource] !== "") {
+        return nonNegativeExchangeInteger(dsMap[resource]);
+      }
       const p = GC.lastState?.player || GC.lastState?.resources || {};
-      const fromPlayer = parseIntNumber(p[resource]);
-      if (Number.isFinite(fromPlayer) && fromPlayer >= 0) return fromPlayer;
-      return 0;
+      if (p[resource] != null) return nonNegativeExchangeInteger(p[resource]);
+      return BigInt(0);
     };
 
     const readExchangeDailyRemaining = () => {
       const ex = GC.lastState?.exchange;
-      if (typeof ex?.daily_remaining === "number") {
-        return Math.max(0, Math.floor(ex.daily_remaining));
+      if (ex?.daily_remaining != null) {
+        return nonNegativeExchangeInteger(ex.daily_remaining);
       }
-      const fromDs = parseIntNumber(panel.dataset.dailyRemaining);
-      if (Number.isFinite(fromDs) && fromDs >= 0) return fromDs;
-      const used = parseIntNumber(dailyUsedEl?.textContent);
-      const limit = parseIntNumber(dailyLimitEl?.textContent);
-      if (Number.isFinite(used) && Number.isFinite(limit) && limit >= 0) {
-        return Math.max(0, limit - used);
+      if (panel.dataset.dailyRemaining != null && panel.dataset.dailyRemaining !== "") {
+        return nonNegativeExchangeInteger(panel.dataset.dailyRemaining);
       }
-      return 0;
+      const usedRaw = dailyUsedEl?.getAttribute("title") || dailyUsedEl?.textContent || "0";
+      const limitRaw = dailyLimitEl?.getAttribute("title") || dailyLimitEl?.textContent || "0";
+      const used = nonNegativeExchangeInteger(usedRaw);
+      const limit = nonNegativeExchangeInteger(limitRaw);
+      return limit > used ? limit - used : BigInt(0);
     };
 
     const computeExchangeMaxInput = () => {
       const dir = selectedDirection();
-      if (!ROUTES[dir]) return 0;
+      if (!ROUTES[dir]) return BigInt(0);
       const { from } = routeParts(dir);
-      if (!from) return 0;
+      if (!from) return BigInt(0);
       const balance = readExchangeGiveBalance(from);
       const remaining = readExchangeDailyRemaining();
-      return Math.max(0, Math.min(balance, remaining));
+      return balance < remaining ? balance : remaining;
     };
 
     const updateExchangeMaxBtn = () => {
       if (!maxBtn) return;
-      const minNow = parseInt(panel.dataset.routeMin || String(minForRoute(selectedDirection())), 10);
+      const minNow = normalizeGameplayInteger(
+        panel.dataset.routeMin || String(minForRoute(selectedDirection()))
+      );
       const maxVal = computeExchangeMaxInput();
-      const enabled = maxVal > 0 && maxVal >= minNow && panel.dataset.disabled !== "1";
+      const enabled =
+        isPositiveGameplayInteger(maxVal) &&
+        compareGameplayIntegers(maxVal, minNow) >= 0 &&
+        panel.dataset.disabled !== "1";
       maxBtn.disabled = !enabled;
       maxBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
     };
 
     const applyExchangeMaxAmount = () => {
       const maxVal = computeExchangeMaxInput();
-      if (maxVal <= 0) return;
-      setNumberInputValue(amountInput, maxVal);
+      if (!isPositiveGameplayInteger(maxVal)) return;
+      setGameplayIntegerInput(amountInput, maxVal);
       amountInput.dispatchEvent(new Event("input", { bubbles: true }));
       scheduleUpdatePreview();
     };
@@ -31716,8 +31779,11 @@
       panel.dataset.routeMin = String(minNow);
       amountInput.min = String(minNow);
       amountInput.dataset.exchangeMin = String(minNow);
-      if (!amountInput.value || readNumberInput(amountInput) < minNow) {
-        setNumberInputValue(amountInput, minNow);
+      if (
+        !amountInput.value ||
+        compareGameplayIntegers(readGameplayIntegerInput(amountInput, "0"), minNow) < 0
+      ) {
+        setGameplayIntegerInput(amountInput, minNow);
       }
       updatePreview();
       updateExchangeMaxBtn();
@@ -31739,11 +31805,15 @@
 
     let previewRaf = 0;
     const updatePreview = () => {
-      const raw = readNumberInput(amountInput);
-      const minNow = parseInt(panel.dataset.routeMin || String(minForRoute(selectedDirection())), 10);
+      const raw = readGameplayIntegerInput(amountInput, "0");
+      const minNow = normalizeGameplayInteger(
+        panel.dataset.routeMin || String(minForRoute(selectedDirection()))
+      );
       const dir = selectedDirection();
       const { to } = routeParts(dir);
-      const valid = raw >= minNow;
+      const valid =
+        isPositiveGameplayInteger(raw) &&
+        compareGameplayIntegers(raw, minNow) >= 0;
       if (submitBtn) submitBtn.disabled = !valid;
       if (!valid) {
         previewEl.textContent = "–";
@@ -31769,39 +31839,44 @@
 
     const patchExchangeFromState = (exchange) => {
       if (!exchange) return;
-      if (typeof exchange.daily_used === "number" && dailyUsedEl) {
-        dailyUsedEl.textContent = formatNumberCompact(exchange.daily_used);
-        dailyUsedEl.setAttribute("title", fmtNumber(exchange.daily_used));
+      if (exchange.daily_used != null && dailyUsedEl) {
+        const dailyUsed = nonNegativeExchangeInteger(exchange.daily_used);
+        dailyUsedEl.textContent = formatNumberCompact(dailyUsed);
+        dailyUsedEl.setAttribute("title", fmtNumber(dailyUsed));
       }
-      if (typeof exchange.daily_remaining === "number" && remainingEl) {
-        remainingEl.textContent = formatNumberCompact(exchange.daily_remaining);
-        remainingEl.setAttribute("title", fmtNumber(exchange.daily_remaining));
+      if (exchange.daily_remaining != null && remainingEl) {
+        const dailyRemaining = nonNegativeExchangeInteger(exchange.daily_remaining);
+        remainingEl.textContent = formatNumberCompact(dailyRemaining);
+        remainingEl.setAttribute("title", fmtNumber(dailyRemaining));
       }
-      if (typeof exchange.daily_remaining === "number") {
-        panel.dataset.dailyRemaining = String(Math.max(0, Math.floor(exchange.daily_remaining)));
+      if (exchange.daily_remaining != null) {
+        panel.dataset.dailyRemaining = nonNegativeExchangeInteger(exchange.daily_remaining).toString();
       }
       if (exchange.balances && typeof exchange.balances === "object") {
-        if (typeof exchange.balances.metal === "number") {
-          panel.dataset.balanceMetal = String(Math.max(0, Math.floor(exchange.balances.metal)));
+        if (exchange.balances.metal != null) {
+          panel.dataset.balanceMetal = nonNegativeExchangeInteger(exchange.balances.metal).toString();
         }
-        if (typeof exchange.balances.crystal === "number") {
-          panel.dataset.balanceCrystal = String(Math.max(0, Math.floor(exchange.balances.crystal)));
+        if (exchange.balances.crystal != null) {
+          panel.dataset.balanceCrystal = nonNegativeExchangeInteger(exchange.balances.crystal).toString();
         }
-        if (typeof exchange.balances.fuel_cells === "number") {
-          panel.dataset.balanceFuelCells = String(Math.max(0, Math.floor(exchange.balances.fuel_cells)));
+        if (exchange.balances.fuel_cells != null) {
+          panel.dataset.balanceFuelCells = nonNegativeExchangeInteger(exchange.balances.fuel_cells).toString();
         }
       }
-      if (typeof exchange.daily_limit === "number" && dailyLimitEl) {
-        dailyLimitEl.textContent = formatNumberCompact(exchange.daily_limit);
-        dailyLimitEl.setAttribute("title", fmtNumber(exchange.daily_limit));
+      if (exchange.daily_limit != null && dailyLimitEl) {
+        const dailyLimit = nonNegativeExchangeInteger(exchange.daily_limit);
+        dailyLimitEl.textContent = formatNumberCompact(dailyLimit);
+        dailyLimitEl.setAttribute("title", fmtNumber(dailyLimit));
       }
-      if (typeof exchange.daily_limit === "number" && dailyLimitDisplayEl) {
-        dailyLimitDisplayEl.textContent = formatNumberCompact(exchange.daily_limit);
-        dailyLimitDisplayEl.setAttribute("title", fmtNumber(exchange.daily_limit));
+      if (exchange.daily_limit != null && dailyLimitDisplayEl) {
+        const dailyLimit = nonNegativeExchangeInteger(exchange.daily_limit);
+        dailyLimitDisplayEl.textContent = formatNumberCompact(dailyLimit);
+        dailyLimitDisplayEl.setAttribute("title", fmtNumber(dailyLimit));
       }
-      if (typeof exchange.empire_production_day_total === "number" && empireDayEl) {
-        const empireFull = fmtNumber(exchange.empire_production_day_total);
-        const empireCompact = formatNumberCompact(exchange.empire_production_day_total);
+      if (exchange.empire_production_day_total != null && empireDayEl) {
+        const empireTotal = nonNegativeExchangeInteger(exchange.empire_production_day_total);
+        const empireFull = fmtNumber(empireTotal);
+        const empireCompact = formatNumberCompact(empireTotal);
         empireDayEl.textContent = tf(
           "trader_hub_empire_production_day",
           { total: empireCompact },
@@ -31821,11 +31896,11 @@
       if (typeof exchange.fuel_crystal_per_unit === "number") {
         panel.dataset.fuelCrystalPer = String(exchange.fuel_crystal_per_unit);
       }
-      if (typeof exchange.fuel_min_units === "number") {
-        panel.dataset.fuelMin = String(exchange.fuel_min_units);
+      if (exchange.fuel_min_units != null) {
+        panel.dataset.fuelMin = normalizeGameplayInteger(exchange.fuel_min_units);
       }
-      if (typeof exchange.min_amount === "number") {
-        panel.dataset.min = String(exchange.min_amount);
+      if (exchange.min_amount != null) {
+        panel.dataset.min = normalizeGameplayInteger(exchange.min_amount);
       }
       setDirection(selectedDirection());
       updateExchangeMaxBtn();
@@ -31874,11 +31949,13 @@
           errorEl.textContent = "";
         }
 
-        const amountDigits = String(amountInput.value || "").replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "") || "0";
-        const amount = readNumberInput(amountInput);
+        const amount = readGameplayIntegerInput(amountInput, "0");
         const dir = selectedDirection();
-        const minNow = minForRoute(dir);
-        if (!amount || amount < minNow) {
+        const minNow = normalizeGameplayInteger(minForRoute(dir));
+        if (
+          !isPositiveGameplayInteger(amount) ||
+          compareGameplayIntegers(amount, minNow) < 0
+        ) {
           if (errorEl) {
             errorEl.textContent = reasonText("below_minimum");
             errorEl.hidden = false;
@@ -31906,10 +31983,10 @@
             headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
             // Send the exact decimal string; Flask/Python int accepts it and
             // avoids JavaScript Number precision loss on very large empires.
-            body: JSON.stringify({ direction: dir, from, to, amount: amountDigits }),
+            body: JSON.stringify({ direction: dir, from, to, amount }),
           });
           if (res?.ok) {
-            setNumberInputValue(amountInput, minNow);
+            setGameplayIntegerInput(amountInput, minNow);
             scheduleUpdatePreview();
             applyActionState(res, "exchange_success");
             showNotify(tt("exchange_success", "Exchange completed."), "success");
