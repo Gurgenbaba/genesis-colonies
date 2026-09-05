@@ -38,7 +38,7 @@ def test_schema_finalizer_is_noop_for_sqlite(monkeypatch):
 
 
 @requires_postgres
-def test_migrate_rerun_repairs_late_migration_int4_column(pg_parity_db):
+def test_migrate_rerun_repairs_intentional_late_i64_column(pg_parity_db):
     """A late table must be hardened even when no numbered migration is pending."""
     from migrate import main as migrate_main
     from game.db import db
@@ -52,21 +52,21 @@ def test_migrate_rerun_repairs_late_migration_int4_column(pg_parity_db):
             SELECT data_type
             FROM information_schema.columns
             WHERE table_schema = current_schema()
-              AND table_name = 'expedition_daily_value'
-              AND column_name = 'expo_value_total';
+              AND table_name = 'pirate_bot_state'
+              AND column_name = 'seed';
             """
         ).fetchone()
         assert before is not None
-        assert str(before["data_type"]).lower() in {"bigint", "numeric"}
+        assert str(before["data_type"]).lower() == "bigint"
 
         # Simulate the historical fresh-bootstrap ordering bug: a table created
         # by a numbered migration exists as ordinary PG INTEGER after the
         # pre-migration hardening pass.
         conn.execute(
             """
-            ALTER TABLE expedition_daily_value
-            ALTER COLUMN expo_value_total TYPE INTEGER
-            USING expo_value_total::integer;
+            ALTER TABLE pirate_bot_state
+            ALTER COLUMN seed TYPE INTEGER
+            USING seed::integer;
             """
         )
         conn.commit()
@@ -83,8 +83,8 @@ def test_migrate_rerun_repairs_late_migration_int4_column(pg_parity_db):
             SELECT data_type
             FROM information_schema.columns
             WHERE table_schema = current_schema()
-              AND table_name = 'expedition_daily_value'
-              AND column_name = 'expo_value_total';
+              AND table_name = 'pirate_bot_state'
+              AND column_name = 'seed';
             """
         ).fetchone()
         assert after is not None
