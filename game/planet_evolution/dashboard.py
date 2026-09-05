@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import sqlite3
 import time
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from typing import Any, Dict, List, Mapping, Optional
 
 from ..models import get_planet_buildings
@@ -172,9 +173,29 @@ def _economy_flow(planet_id: int, mechanics: Dict[str, Any], conn: sqlite3.Conne
 
     deficits = []
     for d in mechanics.get("import_deficits") or []:
-        received = float(d.get("received") or 0)
-        required = float(d.get("required") or 0)
-        pct = int(round(100.0 * received / required)) if required > 0 else 0
+        try:
+            received = Decimal(str(d.get("received") or 0))
+            required = Decimal(str(d.get("required") or 0))
+        except (InvalidOperation, TypeError, ValueError):
+            received = Decimal(0)
+            required = Decimal(0)
+        if not received.is_finite():
+            received = Decimal(0)
+        if not required.is_finite():
+            required = Decimal(0)
+        pct = 0
+        if required > 0:
+            with localcontext() as ctx:
+                ctx.prec = max(
+                    64,
+                    len(received.as_tuple().digits) + 32,
+                    len(required.as_tuple().digits) + 32,
+                )
+                pct = int(
+                    ((Decimal(100) * received) / required).to_integral_value(
+                        rounding=ROUND_HALF_EVEN
+                    )
+                )
         deficits.append(
             {
                 "resource_key": d.get("resource_key"),
