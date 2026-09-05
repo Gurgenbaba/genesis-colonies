@@ -25,7 +25,8 @@ def test_init_exchange_panel_max_uses_min_balance_and_daily_remaining():
     assert "computeExchangeMaxInput" in block
     assert "readExchangeGiveBalance" in block
     assert "readExchangeDailyRemaining" in block
-    assert "Math.min(balance, remaining)" in block
+    assert "balance < remaining ? balance : remaining" in block
+    assert "Math.min(balance, remaining)" not in block
     assert "updateExchangeMaxBtn" in block
     assert "applyExchangeMaxAmount" in block
     assert 'panel.querySelector("[data-exchange-max]")' in block
@@ -34,7 +35,7 @@ def test_init_exchange_panel_max_uses_min_balance_and_daily_remaining():
 def test_max_click_updates_input_without_fetch():
     src = _read("static/main.js")
     block = src.split("const applyExchangeMaxAmount = () => {")[1].split("const setDirection = (dir) => {")[0]
-    assert "setNumberInputValue(amountInput, maxVal)" in block
+    assert "setGameplayIntegerInput(amountInput, maxVal)" in block
     assert 'dispatchEvent(new Event("input"' in block
     assert "scheduleUpdatePreview()" in block
     assert "fetch(" not in block
@@ -44,8 +45,8 @@ def test_max_click_updates_input_without_fetch():
 def test_max_disabled_when_below_minimum_or_zero():
     src = _read("static/main.js")
     block = src.split("const updateExchangeMaxBtn = () => {")[1].split("const applyExchangeMaxAmount = () => {")[0]
-    assert "maxVal > 0" in block
-    assert "maxVal >= minNow" in block
+    assert "isPositiveGameplayInteger(maxVal)" in block
+    assert "compareGameplayIntegers(maxVal, minNow) >= 0" in block
     assert "maxBtn.disabled = !enabled" in block
 
 
@@ -65,7 +66,27 @@ def test_patch_exchange_state_refreshes_max_inputs():
     block = src.split("const patchExchangeFromState = (exchange) => {")[1].split("if (!panel.dataset.exchangeBound)")[0]
     assert "panel.dataset.balanceMetal" in block
     assert "panel.dataset.dailyRemaining" in block
+    assert "nonNegativeExchangeInteger(exchange.daily_remaining)" in block
+    assert "nonNegativeExchangeInteger(exchange.balances.metal)" in block
+    assert 'typeof exchange.daily_remaining === "number"' not in block
+    assert 'typeof exchange.balances.metal === "number"' not in block
     assert "updateExchangeMaxBtn()" in block
+
+
+def test_exchange_max_and_submit_keep_js_unsafe_integers_exact():
+    src = _read("static/main.js")
+    block = src.split("function initExchangePanel()")[1].split("function renderScrapyardRows")[0]
+
+    assert "const raw = gameplayBigInt(amount);" in block
+    assert "parseExchangeRateRatio" in block
+    assert "multiplyByExchangeRate" in block
+    assert "divideByExchangeRate" in block
+    assert 'const amount = readGameplayIntegerInput(amountInput, "0");' in block
+    assert "compareGameplayIntegers(amount, minNow) < 0" in block
+    assert "body: JSON.stringify({ direction: dir, from, to, amount })" in block
+
+    assert "const amount = readNumberInput(amountInput);" not in block
+    assert "const raw = parseIntNumber(amount);" not in block
 
 
 def test_resource_switch_updates_max_button():
