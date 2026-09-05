@@ -53,6 +53,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_stocks_troops.py"
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
+      - "tests/test_gc_pg_numeric_final_no_max.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -107,6 +108,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_stocks_troops.py"
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
+      - "tests/test_gc_pg_numeric_final_no_max.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -175,7 +177,8 @@ jobs:
             game/troops.py game/queue_refund.py \
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
-            game/planet_evolution/ascension.py game/planet_evolution/economy.py game/planet_evolution/mechanics.py game/planet_evolution/service.py game/planet_evolution/dashboard.py
+            game/planet_evolution/ascension.py game/planet_evolution/economy.py game/planet_evolution/mechanics.py game/planet_evolution/service.py game/planet_evolution/dashboard.py \
+            game/expedition_events.py game/pirates/brain.py game/chronicle_entries.py game/stellar_forge/service.py
           git diff --check
 
       - name: Apply full PostgreSQL schema
@@ -196,4 +199,5 @@ jobs:
             tests/test_gc_pg_numeric_p1_combat_progression.py \
             tests/test_gc_pg_numeric_p1_stocks_troops.py \
             tests/test_gc_pg_numeric_p1_planet_economy.py \
-            tests/test_gc_pg_schema_final_pass.py
+            tests/test_gc_pg_schema_final_pass.py \
+            tests/test_gc_pg_numeric_final_no_max.py
