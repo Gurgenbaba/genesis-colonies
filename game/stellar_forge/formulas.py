@@ -118,7 +118,13 @@ OPERATIONAL_TARGETS_BASE: Dict[str, int] = {
 def operational_target(protocol: str, rank: int) -> int:
     base = int(OPERATIONAL_TARGETS_BASE.get(protocol, 0))
     n = max(1, int(rank or 1))
-    return int(round(base * (1.0 + 0.5 * (n - 1))))
+    # Exact equivalent of round(base * (1 + 0.5 * (n - 1))) without
+    # converting an unbounded Forge rank through IEEE-754.
+    numerator = base * (n + 1)
+    quotient, remainder = divmod(numerator, 2)
+    if remainder and quotient % 2:
+        quotient += 1
+    return quotient
 
 
 def operational_trial_complete(protocols_done: set) -> bool:
