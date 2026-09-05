@@ -727,6 +727,7 @@
   {% endif %}
   {% endif %}
 
+  {% if not request.headers.get("X-PJAX") %}
   <!-- Locale JSON für Frontend-JS -->
   <script id="gc-locale" type="application/json">
     {{ T_DATA | tojson | safe }}
@@ -777,6 +778,8 @@
       }
     })();
   </script>
+
+  {% endif %}
 
   {% include "partials/cookie_notice.html" %}
 
