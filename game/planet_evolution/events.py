@@ -8,6 +8,7 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..exact_math import decimal_text
 from ..models import get_game_settings
 from .constants import EVENT_COOLDOWN_HOURS
 from .definitions import get_event, get_events
@@ -389,10 +390,10 @@ class PlanetEventEngine:
             cur.execute(
                 """
                 UPDATE planet_special_resources
-                SET amount = MIN(cap, amount + ?)
+                SET amount = MIN(cap, amount + CAST(? AS NUMERIC))
                 WHERE planet_id = ? AND resource_key = ?;
                 """,
-                (float(amount), int(planet_id), str(res_key)),
+                (decimal_text(amount), int(planet_id), str(res_key)),
             )
 
         failure_key = outcome.get("add_failure")

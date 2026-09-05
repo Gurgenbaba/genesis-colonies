@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
+from ..exact_math import decimal_text, decimal_value
 from ..models import db, try_spend_resources_conn
 from ..ranking import invalidate_player_score_cache
 from .definitions import get_ascension, get_ascensions
@@ -58,7 +59,9 @@ def check_ascension_requirements(
                 (int(planet_id), str(res_key)),
             )
             row = cur.fetchone()
-            if not row or float(row["amount"] or 0) < float(amount):
+            required = decimal_value(amount)
+            available = decimal_value(row["amount"] if row else 0)
+            if not row or available < required:
                 missing.append(f"cost:{res_key}")
 
     return len(missing) == 0, missing
@@ -237,12 +240,15 @@ def start_ascension(
             if res_key in ("metal", "crystal"):
                 continue
             cur = conn.cursor()
+            amount_sql = decimal_text(amount)
             cur.execute(
                 """
-                UPDATE planet_special_resources SET amount = amount - ?
-                WHERE planet_id = ? AND resource_key = ? AND amount >= ?;
+                UPDATE planet_special_resources
+                SET amount = amount - CAST(? AS NUMERIC)
+                WHERE planet_id = ? AND resource_key = ?
+                  AND amount >= CAST(? AS NUMERIC);
                 """,
-                (float(amount), int(planet_id), str(res_key), float(amount)),
+                (amount_sql, int(planet_id), str(res_key), amount_sql),
             )
             if cur.rowcount <= 0:
                 rollback(conn)
