@@ -25,6 +25,11 @@ def decimal_value(value: Any, default: str = "0") -> Decimal:
     return out if out.is_finite() else Decimal(default)
 
 
+def decimal_text(value: Any, default: str = "0") -> str:
+    """Plain finite decimal text suitable for CAST(? AS NUMERIC)."""
+    return format(decimal_value(value, default), "f")
+
+
 def integer_precision(*values: Any, extra: int = 64) -> int:
     digits = 1
     for value in values:
