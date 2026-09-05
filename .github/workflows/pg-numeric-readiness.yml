@@ -26,6 +26,8 @@ on:
       - "game/exact_math.py"
       - "game/expedition_events.py"
       - "game/pirates/bases.py"
+      - "game/pirates/brain.py"
+      - "game/pirates/threat.py"
       - "game/combat_hof.py"
       - "game/directives/**"
       - "game/case_battles.py"
@@ -57,6 +59,7 @@ on:
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
       - "tests/test_gc_big_number_runtime_expeditions.py"
+      - "tests/test_gc_big_number_runtime_pirates.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -115,6 +118,7 @@ on:
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
       - "tests/test_gc_big_number_runtime_expeditions.py"
+      - "tests/test_gc_big_number_runtime_pirates.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -207,4 +211,5 @@ jobs:
             tests/test_gc_pg_numeric_p1_planet_economy.py \
             tests/test_gc_pg_schema_final_pass.py \
             tests/test_gc_pg_numeric_final_no_max.py \
-            tests/test_gc_big_number_runtime_expeditions.py
+            tests/test_gc_big_number_runtime_expeditions.py \
+            tests/test_gc_big_number_runtime_pirates.py
