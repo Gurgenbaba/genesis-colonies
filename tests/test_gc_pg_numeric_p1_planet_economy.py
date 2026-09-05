@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 from tests.pg_fixtures import close_pg_pool, requires_postgres
@@ -236,7 +236,12 @@ def test_live_postgres_planet_economy_roundtrip_and_transfer_is_exact(pg_parity_
             "SELECT metal FROM planets WHERE id = ?;",
             (target_id,),
         ).fetchone()
-        assert Decimal(source["metal"]) == SOURCE_METAL - HUGE_RATE
+        with localcontext() as ctx:
+            ctx.prec = 128
+            expected_source_metal = SOURCE_METAL - HUGE_RATE
+            expected_source_special = SPECIAL_SOURCE - HUGE_SPECIAL_RATE
+
+        assert Decimal(source["metal"]) == expected_source_metal
         assert Decimal(target["metal"]) == HUGE_RATE
 
         source_special = conn.execute(
@@ -253,9 +258,7 @@ def test_live_postgres_planet_economy_roundtrip_and_transfer_is_exact(pg_parity_
             """,
             (target_id,),
         ).fetchone()
-        assert Decimal(source_special["amount"]) == (
-            SPECIAL_SOURCE - HUGE_SPECIAL_RATE
-        )
+        assert Decimal(source_special["amount"]) == expected_source_special
         assert Decimal(target_special["amount"]) == HUGE_SPECIAL_RATE
     finally:
         conn.close()
