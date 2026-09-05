@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
+from game.exact_math import scale_int
 from game.pirates.bases import (
     MAX_WAVE_HP_FRACTION,
     _row_to_base,
@@ -108,7 +107,7 @@ def test_pirate_base_hp_damage_handles_10_pow_400():
         attacker_ships_before={"spark_drone": HUGE * 2},
     )
     assert damage > 0
-    assert damage <= int(HUGE * MAX_WAVE_HP_FRACTION)
+    assert damage <= scale_int(HUGE, MAX_WAVE_HP_FRACTION)
 
 
 def test_pirate_runtime_sources_have_no_unbounded_float_roundtrips():
