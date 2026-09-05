@@ -102,6 +102,19 @@ def building_modifier_for(
     return building_modifier_from_rank(rank)
 
 
+def _progress_percent_exact(value: Any, required: Any) -> int:
+    """Round value/required to a bounded 0..100 percent without float conversion."""
+    numerator = max(0, int(value or 0)) * 100
+    denominator = int(required or 0)
+    if denominator <= 0:
+        return 0
+    quotient, remainder = divmod(numerator, denominator)
+    doubled = remainder * 2
+    if doubled > denominator or (doubled == denominator and quotient % 2):
+        quotient += 1
+    return max(0, min(100, quotient))
+
+
 def panel_evolution_fields(
     planet_id: Optional[int],
     building_type: str,
@@ -135,10 +148,7 @@ def panel_evolution_fields(
     next_bonus = building_modifier_from_rank(next_n) - 1.0
     tribute_m, tribute_c = tribute_cost_for_next_rank(building_type, next_n)
     lvl = int(level or 0)
-    if required > 0:
-        progress_pct = max(0, min(100, int(round((float(lvl) / float(required)) * 100.0))))
-    else:
-        progress_pct = 0
+    progress_pct = _progress_percent_exact(lvl, required)
     return {
         "mine_evolution": True,
         "evolution_rank": rank,
