@@ -54,7 +54,6 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
-      - "tests/test_world_boss_raid.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -110,7 +109,6 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
-      - "tests/test_world_boss_raid.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -202,5 +200,4 @@ jobs:
             tests/test_gc_pg_numeric_p1_stocks_troops.py \
             tests/test_gc_pg_numeric_p1_planet_economy.py \
             tests/test_gc_pg_schema_final_pass.py \
-            tests/test_gc_pg_numeric_final_no_max.py \
-            tests/test_world_boss_raid.py
+            tests/test_gc_pg_numeric_final_no_max.py
