@@ -28,6 +28,9 @@ on:
       - "game/directives/**"
       - "game/case_battles.py"
       - "game/planet_evolution/dashboard.py"
+      - "game/planet_evolution/economy.py"
+      - "game/planet_evolution/mechanics.py"
+      - "game/planet_evolution/service.py"
       - "game/planet_evolution/ascension.py"
       - "game/queue_refund.py"
       - "game/spy.py"
@@ -48,6 +51,8 @@ on:
       - "tests/test_gc_pg_exact_paid_queue_snapshots_c1.py"
       - "tests/test_gc_pg_numeric_p1_combat_progression.py"
       - "tests/test_gc_pg_numeric_p1_stocks_troops.py"
+      - "tests/test_gc_pg_numeric_p1_planet_economy.py"
+      - "tests/test_gc_pg_schema_final_pass.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -77,6 +82,9 @@ on:
       - "game/directives/**"
       - "game/case_battles.py"
       - "game/planet_evolution/dashboard.py"
+      - "game/planet_evolution/economy.py"
+      - "game/planet_evolution/mechanics.py"
+      - "game/planet_evolution/service.py"
       - "game/planet_evolution/ascension.py"
       - "game/queue_refund.py"
       - "game/spy.py"
@@ -97,6 +105,8 @@ on:
       - "tests/test_gc_pg_exact_paid_queue_snapshots_c1.py"
       - "tests/test_gc_pg_numeric_p1_combat_progression.py"
       - "tests/test_gc_pg_numeric_p1_stocks_troops.py"
+      - "tests/test_gc_pg_numeric_p1_planet_economy.py"
+      - "tests/test_gc_pg_schema_final_pass.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -171,6 +181,9 @@ jobs:
       - name: Apply full PostgreSQL schema
         run: python migrate.py
 
+      - name: Strict fresh-schema numeric audit
+        run: python scripts/pg_numeric_readiness_audit.py --strict
+
       - name: Run exact numeric core contract
         run: |
           python -m pytest -q -s --tb=line \
@@ -182,4 +195,5 @@ jobs:
             tests/test_gc_pg_exact_paid_queue_snapshots_c1.py \
             tests/test_gc_pg_numeric_p1_combat_progression.py \
             tests/test_gc_pg_numeric_p1_stocks_troops.py \
-            tests/test_gc_pg_numeric_p1_planet_economy.py
+            tests/test_gc_pg_numeric_p1_planet_economy.py \
+            tests/test_gc_pg_schema_final_pass.py

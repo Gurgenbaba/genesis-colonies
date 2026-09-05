@@ -480,6 +480,31 @@ def apply_migration(conn: Any, filename: str, sql_text: str) -> None:
 
 
 # ----------------------------------------
+# Post-migration schema finalization
+# ----------------------------------------
+
+def finalize_postgres_schema(conn: Any) -> List[str]:
+    """Run idempotent Postgres type hardening after numbered migrations.
+
+    The pre-migration bootstrap can only widen tables that already exist.
+    Late tables created by numbered migrations therefore need one final pass
+    in the migration owner itself. NUMERIC/TEXT columns are left untouched.
+    """
+    if _backend() != "postgres":
+        return []
+
+    from game.schema_bootstrap import ensure_postgres_i64_columns
+
+    widened = ensure_postgres_i64_columns(conn)
+    if widened:
+        print(
+            "[INFO] Final Postgres 64-bit hardening: "
+            + ", ".join(widened)
+        )
+    return widened
+
+
+# ----------------------------------------
 # Main
 # ----------------------------------------
 
@@ -541,6 +566,11 @@ def main() -> None:
 
         if backend == "sqlite":
             _ensure_galaxy_coordinates(conn)
+        else:
+            # GC-PG-NUMERIC-READINESS: late migration tables did not exist
+            # during ensure_db_exists(), so harden once more after the full
+            # numbered migration chain. This also runs on no-op reruns.
+            finalize_postgres_schema(conn)
     finally:
         conn.close()
 
