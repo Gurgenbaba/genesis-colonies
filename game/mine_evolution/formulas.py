@@ -32,6 +32,10 @@ TRIBUTE_FACTOR = 0.25  # 25 % of lookback upgrade costs at the rank milestone
 MAX_BONUS_ASYMPTOTE = 0.55
 BONUS_K = 0.246
 BONUS_P = 0.69
+# Beyond this rank the double-precision exp term is already exactly 0.0
+# (using a conservative exp(-746) underflow threshold), so the historical
+# formula equals MAX_BONUS_ASYMPTOTE exactly without needing float(rank).
+BONUS_SATURATION_RANK = int(math.ceil((746.0 / BONUS_K) ** (1.0 / BONUS_P)))
 
 
 def is_evolvable_mine(building_type: str) -> bool:
@@ -49,6 +53,8 @@ def cumulative_production_bonus(rank: int) -> float:
     r = max(0, int(rank or 0))
     if r <= 0:
         return 0.0
+    if r >= BONUS_SATURATION_RANK:
+        return float(MAX_BONUS_ASYMPTOTE)
     return float(MAX_BONUS_ASYMPTOTE * (1.0 - math.exp(-BONUS_K * (float(r) ** BONUS_P))))
 
 

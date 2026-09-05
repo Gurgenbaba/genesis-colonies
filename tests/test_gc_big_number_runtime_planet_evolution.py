@@ -187,3 +187,37 @@ def test_mine_evolution_progress_source_has_no_level_float_roundtrip():
 
     assert "float(lvl) / float(required)" not in source
     assert "progress_pct = _progress_percent_exact(lvl, required)" in source
+
+
+
+def test_mine_evolution_bonus_saturates_before_huge_rank_float_conversion():
+    import math
+
+    from game.mine_evolution import formulas as mine_formulas
+
+    for rank in (1, 10, 100, 1_000, mine_formulas.BONUS_SATURATION_RANK - 1):
+        legacy = float(
+            mine_formulas.MAX_BONUS_ASYMPTOTE
+            * (
+                1.0
+                - math.exp(
+                    -mine_formulas.BONUS_K
+                    * (float(rank) ** mine_formulas.BONUS_P)
+                )
+            )
+        )
+        assert mine_formulas.cumulative_production_bonus(rank) == legacy
+
+    assert mine_formulas.cumulative_production_bonus(HUGE) == mine_formulas.MAX_BONUS_ASYMPTOTE
+    assert mine_formulas.building_modifier_from_rank(HUGE) == 1.0 + mine_formulas.MAX_BONUS_ASYMPTOTE
+
+
+def test_mine_evolution_bonus_guard_precedes_rank_float_conversion():
+    source = (ROOT / "game" / "mine_evolution" / "formulas.py").read_text(encoding="utf-8")
+    block = source.split("def cumulative_production_bonus(rank: int) -> float:")[1].split(
+        "def building_modifier_from_rank", 1
+    )[0]
+
+    guard_at = block.index("if r >= BONUS_SATURATION_RANK:")
+    float_at = block.index("float(r)")
+    assert guard_at < float_at
