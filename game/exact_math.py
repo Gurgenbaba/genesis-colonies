@@ -111,6 +111,72 @@ def bounded_ratio_float(
     return float(ratio)
 
 
+def scale_ratio_power_int(
+    base: Any,
+    numerator: Any,
+    denominator: Any,
+    exponent: Any,
+    *multipliers: Any,
+    rounding: str = "floor",
+    cap: Any | None = None,
+) -> int:
+    """Scale base * (numerator/denominator)**exponent without huge-int floats.
+
+    With a cap, astronomically large inputs saturate before constructing the
+    full Decimal power. The cap/threshold math only uses bounded config values.
+    """
+    base_int = max(0, int(base or 0))
+    num = max(0, int(numerator or 0))
+    den = max(1, int(denominator or 1))
+    exp = decimal_value(exponent)
+    factors = [decimal_value(mult, "0") for mult in multipliers]
+    cap_int = max(0, int(cap or 0)) if cap is not None else None
+
+    if base_int <= 0:
+        return 0
+    if any(factor <= 0 for factor in factors):
+        return 0
+    if exp < 0:
+        raise ValueError("negative ratio exponents are not supported")
+
+    if exp == 0:
+        out = scale_int(base_int, *factors, rounding=rounding)
+        return min(cap_int, out) if cap_int is not None and cap_int > 0 else out
+
+    factor_product = Decimal("1")
+    for factor in factors:
+        factor_product *= factor
+
+    if cap_int is not None and cap_int > 0 and factor_product > 0:
+        with localcontext() as ctx:
+            ctx.prec = 96
+            needed = Decimal(cap_int) / (Decimal(base_int) * factor_product)
+            if needed <= 1:
+                threshold_ratio = Decimal("1")
+            else:
+                threshold_ratio = ctx.power(needed, Decimal("1") / exp)
+            threshold_num = (
+                Decimal(den) * threshold_ratio
+            ).to_integral_value(rounding=ROUND_FLOOR)
+            if num > int(threshold_num):
+                return cap_int
+
+    with localcontext() as ctx:
+        ctx.prec = integer_precision(base_int, num, den, extra=128)
+        ratio = Decimal(num) / Decimal(den)
+        result = Decimal(base_int) * ctx.power(ratio, exp)
+        result *= factor_product
+        if rounding == "half_even":
+            out = int(result.to_integral_value(rounding=ROUND_HALF_EVEN))
+        elif rounding == "floor":
+            out = int(result.to_integral_value(rounding=ROUND_FLOOR))
+        else:
+            raise ValueError(f"unsupported rounding mode: {rounding}")
+
+    if cap_int is not None and cap_int > 0:
+        return min(cap_int, out)
+    return out
+
 def sqrt_scaled_int(value: Any, multiplier: Any) -> int:
     """floor(sqrt(value) * multiplier), safe far beyond binary-float range."""
     base = max(0, int(value or 0))
