@@ -62,6 +62,7 @@ on:
       - "tests/test_gc_big_number_runtime_expeditions.py"
       - "tests/test_gc_big_number_runtime_pirates.py"
       - "tests/test_gc_big_number_runtime_planet_evolution.py"
+      - "tests/test_gc_big_number_runtime_directives.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -125,6 +126,7 @@ on:
       - "tests/test_gc_big_number_runtime_expeditions.py"
       - "tests/test_gc_big_number_runtime_pirates.py"
       - "tests/test_gc_big_number_runtime_planet_evolution.py"
+      - "tests/test_gc_big_number_runtime_directives.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -189,7 +191,7 @@ jobs:
             game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
             game/buildings.py game/research.py game/shipyard.py game/shipyard_queue.py game/defense.py \
             game/inactive_autoplay.py game/world_boss.py game/world_boss_companions.py \
-            game/pirates/bases.py game/pirates/brain.py game/pirates/threat.py game/combat_hof.py game/directives/progress.py game/directives/generator.py game/case_battles.py \
+            game/pirates/bases.py game/pirates/brain.py game/pirates/threat.py game/combat_hof.py game/directives/definitions.py game/directives/scaling.py game/directives/balancing.py game/directives/progress.py game/directives/generator.py game/case_battles.py \
             game/troops.py game/queue_refund.py \
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
@@ -219,4 +221,5 @@ jobs:
             tests/test_gc_pg_numeric_final_no_max.py \
             tests/test_gc_big_number_runtime_expeditions.py \
             tests/test_gc_big_number_runtime_pirates.py \
-            tests/test_gc_big_number_runtime_planet_evolution.py
+            tests/test_gc_big_number_runtime_planet_evolution.py \
+            tests/test_gc_big_number_runtime_directives.py
