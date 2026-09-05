@@ -273,3 +273,26 @@ if (GC.fmtGameplayInteger(huge).replace(/[^0-9]/g, "") !== huge) process.exit(14
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_exchange_panel_consumes_stringified_gameplay_integers_exactly():
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    start = main.index("function initExchangePanel()")
+    end = main.index("function renderScrapyardRows", start)
+    exchange = main[start:end]
+
+    assert "nonNegativeExchangeInteger(ex.balances[resource])" in exchange
+    assert "nonNegativeExchangeInteger(ex.daily_remaining)" in exchange
+    assert "balance < remaining ? balance : remaining" in exchange
+    assert "setGameplayIntegerInput(amountInput, maxVal)" in exchange
+    assert 'const amount = readGameplayIntegerInput(amountInput, "0");' in exchange
+    assert "compareGameplayIntegers(amount, minNow) < 0" in exchange
+    assert "body: JSON.stringify({ direction: dir, from, to, amount })" in exchange
+    assert "parseExchangeRateRatio" in exchange
+    assert "const raw = gameplayBigInt(amount);" in exchange
+
+    assert 'typeof ex?.daily_remaining === "number"' not in exchange
+    assert 'typeof ex.balances[resource] === "number"' not in exchange
+    assert "Math.min(balance, remaining)" not in exchange
+    assert "const amount = readNumberInput(amountInput);" not in exchange
+    assert "const raw = parseIntNumber(amount);" not in exchange
