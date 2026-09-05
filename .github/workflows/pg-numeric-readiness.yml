@@ -23,6 +23,8 @@ on:
       - "game/troops.py"
       - "game/world_boss.py"
       - "game/world_boss_companions.py"
+      - "game/exact_math.py"
+      - "game/expedition_events.py"
       - "game/pirates/bases.py"
       - "game/combat_hof.py"
       - "game/directives/**"
@@ -54,6 +56,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
+      - "tests/test_gc_big_number_runtime_expeditions.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -78,6 +81,8 @@ on:
       - "game/troops.py"
       - "game/world_boss.py"
       - "game/world_boss_companions.py"
+      - "game/exact_math.py"
+      - "game/expedition_events.py"
       - "game/pirates/bases.py"
       - "game/combat_hof.py"
       - "game/directives/**"
@@ -109,6 +114,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
+      - "tests/test_gc_big_number_runtime_expeditions.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -178,7 +184,7 @@ jobs:
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
             game/planet_evolution/ascension.py game/planet_evolution/economy.py game/planet_evolution/mechanics.py game/planet_evolution/service.py game/planet_evolution/dashboard.py \
-            game/expedition_events.py game/pirates/brain.py game/chronicle_entries.py game/stellar_forge/service.py
+            game/exact_math.py game/expedition_events.py game/pirates/brain.py game/chronicle_entries.py game/stellar_forge/service.py
           git diff --check
 
       - name: Apply full PostgreSQL schema
@@ -200,4 +206,5 @@ jobs:
             tests/test_gc_pg_numeric_p1_stocks_troops.py \
             tests/test_gc_pg_numeric_p1_planet_economy.py \
             tests/test_gc_pg_schema_final_pass.py \
-            tests/test_gc_pg_numeric_final_no_max.py
+            tests/test_gc_pg_numeric_final_no_max.py \
+            tests/test_gc_big_number_runtime_expeditions.py
