@@ -31,6 +31,7 @@ on:
       - "game/combat_hof.py"
       - "game/directives/**"
       - "game/case_battles.py"
+      - "game/stellar_forge/**"
       - "game/planet_evolution/dashboard.py"
       - "game/planet_evolution/economy.py"
       - "game/planet_evolution/mechanics.py"
@@ -65,6 +66,7 @@ on:
       - "tests/test_gc_big_number_runtime_directives.py"
       - "tests/test_gc_big_number_runtime_case_battles.py"
       - "tests/test_gc_big_number_runtime_fleet.py"
+      - "tests/test_gc_big_number_runtime_stellar_forge.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -97,6 +99,7 @@ on:
       - "game/combat_hof.py"
       - "game/directives/**"
       - "game/case_battles.py"
+      - "game/stellar_forge/**"
       - "game/planet_evolution/dashboard.py"
       - "game/planet_evolution/economy.py"
       - "game/planet_evolution/mechanics.py"
@@ -131,6 +134,7 @@ on:
       - "tests/test_gc_big_number_runtime_directives.py"
       - "tests/test_gc_big_number_runtime_case_battles.py"
       - "tests/test_gc_big_number_runtime_fleet.py"
+      - "tests/test_gc_big_number_runtime_stellar_forge.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -228,4 +232,5 @@ jobs:
             tests/test_gc_big_number_runtime_planet_evolution.py \
             tests/test_gc_big_number_runtime_directives.py \
             tests/test_gc_big_number_runtime_case_battles.py \
-            tests/test_gc_big_number_runtime_fleet.py
+            tests/test_gc_big_number_runtime_fleet.py \
+            tests/test_gc_big_number_runtime_stellar_forge.py

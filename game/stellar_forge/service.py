@@ -47,6 +47,14 @@ def _row(conn: sqlite3.Connection, planet_id: int) -> Optional[sqlite3.Row]:
     return cur.fetchone()
 
 
+def _operational_progress_int(value: Any) -> int:
+    """Normalize legacy/new operational progress without an IEEE-754 roundtrip."""
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 def _default_state(planet_id: int) -> Dict[str, Any]:
     return {
         "planet_id": int(planet_id),
@@ -309,7 +317,7 @@ def panel_forge_fields(
         op_progress = state["operational_progress"]
         op_done = {
             p for p in OPERATIONAL_PROTOCOLS
-            if float(op_progress.get(p, 0) or 0) >= operational_target(p, next_rank)
+            if _operational_progress_int(op_progress.get(p, 0)) >= operational_target(p, next_rank)
         }
         cores_required = forge_cores_required(next_rank)
         cores_have = get_forge_cores(player_id, conn=conn)
@@ -339,7 +347,7 @@ def panel_forge_fields(
             "stellar_forge_manufacturing_done": pillar2_done,
             "stellar_forge_operational_protocols": {
                 p: {
-                    "progress": float(op_progress.get(p, 0) or 0),
+                    "progress": _operational_progress_int(op_progress.get(p, 0)),
                     "target": operational_target(p, next_rank),
                     "done": p in op_done,
                 }
@@ -514,7 +522,7 @@ def record_hull_mass_delivery(
 def record_operational_progress(
     planet_id: int,
     protocol: str,
-    amount: float,
+    amount: int,
     *,
     conn: sqlite3.Connection,
     now: Optional[float] = None,
@@ -522,7 +530,7 @@ def record_operational_progress(
     """Accumulate progress toward one Operational Trial protocol (only while campaign active)."""
     if protocol not in OPERATIONAL_PROTOCOLS:
         return
-    amt = float(amount or 0)
+    amt = _operational_progress_int(amount)
     if amt <= 0 or not schema_ready(conn):
         return
     state = get_raw_state(planet_id, conn=conn)
@@ -530,7 +538,7 @@ def record_operational_progress(
         return
 
     progress = dict(state["operational_progress"])
-    progress[protocol] = float(progress.get(protocol, 0) or 0) + amt
+    progress[protocol] = _operational_progress_int(progress.get(protocol, 0)) + amt
 
     _upsert_state(
         conn,
@@ -589,7 +597,7 @@ def ascend(user_id: int, planet: Dict[str, Any]) -> Tuple[bool, str, Dict[str, A
 
         op_done = {
             p for p in OPERATIONAL_PROTOCOLS
-            if float(state["operational_progress"].get(p, 0) or 0) >= operational_target(p, next_rank)
+            if _operational_progress_int(state["operational_progress"].get(p, 0)) >= operational_target(p, next_rank)
         }
         if not operational_trial_complete(op_done):
             rollback(conn)
