@@ -163,6 +163,7 @@ def compute_import_deficits(
             received_routes = incoming_rate * delta_h
             received_local = local_rate * delta_h
             total = received_routes + received_local
+            received_total_rate = incoming_rate + local_rate
             deficit_rate = max(
                 Decimal(0),
                 required_rate - (total / delta_h),
@@ -173,7 +174,7 @@ def compute_import_deficits(
                 {
                     "resource_key": key,
                     "required": required_rate,
-                    "received": incoming_rate + local_rate,
+                    "received": received_total_rate,
                     "required_per_hour": required_rate,
                     "received_per_hour": incoming_rate,
                     "deficit_per_hour": deficit_rate,
@@ -355,7 +356,10 @@ def tick_special_resources(
             continue
 
         _add_special_amount(planet_id, output_key, output, conn)
-        produced[output_key] = produced.get(output_key, Decimal(0)) + output
+        previous_output = produced.get(output_key, Decimal(0))
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(previous_output, output)
+            produced[output_key] = previous_output + output
 
         cur = conn.cursor()
         cur.execute(
