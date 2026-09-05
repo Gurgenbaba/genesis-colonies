@@ -12,6 +12,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from ..db import table_exists
+from ..exact_math import bounded_ratio_float, decimal_value, integer_precision, mul_div_floor, scale_int
 from ..runtime_state import get_runtime_value, set_runtime_value
 from .heat import HEAT_THRESHOLDS, get_galaxy_heat, schema_ready as heat_schema_ready
 from .log import log_pirate_action
@@ -102,7 +103,7 @@ def _row_to_base(row: Mapping[str, Any]) -> Dict[str, Any]:
     strength = int(row["strength"] or 1)
     max_hp = int(row["max_hp"] or 100)
     current_hp = int(row["current_hp"] or 0)
-    hp_ratio = (float(current_hp) / float(max_hp)) if max_hp > 0 else 0.0
+    hp_ratio = bounded_ratio_float(current_hp, max_hp) if max_hp > 0 else 0.0
     g = int(row["galaxy"])
     s = int(row["system"])
     p = int(row["position"])
@@ -301,7 +302,7 @@ def _scale_stacks(stacks: Mapping[str, Any], strength: int) -> Dict[str, int]:
     mult = 0.5 + 0.5 * max(1, strength)
     out: Dict[str, int] = {}
     for k, v in dict(stacks or {}).items():
-        n = int(max(0, round(int(v or 0) * mult)))
+        n = max(0, scale_int(int(v or 0), mult, rounding="half_even"))
         if n > 0:
             out[str(k)] = n
     return out
@@ -482,10 +483,10 @@ def escalate_due_bases(conn, *, now: Optional[float] = None) -> List[int]:
         activity = min(100, int(row["activity"] or 0) + 25)
         stacks = _scale_stacks(_json_loads(row["fleet_stacks_json"], {}), strength)
         max_hp = _hp_for_strength(strength)
-        # Keep current HP ratio when escalating.
+        # Keep current HP ratio when escalating without converting HP to float.
         old_max = max(1, int(row["max_hp"] or 1))
-        ratio = float(row["current_hp"] or 0) / float(old_max)
-        new_hp = max(1, int(max_hp * ratio))
+        old_hp = max(0, int(row["current_hp"] or 0))
+        new_hp = max(1, mul_div_floor(max_hp, old_hp, old_max))
         conn.execute(
             """
             UPDATE pirate_bases
@@ -745,7 +746,8 @@ def compute_base_hp_damage(
     max_hp: int,
     attacker_ships_before: Mapping[str, int],
 ) -> int:
-    import math
+    """Map real combat losses to shared base HP without IEEE-754 ceilings."""
+    from decimal import Decimal, localcontext
 
     from ..scoring import compute_destroyed_raw_from_losses
 
@@ -768,21 +770,47 @@ def compute_base_hp_damage(
     lost_score = int(compute_destroyed_raw_from_losses(losses))
     if full_score <= 0:
         return 1 if lost_score > 0 else 0
-    fraction = min(1.0, float(lost_score) / float(full_score))
+
     atk = {
         str(k): max(0, int(v or 0))
         for k, v in dict(attacker_ships_before or {}).items()
         if int(v or 0) > 0
     }
     attacker_score = int(compute_destroyed_raw_from_losses(atk)) if atk else 0
-    force_ratio = float(attacker_score) / float(max(full_score, 1))
-    overkill_mult = max(
-        1.0,
-        1.0 + float(OVERKILL_LOG_SCALE) * math.log2(max(1.0, force_ratio)),
-    )
-    base = float(hp_budget) * float(WAVE_HP_FRACTION) * fraction * overkill_mult
-    cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
-    damage = int(min(cap, max(0.0, base)))
+
+    with localcontext() as ctx:
+        ctx.prec = integer_precision(
+            hp_budget,
+            lost_score,
+            full_score,
+            attacker_score,
+            extra=96,
+        )
+        ratio = Decimal(lost_score) / Decimal(max(full_score, 1))
+        fraction = min(Decimal("1"), max(Decimal("0"), ratio))
+        force_ratio = max(
+            Decimal("1"),
+            Decimal(attacker_score) / Decimal(max(full_score, 1)),
+        )
+        if force_ratio > 1:
+            log2_ratio = force_ratio.ln() / Decimal(2).ln()
+            overkill_mult = max(
+                Decimal("1"),
+                Decimal("1")
+                + decimal_value(OVERKILL_LOG_SCALE) * log2_ratio,
+            )
+        else:
+            overkill_mult = Decimal("1")
+
+        base = (
+            Decimal(hp_budget)
+            * decimal_value(WAVE_HP_FRACTION)
+            * fraction
+            * overkill_mult
+        )
+        cap = Decimal(hp_budget) * decimal_value(MAX_WAVE_HP_FRACTION)
+        damage = int(min(cap, max(Decimal("0"), base)))
+
     if damage <= 0 and lost_score > 0:
         return 1
     return max(0, damage)
@@ -949,9 +977,9 @@ def _grant_destroy_rewards(conn, base: Mapping[str, Any], *, now: float) -> None
     total_dmg = sum(int(r["damage"] or 0) for r in rows) or 1
     for row in rows:
         pid = int(row["player_id"])
-        share = float(row["damage"] or 0) / float(total_dmg)
-        metal = int(pool_metal * share)
-        crystal = int(pool_crystal * share)
+        contribution = max(0, int(row["damage"] or 0))
+        metal = mul_div_floor(pool_metal, contribution, total_dmg)
+        crystal = mul_div_floor(pool_crystal, contribution, total_dmg)
         if metal <= 0 and crystal <= 0:
             continue
         # Idempotent claim marker

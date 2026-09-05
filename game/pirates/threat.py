@@ -84,10 +84,12 @@ def recompute_player_threat(player_id: int, *, conn) -> Dict[str, Any]:
             "SELECT COALESCE(SUM(damage), 0) AS d FROM world_boss_contributions WHERE player_id = ?;",
             (pid,),
         )
-        boss_dmg = float((cur.fetchone() or {"d": 0})["d"] or 0)
+        # Keep aggregate boss damage as an arbitrary-size integer. math.log10
+        # accepts Python ints directly; the result is immediately capped.
+        boss_dmg = max(0, int((cur.fetchone() or {"d": 0})["d"] or 0))
         import math
 
-        components["boss"] = min(15.0, math.log10(max(1.0, boss_dmg)) * 3.0)
+        components["boss"] = min(15.0, math.log10(max(1, boss_dmg)) * 3.0)
 
     # Pirate base kills
     if table_exists(conn, "pirate_base_claims"):
