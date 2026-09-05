@@ -87,6 +87,8 @@ on:
       - "game/exact_math.py"
       - "game/expedition_events.py"
       - "game/pirates/bases.py"
+      - "game/pirates/brain.py"
+      - "game/pirates/threat.py"
       - "game/combat_hof.py"
       - "game/directives/**"
       - "game/case_battles.py"
@@ -183,12 +185,12 @@ jobs:
             game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
             game/buildings.py game/research.py game/shipyard.py game/shipyard_queue.py game/defense.py \
             game/inactive_autoplay.py game/world_boss.py game/world_boss_companions.py \
-            game/pirates/bases.py game/combat_hof.py game/directives/progress.py game/directives/generator.py game/case_battles.py \
+            game/pirates/bases.py game/pirates/brain.py game/pirates/threat.py game/combat_hof.py game/directives/progress.py game/directives/generator.py game/case_battles.py \
             game/troops.py game/queue_refund.py \
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
             game/planet_evolution/ascension.py game/planet_evolution/economy.py game/planet_evolution/mechanics.py game/planet_evolution/service.py game/planet_evolution/dashboard.py \
-            game/exact_math.py game/expedition_events.py game/pirates/brain.py game/chronicle_entries.py game/stellar_forge/service.py
+            game/exact_math.py game/expedition_events.py game/chronicle_entries.py game/stellar_forge/service.py
           git diff --check
 
       - name: Apply full PostgreSQL schema
