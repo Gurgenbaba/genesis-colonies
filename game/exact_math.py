@@ -14,7 +14,7 @@ from decimal import (
     ROUND_HALF_EVEN,
     localcontext,
 )
-from typing import Any
+from typing import Any, Iterable, Tuple
 
 
 def decimal_value(value: Any, default: str = "0") -> Decimal:
@@ -57,6 +57,19 @@ def scale_int(
         if rounding != "floor":
             raise ValueError(f"unsupported rounding mode: {rounding}")
         return int(result.to_integral_value(rounding=ROUND_FLOOR))
+
+
+def sum_products_floor(terms: Iterable[Tuple[Any, Any]]) -> int:
+    """floor(sum(integer_value * decimal_factor)) without float integer coercion."""
+    pairs = [(int(value or 0), decimal_value(factor)) for value, factor in terms]
+    if not pairs:
+        return 0
+    with localcontext() as ctx:
+        ctx.prec = integer_precision(*(value for value, _ in pairs), extra=96)
+        total = Decimal(0)
+        for value, factor in pairs:
+            total += Decimal(value) * factor
+        return int(total.to_integral_value(rounding=ROUND_FLOOR))
 
 
 def mul_div_floor(value: Any, numerator: Any, denominator: Any) -> int:
