@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any, Dict, Mapping
+
+from ..exact_math import scale_ratio_power_int
 
 # Midgame anchor — at this total_score, count tiers sit in the middle band.
 SCORE_ANCHOR = 20_000
@@ -57,20 +58,22 @@ def compute_scaled_target(
     base = max(1, int(base_target or 1))
     score = _resolve_total_score(total_score)
     cfg = scale_profile_config(scale_profile)
-    exponent = float(cfg.get("exponent") or 0.25)
-    ratio = max(float(SCORE_FLOOR), float(score)) / float(SCORE_ANCHOR)
-    scaled = float(base) * math.pow(ratio, exponent)
-
-    if str(cadence or "daily").strip().lower() == "weekly":
-        scaled *= float(cfg.get("weekly_multiplier") or 1.0)
-
-    result = int(math.floor(scaled))
+    exponent = cfg.get("exponent")
+    if exponent is None:
+        exponent = 0.25
+    weekly = str(cadence or "daily").strip().lower() == "weekly"
+    weekly_mult = (cfg.get("weekly_multiplier") or 1.0) if weekly else 1.0
+    max_target = int(cfg.get("max_target") or 0)
+    result = scale_ratio_power_int(
+        base,
+        max(SCORE_FLOOR, score),
+        SCORE_ANCHOR,
+        exponent,
+        weekly_mult,
+        cap=max_target if max_target > 0 else None,
+    )
     min_target = int(cfg.get("min_target") or 1)
     result = max(min_target, result)
-
-    max_target = int(cfg.get("max_target") or 0)
-    if max_target > 0:
-        result = min(max_target, result)
 
     return result
 
