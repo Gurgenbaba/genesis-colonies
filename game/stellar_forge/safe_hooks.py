@@ -35,7 +35,7 @@ def _rollback_optional_savepoint(conn: Any, savepoint: str) -> None:
 def record_operational_progress(
     planet_id: int,
     protocol: str,
-    amount: float,
+    amount: int,
     *,
     conn: Any,
     now: Optional[float] = None,
