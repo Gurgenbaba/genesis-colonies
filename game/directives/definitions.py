@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any, Dict, List, Mapping, Optional
 
 from ..db import table_exists
+from ..exact_math import scale_int
 
 DAILY_DIRECTIVE_COUNT = 3
 WEEKLY_DIRECTIVE_COUNT = 1
@@ -175,9 +176,8 @@ def rarity_for_roll(
 
 def effective_base_target(definition: Mapping[str, Any], rarity: str) -> int:
     base = max(1, int(definition.get("base_target") or 1))
-    mult = float(RARITY_TARGET_MULTIPLIER.get(str(rarity).strip().lower(), 1.0))
+    mult = RARITY_TARGET_MULTIPLIER.get(str(rarity).strip().lower(), 1.0)
     kind = str(definition.get("objective_kind") or OBJECTIVE_COUNT).strip().lower()
-    scaled = base * mult
     if kind == OBJECTIVE_COUNT:
-        return max(1, int(round(scaled)))
-    return max(1, int(scaled))
+        return max(1, scale_int(base, mult, rounding="half_even"))
+    return max(1, scale_int(base, mult))

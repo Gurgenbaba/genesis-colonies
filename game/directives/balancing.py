@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+
+from ..exact_math import decimal_value, scale_int, scale_ratio_power_int
 
 from .definitions import (
     CADENCE_DAILY,
@@ -123,9 +124,16 @@ def _snap_to_tier(raw: int, tiers: Sequence[int]) -> int:
 def _score_tier_index(score: int, tier_count: int) -> int:
     if tier_count <= 1:
         return 0
-    ratio = max(1.0, float(score)) / float(SCORE_ANCHOR)
-    idx = int(math.floor(math.log(max(1.0, ratio), 2.5)))
-    return max(0, min(tier_count - 1, idx))
+    value = max(1, int(score))
+    idx = 0
+    threshold = decimal_value(SCORE_ANCHOR)
+    step = decimal_value("2.5")
+    while idx < tier_count - 1:
+        threshold *= step
+        if value < int(threshold):
+            break
+        idx += 1
+    return idx
 
 
 def _count_target_from_tiers(
@@ -156,16 +164,21 @@ def _scaled_count_target(
     cadence: str,
 ) -> int:
     cfg = scale_profile_config(scale_profile)
-    exponent = float(cfg.get("exponent") or 0.25)
-    ratio = max(float(SCORE_FLOOR), float(score)) / float(SCORE_ANCHOR)
-    scaled = float(max(1, base)) * math.pow(ratio, exponent)
-    if str(cadence or CADENCE_DAILY).strip().lower() == CADENCE_WEEKLY:
-        scaled *= float(cfg.get("weekly_multiplier") or 3.5)
-    result = max(1, int(math.floor(scaled)))
+    exponent = cfg.get("exponent")
+    if exponent is None:
+        exponent = 0.25
+    weekly = str(cadence or CADENCE_DAILY).strip().lower() == CADENCE_WEEKLY
+    weekly_mult = (cfg.get("weekly_multiplier") or 3.5) if weekly else 1.0
     max_target = int(cfg.get("max_target") or 0)
-    if max_target > 0:
-        result = min(max_target, result)
-    return result
+    result = scale_ratio_power_int(
+        max(1, base),
+        max(SCORE_FLOOR, int(score)),
+        SCORE_ANCHOR,
+        exponent,
+        weekly_mult,
+        cap=max_target if max_target > 0 else None,
+    )
+    return max(1, result)
 
 
 def _produce_target(
@@ -176,16 +189,16 @@ def _produce_target(
     context: Mapping[str, Any] | None,
 ) -> int:
     daily = _daily_resource_production(context, resource_key)
-    pct = float(PRODUCE_DAILY_PCT.get(str(rarity or "common").strip().lower(), 0.02))
-    target = int(math.floor(float(daily) * pct))
+    pct = PRODUCE_DAILY_PCT.get(str(rarity or "common").strip().lower(), 0.02)
+    target = scale_int(daily, pct)
     if str(cadence or CADENCE_DAILY).strip().lower() == CADENCE_WEEKLY:
-        target = int(math.floor(float(target) * WEEKLY_PRODUCE_MULTIPLIER))
+        target = scale_int(target, WEEKLY_PRODUCE_MULTIPLIER)
         cap = PRODUCE_ABSOLUTE_WEEKLY_CAP
     else:
         cap = PRODUCE_ABSOLUTE_DAILY_CAP
     score = _resolve_score(context)
     if score < SCORE_ANCHOR:
-        target = max(target, int(STARTER_DAILY_PRODUCTION * pct))
+        target = max(target, scale_int(STARTER_DAILY_PRODUCTION, pct))
     return max(500, min(cap, target))
 
 
@@ -196,13 +209,19 @@ def _ships_target(
     cadence: str,
     rarity: str,
 ) -> int:
-    mult = float(RARITY_TARGET_MULTIPLIER.get(str(rarity or "common").strip().lower(), 1.0))
-    ratio = max(1.0, float(score) / float(SCORE_ANCHOR))
-    scaled = float(max(1, base)) * mult * math.pow(ratio, 0.28)
-    if str(cadence or CADENCE_DAILY).strip().lower() == CADENCE_WEEKLY:
-        scaled *= 3.5
-    result = max(2, int(math.floor(scaled)))
-    return min(80 if cadence == CADENCE_DAILY else 150, result)
+    mult = RARITY_TARGET_MULTIPLIER.get(str(rarity or "common").strip().lower(), 1.0)
+    weekly = str(cadence or CADENCE_DAILY).strip().lower() == CADENCE_WEEKLY
+    cap = 150 if weekly else 80
+    result = scale_ratio_power_int(
+        max(1, base),
+        max(SCORE_ANCHOR, int(score)),
+        SCORE_ANCHOR,
+        "0.28",
+        mult,
+        "3.5" if weekly else "1",
+        cap=cap,
+    )
+    return max(2, min(cap, result))
 
 
 def compute_directive_target(
