@@ -224,5 +224,5 @@ jobs:
             tests/test_gc_big_number_runtime_expeditions.py \
             tests/test_gc_big_number_runtime_pirates.py \
             tests/test_gc_big_number_runtime_planet_evolution.py \
-            tests/test_gc_big_number_runtime_directives.py \\
+            tests/test_gc_big_number_runtime_directives.py \
             tests/test_gc_big_number_runtime_case_battles.py
