@@ -10,6 +10,7 @@ from game.world_boss import (
     _advance_world_boss_raid_after_hit,
     _apply_raid_containment,
     _apply_raid_damage_rules,
+    _scale_bigint_decimal,
     get_world_boss_raid_state,
     scale_instant_hit_damage,
 )
@@ -133,3 +134,88 @@ def test_last_stand_is_derived_from_event_lifetime():
         assert state["containment"]["active"] is False
     finally:
         conn.close()
+
+
+HUGE_HP = 10**400
+
+
+def test_raid_containment_is_exact_beyond_ieee754_range():
+    five_pct = HUGE_HP // 20
+    ten_pct = HUGE_HP // 10
+
+    assert _apply_raid_containment(five_pct, 0, HUGE_HP) == five_pct
+    assert _apply_raid_containment(HUGE_HP, ten_pct, HUGE_HP) == HUGE_HP // 20
+
+    # Start at 4% and spend enough raw damage to cross the 5% boundary.
+    start = HUGE_HP // 25
+    raw = HUGE_HP // 25
+    # First 1% effective at 100%, remaining 3% raw at 25% => 1.75% HP.
+    expected = (HUGE_HP // 100) + (3 * HUGE_HP // 400)
+    assert _apply_raid_containment(raw, start, HUGE_HP) == expected
+
+
+def test_raid_action_caps_are_exact_at_10_pow_400_hp():
+    conn = _conn()
+    try:
+        event = _event()
+        event["max_hp"] = HUGE_HP
+        event["current_hp"] = HUGE_HP
+        after_containment = event["starts_at"] + 3 * 3600
+
+        one, meta1, _ = _apply_raid_damage_rules(
+            HUGE_HP,
+            hit_mult=1,
+            event=event,
+            player_id=7,
+            conn=conn,
+            now=after_containment,
+        )
+        five, meta5, _ = _apply_raid_damage_rules(
+            HUGE_HP,
+            hit_mult=5,
+            event=event,
+            player_id=7,
+            conn=conn,
+            now=after_containment,
+        )
+
+        assert one == (HUGE_HP * 3) // 100
+        assert five == HUGE_HP // 8
+        assert meta1["action_cap"] == one
+        assert meta5["action_cap"] == five
+        assert meta1["boosted_damage"] == HUGE_HP
+        assert meta5["boosted_damage"] == HUGE_HP
+    finally:
+        conn.close()
+
+
+def test_bigint_decimal_scaler_has_no_float_ceiling():
+    assert _scale_bigint_decimal(HUGE_HP, "0.125") == HUGE_HP // 8
+    assert _scale_bigint_decimal(
+        HUGE_HP,
+        "1.5",
+        round_half_even=True,
+    ) == (HUGE_HP * 3) // 2
+
+
+def test_world_boss_raid_source_has_no_huge_hp_float_roundtrip():
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "game" / "world_boss.py"
+    ).read_text(encoding="utf-8")
+
+    for forbidden in (
+        "float(player_damage) / float(max_hp)",
+        "remaining_raw = float(max(0, int(raw_damage)))",
+        "hp = float(max(1, int(max_hp)))",
+        "boosted = float(max(0, int(raw_damage)))",
+        "int(float(max_hp) * cap_fraction)",
+        'float(state["containment"].get("player_damage_ratio") or 0.0) * float(max_hp)',
+        "int(rolled * float(ALLIANCE_SALVO_FRACTION))",
+        "float(new_hp) / float(max_hp)",
+    ):
+        assert forbidden not in source
+
+    assert '"player_damage": int(player_damage)' in source
+    assert "hp_phase_from_values(new_hp, max_hp)" in source

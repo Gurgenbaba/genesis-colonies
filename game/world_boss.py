@@ -78,6 +78,50 @@ ALLIANCE_XP_DAMAGE_DIVISOR = 40_000
 ALLIANCE_XP_PER_WAVE_CAP = 40
 
 
+def _bigint_decimal_precision(*values: int, extra: int = 64) -> int:
+    digits = 1
+    for value in values:
+        try:
+            digits = max(digits, len(str(abs(int(value)))))
+        except (TypeError, ValueError):
+            continue
+    return max(64, digits + max(16, int(extra)))
+
+
+def _scale_bigint_decimal(
+    value: int,
+    multiplier: Any,
+    *,
+    round_half_even: bool = False,
+) -> int:
+    """Scale an arbitrary-size gameplay integer without IEEE-754 conversion."""
+    base = max(0, int(value or 0))
+    factor = Decimal(str(multiplier))
+    if base <= 0 or factor <= 0:
+        return 0
+    with localcontext() as ctx:
+        ctx.prec = _bigint_decimal_precision(base)
+        scaled = Decimal(base) * factor
+        if round_half_even:
+            return int(scaled.to_integral_value(rounding=ROUND_HALF_EVEN))
+        return int(scaled)
+
+
+def _bounded_ratio_float(
+    numerator: int,
+    denominator: int,
+    *,
+    maximum: Decimal = Decimal("1"),
+) -> float:
+    """Display-only ratio; clamp before float conversion so magnitude is bounded."""
+    num = max(0, int(numerator or 0))
+    den = max(1, int(denominator or 1))
+    with localcontext() as ctx:
+        ctx.prec = _bigint_decimal_precision(num, den)
+        ratio = max(Decimal("0"), min(maximum, Decimal(num) / Decimal(den)))
+    return float(ratio)
+
+
 def alliance_xp_from_boss_damage(damage: int) -> int:
     """Convert one wave's HP damage into alliance XP (0 if below threshold)."""
     dmg = max(0, int(damage))
@@ -1247,10 +1291,10 @@ def get_world_boss_raid_state(
                 target_lock = max(0, min(100, int(row["target_lock"] or 0)))
 
     max_hp = max(1, int(event.get("max_hp") or 1))
-    damage_ratio = float(player_damage) / float(max_hp)
-    if damage_ratio < 0.05:
+    damage_ratio = _bounded_ratio_float(player_damage, max_hp)
+    if player_damage * 20 < max_hp:
         containment_efficiency = 1.0
-    elif damage_ratio < 0.10:
+    elif player_damage * 10 < max_hp:
         containment_efficiency = 0.25
     else:
         containment_efficiency = 0.05
@@ -1264,6 +1308,7 @@ def get_world_boss_raid_state(
             "active": containment_active,
             "ends_at": float(containment_ends_at),
             "seconds": int(RAID_CONTAINMENT_SECONDS),
+            "player_damage": int(player_damage),
             "player_damage_ratio": round(damage_ratio, 6),
             "current_efficiency": containment_efficiency,
         },
@@ -1297,26 +1342,41 @@ def get_world_boss_raid_state(
 
 def _apply_raid_containment(raw_damage: int, current_damage: int, max_hp: int) -> int:
     """Piecewise 100% / 25% / 5% effective damage during opening containment."""
-    remaining_raw = float(max(0, int(raw_damage)))
-    if remaining_raw <= 0:
+    raw_int = max(0, int(raw_damage))
+    if raw_int <= 0:
         return 0
-    hp = float(max(1, int(max_hp)))
-    effective_pos = float(max(0, int(current_damage)))
-    gained = 0.0
-    for ceiling, efficiency in ((0.05 * hp, 1.0), (0.10 * hp, 0.25), (float("inf"), 0.05)):
-        if remaining_raw <= 0:
-            break
-        if effective_pos >= ceiling:
-            continue
-        effective_capacity = ceiling - effective_pos
-        raw_capacity = effective_capacity / efficiency
-        raw_take = min(remaining_raw, raw_capacity)
-        effective_take = raw_take * efficiency
-        gained += effective_take
-        effective_pos += effective_take
-        remaining_raw -= raw_take
-    out = int(max(0.0, gained))
-    return max(1, out) if raw_damage > 0 else 0
+    hp_int = max(1, int(max_hp))
+    current_int = max(0, int(current_damage))
+
+    with localcontext() as ctx:
+        ctx.prec = _bigint_decimal_precision(raw_int, hp_int, current_int)
+        remaining_raw = Decimal(raw_int)
+        hp = Decimal(hp_int)
+        effective_pos = Decimal(current_int)
+        gained = Decimal("0")
+        regions = (
+            (hp * Decimal("0.05"), Decimal("1")),
+            (hp * Decimal("0.10"), Decimal("0.25")),
+            (None, Decimal("0.05")),
+        )
+        for ceiling, efficiency in regions:
+            if remaining_raw <= 0:
+                break
+            if ceiling is not None:
+                if effective_pos >= ceiling:
+                    continue
+                effective_capacity = ceiling - effective_pos
+                raw_capacity = effective_capacity / efficiency
+                raw_take = min(remaining_raw, raw_capacity)
+            else:
+                raw_take = remaining_raw
+            effective_take = raw_take * efficiency
+            gained += effective_take
+            effective_pos += effective_take
+            remaining_raw -= raw_take
+
+        out = int(max(Decimal("0"), gained))
+    return max(1, out)
 
 
 def _apply_raid_damage_rules(
@@ -1331,35 +1391,41 @@ def _apply_raid_damage_rules(
     """Apply raid buffs, strict action cap, then opening containment."""
     state = get_world_boss_raid_state(event, int(player_id), conn=conn, now=now)
     max_hp = max(1, int(event.get("max_hp") or 1))
-    boosted = float(max(0, int(raw_damage)))
-    damage_mult = 1.0
+
+    damage_mult = Decimal("1")
     if state["resonance"]["active"]:
-        damage_mult *= float(RAID_RESONANCE_DAMAGE_MULT)
+        damage_mult *= Decimal(str(RAID_RESONANCE_DAMAGE_MULT))
     if state["last_stand"]["active"]:
-        damage_mult *= float(RAID_LAST_STAND_DAMAGE_MULT)
-    boosted *= damage_mult
+        damage_mult *= Decimal(str(RAID_LAST_STAND_DAMAGE_MULT))
+
+    boosted_int = _scale_bigint_decimal(
+        max(0, int(raw_damage)),
+        damage_mult,
+        round_half_even=True,
+    )
 
     cap_fraction = (
-        float(RAID_MULTI_ACTION_CAP_FRACTION)
+        Decimal(str(RAID_MULTI_ACTION_CAP_FRACTION))
         if int(hit_mult or 1) > 1
-        else float(RAID_SINGLE_ACTION_CAP_FRACTION)
+        else Decimal(str(RAID_SINGLE_ACTION_CAP_FRACTION))
     )
-    action_cap = max(1, int(float(max_hp) * cap_fraction))
-    capped = min(action_cap, max(0, int(round(boosted))))
+    action_cap = max(1, _scale_bigint_decimal(max_hp, cap_fraction))
+    capped = min(action_cap, boosted_int)
 
-    current_damage = int(
-        round(float(state["containment"].get("player_damage_ratio") or 0.0) * float(max_hp))
+    current_damage = max(
+        0,
+        int((state.get("containment") or {}).get("player_damage") or 0),
     )
     final_damage = capped
     if state["containment"]["active"]:
         final_damage = _apply_raid_containment(capped, current_damage, max_hp)
     final_damage = min(action_cap, max(0, int(final_damage)))
     return final_damage, {
-        "damage_mult": round(damage_mult, 3),
+        "damage_mult": round(float(damage_mult), 3),
         "action_cap": int(action_cap),
-        "action_cap_fraction": cap_fraction,
+        "action_cap_fraction": float(cap_fraction),
         "pre_raid_damage": int(raw_damage),
-        "boosted_damage": int(round(boosted)),
+        "boosted_damage": int(boosted_int),
         "capped_damage": int(capped),
         "containment_applied": bool(state["containment"]["active"]),
         "final_damage": int(final_damage),
@@ -1626,8 +1692,11 @@ def execute_instant_attack(
         rolled = max(0, int(rolled))
 
     alliance_salvo = 0
-    if float(ALLIANCE_SALVO_FRACTION) > 0:
-        alliance_salvo = int(rolled * float(ALLIANCE_SALVO_FRACTION))
+    if Decimal(str(ALLIANCE_SALVO_FRACTION)) > 0:
+        alliance_salvo = _scale_bigint_decimal(
+            rolled,
+            ALLIANCE_SALVO_FRACTION,
+        )
         rolled += alliance_salvo
 
     rolled, raid_damage_meta, raid_before = _apply_raid_damage_rules(
@@ -1795,7 +1864,7 @@ def execute_instant_attack(
         updated = get_event_by_id(eid, conn=conn)
 
     cooldown_until = float(ts + WAVE_COOLDOWN_SEC * int(mult))
-    hp_ratio = (float(new_hp) / float(max_hp)) if max_hp > 0 else 0.0
+    hp_ratio = _bounded_ratio_float(new_hp, max_hp) if max_hp > 0 else 0.0
     contrib_row = conn.execute(
         """
         SELECT damage, waves FROM world_boss_contributions
@@ -1842,7 +1911,7 @@ def execute_instant_attack(
             "hp": int(new_hp),
             "max_hp": int(max_hp),
             "hp_pct": round(max(0.0, min(100.0, hp_ratio * 100.0)), 2),
-            "phase": int(hp_phase_from_ratio(hp_ratio)),
+            "phase": int(hp_phase_from_values(new_hp, max_hp)),
             "phase_index": int(new_phase),
             "defeated": bool(defeated),
             "status": new_status,
