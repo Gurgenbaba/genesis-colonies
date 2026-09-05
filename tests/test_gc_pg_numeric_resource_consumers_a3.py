@@ -95,6 +95,7 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             "game/commander_classes.py",
             "game/admin_balance.py",
             "game/overview_page.py",
+            "game/economy_balance.py",
             "game/planet_evolution/ascension.py",
         )
     }
@@ -181,6 +182,10 @@ def test_core_resource_consumers_block_authoritative_float_roundtrips():
             'int(float(player_view.get("crystal")',
             'int(float(player_view.get("fuel_cells")',
         ),
+        "game/economy_balance.py": (
+            "metal = float(metal_available or 0)",
+            "crystal = float(crystal_available or 0)",
+        ),
         "game/overview_page.py": (
             '"metal": float(player_view.get("metal")',
             '"crystal": float(player_view.get("crystal")',
@@ -215,3 +220,32 @@ def test_backend_aware_binder_is_used_for_resource_writes():
     }
     for rel, source in sources.items():
         assert "resource_db_param" in source, rel
+
+
+
+def test_mine_bulk_affordability_handles_10_pow_400_exactly(monkeypatch):
+    import game.economy_balance as economy_balance
+
+    huge_cost = 10**400 + 7
+
+    def fake_power_upgrade_cost(_building_type, target_level):
+        _ = target_level
+        return huge_cost, huge_cost
+
+    monkeypatch.setattr(economy_balance, "power_upgrade_cost", fake_power_upgrade_cost)
+
+    assert economy_balance.max_affordable_mine_upgrade_level(
+        "metal_mine",
+        10,
+        13,
+        metal_available=huge_cost * 2 - 1,
+        crystal_available=huge_cost * 2 - 1,
+    ) == 11
+
+    assert economy_balance.max_affordable_mine_upgrade_level(
+        "metal_mine",
+        10,
+        13,
+        metal_available=huge_cost * 2,
+        crystal_available=huge_cost * 2,
+    ) == 12
