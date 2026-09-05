@@ -82,8 +82,8 @@ POLICIES: tuple[NumericPolicy, ...] = (
     NumericPolicy("defense_queue", "cost_metal_exact", "exact_snapshot", "P0", "exact defense batch paid cost"),
     NumericPolicy("defense_queue", "cost_crystal_exact", "exact_snapshot", "P0", "exact defense batch paid cost"),
     NumericPolicy("defense_queue", "cost_fuel_cells_exact", "exact_snapshot", "P0", "exact defense batch paid cost"),
-    NumericPolicy("troop_queue", "cost_metal", "exact_snapshot", "P1", "troop batch paid cost"),
-    NumericPolicy("troop_queue", "cost_crystal", "exact_snapshot", "P1", "troop batch paid cost"),
+    NumericPolicy("troop_queue", "cost_metal_exact", "exact_snapshot", "P1", "exact troop batch paid cost"),
+    NumericPolicy("troop_queue", "cost_crystal_exact", "exact_snapshot", "P1", "exact troop batch paid cost"),
 
     # Stock / queue amounts.
     NumericPolicy("planet_ships", "amount", "at_least_i64", "P1", "ship stock"),
