@@ -1344,9 +1344,9 @@ def resolve_time_anomaly_legendary(
             )
             for key in VALID_RESOURCE_KEYS:
                 rewards[key] = scale_int(
-                rewards.get(key) or 0,
-                _TIME_ANOMALY_BONUS_LOOT_SCALE,
-            )
+                    rewards.get(key) or 0,
+                    _TIME_ANOMALY_BONUS_LOOT_SCALE,
+                )
             _apply_cargo_cap(rewards, int(cargo_total))
     return {
         "variant": variant,
