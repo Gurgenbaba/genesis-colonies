@@ -6,6 +6,7 @@ import math
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypedDict
 
+from .exact_math import scale_int
 from .fleet_defs import (
     ACTIVE_SHIP_KEYS,
     DEFAULT_HOLD_SECONDS,
@@ -278,7 +279,7 @@ def calculate_total_cargo(
             total += int(spec.get("cargo") or 0) * qty
     mult = max(0.0, float(cargo_multiplier or 1.0))
     if abs(mult - 1.0) > 1e-9:
-        total = int(math.floor(total * mult + 1e-9))
+        total = scale_int(total, mult)
     return max(0, total)
 
 
@@ -801,13 +802,14 @@ def split_ships_by_weights(
         qty = int(total)
         if qty <= 0:
             continue
-        exact = [(qty * wi) / float(total_w) for wi in w]
-        floors = [int(math.floor(v)) for v in exact]
+        products = [qty * wi for wi in w]
+        floors = [product // total_w for product in products]
+        remainders = [product % total_w for product in products]
         assigned = sum(floors)
         rem = qty - assigned
         order = sorted(
             range(n),
-            key=lambda i: (-(exact[i] - floors[i]), i),
+            key=lambda i: (-remainders[i], i),
         )
         for i in range(n):
             if floors[i] > 0:
