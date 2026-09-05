@@ -101,6 +101,14 @@ def test_live_postgres_planet_economy_roundtrip_and_transfer_is_exact(pg_parity_
     player_id = int(user["id"])
     source_id = int(get_homeworld(player_id)["id"])
 
+    from conftest import unlock_colony_slots
+
+    unlock_conn = db()
+    try:
+        unlock_colony_slots(unlock_conn, source_id, slots=1)
+    finally:
+        unlock_conn.close()
+
     ok_colony, reason_colony, extra = colonize_planet(
         player_id,
         name=f"NumericPE-{username[-5:]}",
