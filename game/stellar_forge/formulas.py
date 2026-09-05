@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, List, Mapping, Sequence
+from decimal import Decimal, ROUND_FLOOR, localcontext
+from typing import Any, Dict, List, Mapping, Sequence
 
 FORGE_BUILDING = "orbital_shipyard"
 
@@ -12,6 +13,25 @@ FORGE_BUILDING = "orbital_shipyard"
 TRIBUTE_BASE_HOURS = 24
 TRIBUTE_HOURS_STEP = 12
 TRIBUTE_WEIGHTS: Dict[str, float] = {"metal": 0.55, "crystal": 0.30, "fuel_cells": 0.15}
+TRIBUTE_WEIGHT_RATIOS: Dict[str, tuple[int, int]] = {
+    "metal": (55, 100),
+    "crystal": (30, 100),
+    "fuel_cells": (15, 100),
+}
+
+
+def _mul_div_round_half_even_nonnegative(value: Any, numerator: int, denominator: int) -> int:
+    """Exact round-half-even(value * numerator / denominator) for non-negative integers."""
+    base = max(0, int(value or 0))
+    num = max(0, int(numerator))
+    den = int(denominator)
+    if den <= 0:
+        raise ValueError("denominator must be > 0")
+    quotient, remainder = divmod(base * num, den)
+    doubled = remainder * 2
+    if doubled > den or (doubled == den and quotient % 2):
+        quotient += 1
+    return quotient
 
 
 def tribute_hours(rank: int) -> int:
@@ -20,13 +40,17 @@ def tribute_hours(rank: int) -> int:
     return int(TRIBUTE_BASE_HOURS + (n - 1) * TRIBUTE_HOURS_STEP)
 
 
-def tribute_cost_for_rank(rank: int, production_per_hour: Mapping[str, float]) -> Dict[str, int]:
-    """Metal/crystal/fuel_cells tribute — trailing production × window × resource weight."""
+def tribute_cost_for_rank(rank: int, production_per_hour: Mapping[str, Any]) -> Dict[str, int]:
+    """Metal/crystal/fuel_cells tribute — exact production × window × resource weight."""
     hours = tribute_hours(rank)
     out: Dict[str, int] = {}
-    for resource, weight in TRIBUTE_WEIGHTS.items():
-        rate = max(0.0, float(production_per_hour.get(resource, 0) or 0))
-        out[resource] = int(round(rate * hours * weight))
+    for resource, (weight_num, weight_den) in TRIBUTE_WEIGHT_RATIOS.items():
+        rate = max(0, int(production_per_hour.get(resource, 0) or 0))
+        out[resource] = _mul_div_round_half_even_nonnegative(
+            rate * hours,
+            weight_num,
+            weight_den,
+        )
     return out
 
 
@@ -93,7 +117,7 @@ def manufacturing_trial_complete(
         return False
     roles = list(required_roles or [])
     if roles:
-        return all(float(by_role.get(r, 0) or 0) > 0 for r in roles)
+        return all(int(by_role.get(r, 0) or 0) > 0 for r in roles)
     contributing_roles = [v for v in by_role.values() if v > 0]
     return len(contributing_roles) >= HULL_MASS_MIN_ROLES
 
@@ -163,12 +187,40 @@ def queue_slot_bonus(rank: int) -> int:
 # yard clears the ~130k ships/cycle needed to build 300M ships in ~4-5h —
 # see docs/STELLAR_FORGE.md for the full derivation.
 FORGE_CAPACITY_BONUS_PER_RANK = 1.5
+FORGE_CAPACITY_BONUS_NUMERATOR = 3
+FORGE_CAPACITY_BONUS_DENOMINATOR = 2
 
 
-def forge_capacity_multiplier(rank: int) -> float:
-    """Batch-capacity multiplier from completed Forge ranks (uncapped, repeatable)."""
+def forge_capacity_ratio(rank: int) -> tuple[int, int]:
+    """Exact multiplier ratio for 1 + rank * 1.5."""
     n = max(0, int(rank or 0))
-    return 1.0 + n * FORGE_CAPACITY_BONUS_PER_RANK
+    return (
+        FORGE_CAPACITY_BONUS_DENOMINATOR + n * FORGE_CAPACITY_BONUS_NUMERATOR,
+        FORGE_CAPACITY_BONUS_DENOMINATOR,
+    )
+
+
+def forge_capacity_scaled_floor(base_value: Any, rank: int) -> int:
+    """floor(base_value * Forge multiplier) without converting an unbounded rank to float."""
+    numerator, denominator = forge_capacity_ratio(rank)
+    base = Decimal(str(base_value))
+    if not base.is_finite() or base <= 0:
+        return 0
+    with localcontext() as ctx:
+        ctx.prec = max(96, len(str(abs(numerator))) + 64)
+        result = base * Decimal(numerator) / Decimal(denominator)
+        return int(result.to_integral_value(rounding=ROUND_FLOOR))
+
+
+def forge_capacity_multiplier(rank: int) -> float | str:
+    """UI-compatible multiplier; huge ranks fall back to exact decimal text."""
+    numerator, denominator = forge_capacity_ratio(rank)
+    if numerator.bit_length() <= 1020:
+        return float(numerator) / float(denominator)
+    whole, remainder = divmod(numerator, denominator)
+    if remainder == 0:
+        return str(whole)
+    return f"{whole}.5"
 
 
 def nanite_assist_unlocked(rank: int) -> bool:

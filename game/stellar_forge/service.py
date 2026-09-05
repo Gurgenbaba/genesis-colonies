@@ -237,7 +237,7 @@ def _upsert_state(conn: sqlite3.Connection, planet_id: int, **fields: Any) -> No
     )
 
 
-def _get_production_per_hour(planet: Dict[str, Any], *, conn: sqlite3.Connection) -> Dict[str, float]:
+def _get_production_per_hour(planet: Dict[str, Any], *, conn: sqlite3.Connection) -> Dict[str, int]:
     """Trailing per-hour production for Tribute — same EffectResolver path as economy_live_audit."""
     from .. import models as _models
     from ..effects.effect_resolver import EffectResolver
@@ -260,9 +260,9 @@ def _get_production_per_hour(planet: Dict[str, Any], *, conn: sqlite3.Connection
     ratio = resolver.energy_ratio(energy_total, energy_used)
     prod = resolver.get_building_production_per_hour(ratio)
     return {
-        "metal": float(prod.get("metal_mine", 0) or 0),
-        "crystal": float(prod.get("crystal_mine", 0) or 0),
-        "fuel_cells": float(prod.get("fuel_cell_plant", 0) or 0),
+        "metal": int(prod.get("metal_mine", 0) or 0),
+        "crystal": int(prod.get("crystal_mine", 0) or 0),
+        "fuel_cells": int(prod.get("fuel_cell_plant", 0) or 0),
     }
 
 
@@ -302,9 +302,9 @@ def panel_forge_fields(
         try:
             if production_per_hour is not None:
                 production = {
-                    "metal": float(production_per_hour.get("metal_mine", 0) or 0),
-                    "crystal": float(production_per_hour.get("crystal_mine", 0) or 0),
-                    "fuel_cells": float(production_per_hour.get("fuel_cell_plant", 0) or 0),
+                    "metal": int(production_per_hour.get("metal_mine", 0) or 0),
+                    "crystal": int(production_per_hour.get("crystal_mine", 0) or 0),
+                    "fuel_cells": int(production_per_hour.get("fuel_cell_plant", 0) or 0),
                 }
             else:
                 production = _get_production_per_hour(planet, conn=conn)
