@@ -65,11 +65,11 @@ def orbital_production_batch_capacity(shipyard_level: int, forge_rank: int = 0) 
     Stellar Forge ranks scale capacity further beyond the Level 50 yard cap —
     see ``stellar_forge.formulas.forge_capacity_multiplier``.
     """
-    from .stellar_forge.formulas import forge_capacity_multiplier
+    from .stellar_forge.formulas import forge_capacity_scaled_floor
 
     lvl = max(1, int(shipyard_level or 1))
     base = 1 + lvl * 5 + lvl**2.3
-    return max(1, int(math.floor(base * forge_capacity_multiplier(forge_rank))))
+    return max(1, forge_capacity_scaled_floor(base, forge_rank))
 
 
 def shipyard_batch_capacity(shipyard_level: int, forge_rank: int = 0) -> int:
