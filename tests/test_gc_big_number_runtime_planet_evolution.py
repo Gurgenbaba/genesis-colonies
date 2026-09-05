@@ -152,3 +152,38 @@ def test_live_postgres_pe_ascension_and_event_amounts_are_exact(pg_parity_db, mo
     finally:
         conn.close()
         close_pg_pool()
+
+
+
+def test_mine_evolution_progress_percent_handles_10_pow_400_exactly():
+    from game.mine_evolution.service import _progress_percent_exact
+
+    assert _progress_percent_exact(0, HUGE) == 0
+    assert _progress_percent_exact(HUGE // 4, HUGE) == 25
+    assert _progress_percent_exact(HUGE // 2, HUGE) == 50
+    assert _progress_percent_exact(HUGE * 3, HUGE * 4) == 75
+    assert _progress_percent_exact(HUGE, HUGE) == 100
+    assert _progress_percent_exact(HUGE * 2, HUGE) == 100
+
+
+def test_mine_evolution_progress_percent_preserves_normal_rounding():
+    from game.mine_evolution.service import _progress_percent_exact
+
+    for value, required in (
+        (1, 3),
+        (2, 3),
+        (1, 8),
+        (5, 8),
+        (49, 100),
+        (50, 100),
+        (99, 100),
+    ):
+        legacy = max(0, min(100, int(round((value / required) * 100.0))))
+        assert _progress_percent_exact(value, required) == legacy
+
+
+def test_mine_evolution_progress_source_has_no_level_float_roundtrip():
+    source = (ROOT / "game" / "mine_evolution" / "service.py").read_text(encoding="utf-8")
+
+    assert "float(lvl) / float(required)" not in source
+    assert "progress_pct = _progress_percent_exact(lvl, required)" in source
