@@ -667,8 +667,8 @@ def max_affordable_mine_upgrade_level(
     from_level: int,
     max_level: int,
     *,
-    metal_available: float,
-    crystal_available: float,
+    metal_available: int,
+    crystal_available: int,
 ) -> int:
     """GC-821F prep — highest target level affordable in one bulk action."""
     btype = str(building_type)
@@ -677,12 +677,12 @@ def max_affordable_mine_upgrade_level(
     cur = max(0, int(from_level))
     cap = max(cur, int(max_level))
     best = cur
-    metal = float(metal_available or 0)
-    crystal = float(crystal_available or 0)
+    metal = max(0, int(metal_available or 0))
+    crystal = max(0, int(crystal_available or 0))
     for target in range(cur + 1, cap + 1):
         m, c = power_upgrade_cost(btype, target)
-        metal -= m
-        crystal -= c
+        metal -= int(m)
+        crystal -= int(c)
         if metal < 0 or crystal < 0:
             break
         best = target
@@ -694,8 +694,8 @@ def mine_bulk_upgrade_preview(
     from_level: int,
     max_level: int,
     *,
-    metal_available: float,
-    crystal_available: float,
+    metal_available: int,
+    crystal_available: int,
 ) -> Dict[str, Any]:
     """GC-821F prep — metadata for +1/+5/+10/max bulk upgrade UI (no actions yet)."""
     btype = str(building_type)
