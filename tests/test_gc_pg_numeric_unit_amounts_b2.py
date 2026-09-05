@@ -1,4 +1,4 @@
-"""P0-B2 PostgreSQL at-least-i64 defense/troop quantity contract."""
+"""P0-B2/P1-final PostgreSQL no-max defense/troop quantity contract."""
 
 from __future__ import annotations
 
@@ -9,8 +9,10 @@ from tests.pg_fixtures import close_pg_pool, requires_postgres
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "167_pg_unit_amounts_bigint.sql"
+FINAL_MIGRATION = ROOT / "migrations" / "173_pg_p1_final_no_max_numeric.sql"
 
 OVER_INT4 = 5_000_000_000
+HUGE = 10**30 + 246_813_579
 
 
 def test_pg_unit_amount_migration_widens_only_quantity_columns():
@@ -32,10 +34,19 @@ def test_pg_unit_amount_migration_widens_only_quantity_columns():
         assert token not in sql
 
 
-def test_production_duration_math_handles_quantity_above_int4():
+def test_final_unit_amount_migration_removes_bigint_ceiling():
+    sql = FINAL_MIGRATION.read_text(encoding="utf-8")
+    assert "-- GC-BACKEND: postgres" in sql
+    assert "NUMERIC(" not in sql
+    for table in ("defense_queue", "planet_troops", "troop_queue"):
+        assert f"ALTER TABLE {table}" in sql
+        assert "ALTER COLUMN amount TYPE NUMERIC" in sql
+
+
+def test_production_duration_math_handles_no_max_quantity():
     from game.shipyard import production_job_duration_seconds
 
-    amount = OVER_INT4
+    amount = HUGE
     capacity = 7
     unit_seconds = 13
     expected_batches = (amount + capacity - 1) // capacity
@@ -47,7 +58,7 @@ def test_production_duration_math_handles_quantity_above_int4():
 
 
 @requires_postgres
-def test_live_postgres_unit_amounts_roundtrip_above_int4(pg_parity_db):
+def test_live_postgres_unit_amounts_roundtrip_above_i64(pg_parity_db):
     from migrate import main as migrate_main
 
     migrate_main()
@@ -81,19 +92,19 @@ def test_live_postgres_unit_amounts_roundtrip_above_int4(pg_parity_db):
             for row in rows
         }
         assert seen == {
-            ("defense_queue", "amount"): "bigint",
-            ("planet_troops", "amount"): "bigint",
-            ("troop_queue", "amount"): "bigint",
+            ("defense_queue", "amount"): "numeric",
+            ("planet_troops", "amount"): "numeric",
+            ("troop_queue", "amount"): "numeric",
         }
 
         set_planet_troops(
             planet_id,
-            {"militia": OVER_INT4},
+            {"militia": HUGE},
             conn=conn,
         )
         conn.commit()
         stock = get_planet_troops(planet_id, conn=conn)
-        assert int(stock["militia"]) == OVER_INT4
+        assert int(stock["militia"]) == HUGE
 
         now = time.time()
         defense = conn.execute(
@@ -109,7 +120,7 @@ def test_live_postgres_unit_amounts_roundtrip_above_int4(pg_parity_db):
             (
                 player_id,
                 planet_id,
-                OVER_INT4,
+                HUGE,
                 now,
                 now + 3600,
                 now,
@@ -130,7 +141,7 @@ def test_live_postgres_unit_amounts_roundtrip_above_int4(pg_parity_db):
             (
                 player_id,
                 planet_id,
-                OVER_INT4,
+                HUGE,
                 now,
                 now + 3600,
                 now,
@@ -143,16 +154,16 @@ def test_live_postgres_unit_amounts_roundtrip_above_int4(pg_parity_db):
             "SELECT amount FROM defense_queue WHERE id = ?;",
             (defense_id,),
         ).fetchone()
-        assert int(row["amount"]) == OVER_INT4
+        assert int(row["amount"]) == HUGE
 
         row = conn.execute(
             "SELECT amount FROM troop_queue WHERE id = ?;",
             (troop_id,),
         ).fetchone()
-        assert int(row["amount"]) == OVER_INT4
+        assert int(row["amount"]) == HUGE
 
-        # Exercise an in-place queue decrement while still above int4.
-        decrement = 1_000_000_000
+        # Exercise in-place queue arithmetic while still far above signed i64.
+        decrement = 10**20 + 7
         conn.execute(
             "UPDATE defense_queue SET amount = amount - ? WHERE id = ?;",
             (decrement, defense_id),
@@ -167,13 +178,13 @@ def test_live_postgres_unit_amounts_roundtrip_above_int4(pg_parity_db):
             "SELECT amount FROM defense_queue WHERE id = ?;",
             (defense_id,),
         ).fetchone()
-        assert int(row["amount"]) == OVER_INT4 - decrement
+        assert int(row["amount"]) == HUGE - decrement
 
         row = conn.execute(
             "SELECT amount FROM troop_queue WHERE id = ?;",
             (troop_id,),
         ).fetchone()
-        assert int(row["amount"]) == OVER_INT4 - decrement
+        assert int(row["amount"]) == HUGE - decrement
     finally:
         conn.close()
         close_pg_pool()
