@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..db import (
@@ -642,7 +643,7 @@ def create_trade_route(
     source_planet_id: int,
     target_planet_id: int,
     resource_key: str,
-    amount_per_hour: float,
+    amount_per_hour: Any,
     conn: Optional[sqlite3.Connection] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     own = conn is None
@@ -651,7 +652,15 @@ def create_trade_route(
     try:
         if source_planet_id == target_planet_id:
             return False, "same_planet", None
-        if amount_per_hour <= 0:
+        try:
+            amount_decimal = (
+                amount_per_hour
+                if isinstance(amount_per_hour, Decimal)
+                else Decimal(str(amount_per_hour))
+            )
+        except (InvalidOperation, TypeError, ValueError):
+            return False, "invalid_amount", None
+        if not amount_decimal.is_finite() or amount_decimal <= 0:
             return False, "invalid_amount", None
 
         begin_write_transaction(conn)
@@ -667,14 +676,14 @@ def create_trade_route(
             INSERT INTO planet_trade_routes (
                 owner_player_id, source_planet_id, target_planet_id,
                 resource_key, amount_per_hour, is_active, created_at
-            ) VALUES (?, ?, ?, ?, ?, 1, ?);
+            ) VALUES (?, ?, ?, ?, CAST(? AS NUMERIC), 1, ?);
             """,
             (
                 int(owner_player_id),
                 int(source_planet_id),
                 int(target_planet_id),
                 str(resource_key),
-                float(amount_per_hour),
+                format(amount_decimal, "f"),
                 time.time(),
             ),
         )
