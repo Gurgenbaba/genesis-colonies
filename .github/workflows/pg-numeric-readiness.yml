@@ -165,7 +165,7 @@ jobs:
             game/troops.py game/queue_refund.py \
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
-            game/planet_evolution/ascension.py
+            game/planet_evolution/ascension.py game/planet_evolution/economy.py game/planet_evolution/mechanics.py game/planet_evolution/service.py game/planet_evolution/dashboard.py
           git diff --check
 
       - name: Apply full PostgreSQL schema
@@ -181,4 +181,5 @@ jobs:
             tests/test_gc_pg_numeric_unit_amounts_b2.py \
             tests/test_gc_pg_exact_paid_queue_snapshots_c1.py \
             tests/test_gc_pg_numeric_p1_combat_progression.py \
-            tests/test_gc_pg_numeric_p1_stocks_troops.py
+            tests/test_gc_pg_numeric_p1_stocks_troops.py \
+            tests/test_gc_pg_numeric_p1_planet_economy.py

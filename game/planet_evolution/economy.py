@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any, Dict, List, Optional
 
 from ..models import get_game_settings
@@ -17,6 +18,30 @@ from .repository import (
     get_special_resources,
     get_trade_routes,
 )
+
+
+def _decimal_value(value: Any, default: str = "0") -> Decimal:
+    """Lossless gameplay decimal coercion for PE balances/rates."""
+    try:
+        out = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        out = Decimal(default)
+    return out if out.is_finite() else Decimal(default)
+
+
+def _decimal_precision(*values: Decimal, extra: int = 64) -> int:
+    """Enough context precision for huge balances multiplied by fractional rates."""
+    digits = 1
+    for value in values:
+        if not isinstance(value, Decimal) or not value.is_finite() or value == 0:
+            continue
+        digits = max(digits, len(value.as_tuple().digits), value.adjusted() + 1)
+    return max(64, digits + max(16, int(extra)))
+
+
+def _decimal_sql(value: Decimal) -> str:
+    """Plain decimal text for CAST(? AS NUMERIC), portable across SQLite/PG."""
+    return format(value, "f")
 
 
 def ensure_special_resource_row(
@@ -35,14 +60,14 @@ def ensure_special_resource_row(
     if cur.fetchone():
         return
     rdef = get_special_resource_def(resource_key) or {}
-    cap = float(rdef.get("base_cap") or 100000)
+    cap = _decimal_value(rdef.get("base_cap") or 100000)
     cur.execute(
         """
         INSERT INTO planet_special_resources (
             planet_id, resource_key, amount, cap, production_per_hour, consumption_per_hour
-        ) VALUES (?, ?, 0, ?, 0, 0);
+        ) VALUES (?, ?, 0, CAST(? AS NUMERIC), 0, 0);
         """,
-        (int(planet_id), str(resource_key), cap),
+        (int(planet_id), str(resource_key), _decimal_sql(cap)),
     )
 
 
@@ -113,32 +138,64 @@ def compute_import_deficits(
     if not demands:
         return []
 
-    resources = {str(r["resource_key"]): r for r in get_special_resources(planet_id, conn=conn)}
+    resources = {
+        str(r["resource_key"]): r
+        for r in get_special_resources(planet_id, conn=conn)
+    }
     routes_in = _incoming_routes(planet_id, conn)
     deficits: List[Dict[str, Any]] = []
+    delta_h = _decimal_value(delta_hours, "1")
+    if delta_h <= 0:
+        return deficits
 
     for demand in demands:
         key = str(demand["resource_key"])
-        required = float(demand["required_per_hour"]) * float(delta_hours)
-        received = float(routes_in.get(key, 0.0)) * float(delta_hours)
-        local = float((resources.get(key) or {}).get("production_per_hour") or 0) * float(delta_hours)
-        total = received + local
-        if total + 1e-6 < required:
+        required_rate = _decimal_value(demand["required_per_hour"])
+        incoming_rate = _decimal_value(routes_in.get(key, Decimal(0)))
+        local_rate = _decimal_value(
+            (resources.get(key) or {}).get("production_per_hour") or 0
+        )
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(
+                required_rate, incoming_rate, local_rate, delta_h
+            )
+            required = required_rate * delta_h
+            received_routes = incoming_rate * delta_h
+            received_local = local_rate * delta_h
+            total = received_routes + received_local
+            received_total_rate = incoming_rate + local_rate
+            deficit_rate = max(
+                Decimal(0),
+                required_rate - (total / delta_h),
+            )
+
+        if total + Decimal("0.000001") < required:
             deficits.append(
                 {
                     "resource_key": key,
-                    "required_per_hour": float(demand["required_per_hour"]),
-                    "received_per_hour": received / max(delta_hours, 1e-6),
-                    "deficit_per_hour": float(demand["required_per_hour"]) - (total / max(delta_hours, 1e-6)),
-                    "deficit_penalty_key": str(demand.get("deficit_penalty_key") or "chain_efficiency_halved"),
+                    "required": required_rate,
+                    "received": received_total_rate,
+                    "required_per_hour": required_rate,
+                    "received_per_hour": incoming_rate,
+                    "deficit_per_hour": deficit_rate,
+                    "deficit_penalty_key": str(
+                        demand.get("deficit_penalty_key")
+                        or "chain_efficiency_halved"
+                    ),
                 }
             )
     return deficits
 
 
-def _incoming_routes(planet_id: int, conn: sqlite3.Connection) -> Dict[str, float]:
+def _incoming_routes(
+    planet_id: int,
+    conn: sqlite3.Connection,
+) -> Dict[str, Decimal]:
     cur = conn.cursor()
-    cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    cur.execute(
+        "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
     owner_row = cur.fetchone()
     owner_id = int(owner_row["player_id"]) if owner_row else None
     if owner_id is None:
@@ -153,7 +210,10 @@ def _incoming_routes(planet_id: int, conn: sqlite3.Connection) -> Dict[str, floa
         """,
         (int(planet_id), owner_id),
     )
-    return {str(r["resource_key"]): float(r["total"] or 0) for r in cur.fetchall()}
+    return {
+        str(r["resource_key"]): _decimal_value(r["total"] or 0)
+        for r in cur.fetchall()
+    }
 
 
 def _consume_planet_inputs(
@@ -163,21 +223,41 @@ def _consume_planet_inputs(
     conn: sqlite3.Connection,
 ) -> bool:
     cur = conn.cursor()
-    cur.execute("SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    cur.execute(
+        "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
     prow = cur.fetchone()
     if not prow:
         return False
 
-    metal_need = float(inputs.get("metal") or 0) * delta_hours
-    crystal_need = float(inputs.get("crystal") or 0) * delta_hours
-    metal = float(prow["metal"] or 0)
-    crystal = float(prow["crystal"] or 0)
+    delta_h = _decimal_value(delta_hours)
+    metal_rate = _decimal_value(inputs.get("metal") or 0)
+    crystal_rate = _decimal_value(inputs.get("crystal") or 0)
+    metal = _decimal_value(prow["metal"] or 0)
+    crystal = _decimal_value(prow["crystal"] or 0)
+    with localcontext() as ctx:
+        ctx.prec = _decimal_precision(
+            metal, crystal, metal_rate, crystal_rate, delta_h
+        )
+        metal_need = metal_rate * delta_h
+        crystal_need = crystal_rate * delta_h
+
     if metal < metal_need or crystal < crystal_need:
         return False
 
     cur.execute(
-        "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
-        (metal - metal_need, crystal - crystal_need, int(planet_id)),
+        """
+        UPDATE planets
+        SET metal = metal - CAST(? AS NUMERIC),
+            crystal = crystal - CAST(? AS NUMERIC)
+        WHERE id = ?;
+        """,
+        (
+            _decimal_sql(metal_need),
+            _decimal_sql(crystal_need),
+            int(planet_id),
+        ),
     )
     return True
 
@@ -185,7 +265,7 @@ def _consume_planet_inputs(
 def _add_special_amount(
     planet_id: int,
     resource_key: str,
-    amount: float,
+    amount: Decimal,
     conn: sqlite3.Connection,
 ) -> None:
     ensure_special_resource_row(planet_id, resource_key, conn)
@@ -193,10 +273,13 @@ def _add_special_amount(
     cur.execute(
         """
         UPDATE planet_special_resources
-        SET amount = MIN(cap, MAX(0, amount + ?))
+        SET amount = MIN(
+            cap,
+            MAX(0, amount + CAST(? AS NUMERIC))
+        )
         WHERE planet_id = ? AND resource_key = ?;
         """,
-        (float(amount), int(planet_id), str(resource_key)),
+        (_decimal_sql(amount), int(planet_id), str(resource_key)),
     )
 
 
@@ -214,9 +297,15 @@ def tick_special_resources(
     if "reactor_crisis" in failures or "population_crisis" in failures:
         return {"produced": {}, "halted": "failure"}
 
-    deficits = {d["resource_key"]: d for d in compute_import_deficits(planet_id, conn, delta_hours=delta_hours)}
+    deficits = {
+        d["resource_key"]: d
+        for d in compute_import_deficits(
+            planet_id, conn, delta_hours=delta_hours
+        )
+    }
     chains = get_production_chains(planet_id, conn=conn)
-    produced: Dict[str, float] = {}
+    produced: Dict[str, Decimal] = {}
+    delta_h = _decimal_value(delta_hours)
 
     for chain_row in chains:
         if not int(chain_row.get("is_active") or 0):
@@ -231,32 +320,46 @@ def tick_special_resources(
             if res_key in deficits:
                 cur = conn.cursor()
                 cur.execute(
-                    "UPDATE planet_production_chains SET efficiency = 0.5 WHERE planet_id = ? AND chain_key = ?;",
+                    "UPDATE planet_production_chains SET efficiency = 0.5 "
+                    "WHERE planet_id = ? AND chain_key = ?;",
                     (int(planet_id), chain_key),
                 )
                 continue
 
-        efficiency = float(chain_row.get("efficiency") or 1.0)
+        efficiency = _decimal_value(chain_row.get("efficiency") or 1.0, "1")
         if chain_key in deficits or output_key in deficits:
-            efficiency *= 0.5
+            efficiency *= Decimal("0.5")
 
         inputs = chain.get("inputs") or {}
-        if inputs and not _consume_planet_inputs(planet_id, inputs, delta_hours, conn):
+        if inputs and not _consume_planet_inputs(
+            planet_id, inputs, delta_hours, conn
+        ):
             cur = conn.cursor()
             cur.execute(
-                "UPDATE planet_production_chains SET efficiency = 0 WHERE planet_id = ? AND chain_key = ?;",
+                "UPDATE planet_production_chains SET efficiency = 0 "
+                "WHERE planet_id = ? AND chain_key = ?;",
                 (int(planet_id), chain_key),
             )
             continue
 
-        base_out = float(chain.get("base_output_per_hour") or 0)
-        mult = _culture_chain_mult(planet_id, chain_key, conn, output_key=output_key)
-        output = base_out * efficiency * mult * float(delta_hours)
+        base_out = _decimal_value(chain.get("base_output_per_hour") or 0)
+        mult = _decimal_value(
+            _culture_chain_mult(
+                planet_id, chain_key, conn, output_key=output_key
+            ),
+            "1",
+        )
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(base_out, efficiency, mult, delta_h)
+            output = base_out * efficiency * mult * delta_h
         if output <= 0:
             continue
 
         _add_special_amount(planet_id, output_key, output, conn)
-        produced[output_key] = produced.get(output_key, 0.0) + output
+        previous_output = produced.get(output_key, Decimal(0))
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(previous_output, output)
+            produced[output_key] = previous_output + output
 
         cur = conn.cursor()
         cur.execute(
@@ -272,33 +375,43 @@ def tick_special_resources(
     return {"produced": produced, "deficits": list(deficits.values())}
 
 
-def _apply_decay(planet_id: int, delta_hours: float, conn: sqlite3.Connection) -> None:
+def _apply_decay(
+    planet_id: int,
+    delta_hours: float,
+    conn: sqlite3.Connection,
+) -> None:
     try:
         settings = get_game_settings(conn=conn)
-        global_decay = float(settings.get("special_resource_decay_global", 0.02))
+        global_decay = _decimal_value(
+            settings.get("special_resource_decay_global", 0.02), "0.02"
+        )
     except Exception:
-        global_decay = 0.02
+        global_decay = Decimal("0.02")
 
-    day_frac = float(delta_hours) / 24.0
+    delta_h = _decimal_value(delta_hours)
+    day_frac = delta_h / Decimal("24")
     rows = get_special_resources(planet_id, conn=conn)
     cur = conn.cursor()
     for row in rows:
         key = str(row["resource_key"])
         rdef = get_special_resource_def(key) or {}
-        decay = float(rdef.get("decay_per_day") or global_decay)
-        cap = float(row["cap"] or 1)
-        amount = float(row["amount"] or 0)
-        soft = cap * 0.8
-        if amount <= soft:
-            continue
-        excess = amount - soft
-        loss = excess * decay * day_frac
+        decay = _decimal_value(rdef.get("decay_per_day") or global_decay)
+        cap = _decimal_value(row["cap"] or 1)
+        amount = _decimal_value(row["amount"] or 0)
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(amount, cap, decay, day_frac)
+            soft = cap * Decimal("0.8")
+            if amount <= soft:
+                continue
+            excess = amount - soft
+            loss = excess * decay * day_frac
         cur.execute(
             """
-            UPDATE planet_special_resources SET amount = MAX(0, amount - ?)
+            UPDATE planet_special_resources
+            SET amount = MAX(0, amount - CAST(? AS NUMERIC))
             WHERE planet_id = ? AND resource_key = ?;
             """,
-            (loss, int(planet_id), key),
+            (_decimal_sql(loss), int(planet_id), key),
         )
 
 
@@ -318,37 +431,56 @@ def process_trade_routes(
     routes = [
         r
         for r in get_trade_routes(int(owner), conn=conn)
-        if int(r.get("source_planet_id") or 0) == int(planet_id) and int(r.get("is_active") or 0)
+        if int(r.get("source_planet_id") or 0) == int(planet_id)
+        and int(r.get("is_active") or 0)
     ]
     transfers: List[Dict[str, Any]] = []
-    bonus = float(get_flag(planet_id, "trade_route_bonus", 0.0, conn=conn) or 0.0)
+    bonus = _decimal_value(
+        get_flag(planet_id, "trade_route_bonus", 0.0, conn=conn) or 0.0
+    )
+    delta_h = _decimal_value(delta_hours)
 
     for route in routes:
-        amount_h = float(route["amount_per_hour"]) * (1.0 + bonus)
-        amount = amount_h * float(delta_hours)
+        rate = _decimal_value(route["amount_per_hour"])
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(rate, bonus, delta_h)
+            amount_h = rate * (Decimal(1) + bonus)
+            amount = amount_h * delta_h
         resource_key = str(route["resource_key"])
         target_id = int(route["target_planet_id"])
 
         if resource_key in ("metal", "crystal"):
             cur = conn.cursor()
-            cur.execute("SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+            cur.execute(
+                "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+                (int(planet_id),),
+            )
             src = cur.fetchone()
             if not src:
                 continue
             col = resource_key
-            available = float(src[col] or 0)
+            available = _decimal_value(src[col] or 0)
             move = min(available, amount)
             if move <= 0:
                 continue
+            move_sql = _decimal_sql(move)
             cur.execute(
-                f"UPDATE planets SET {col} = {col} - ? WHERE id = ?;",
-                (move, int(planet_id)),
+                f"UPDATE planets SET {col} = {col} - CAST(? AS NUMERIC) "
+                "WHERE id = ?;",
+                (move_sql, int(planet_id)),
             )
             cur.execute(
-                f"UPDATE planets SET {col} = {col} + ? WHERE id = ?;",
-                (move, target_id),
+                f"UPDATE planets SET {col} = {col} + CAST(? AS NUMERIC) "
+                "WHERE id = ?;",
+                (move_sql, target_id),
             )
-            transfers.append({"resource_key": resource_key, "amount": move, "target_planet_id": target_id})
+            transfers.append(
+                {
+                    "resource_key": resource_key,
+                    "amount": move,
+                    "target_planet_id": target_id,
+                }
+            )
         else:
             ensure_special_resource_row(planet_id, resource_key, conn)
             ensure_special_resource_row(target_id, resource_key, conn)
@@ -361,25 +493,33 @@ def process_trade_routes(
                 (int(planet_id), resource_key),
             )
             row = cur.fetchone()
-            available = float(row["amount"] or 0) if row else 0.0
+            available = _decimal_value(row["amount"] or 0) if row else Decimal(0)
             move = min(available, amount)
             if move <= 0:
                 continue
+            move_sql = _decimal_sql(move)
             cur.execute(
                 """
-                UPDATE planet_special_resources SET amount = amount - ?
+                UPDATE planet_special_resources
+                SET amount = amount - CAST(? AS NUMERIC)
                 WHERE planet_id = ? AND resource_key = ?;
                 """,
-                (move, int(planet_id), resource_key),
+                (move_sql, int(planet_id), resource_key),
             )
             cur.execute(
                 """
                 UPDATE planet_special_resources
-                SET amount = MIN(cap, amount + ?)
+                SET amount = MIN(cap, amount + CAST(? AS NUMERIC))
                 WHERE planet_id = ? AND resource_key = ?;
                 """,
-                (move, target_id, resource_key),
+                (move_sql, target_id, resource_key),
             )
-            transfers.append({"resource_key": resource_key, "amount": move, "target_planet_id": target_id})
+            transfers.append(
+                {
+                    "resource_key": resource_key,
+                    "amount": move,
+                    "target_planet_id": target_id,
+                }
+            )
 
     return {"transfers": transfers}

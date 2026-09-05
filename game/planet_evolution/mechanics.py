@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Set
 
 from .constants import MECHANICS_COMPILE_VERSION
@@ -290,9 +291,29 @@ def _sync_import_demands(planet_id: int, spec_key: str | None, spec_tier: int, c
             if res in seen:
                 continue
             seen.add(res)
+            try:
+                required = Decimal(str(d.get("required_per_hour", 0)))
+            except (InvalidOperation, TypeError, ValueError):
+                required = Decimal(0)
+            if not required.is_finite():
+                required = Decimal(0)
             cur.execute(
-                "INSERT INTO planet_import_demands (planet_id, resource_key, required_per_hour, deficit_penalty_key) VALUES (?, ?, ?, ?);",
-                (int(planet_id), res, float(d.get("required_per_hour", 0)), str(d.get("deficit_penalty_key", "chain_efficiency_halved"))),
+                """
+                INSERT INTO planet_import_demands (
+                    planet_id, resource_key, required_per_hour, deficit_penalty_key
+                ) VALUES (?, ?, CAST(? AS NUMERIC), ?);
+                """,
+                (
+                    int(planet_id),
+                    res,
+                    format(max(Decimal(0), required), "f"),
+                    str(
+                        d.get(
+                            "deficit_penalty_key",
+                            "chain_efficiency_halved",
+                        )
+                    ),
+                ),
             )
 
 
