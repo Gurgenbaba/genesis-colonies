@@ -821,25 +821,36 @@ def _slot_team(slot: int) -> str:
     return "A" if int(slot) < 2 else "B"
 
 
-def _largest_remainder_split(total: int, weights: Mapping[int, float]) -> Dict[int, int]:
-    """Split integer `total` across keys by weights (largest remainder)."""
+def _largest_remainder_split(total: int, weights: Mapping[int, Any]) -> Dict[int, int]:
+    """Split integer total by arbitrary-size integer weights, exactly."""
     amt = max(0, int(total))
-    if amt <= 0 or not weights:
-        return {int(k): 0 for k in weights}
-    wsum = sum(max(0.0, float(v)) for v in weights.values())
+    normalized = {int(k): max(0, int(v or 0)) for k, v in weights.items()}
+    if amt <= 0 or not normalized:
+        return {int(k): 0 for k in normalized}
+    wsum = sum(normalized.values())
     if wsum <= 0:
-        uids = list(weights.keys())
-        out = {int(k): 0 for k in uids}
-        out[int(uids[0])] = amt
+        uids = list(normalized.keys())
+        out = {uid: 0 for uid in uids}
+        out[uids[0]] = amt
         return out
-    raw = {int(k): (amt * max(0.0, float(v)) / wsum) for k, v in weights.items()}
-    floors = {k: int(v) for k, v in raw.items()}
+
+    floors: Dict[int, int] = {}
+    remainders: Dict[int, int] = {}
+    for uid, weight in normalized.items():
+        product = amt * weight
+        floors[uid] = product // wsum
+        remainders[uid] = product % wsum
+
     rem = amt - sum(floors.values())
-    order = sorted(raw.keys(), key=lambda k: (raw[k] - floors[k], -k), reverse=True)
-    for k in order:
+    order = sorted(
+        normalized.keys(),
+        key=lambda uid: (remainders[uid], -uid),
+        reverse=True,
+    )
+    for uid in order:
         if rem <= 0:
             break
-        floors[k] += 1
+        floors[uid] += 1
         rem -= 1
     return floors
 
@@ -920,8 +931,7 @@ def _compute_settlement_grants(
         winner_ids = [display] + [w for w in dict.fromkeys(round_winners) if w != display]
 
     elif mode_key == "share":
-        total_rv = sum(totals.values()) or 1
-        weights = {uid: float(totals.get(uid, 0)) / float(total_rv) for uid in uids}
+        weights = {uid: max(0, int(totals.get(uid, 0))) for uid in uids}
         merged_s: Dict[str, int] = {}
         for r in rolls:
             key = str(r["reward_key"])
