@@ -163,22 +163,11 @@ _POSTGRES_I64_COLUMNS: List[tuple[str, str]] = [
     ("build_queue", "cost_crystal"),
     ("research_queue", "cost_metal"),
     ("research_queue", "cost_crystal"),
-    ("planet_ships", "amount"),
-    ("shipyard_queue", "amount"),
     ("shipyard_queue", "cost_metal"),
     ("shipyard_queue", "cost_crystal"),
-    ("planet_defense", "amount"),
-    ("chronicle_entries", "score_value"),
-    ("directive_progress", "delta"),
-    ("expedition_daily_value", "expo_value_total"),
-    ("expedition_daily_recorded", "expo_value"),
-    ("pirate_intel", "resources_score"),
-    ("pirate_intel", "fleet_score"),
-    ("pirate_intel", "defense_score"),
     ("pirate_bot_state", "seed"),
     ("troop_queue", "cost_metal"),
     ("troop_queue", "cost_crystal"),
-    ("planet_shipyard_ascension", "hull_mass_progress"),
 ]
 
 _INT32_MAX = 2147483647
