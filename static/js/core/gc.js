@@ -355,7 +355,8 @@
       var logisticsPanel = page.querySelector('[data-fleet-mode-panel="logistics"]');
       var logPage = page.querySelector("#logistics-page");
 
-      if (logistics && !syncLogisticsPresentation(logPage, nextMode)) return false;
+      if (!logistics && !sendPanel) return false;
+      if (logistics && (!logisticsPanel || !syncLogisticsPresentation(logPage, nextMode))) return false;
 
       page.dataset.fleetPageMode = nextMode;
       page.querySelectorAll("[data-fleet-mode-tab]").forEach(function (tab) {
