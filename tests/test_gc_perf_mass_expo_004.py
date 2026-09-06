@@ -160,6 +160,18 @@ def test_mass_expo_source_has_bulk_and_fast_return_contracts():
     assert "_movement_batch_type" not in expo_fast
 
 
+def test_expedition_outbound_arrival_skips_locale_and_report_reads():
+    src = Path("game/fleet.py").read_text(encoding="utf-8")
+    arrival = src.split("def _handle_arrival(", 1)[1].split("\ndef ", 1)[0]
+    fast = arrival.split('if mission == "expedition":', 1)[1].split(
+        "from .i18n import get_player_locale, tr", 1
+    )[0]
+    assert "_claim_movement_status(" in fast
+    assert '"holding"' in fast
+    assert "get_player_locale" not in fast
+    assert "notify_" not in fast
+
+
 def test_postgres_due_budget_and_single_load_contracts_are_explicit():
     src = Path("game/fleet.py").read_text(encoding="utf-8")
     tick = src.split("def _process_fleet_tick_short_tx(", 1)[1].split(
