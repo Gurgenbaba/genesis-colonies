@@ -14,7 +14,6 @@ from game.economy_balance import (
     NANOFACTORY_COST_GROWTH,
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
-    NANOFACTORY_PERSISTED_COST_MAX,
     RESEARCH_COST_AFFORD_HOURS,
     nanofactory_upgrade_cost,
     power_upgrade_cost,
@@ -105,12 +104,13 @@ class TestGc863aNanofactory:
         assert metal == max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** level))))
         assert crystal == max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** level))))
 
-    def test_level_50_fits_persisted_queue_cost_columns(self) -> None:
+    def test_level_50_crosses_i64_without_gameplay_clamp(self) -> None:
         metal, crystal = nanofactory_upgrade_cost(50)
-        assert metal == NANOFACTORY_PERSISTED_COST_MAX
-        assert metal <= 9_000_000_000_000_000_000
-        assert crystal < NANOFACTORY_PERSISTED_COST_MAX
-        assert crystal >= 10_000_000_000
+        signed_i64_max = (1 << 63) - 1
+        assert metal == 11_258_999_068_426_240_000
+        assert metal > signed_i64_max
+        assert crystal == 5_629_499_534_213_120_000
+        assert crystal < signed_i64_max
 
 
 class TestGc863aResearchCosts:

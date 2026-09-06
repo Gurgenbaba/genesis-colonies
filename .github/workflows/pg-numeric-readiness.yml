@@ -71,6 +71,7 @@ on:
       - "tests/test_gc_big_number_runtime_fleet.py"
       - "tests/test_gc_big_number_runtime_stellar_forge.py"
       - "tests/test_gc_big_number_runtime_production.py"
+      - "tests/test_gc_big_number_runtime_economy_curves.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -143,6 +144,7 @@ on:
       - "tests/test_gc_big_number_runtime_fleet.py"
       - "tests/test_gc_big_number_runtime_stellar_forge.py"
       - "tests/test_gc_big_number_runtime_production.py"
+      - "tests/test_gc_big_number_runtime_economy_curves.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:

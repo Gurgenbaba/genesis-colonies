@@ -10,6 +10,7 @@ Authoritative production: game/production_formula.py · docs/PRODUCTION_FORMULA_
 from __future__ import annotations
 
 import math
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, localcontext
 from typing import Any, Dict, List, Optional, Tuple
 
 from .production_formula import (
@@ -19,7 +20,9 @@ from .production_formula import (
     mine_output,
     mine_output_decimal,
     normalize_resource_type,
+    standard_output_decimal,
 )
+from .exact_math import decimal_value
 
 # Benchmark levels for tests and balance docs.
 BENCHMARK_LEVELS: Tuple[int, ...] = (10, 30, 60, 90, 120)
@@ -143,8 +146,8 @@ STORAGE_REFERENCE_HOURS = 24
 NANOFACTORY_METAL_BASE = 10_000.0
 NANOFACTORY_CRYSTAL_BASE = 5_000.0
 NANOFACTORY_COST_GROWTH = 2.0  # Alpha: doubles per target level (OGame-style steep investment)
-# Queue cost snapshots are persisted as signed 64-bit integers on both supported DB paths.
-# L50 metal would otherwise exceed BIGINT/SQLite INTEGER while L49 remains valid.
+# Legacy compatibility marker only. Exact paid-cost snapshots + PostgreSQL NUMERIC are now
+# authoritative; gameplay costs are no longer clamped to this historical SQLite/BIGINT ceiling.
 NANOFACTORY_PERSISTED_COST_MAX = 9_000_000_000_000_000_000
 
 # GC-821B — exchange (scales with empire day production via exchange.py).
@@ -195,6 +198,86 @@ RESEARCH_COST_AFFORD_HOURS: Dict[int, float] = {
 _RESEARCH_L1_AFFORD_HOURS = 3.0
 _RESEARCH_COST_RAMP_LEVEL = 10
 
+# Above this level the Ferdi 1.075^level production reference approaches/exceeds
+# binary-float range. Normal gameplay levels intentionally retain the historical
+# float path byte-for-byte; high-level pricing switches arithmetic only.
+_EXACT_CURVE_LEVEL_THRESHOLD = 5_000
+_JS_SAFE_INTEGER_MAX = (1 << 53) - 1
+
+
+def _decimal_digits(value: Decimal) -> int:
+    dec = value.copy_abs()
+    if not dec:
+        return 1
+    return max(1, len(dec.as_tuple().digits), dec.adjusted() + 1)
+
+
+def _power_decimal(base: Any, level: int, exponent: Any, *multipliers: Any) -> Decimal:
+    """Positive base * level**exponent * factors without IEEE-754 level coercion."""
+    lvl = max(1, int(level))
+    exp = decimal_value(exponent)
+    # Exponents in the balance tables are bounded (<4). Overestimate significant
+    # digits so integral rounding remains meaningful even for huge integer levels.
+    exp_ceiling = max(1, int(exp.to_integral_value(rounding=ROUND_CEILING)))
+    estimated_digits = len(str(lvl)) * exp_ceiling + 160
+    with localcontext() as ctx:
+        ctx.prec = max(192, estimated_digits)
+        out = decimal_value(base, "0") * ctx.power(Decimal(lvl), exp)
+        for factor in multipliers:
+            out *= decimal_value(factor, "0")
+        return +out
+
+
+def _round_decimal_to_step(value: Any, step: int) -> int:
+    dec = decimal_value(value, "0")
+    unit = max(1, int(step))
+    with localcontext() as ctx:
+        ctx.prec = max(96, _decimal_digits(dec) + 64)
+        units = (dec / Decimal(unit)).to_integral_value(rounding=ROUND_HALF_EVEN)
+        return max(unit, int(units) * unit)
+
+
+def _round_ratio_half_even(numerator: int, denominator: int) -> int:
+    num = int(numerator)
+    den = int(denominator)
+    if den <= 0:
+        raise ZeroDivisionError("denominator must be positive")
+    q, r = divmod(num, den)
+    twice = r * 2
+    if twice < den:
+        return q
+    if twice > den:
+        return q + 1
+    return q if q % 2 == 0 else q + 1
+
+
+def _research_income_reference_decimal(level: int) -> Decimal:
+    """Neutral metal+crystal production reference with full high-level precision."""
+    lvl = max(1, int(level))
+    metal_mine = mine_output_decimal("metal", lvl)
+    crystal_mine = mine_output_decimal("crystal", lvl)
+    with localcontext() as ctx:
+        ctx.prec = max(_decimal_digits(metal_mine), _decimal_digits(crystal_mine)) + 96
+        metal = metal_mine + standard_output_decimal("metal")
+        crystal = crystal_mine + standard_output_decimal("crystal")
+        return +(metal + crystal)
+
+
+def _mine_upgrade_cost_total_exact(building_type: str, target_level: int) -> Decimal:
+    """High-level equivalent of GC-821F ROI calibration without float production."""
+    btype = str(building_type)
+    lvl = max(1, int(target_level))
+    curve = BUILDING_UPGRADE_CURVES[btype]
+    metal_curve = BUILDING_UPGRADE_CURVES["metal_mine"]
+    cur = mine_output_decimal("metal", lvl)
+    prev = mine_output_decimal("metal", lvl - 1)
+    with localcontext() as ctx:
+        ctx.prec = max(_decimal_digits(cur), _decimal_digits(prev)) + 128
+        delta = max(Decimal(0), cur - prev)
+        target = decimal_value(mine_roi_anchor_hours(lvl), "1")
+        k_ratio = decimal_value(curve.k, "1") / decimal_value(metal_curve.k, "1")
+        return +(delta * target * k_ratio)
+
 
 def _log_interpolate_anchor_map(level: int, anchors: Dict[int, float]) -> float:
     """Log-linear interpolation between sorted anchor levels."""
@@ -240,10 +323,15 @@ def research_cost_afford_hours(level: int) -> float:
     return _log_interpolate_anchor_map(lvl, RESEARCH_COST_AFFORD_HOURS)
 
 
-def research_cost_anchor_total(level: int) -> float:
+def research_cost_anchor_total(level: int) -> float | Decimal:
     """GC-825 combined resource value (energy_tech tier) before tech tier split."""
     lvl = max(1, int(level))
-    return max(1.0, _research_income_reference(lvl) * research_cost_afford_hours(lvl))
+    if lvl <= _EXACT_CURVE_LEVEL_THRESHOLD:
+        return max(1.0, _research_income_reference(lvl) * research_cost_afford_hours(lvl))
+    income = _research_income_reference_decimal(lvl)
+    with localcontext() as ctx:
+        ctx.prec = _decimal_digits(income) + 96
+        return max(Decimal(1), income * decimal_value(research_cost_afford_hours(lvl), "1"))
 
 
 def research_time_tier(base_time: float) -> float:
@@ -266,8 +354,30 @@ def research_cost_tier(base_cost_m: int, base_cost_c: int) -> float:
     return max(0.75, combined / RESEARCH_REF_COMBINED_COST)
 
 
-def _research_cost_round_total(total: float) -> int:
+def _research_cost_round_total(total: Any) -> int:
     """GC-863B — snap combined research cost to Genesis round numbers."""
+    if isinstance(total, Decimal):
+        t_dec = max(Decimal(1), total)
+        if t_dec < 1_000:
+            step = 50
+        elif t_dec < 5_000:
+            step = 250
+        elif t_dec < 25_000:
+            step = 500
+        elif t_dec < 100_000:
+            step = 2_500
+        elif t_dec < 500_000:
+            step = 10_000
+        elif t_dec < 5_000_000:
+            step = 50_000
+        elif t_dec < 50_000_000:
+            step = 250_000
+        elif t_dec < 500_000_000:
+            step = 1_000_000
+        else:
+            step = 5_000_000
+        return _round_decimal_to_step(t_dec, step)
+
     t = max(1.0, float(total))
     if t < 1_000:
         step = 50
@@ -305,10 +415,15 @@ def _split_research_cost_round(total: int, base_cost_m: int, base_cost_c: int) -
         comp_step = 50_000
     else:
         comp_step = 250 if total < 5_000 else (500 if total < 25_000 else 2_500)
-    metal = max(
-        comp_step,
-        int(round((total * bm / combined) / comp_step) * comp_step),
-    )
+    if total <= _JS_SAFE_INTEGER_MAX:
+        # Preserve the historical normal-level float rounding exactly.
+        metal = max(
+            comp_step,
+            int(round((total * bm / combined) / comp_step) * comp_step),
+        )
+    else:
+        metal_units = _round_ratio_half_even(total * bm, combined * comp_step)
+        metal = max(comp_step, metal_units * comp_step)
     metal = min(metal, total - comp_step) if total > comp_step else total
     crystal = total - metal
     return max(1, metal), max(0, crystal)
@@ -317,8 +432,21 @@ def _split_research_cost_round(total: int, base_cost_m: int, base_cost_c: int) -
 def research_upgrade_cost(base_cost_m: int, base_cost_c: int, target_level: int) -> Tuple[int, int]:
     """GC-825 research upgrade cost (metal, crystal) before payment."""
     lvl = max(1, int(target_level))
-    tier = research_cost_tier(base_cost_m, base_cost_c)
-    raw_total = max(research_cost_anchor_total(lvl) * tier, 1.0)
+    anchor = research_cost_anchor_total(lvl)
+    if isinstance(anchor, Decimal):
+        combined = max(0, int(base_cost_m)) + max(0, int(base_cost_c))
+        with localcontext() as ctx:
+            ctx.prec = _decimal_digits(anchor) + 96
+            tier = max(
+                Decimal("0.75"),
+                Decimal(combined) / decimal_value(RESEARCH_REF_COMBINED_COST, "1500")
+                if combined > 0
+                else Decimal(1),
+            )
+            raw_total = max(Decimal(1), anchor * tier)
+    else:
+        tier = research_cost_tier(base_cost_m, base_cost_c)
+        raw_total = max(anchor * tier, 1.0)
     total = _research_cost_round_total(raw_total)
     return _split_research_cost_round(total, int(base_cost_m), int(base_cost_c))
 
@@ -425,14 +553,14 @@ def storage_capacity_anchor(
 
 
 def nanofactory_upgrade_cost(target_level: int) -> Tuple[int, int]:
-    """GC-863 — steep Alpha curve, capped only at the DB-safe persisted snapshot ceiling."""
+    """GC-863 — steep Alpha curve with no historical SQLite/BIGINT gameplay clamp."""
     lvl = max(1, int(target_level))
-    raw_metal = max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
-    raw_crystal = max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
-    return (
-        min(raw_metal, NANOFACTORY_PERSISTED_COST_MAX),
-        min(raw_crystal, NANOFACTORY_PERSISTED_COST_MAX),
-    )
+    # The live curve is exactly base × 2^level. Keep it integer-exact so L50+
+    # and far larger levels never pass through float or an i64 compatibility cap.
+    growth = 1 << lvl
+    raw_metal = max(1, int(NANOFACTORY_METAL_BASE) * growth)
+    raw_crystal = max(0, int(NANOFACTORY_CRYSTAL_BASE) * growth)
+    return raw_metal, raw_crystal
 
 
 def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]:
@@ -443,8 +571,30 @@ def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]
         return nanofactory_upgrade_cost(lvl)
     curve = BUILDING_UPGRADE_CURVES.get(btype)
     if curve is None:
+        # Legacy unknown-building fallback; live BUILDING_UPGRADE_CURVES entries
+        # take the no-max path below.
         mult = 1.5 ** (lvl - 1)
         return int(100 * mult), int(50 * mult)
+
+    if lvl > _EXACT_CURVE_LEVEL_THRESHOLD:
+        if btype in MINE_BUILDING_TYPES:
+            total_dec = _mine_upgrade_cost_total_exact(btype, lvl)
+        else:
+            total_dec = _power_decimal(curve.k, lvl, curve.exponent)
+        if btype in STORAGE_BUILDING_TYPES:
+            total_dec *= decimal_value(STORAGE_BUILDING_COST_MULTIPLIER, "1")
+        total_dec = max(Decimal(1), total_dec)
+        with localcontext() as ctx:
+            ctx.prec = _decimal_digits(total_dec) + 96
+            metal = max(
+                1,
+                int((total_dec * decimal_value(curve.metal_frac)).to_integral_value(rounding=ROUND_CEILING)),
+            )
+            crystal = max(
+                0,
+                int((total_dec * decimal_value(curve.crystal_frac)).to_integral_value(rounding=ROUND_CEILING)),
+            )
+        return metal, crystal
 
     if btype in MINE_BUILDING_TYPES:
         total = _mine_upgrade_cost_total_raw(btype, lvl)
@@ -464,6 +614,9 @@ def power_build_seconds(building_type: str, target_level: int) -> int:
     btype = str(building_type)
     lvl = max(1, int(target_level))
     k, exp = BUILD_TIME_CURVES.get(btype, (120.0, 1.35))
+    if lvl > _EXACT_CURVE_LEVEL_THRESHOLD:
+        exact = _power_decimal(k, lvl, exp)
+        return max(30, int(exact.to_integral_value(rounding=ROUND_FLOOR)))
     return max(30, int(k * (float(lvl) ** exp)))
 
 
