@@ -140,7 +140,7 @@ Client: Research timer-zero uses the same `requestQueueTimerZeroRefresh` path as
 - Lesende Pfade: `skip_finish=True` nach bereits gelaufenem Refresh.
 - Poll: `finish_source=game_state` — leichtgewichtig, siehe [STATE_AJAX.md](STATE_AJAX.md).
 - **GC-PERF-WORKER-001:** Mit `GC_GAME_WORKER_PRIMARY=1` finish't der Poll nur noch bei tatsächlich fälliger Arbeit (Safety-Net). Reguläre Finishes: `POST /api/internal/cron/queue-tick` / `scripts/run_game_worker.py` → weiterhin `finish_due_work` (kein Parallel-System).
-- **GC-PROD-SQLITE-STALL-001A:** Safety-Net-Finish nur wenn der **Queue-Tick-Heartbeat** (`QUEUE_TICK_KEY` / `record_queue_tick_result`) fehlt oder stale ist — **nicht** aus Fleet-/Maintenance-Heartbeat ableiten. Vor `finish_player_due_work` muss `try_claim_poll_due_finish` gewinnen (Single-Flight, TTL). Fleet-Due separat: frischer Fleet-Worker → Poll deferred; sonst player-scoped `process_fleet_tick(..., manage_transaction=True)`.
+- **GC-PROD-SQLITE-STALL-001A:** Safety-Net-Finish nur wenn der **Queue-Tick-Heartbeat** (`QUEUE_TICK_KEY` / `record_queue_tick_result`) fehlt oder stale ist — **nicht** aus Fleet-/Maintenance-Heartbeat ableiten. Vor `finish_player_due_work` muss `try_claim_poll_due_finish` gewinnen (Single-Flight, TTL). Fleet-Due separat: `player_fleet_is_dirty()` ist der indexierte Deadline-Trigger. Sobald für den aktiven Spieler eine Phase wirklich fällig ist, führt der bestehende Game-State-Poll einen begrenzten `process_player_due_fleets_now()`-Pass auf eigener DB-Connection/kurzen Transaktionen aus — **unabhängig von der Fleet-Worker-Heartbeat-Frische**. Der Heartbeat darf ein nach seinem letzten Lauf abgelaufenes `0s`-Deadline nicht mehr bis zum nächsten 60-s-Worker-Tick blockieren. Kein zusätzlicher Poll-Loop.
 
 ---
 
