@@ -26,6 +26,7 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
         "page_context_overview_ms",
         "page_context_shipyard_ms",
         "page_context_fleet_ms",
+        "page_context_defense_ms",
         "live_state_ms",
         "finish_ms",
         "mutate_ms",
