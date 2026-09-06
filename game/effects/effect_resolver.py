@@ -16,11 +16,11 @@ from __future__ import annotations
 import logging
 import os
 from contextvars import ContextVar
-from decimal import Decimal, localcontext
+from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..economy_balance import STORAGE_BASE_CAPACITY
-from ..exact_math import bounded_ratio_float, scale_int
+from ..exact_math import bounded_ratio_float, decimal_value, integer_precision, scale_int
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
 from ..planet_evolution.repository import get_context_planet
 
@@ -48,6 +48,10 @@ COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_l
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
 STORAGE_TECH_PER_LEVEL = 0.15
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
+# 0.985^1829 is already below _DIVISION_EPS. Beyond this point all canonical
+# build/research speed consumers clamp the duration factor to the same epsilon,
+# so avoid coercing astronomical integer levels through Python float pow().
+_BUILDTIME_TECH_EPS_LEVEL = 1829
 
 # Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
 
@@ -117,19 +121,33 @@ class EffectResolver:
 
     @staticmethod
     def _reduction_factor(level: int, per_level: float) -> float:
-        """Gameplay multiplier in [0, 1]; clamps at 0 when linear reduction exceeds 100%."""
+        """Gameplay multiplier in [0, 1] without huge-int → float coercion."""
         lvl = max(0, int(level or 0))
         if lvl <= 0:
             return 1.0
-        return max(0.0, 1.0 - per_level * lvl)
+        rate = float(per_level)
+        if rate <= 0.0:
+            return 1.0
+        # Once the linear reduction is certainly >=100%, the canonical result
+        # is exactly the existing 0.0 clamp. Check the small threshold first so
+        # an arbitrarily large level never participates in float multiplication.
+        zero_after = max(1, int(1.0 / rate) + 2)
+        if lvl >= zero_after:
+            return 0.0
+        return max(0.0, 1.0 - rate * lvl)
 
     @staticmethod
     def _reduction_pct(level: int, per_level: float) -> int:
-        """Display reduction % — unbounded (can exceed 100%)."""
+        """Display reduction % — unbounded, including levels beyond IEEE-754."""
         lvl = max(0, int(level or 0))
         if lvl <= 0:
             return 0
-        return int(round(per_level * lvl * 100))
+        if lvl.bit_length() <= 52:
+            return int(round(per_level * lvl * 100))
+        with localcontext() as ctx:
+            ctx.prec = integer_precision(lvl, extra=64)
+            pct = Decimal(lvl) * decimal_value(per_level) * Decimal(100)
+            return int(pct.to_integral_value(rounding=ROUND_HALF_EVEN))
 
     @staticmethod
     def mine_energy_factor_for_level(level: int) -> float:
@@ -153,6 +171,8 @@ class EffectResolver:
         lvl = max(0, int(level or 0))
         if lvl <= 0:
             return 1.0
+        if lvl >= _BUILDTIME_TECH_EPS_LEVEL:
+            return 0.0
         return float(BUILDTIME_TECH_DURATION ** lvl)
 
     @staticmethod
@@ -790,7 +810,7 @@ class EffectResolver:
         # --- Research: buildtime_tech (duration × BUILDTIME_TECH_DURATION ** level) ---
         lb = _lvl(r, "buildtime_tech")
         if lb > 0:
-            duration_factor = float(BUILDTIME_TECH_DURATION ** lb)
+            duration_factor = self.buildtime_duration_factor_for_level(lb)
             speed_boost = 1.0 / max(duration_factor, _DIVISION_EPS)
             build_time_speed *= speed_boost
             research_time_speed *= speed_boost
@@ -1506,9 +1526,21 @@ class EffectResolver:
     def get_build_time_seconds(self, building_type: str, target_level: int) -> int:
         from ..economy_balance import power_build_seconds
 
-        seconds = float(power_build_seconds(building_type, int(target_level)))
-        seconds /= self.get_build_time_effective_speed(building_type)
-        return max(int(seconds), 1)
+        base_seconds = int(power_build_seconds(building_type, int(target_level)))
+        effective_speed = self.get_build_time_effective_speed(building_type)
+
+        # Preserve the historical normal-range float path exactly. High-level
+        # GC-821 curves can exceed IEEE-754, so divide the integer duration by
+        # the bounded speed as Decimal rather than round-tripping through float.
+        if base_seconds.bit_length() < 1024:
+            seconds = float(base_seconds) / effective_speed
+            return max(int(seconds), 1)
+
+        speed_dec = max(decimal_value(effective_speed, "1"), Decimal("0.1"))
+        with localcontext() as ctx:
+            ctx.prec = integer_precision(base_seconds, extra=96)
+            duration_factor = Decimal(1) / speed_dec
+        return max(scale_int(base_seconds, duration_factor), 1)
 
     def get_research_time_seconds(self, tech_key: str, target_level: int) -> int:
         from ..research import RESEARCH_TECHS
