@@ -25,11 +25,12 @@ def test_poll_live_path_remains_the_only_http_fleet_finish_safety_net():
         "\ndef refresh_player_live_state(", 1
     )[0]
 
-    assert "is_fleet_worker_heartbeat_fresh" in block
-    assert "if fleet_dirty and not should_finish_queues" in block
-    assert "if not is_fleet_worker_heartbeat_fresh" in block
-    assert "should_finish_fleet = True" in block
-    assert "process_fleet_tick(" in block
+    assert "if fleet_dirty:" in block
+    assert "process_player_due_fleets_now(uid, now=now)" in block
+    assert "is_fleet_worker_heartbeat_fresh" not in block
+    # HUD payload stays read-only; only the poll live-state owner may invoke
+    # the bounded dedicated fleet deadline pass.
+    assert "process_fleet_tick(" not in block
 
 
 def test_pjax_navigation_uses_poll_live_path():
