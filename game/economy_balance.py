@@ -202,6 +202,7 @@ _RESEARCH_COST_RAMP_LEVEL = 10
 # binary-float range. Normal gameplay levels intentionally retain the historical
 # float path byte-for-byte; high-level pricing switches arithmetic only.
 _EXACT_CURVE_LEVEL_THRESHOLD = 5_000
+_JS_SAFE_INTEGER_MAX = (1 << 53) - 1
 
 
 def _decimal_digits(value: Decimal) -> int:
@@ -253,10 +254,12 @@ def _round_ratio_half_even(numerator: int, denominator: int) -> int:
 def _research_income_reference_decimal(level: int) -> Decimal:
     """Neutral metal+crystal production reference with full high-level precision."""
     lvl = max(1, int(level))
-    metal = mine_output_decimal("metal", lvl) + standard_output_decimal("metal")
-    crystal = mine_output_decimal("crystal", lvl) + standard_output_decimal("crystal")
+    metal_mine = mine_output_decimal("metal", lvl)
+    crystal_mine = mine_output_decimal("crystal", lvl)
     with localcontext() as ctx:
-        ctx.prec = max(_decimal_digits(metal), _decimal_digits(crystal)) + 96
+        ctx.prec = max(_decimal_digits(metal_mine), _decimal_digits(crystal_mine)) + 96
+        metal = metal_mine + standard_output_decimal("metal")
+        crystal = crystal_mine + standard_output_decimal("crystal")
         return +(metal + crystal)
 
 
@@ -412,8 +415,15 @@ def _split_research_cost_round(total: int, base_cost_m: int, base_cost_c: int) -
         comp_step = 50_000
     else:
         comp_step = 250 if total < 5_000 else (500 if total < 25_000 else 2_500)
-    metal_units = _round_ratio_half_even(total * bm, combined * comp_step)
-    metal = max(comp_step, metal_units * comp_step)
+    if total <= _JS_SAFE_INTEGER_MAX:
+        # Preserve the historical normal-level float rounding exactly.
+        metal = max(
+            comp_step,
+            int(round((total * bm / combined) / comp_step) * comp_step),
+        )
+    else:
+        metal_units = _round_ratio_half_even(total * bm, combined * comp_step)
+        metal = max(comp_step, metal_units * comp_step)
     metal = min(metal, total - comp_step) if total > comp_step else total
     crystal = total - metal
     return max(1, metal), max(0, crystal)
@@ -561,6 +571,14 @@ def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]
         return nanofactory_upgrade_cost(lvl)
     curve = BUILDING_UPGRADE_CURVES.get(btype)
     if curve is None:
+        if lvl > _EXACT_CURVE_LEVEL_THRESHOLD:
+            with localcontext() as ctx:
+                ctx.prec = max(192, (lvl * 1762) // 10_000 + 192)
+                mult = decimal_value("1.5") ** (lvl - 1)
+                return (
+                    max(1, int((Decimal(100) * mult).to_integral_value(rounding=ROUND_FLOOR))),
+                    max(0, int((Decimal(50) * mult).to_integral_value(rounding=ROUND_FLOOR))),
+                )
         mult = 1.5 ** (lvl - 1)
         return int(100 * mult), int(50 * mult)
 
