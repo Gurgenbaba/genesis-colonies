@@ -4222,6 +4222,25 @@ def _fail_returning_movement(conn, movement_id: int, now: float) -> bool:
     )
 
 
+def _lock_movement_for_status(
+    conn,
+    movement_id: int,
+    expected_status: str,
+) -> bool:
+    """Serialize side-effectful resolution for one movement on PostgreSQL.
+
+    The final status UPDATE remains the idempotency transition. This row lock is
+    deliberately acquired before expedition outcome side effects so an online
+    deadline pass and the global worker cannot both resolve the same holding row.
+    """
+    sql = "SELECT status FROM fleet_movements WHERE id = ?"
+    if get_db_backend() == "postgres":
+        sql += " FOR UPDATE"
+    sql += ";"
+    row = conn.execute(sql, (int(movement_id),)).fetchone()
+    return bool(row and str(row["status"] or "") == str(expected_status))
+
+
 def _claim_movement_status(
     conn,
     movement_id: int,
@@ -6548,6 +6567,15 @@ def _handle_expedition_holding_end(
 
     movement_id = int(movement["id"])
     player_id = int(movement["player_id"])
+
+    # GC-PERF-EXPO-RACE-006: expedition holding resolution has many side effects
+    # before the final holding -> returning transition (daily ledger, forge,
+    # lootboxes, reports, directives, XP). Serialize the movement row first.
+    # A concurrent poll/worker waits here, then observes "returning" and exits
+    # before any side effect is repeated.
+    if not _lock_movement_for_status(conn, movement_id, "holding"):
+        return False
+
     sender_locale, empire_daily_total, directive_flags = (
         _expedition_tick_shared_context(
             movement,
