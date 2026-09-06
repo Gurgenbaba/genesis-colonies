@@ -41,3 +41,12 @@ def test_mass_expo_response_uses_fleet_mutation_slim_path():
     )
     assert '"api_fleet_mass_expedition"' in skip
     assert '"api_fleet_mass_expedition_preview"' in skip
+
+def test_action_state_diet_compacts_fleet_hud_after_batch_launch():
+    src = Path("game/live_state.py").read_text(encoding="utf-8")
+    action = src.split("def apply_action_state_diet(", 1)[1].split(
+        "\n# ---------------------------------------------------------------------------\n# GC-PERF-REQUEST-TRACE", 1
+    )[0]
+    assert 'payload["active_fleets"] = active_fleets_poll_slice' in action
+    assert 'payload["fleet_alerts"] = fleet_alerts_poll_slice' in action
+
