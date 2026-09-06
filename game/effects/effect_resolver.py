@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from contextvars import ContextVar
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..economy_balance import STORAGE_BASE_CAPACITY
@@ -1289,7 +1289,7 @@ class EffectResolver:
             full = _mod_float(mods, "fuel_prod_factor")
         return full / max(research_part, 1e-12)
 
-    def production_rates_per_sec_exact(
+    def production_per_hour_exact(
         self,
         energy_ratio: float = 1.0,
     ) -> Tuple[Decimal, Decimal]:
@@ -1301,10 +1301,24 @@ class EffectResolver:
         ratio_f = max(0.0, float(energy_ratio))
         ctx_m = production_context_from_resolver(self, "metal", energy_ratio=ratio_f)
         ctx_c = production_context_from_resolver(self, "crystal", energy_ratio=ratio_f)
-        metal_ph = calculate_resource_output_decimal("metal", ctx_m)
-        crystal_ph = calculate_resource_output_decimal("crystal", ctx_c)
-        divisor = Decimal(3600)
-        return metal_ph / divisor, crystal_ph / divisor
+        return (
+            calculate_resource_output_decimal("metal", ctx_m),
+            calculate_resource_output_decimal("crystal", ctx_c),
+        )
+
+    def production_rates_per_sec_exact(
+        self,
+        energy_ratio: float = 1.0,
+    ) -> Tuple[Decimal, Decimal]:
+        metal_ph, crystal_ph = self.production_per_hour_exact(energy_ratio)
+        with localcontext() as ctx:
+            ctx.prec = max(
+                96,
+                len(metal_ph.as_tuple().digits) + 64,
+                len(crystal_ph.as_tuple().digits) + 64,
+            )
+            divisor = Decimal(3600)
+            return metal_ph / divisor, crystal_ph / divisor
 
     def production_rates_per_sec(self, energy_ratio: float = 1.0) -> Tuple[float, float]:
         from ..production_formula import calculate_resource_output, production_context_from_resolver
@@ -1318,7 +1332,11 @@ class EffectResolver:
 
     def fuel_cells_rate_per_sec_exact(self, energy_ratio: float = 1.0) -> Decimal:
         per_hour = self.fuel_cells_production_per_hour_exact(energy_ratio)
-        return per_hour / Decimal(3600) if per_hour > 0 else Decimal(0)
+        if per_hour <= 0:
+            return Decimal(0)
+        with localcontext() as ctx:
+            ctx.prec = max(96, len(per_hour.as_tuple().digits) + 64)
+            return per_hour / Decimal(3600)
 
     def fuel_cells_rate_per_sec(self, energy_ratio: float = 1.0) -> float:
         per_hour = self.fuel_cells_production_per_hour(energy_ratio)
