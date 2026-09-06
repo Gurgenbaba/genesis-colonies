@@ -80,16 +80,17 @@ def test_mass_expedition_reuses_one_effect_snapshot_for_all_waves(fleet_db, monk
     conn.close()
 
 
-def test_mass_expo_batch_uses_compact_send_result_and_no_redundant_hangar_precheck():
+def test_mass_expo_batch_uses_bulk_insert_not_per_wave_send():
     src = Path("game/fleet.py").read_text(encoding="utf-8")
     block = src.split("def mass_expedition_from_ships(", 1)[1].split(
         "def mass_expedition(", 1
     )[0]
     assert "fleet_modifiers=batch_fleet_modifiers" in block
-    assert "compact_result=True" in block
-    loop = block.split("for wave in range(slot_count):", 1)[1]
-    assert "available = get_planet_ships" not in loop
-    assert "GC-PERF-MASS-EXPO-003" in block
+    assert "send_fleet(" not in block
+    assert "cur.executemany(" in block
+    assert "emit_fleet_missions_sent" in block
+    assert block.count("deduct_planet_ships(") == 1
+    assert "GC-PERF-MASS-EXPO-004" in block
 
 
 def test_admin_fleet_speed_reuses_caller_connection():
