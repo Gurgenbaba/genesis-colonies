@@ -15,7 +15,6 @@ from game.economy_balance import (
     NANOFACTORY_COST_GROWTH,
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
-    NANOFACTORY_PERSISTED_COST_MAX,
     STORAGE_BASE_CAPACITY,
     STORAGE_BUILDING_COST_MULTIPLIER,
     STORAGE_REFERENCE_HOURS,
@@ -212,13 +211,13 @@ class TestGc863NanofactoryCosts:
         assert power_upgrade_cost("nanofactory", level) == (metal, crystal)
 
     def test_benchmark_values(self):
-        # The Alpha curve remains 2.0. Only the L50 Ferronit snapshot is capped
-        # because the raw 11.258e18 value cannot be persisted in BIGINT/INTEGER.
+        # The Alpha curve remains 2.0. Exact paid-cost snapshots + PostgreSQL
+        # NUMERIC allow L50 to cross the historical signed-i64 boundary.
         assert nanofactory_upgrade_cost(1) == (20_000, 10_000)
         assert nanofactory_upgrade_cost(10) == (10_240_000, 5_120_000)
         assert nanofactory_upgrade_cost(25) == (335_544_320_000, 167_772_160_000)
         assert nanofactory_upgrade_cost(50) == (
-            NANOFACTORY_PERSISTED_COST_MAX,
+            11_258_999_068_426_240_000,
             5_629_499_534_213_120_000,
         )
         assert power_upgrade_cost("nanofactory", 50) == nanofactory_upgrade_cost(50)
