@@ -406,7 +406,7 @@ def storage_capacity_at_depot_level(storage_level: int) -> int:
         STORAGE_REFERENCE_RESOURCE,
         reference_mine_level,
     ) * STORAGE_REFERENCE_HOURS
-    return max(STORAGE_BASE_CAPACITY, int(STORAGE_BASE_CAPACITY + reference_day_cap))
+    return max(STORAGE_BASE_CAPACITY, STORAGE_BASE_CAPACITY + int(reference_day_cap))
 
 
 def storage_capacity_anchor(
