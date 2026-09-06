@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from game.db import db
-from game.fleet import process_fleet_tick, send_fleet
+from game.fleet import EXPEDITION_POSITION, process_fleet_tick, send_fleet
 from game.fleet_worker import is_fleet_worker_heartbeat_fresh, record_fleet_worker_result
 from game.logic import read_player_live_state_for_poll
 from game.models import get_planets_by_player
@@ -84,7 +84,7 @@ def test_fresh_worker_heartbeat_does_not_delay_expedition_holding_report(fleet_d
             origin_planet_id=pid,
             target_galaxy=g,
             target_system=s,
-            target_position=16,
+            target_position=EXPEDITION_POSITION,
             mission_type="expedition",
             ships={"solar_skiff": 1},
             conn=conn,
