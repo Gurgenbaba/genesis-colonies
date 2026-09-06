@@ -48,7 +48,15 @@ def _locked_defense_catalog(
     research = get_research_levels(user_id=int(player_id), conn=conn)
     out: list[Dict[str, Any]] = []
     for key in sorted(ACTIVE_DEFENSE_KEYS):
-        if defense_unlocked(key, factory_level, player_id=player_id, planet_id=planet_id, conn=conn):
+        if defense_unlocked(
+            key,
+            factory_level,
+            player_id=player_id,
+            planet_id=planet_id,
+            conn=conn,
+            buildings=buildings,
+            research=research,
+        ):
             continue
         spec = DEFENSES.get(key) or {}
         cost = spec.get("build_cost") or {}
@@ -90,21 +98,58 @@ def build_defense_page_context(
     planet: Mapping[str, Any],
     *,
     conn,
+    tab: str = "structures",
 ) -> Dict[str, Any]:
-    """Full context for defense.html and initial client state."""
+    """Mode-specific context for defense.html and initial client state."""
     pid = int(planet["id"])
+    mode = str(tab or "structures").strip().lower()
+    if mode not in {"structures", "troops"}:
+        mode = "structures"
+
     meta = _planet_meta(pid, conn=conn)
     ready = defense_schema_ready(conn) and defense_queue_table_ready(conn)
 
     if not ready:
         return {
             "ready": False,
+            "active_tab": mode,
             "defense_factory_level": 0,
             **meta,
         }
 
+    # GC-PERF-DEFENSE-SSR-006: top-level Defense tabs are mutually exclusive
+    # heavy surfaces. Build only the state that the requested tab can render.
+    if mode == "troops":
+        troops_state = None
+        vault_state = None
+        try:
+            from .models import get_planet_buildings
+            from .troops import build_troops_state, troop_queue_table_ready, troops_schema_ready
+            from .vault_raid import build_vault_panel_state
+
+            if troops_schema_ready(conn) and troop_queue_table_ready(conn):
+                bld = get_planet_buildings(pid, conn=conn) or {}
+                troops_state = build_troops_state(
+                    pid,
+                    barracks_level=int(bld.get("barracks") or 0),
+                    conn=conn,
+                )
+            vault_state = build_vault_panel_state(int(player_id), conn=conn)
+        except Exception:
+            troops_state = None
+            vault_state = None
+
+        return {
+            "ready": True,
+            "active_tab": mode,
+            "defense_factory_level": 0,
+            **meta,
+            "troops": troops_state,
+            "vault": vault_state,
+        }
+
     payload = build_defense_api_payload(int(player_id), pid, conn=conn)
-    factory_level = get_defense_factory_level(int(player_id), pid, conn=conn)
+    factory_level = int(payload.get("defense_factory_level") or 0)
     locked = _locked_defense_catalog(int(player_id), pid, factory_level, conn=conn)
 
     stock = payload.get("current_defense") or {}
@@ -121,31 +166,13 @@ def build_defense_page_context(
     by_owner = (payload.get("defense_queue") or {}).get("card_jobs_by_owner") or {}
     _attach_queue_jobs_to_defense_rows(locked, by_owner)
 
-    troops_state = None
-    vault_state = None
-    try:
-        from .models import get_planet_buildings
-        from .troops import build_troops_state, troop_queue_table_ready, troops_schema_ready
-        from .vault_raid import build_vault_panel_state
-
-        if troops_schema_ready(conn) and troop_queue_table_ready(conn):
-            bld = get_planet_buildings(pid, conn=conn) or {}
-            troops_state = build_troops_state(
-                pid,
-                barracks_level=int(bld.get("barracks") or 0),
-                conn=conn,
-            )
-        vault_state = build_vault_panel_state(int(player_id), conn=conn)
-    except Exception:
-        troops_state = None
-        vault_state = None
-
     return {
         "ready": True,
+        "active_tab": mode,
         **payload,
         **meta,
         "locked_defense": locked,
         "defense_defs": {row["key"]: row for row in defense_defs_for_client()},
-        "troops": troops_state,
-        "vault": vault_state,
+        "troops": None,
+        "vault": None,
     }
