@@ -66,6 +66,16 @@ def test_bigint_energy_ratio_is_bounded_without_float_conversion():
     assert EffectResolver.energy_ratio(huge * 2, huge) == 1.0
 
 
+def test_postgres_numeric_cast_param_uses_decimal_text(monkeypatch):
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    from game.models import resource_numeric_cast_param
+
+    huge = 10**400 + 123
+    bound = resource_numeric_cast_param(huge)
+    assert isinstance(bound, str)
+    assert bound == str(huge)
+
+
 def test_storage_reference_capacity_survives_float_range():
     cap = storage_capacity_at_depot_level(7_000)
     assert isinstance(cap, int)
@@ -93,6 +103,7 @@ def test_runtime_sources_route_authoritative_production_around_float():
     assert "decimal_mul_div_floor(metal_ph, delta, 3600)" in resources
     assert "mine_output_decimal(" in economy
     assert "MAX(CAST(0 AS NUMERIC), CAST(? AS NUMERIC))" in models
+    assert 'resource_numeric_cast_param(planet["metal"])' in models
 
 
 @requires_postgres
