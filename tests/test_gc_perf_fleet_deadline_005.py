@@ -152,3 +152,29 @@ def test_poll_source_no_longer_defers_due_fleet_on_worker_freshness():
     assert "process_player_due_fleets_now(uid, now=now)" in block
     assert "is_fleet_worker_heartbeat_fresh" not in block
     assert "if fleet_dirty:" in block
+
+def test_expedition_holding_resolution_serializes_before_side_effects():
+    fleet_src = Path("game/fleet.py").read_text(encoding="utf-8")
+    helper = fleet_src.split("def _lock_movement_for_status(", 1)[1].split(
+        "\ndef _claim_movement_status(", 1
+    )[0]
+    assert "FOR UPDATE" in helper
+    assert 'get_db_backend() == "postgres"' in helper
+
+    holding = fleet_src.split("def _handle_expedition_holding_end(", 1)[1].split(
+        "\ndef _handle_holding_end(", 1
+    )[0]
+    lock_at = holding.index('_lock_movement_for_status(conn, movement_id, "holding")')
+    shared_at = holding.index("_expedition_tick_shared_context(")
+    ledger_at = holding.index("record_expedition_daily_value(")
+    claim_at = holding.index("_claim_movement_status(")
+    assert lock_at < shared_at < ledger_at < claim_at
+
+    events_src = Path("game/expedition_events.py").read_text(encoding="utf-8")
+    daily = events_src.split("def record_expedition_daily_value(", 1)[1].split(
+        "\ndef expedition_daily_status(", 1
+    )[0]
+    assert "ON CONFLICT(movement_id) DO NOTHING" in daily
+    assert "SELECT 1 FROM expedition_daily_recorded" not in daily
+    assert "if int(cur.rowcount or 0) <= 0:" in daily
+

@@ -204,3 +204,32 @@ def test_hangar_add_and_deduct_avoid_full_catalog_rewrite():
     assert "set_planet_ships(" not in deduct_block
     assert "ship_key IN" in deduct_block
     assert "executemany(" in deduct_block
+
+def test_mass_expo_success_has_no_direct_fleet_state_refresh_storm():
+    src = Path("static/main.js").read_text(encoding="utf-8")
+
+    bridge = src.split("function syncFleetUiAfterMutation(reason)", 1)[1].split(
+        "function resetQueueRenderSignaturesForImmediatePatch", 1
+    )[0]
+    assert 'r === "fleet_send_success" || r === "fleet_mass_expo_success"' in bridge
+    assert "immediate: false" in bridge
+
+    split_submit = src.split("const submitMassExpeditionSplit = async (page) => {", 1)[1].split(
+        "const submitMassExpedition = async (page) => {", 1
+    )[0]
+    preset_submit = src.split("const submitMassExpedition = async (page) => {", 1)[1].split(
+        'document.addEventListener("mouseover"', 1
+    )[0]
+
+    assert 'applyActionState(res, "fleet_mass_expo_success")' in split_submit
+    assert 'applyActionState(res, "fleet_mass_expo_success")' in preset_submit
+    assert "await refreshFleetState(page)" not in split_submit
+    assert "await refreshFleetState(page)" not in preset_submit
+
+    # Split mode has exactly one unconditional post-submit preview refresh in
+    # finally; the success branch must not schedule a second copy.
+    success_tail = split_submit.split('applyActionState(res, "fleet_mass_expo_success")', 1)[1].split(
+        "} else {", 1
+    )[0]
+    assert "scheduleMassExpoSplitPreview(page)" not in success_tail
+

@@ -63,6 +63,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
+      - "tests/test_gc_pg_expedition_ledger_race_006.py"
       - "tests/test_gc_big_number_runtime_expeditions.py"
       - "tests/test_gc_big_number_runtime_pirates.py"
       - "tests/test_gc_big_number_runtime_planet_evolution.py"
@@ -137,6 +138,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
+      - "tests/test_gc_pg_expedition_ledger_race_006.py"
       - "tests/test_gc_big_number_runtime_expeditions.py"
       - "tests/test_gc_big_number_runtime_pirates.py"
       - "tests/test_gc_big_number_runtime_planet_evolution.py"
@@ -239,6 +241,7 @@ jobs:
             tests/test_gc_pg_numeric_p1_planet_economy.py \
             tests/test_gc_pg_schema_final_pass.py \
             tests/test_gc_pg_numeric_final_no_max.py \
+            tests/test_gc_pg_expedition_ledger_race_006.py \
             tests/test_gc_big_number_runtime_expeditions.py \
             tests/test_gc_big_number_runtime_pirates.py \
             tests/test_gc_big_number_runtime_planet_evolution.py \

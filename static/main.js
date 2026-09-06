@@ -721,7 +721,7 @@
     if (!fleetPage || fleetPage.dataset.ready !== "1") return;
     const r = String(reason || "fleet_mutation");
     // GC-PERF-FLEET-SEND: send already patched list+HUD from live payload — deferred coalesce only
-    if (r === "fleet_send_success") {
+    if (r === "fleet_send_success" || r === "fleet_mass_expo_success") {
       GC.scheduleFleetStateRefresh(r, { immediate: false });
       return;
     }
@@ -28885,11 +28885,9 @@
             "success"
           );
           if (res.state) applyActionState(res, "fleet_mass_expo_success");
-          await refreshFleetState(page);
           page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
           syncFleetShipPickQtyMarks(page);
           schedulePreview(page);
-          scheduleMassExpoSplitPreview(page);
         } else {
           const reason = res?.error || res?.reason || "generic";
           let msg = reasonText(reason);
@@ -28963,7 +28961,6 @@
           }
           showNotify(tt("fleet_mass_expo_success", "Mass expedition launched."), "success");
           if (res.state) applyActionState(res, "fleet_mass_expo_success");
-          await refreshFleetState(page);
           schedulePreview(page);
         } else {
           showNotify(reasonText(apiError(res)), "error");
