@@ -2020,6 +2020,7 @@ def record_request_perf_phase(name: str, duration_ms: float) -> None:
                 "page_context_overview_ms",
                 "page_context_shipyard_ms",
                 "page_context_fleet_ms",
+                "page_context_defense_ms",
                 "db_query_ms",
                 "template_ms",
                 "template_render_ms",
