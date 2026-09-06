@@ -201,13 +201,20 @@ def forge_capacity_ratio(rank: int) -> tuple[int, int]:
 
 
 def forge_capacity_scaled_floor(base_value: Any, rank: int) -> int:
-    """floor(base_value * Forge multiplier) without converting an unbounded rank to float."""
+    """floor(base_value * Forge multiplier) with precision for both operands."""
     numerator, denominator = forge_capacity_ratio(rank)
-    base = Decimal(str(base_value))
+    base = base_value if isinstance(base_value, Decimal) else Decimal(str(base_value))
     if not base.is_finite() or base <= 0:
         return 0
+
+    base_digits = max(
+        1,
+        len(base.as_tuple().digits),
+        base.adjusted() + 1,
+    )
+    numerator_digits = max(1, (abs(int(numerator)).bit_length() * 30103) // 100000 + 1)
     with localcontext() as ctx:
-        ctx.prec = max(96, len(str(abs(numerator))) + 64)
+        ctx.prec = max(128, base_digits + numerator_digits + 64)
         result = base * Decimal(numerator) / Decimal(denominator)
         return int(result.to_integral_value(rounding=ROUND_FLOOR))
 

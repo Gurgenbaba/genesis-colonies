@@ -89,7 +89,13 @@ def _effective_build_seconds(
         return 0
     base = max(1, int(spec.get("build_seconds") or 1))
     lvl = max(1, int(shipyard_level or 1))
-    seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
+    from .shipyard import production_level_cycle_seconds
+
+    seconds = production_level_cycle_seconds(
+        base,
+        lvl,
+        level_factor=BUILD_TIME_LEVEL_FACTOR,
+    )
     speed = _defense_speed_multiplier(conn=conn)
     if planet_id and conn:
         from .shipyard import _directive_time_speed

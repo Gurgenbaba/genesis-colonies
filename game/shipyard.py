@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from decimal import Decimal, localcontext
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from .db import begin_write_transaction, commit, in_transaction, rollback
@@ -20,6 +21,72 @@ from .fleet_defs import (
 from .models import db, get_planet_buildings, lock_planet_for_update, resource_db_param
 
 BUILD_TIME_LEVEL_FACTOR = 0.975  # GC-863A — −2.5% ship build time per shipyard level above 1
+
+
+def _int_decimal_digit_estimate(value: int) -> int:
+    base = max(1, abs(int(value)))
+    return max(1, int(base.bit_length() * 0.30103) + 1)
+
+
+def production_level_cycle_seconds(
+    base_seconds: int,
+    level: int,
+    *,
+    level_factor: float = BUILD_TIME_LEVEL_FACTOR,
+) -> int:
+    """ceil(base × factor^(level-1)) with the canonical 1-second floor.
+
+    Normal levels retain the historical float path. For astronomical levels
+    with 0<factor<1, compare the integer exponent to the point where the result
+    is already certainly below the existing one-second floor before pow().
+    """
+    base = max(1, int(base_seconds))
+    lvl = max(1, int(level or 1))
+    exponent = lvl - 1
+    if exponent <= 0 or base <= 1:
+        return base
+
+    factor = float(level_factor)
+    if factor <= 0.0:
+        return 1
+    if factor < 1.0:
+        floor_exp = int(math.ceil(math.log(1.0 / base) / math.log(factor)))
+        # A small guard keeps all boundary behavior on the legacy float path.
+        if exponent >= floor_exp + 4:
+            return 1
+
+    return max(1, int(math.ceil(base * (factor ** exponent))))
+
+
+def production_level_reduction_pct(
+    level: int,
+    *,
+    level_factor: float = BUILD_TIME_LEVEL_FACTOR,
+) -> int:
+    """Rounded reduction display without evaluating decay at a huge exponent."""
+    lvl = max(1, int(level or 1))
+    exponent = lvl - 1
+    if exponent <= 0:
+        return 0
+    factor = float(level_factor)
+    if 0.0 < factor < 1.0:
+        full_reduction_exp = int(math.ceil(math.log(0.001) / math.log(factor)))
+        if exponent >= full_reduction_exp + 4:
+            return 100
+    return int(round((1.0 - factor ** exponent) * 100))
+
+
+def _orbital_capacity_base(level: int) -> float | Decimal:
+    """1 + 5L + L^2.3, retaining legacy floats only while L is float-safe."""
+    lvl = max(1, int(level or 1))
+    if lvl.bit_length() <= 52:
+        return 1 + lvl * 5 + lvl**2.3
+
+    digits = _int_decimal_digit_estimate(lvl)
+    with localcontext() as ctx:
+        ctx.prec = max(128, digits * 3 + 128)
+        dec_lvl = Decimal(lvl)
+        return +(Decimal(1) + dec_lvl * 5 + ctx.power(dec_lvl, Decimal("2.3")))
 
 
 def _shipyard_speed_multiplier(*, conn=None) -> float:
@@ -68,7 +135,7 @@ def orbital_production_batch_capacity(shipyard_level: int, forge_rank: int = 0) 
     from .stellar_forge.formulas import forge_capacity_scaled_floor
 
     lvl = max(1, int(shipyard_level or 1))
-    base = 1 + lvl * 5 + lvl**2.3
+    base = _orbital_capacity_base(lvl)
     return max(1, forge_capacity_scaled_floor(base, forge_rank))
 
 
@@ -120,9 +187,7 @@ def production_metrics_at_yard(
     base = max(1, int(base_unit_seconds))
     unit = max(1, int(effective_unit_seconds if effective_unit_seconds is not None else base))
     yard_cap = orbital_production_batch_capacity(lvl, forge_rank)
-    reduction = (
-        int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)) * 100)) if lvl > 1 else 0
-    )
+    reduction = production_level_reduction_pct(lvl)
     samples: Dict[str, int] = {}
     cycle_samples: Dict[str, int] = {}
     for amt in (1, 10, 100, 1000):
@@ -390,7 +455,7 @@ def _effective_build_seconds(
         return 0
     base = max(1, int(spec.get("build_seconds") or 1))
     lvl = max(1, int(shipyard_level or 1))
-    seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
+    seconds = production_level_cycle_seconds(base, lvl)
     speed = (
         max(0.000001, float(build_time_speed))
         if build_time_speed is not None

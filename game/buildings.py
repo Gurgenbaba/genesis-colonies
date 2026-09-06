@@ -1146,22 +1146,17 @@ def _panel_upgrade_effect_fields(
         )
 
     if building_type == "orbital_shipyard":
-        from .shipyard import BUILD_TIME_LEVEL_FACTOR, orbital_production_batch_capacity
+        from .shipyard import (
+            orbital_production_batch_capacity,
+            production_level_reduction_pct,
+        )
 
         cur_lvl = int(buildings.get("orbital_shipyard", 0) or 0)
         nxt_lvl = int(target_level)
         cur_cap = orbital_production_batch_capacity(max(1, cur_lvl)) if cur_lvl > 0 else 0
         nxt_cap = orbital_production_batch_capacity(max(1, nxt_lvl))
-        cur_red = (
-            int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (max(1, cur_lvl) - 1)) * 100))
-            if cur_lvl > 1
-            else 0
-        )
-        nxt_red = (
-            int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (max(1, nxt_lvl) - 1)) * 100))
-            if nxt_lvl > 1
-            else 0
-        )
+        cur_red = production_level_reduction_pct(cur_lvl) if cur_lvl > 1 else 0
+        nxt_red = production_level_reduction_pct(nxt_lvl) if nxt_lvl > 1 else 0
         return {
             "effect_kind": "yard_capacity",
             "effect_current": cur_cap,
@@ -1409,14 +1404,12 @@ def _technical_effects_at_level(
             PRODUCTION_TECH_EXAMPLE_BASE_SECONDS,
             orbital_production_batch_capacity,
             unit_batch_capacity,
-            BUILD_TIME_LEVEL_FACTOR,
+            production_level_reduction_pct,
         )
 
         lvl = max(1, int(level))
         yard_cap = orbital_production_batch_capacity(lvl)
-        reduction = (
-            int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)) * 100)) if lvl > 1 else 0
-        )
+        reduction = production_level_reduction_pct(lvl)
         examples = {
             tag: unit_batch_capacity(lvl, sec)
             for tag, sec in PRODUCTION_TECH_EXAMPLE_BASE_SECONDS.items()

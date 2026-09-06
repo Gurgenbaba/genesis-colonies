@@ -998,12 +998,12 @@ def enrich_building_technical_row(
         return
 
     if kind == "yard_production":
-        from .shipyard import BUILD_TIME_LEVEL_FACTOR
+        from .shipyard import production_level_reduction_pct
 
         lvl_i = max(1, lvl)
         prev_i = max(1, prev) if prev > 0 else 1
-        red_cur = int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (prev_i - 1)) * 100)) if prev_i > 1 else 0
-        red_nxt = int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl_i - 1)) * 100)) if lvl_i > 1 else 0
+        red_cur = production_level_reduction_pct(prev_i) if prev_i > 1 else 0
+        red_nxt = production_level_reduction_pct(lvl_i) if lvl_i > 1 else 0
         display = build_yard_display(
             level=lvl_i,
             batch_capacity=int(row.get("yard_batch_capacity") or row.get("effect_value") or 0),
