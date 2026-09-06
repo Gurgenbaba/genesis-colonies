@@ -38,14 +38,27 @@ def _locked_defense_catalog(
     factory_level: int,
     *,
     conn,
+    buildings: Mapping[str, Any] | None = None,
+    research: Mapping[str, Any] | None = None,
+    stock: Mapping[str, Any] | None = None,
 ) -> list[Dict[str, Any]]:
     from .defense_requirements import requirements_summary_for_client
     from .models import get_planet_buildings, get_planet_defense
     from .research import get_research_levels
 
-    stock = get_planet_defense(int(planet_id), conn=conn)
-    buildings = get_planet_buildings(int(planet_id), conn=conn)
-    research = get_research_levels(user_id=int(player_id), conn=conn)
+    defense_stock = (
+        stock if stock is not None else get_planet_defense(int(planet_id), conn=conn)
+    )
+    building_levels = (
+        buildings
+        if buildings is not None
+        else get_planet_buildings(int(planet_id), conn=conn)
+    )
+    research_levels = (
+        research
+        if research is not None
+        else get_research_levels(user_id=int(player_id), conn=conn)
+    )
     out: list[Dict[str, Any]] = []
     for key in sorted(ACTIVE_DEFENSE_KEYS):
         if defense_unlocked(
@@ -54,14 +67,14 @@ def _locked_defense_catalog(
             player_id=player_id,
             planet_id=planet_id,
             conn=conn,
-            buildings=buildings,
-            research=research,
+            buildings=building_levels,
+            research=research_levels,
         ):
             continue
         spec = DEFENSES.get(key) or {}
         cost = spec.get("build_cost") or {}
         req_summary = requirements_summary_for_client(
-            key, buildings=buildings, research=research
+            key, buildings=building_levels, research=research_levels
         )
         req_items = [
             {
@@ -85,7 +98,7 @@ def _locked_defense_catalog(
                 "cost_crystal": int(cost.get("crystal") or 0),
                 "cost_fuel_cells": int(cost.get("fuel_cells") or 0),
                 "build_seconds": 0,
-                "stock": int(stock.get(key, 0) or 0),
+                "stock": int(defense_stock.get(key, 0) or 0),
                 "unlocked": False,
                 "requirements_items": req_items,
             }
@@ -148,9 +161,31 @@ def build_defense_page_context(
             "vault": vault_state,
         }
 
-    payload = build_defense_api_payload(int(player_id), pid, conn=conn)
+    from .models import get_planet_buildings, get_planet_defense
+    from .research import get_research_levels
+
+    # One SSR snapshot feeds both buildable and locked catalogs.
+    buildings = get_planet_buildings(pid, conn=conn)
+    research = get_research_levels(user_id=int(player_id), conn=conn)
+    stock_snapshot = get_planet_defense(pid, conn=conn)
+    payload = build_defense_api_payload(
+        int(player_id),
+        pid,
+        conn=conn,
+        buildings=buildings,
+        research=research,
+        stock=stock_snapshot,
+    )
     factory_level = int(payload.get("defense_factory_level") or 0)
-    locked = _locked_defense_catalog(int(player_id), pid, factory_level, conn=conn)
+    locked = _locked_defense_catalog(
+        int(player_id),
+        pid,
+        factory_level,
+        conn=conn,
+        buildings=buildings,
+        research=research,
+        stock=stock_snapshot,
+    )
 
     stock = payload.get("current_defense") or {}
     for entry in payload.get("buildable_defense") or []:
