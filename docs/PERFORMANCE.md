@@ -137,6 +137,21 @@ Admin keeps the game shell sidebar. HUD sync used to call `restoreLeftmenuState(
 
 **Follow-up GC-INFRA-ADMIN-002:** Orphan `body > .gc-hud-select-menu` (default CSS `top:0;left:0`) blocked left/right nav clicks. Park off-screen + `pointer-events:none` until positioned; teardown removes all body menus; accordion closest falls back to `.gc-sidebar`.
 
+### GC-PERF-DEFENSE-SSR-006 — Mode-specific Defense SSR + shared catalog snapshot
+
+Code audit evidence: `/defense` rendered two mutually exclusive heavy surfaces in one request. The Structures path built the complete Defense catalog + locked requirement cards, then also built Troops + Secret Vault state. The Troops tab paid the inverse cost. The Defense catalog additionally reloaded Buildings/Research through `defense_unlocked` / `max_build_amount_for_planet` for individual rows despite already having those snapshots.
+
+- `defense_view` resolves `tab=structures|troops` before heavy page-context construction.
+- Structures SSR builds only Defense catalog/queue/locked cards.
+- Troops SSR builds only Barracks troops + Secret Vault state.
+- Template emits only the active heavy top-level panel.
+- Cross-tab clicks fall back to the existing PJAX href when the sibling panel is intentionally absent; no second navigation/state owner.
+- Buildable + locked Defense catalogs share one request-local Buildings, Research and Defense-stock snapshot.
+- `defense_unlocked` / `max_build_amount_for_planet` keep historical DB fallbacks for standalone callers, but catalog loops pass the shared snapshots.
+- New `page_context.defense` child span makes post-deploy p95/SQL evidence visible in the existing Performance Intelligence stack.
+
+Regression: `tests/test_gc_perf_defense_ssr_006.py` + existing Defense single-request-connection test + Sentinel.
+
 ### GC-PERF-FLEET-HUD-001 — Drawer without mission resolve
 
 Spike evidence: `fleets.active` 70–120ms on slow `/api/game-state` while drawer only needs labels/timers.
