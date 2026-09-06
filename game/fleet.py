@@ -855,14 +855,56 @@ def add_planet_ships(
     *,
     conn,
 ) -> None:
-    current = get_planet_ships(planet_id, conn=conn)
-    merged = dict(current)
+    """Increment only touched hangar rows; avoid full-hangar read/rewrite."""
+    now = _now()
+    positive: List[Tuple[Any, ...]] = []
+    negative: List[Tuple[Any, ...]] = []
     for key, amount in ships.items():
         sk = canonical_ship_key(str(key))
         if not is_known_ship_key(sk):
             continue
-        merged[sk] = max(0, int(merged.get(sk, 0)) + int(amount))
-    set_planet_ships(planet_id, player_id, merged, conn=conn)
+        delta = int(amount or 0)
+        if delta > 0:
+            positive.append(
+                (
+                    int(player_id),
+                    int(planet_id),
+                    sk,
+                    delta,
+                    now,
+                    now,
+                )
+            )
+        elif delta < 0:
+            negative.append((abs(delta), now, int(planet_id), sk))
+
+    cur = conn.cursor()
+    if positive:
+        cur.executemany(
+            """
+            INSERT INTO planet_ships (
+                player_id, planet_id, ship_key, amount, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(planet_id, ship_key) DO UPDATE SET
+                amount = planet_ships.amount + excluded.amount,
+                updated_at = excluded.updated_at;
+            """,
+            positive,
+        )
+    if negative:
+        cur.executemany(
+            """
+            UPDATE planet_ships
+            SET amount = MAX(0, amount - ?), updated_at = ?
+            WHERE planet_id = ? AND ship_key = ?;
+            """,
+            negative,
+        )
+        cur.execute(
+            "DELETE FROM planet_ships WHERE planet_id = ? AND amount <= 0;",
+            (int(planet_id),),
+        )
 
 
 def deduct_planet_ships(
@@ -871,30 +913,50 @@ def deduct_planet_ships(
     *,
     conn,
 ) -> Tuple[bool, str]:
-    current = get_planet_ships(planet_id, conn=conn)
+    """Deduct only requested hull rows instead of rewriting every ship type."""
+    requested: Dict[str, int] = {}
     for key, amount in ships.items():
-        sk = str(key)
-        need = int(amount)
-        if need <= 0:
+        sk = canonical_ship_key(str(key))
+        if not is_known_ship_key(sk):
             continue
-        have = int(current.get(sk, 0))
-        if have < need:
-            return False, "not_enough_ships"
-    updated = dict(current)
-    for key, amount in ships.items():
-        sk = str(key)
-        need = int(amount)
-        if need <= 0:
-            continue
-        updated[sk] = int(updated.get(sk, 0)) - need
-        if updated[sk] <= 0:
-            updated.pop(sk, None)
+        need = int(amount or 0)
+        if need > 0:
+            requested[sk] = requested.get(sk, 0) + need
+    if not requested:
+        return True, ""
+
+    keys = list(requested)
+    placeholders = ", ".join("?" for _ in keys)
     cur = conn.cursor()
-    cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
-    row = cur.fetchone()
-    if not row:
-        return False, "planet_not_found"
-    set_planet_ships(planet_id, int(row["player_id"]), updated, conn=conn)
+    cur.execute(
+        f"""
+        SELECT ship_key, amount
+        FROM planet_ships
+        WHERE planet_id = ? AND ship_key IN ({placeholders});
+        """,
+        [int(planet_id), *keys],
+    )
+    current = {str(row["ship_key"]): int(row["amount"] or 0) for row in cur.fetchall()}
+    for sk, need in requested.items():
+        if int(current.get(sk, 0)) < int(need):
+            return False, "not_enough_ships"
+
+    now = _now()
+    cur.executemany(
+        """
+        UPDATE planet_ships
+        SET amount = amount - ?, updated_at = ?
+        WHERE planet_id = ? AND ship_key = ?;
+        """,
+        [
+            (int(need), now, int(planet_id), sk)
+            for sk, need in requested.items()
+        ],
+    )
+    cur.execute(
+        "DELETE FROM planet_ships WHERE planet_id = ? AND amount <= 0;",
+        (int(planet_id),),
+    )
     return True, ""
 
 
