@@ -12,6 +12,9 @@
 {% endmacro %}
 
 {% set df = defense if defense is defined and defense else {'ready': false, 'defense_factory_level': 0} %}
+{% set defense_tab_raw = (df.active_tab if df.active_tab is defined else request.args.get('tab', 'structures'))|lower %}
+{% set defense_tab = defense_tab_raw if defense_tab_raw in ('structures', 'troops') else 'structures' %}
+{% set _defense_scope_pid = df.planet_id if df.planet_id is defined else none %}
 {% set buildable = df.buildable_defense if df.buildable_defense is defined else [] %}
 {% set _lcp_def_png = (buildable[0].icon|default(url_for('static', filename='img/defense/' ~ buildable[0].defense_key ~ '.png'))) if buildable else '' %}
 {% set _lcp_preload_href = (_lcp_def_png|webp_static) if _lcp_def_png else '' %}
@@ -54,25 +57,23 @@
   </section>
   {% else %}
 
-  {% set defense_tab = (request.args.get('tab', 'structures')|lower) %}
-  {% if defense_tab not in ('structures', 'troops') %}{% set defense_tab = 'structures' %}{% endif %}
-
   <nav class="gc-page-tabs gc-page-tabs--cols-2 defense-mode-tabs" role="tablist" aria-label="{{ T('defense_title') }}">
-    <button type="button"
-            class="gc-page-tab defense-mode-tab{% if defense_tab == 'structures' %} active{% endif %}"
-            data-defense-tab="structures"
-            role="tab"
-            aria-selected="{{ 'true' if defense_tab == 'structures' else 'false' }}">{{ T("defense_tab_structures", "Orbitale Verteidigung") }}</button>
-    <button type="button"
-            class="gc-page-tab defense-mode-tab{% if defense_tab == 'troops' %} active{% endif %}"
-            data-defense-tab="troops"
-            role="tab"
-            aria-selected="{{ 'true' if defense_tab == 'troops' else 'false' }}">{{ T("defense_tab_troops", "Bodentruppen") }}</button>
+    <a href="{{ url_for('defense_view', tab='structures', planet_id=_defense_scope_pid) if _defense_scope_pid else url_for('defense_view', tab='structures') }}"
+       class="gc-page-tab defense-mode-tab{% if defense_tab == 'structures' %} active{% endif %}"
+       data-defense-tab="structures"
+       role="tab"
+       aria-selected="{{ 'true' if defense_tab == 'structures' else 'false' }}">{{ T("defense_tab_structures", "Orbitale Verteidigung") }}</a>
+    <a href="{{ url_for('defense_view', tab='troops', planet_id=_defense_scope_pid) if _defense_scope_pid else url_for('defense_view', tab='troops') }}"
+       class="gc-page-tab defense-mode-tab{% if defense_tab == 'troops' %} active{% endif %}"
+       data-defense-tab="troops"
+       role="tab"
+       aria-selected="{{ 'true' if defense_tab == 'troops' else 'false' }}">{{ T("defense_tab_troops", "Bodentruppen") }}</a>
   </nav>
 
   {% set planet_defense = df.current_defense if df.current_defense is defined else {} %}
 
-  <div class="defense-shell gc-panel" data-defense-tab-panel="structures"{% if defense_tab != 'structures' %} hidden{% endif %}>
+  {% if defense_tab == 'structures' %}
+  <div class="defense-shell gc-panel" data-defense-tab-panel="structures">
   <section class="defense-status-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("defense_factory_title") }}</span>
@@ -220,11 +221,14 @@
   </section>
   {% endif %}
   </div>
+  {% endif %}
 
-  <div class="defense-shell gc-panel" data-defense-tab-panel="troops"{% if defense_tab != 'troops' %} hidden{% endif %}>
+  {% if defense_tab == 'troops' %}
+  <div class="defense-shell gc-panel" data-defense-tab-panel="troops">
     {% include "partials/secret_vault_panel.html" %}
     {% include "partials/barracks_troops_panel.html" %}
   </div>
+  {% endif %}
 
   {% endif %}
 </div>
