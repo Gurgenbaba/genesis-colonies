@@ -571,14 +571,8 @@ def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]
         return nanofactory_upgrade_cost(lvl)
     curve = BUILDING_UPGRADE_CURVES.get(btype)
     if curve is None:
-        if lvl > _EXACT_CURVE_LEVEL_THRESHOLD:
-            with localcontext() as ctx:
-                ctx.prec = max(192, (lvl * 1762) // 10_000 + 192)
-                mult = decimal_value("1.5") ** (lvl - 1)
-                return (
-                    max(1, int((Decimal(100) * mult).to_integral_value(rounding=ROUND_FLOOR))),
-                    max(0, int((Decimal(50) * mult).to_integral_value(rounding=ROUND_FLOOR))),
-                )
+        # Legacy unknown-building fallback; live BUILDING_UPGRADE_CURVES entries
+        # take the no-max path below.
         mult = 1.5 ** (lvl - 1)
         return int(100 * mult), int(50 * mult)
 
