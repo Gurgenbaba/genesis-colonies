@@ -152,6 +152,24 @@ Code audit evidence: `/defense` rendered two mutually exclusive heavy surfaces i
 
 Regression: `tests/test_gc_perf_defense_ssr_006.py` + existing Defense single-request-connection test + Sentinel.
 
+### GC-PERF-FLEET-DEADLINE-005 — No more fleet rows stuck at 0s
+
+Production symptom: mass expeditions could show `RÜCKFLUG 0s` for tens of seconds; expedition reports could also appear late after `HALTEND` elapsed.
+
+Root cause: the poll correctly detected a due movement through `player_fleet_is_dirty()`, but then deferred processing whenever the global Fleet-Worker heartbeat was considered fresh. The worker/maintenance cadence is 60 s and heartbeat freshness can span two intervals, so "worker ran recently" did not mean "worker has seen the deadline that expired after that run".
+
+- No new polling engine or per-fleet timer.
+- Existing active Game-State poll remains the trigger.
+- Indexed due probe stays read-only and cheap while nothing is due.
+- A real due deadline invokes `process_player_due_fleets_now()` regardless of heartbeat freshness.
+- The pass owns a separate connection and uses existing per-movement short transactions.
+- Online budget defaults: PostgreSQL 256 movements / 900 ms; SQLite 64 / 400 ms, env-overridable.
+- Priority for the online pass: returning → holding → outbound, so slot/loot returns and expedition outcome/messages cannot starve behind new arrivals.
+- Existing conditional status claims keep races with the global worker idempotent.
+- `fleet_tick_ms` continues to measure the actual deadline finish cost.
+
+Regression: `tests/test_gc_perf_fleet_deadline_005.py`, `tests/test_gc_prod_sqlite_stall_001a.py`, `tests/test_gc_nav_fleet_readonly_001.py`.
+
 ### GC-PERF-FLEET-HUD-001 — Drawer without mission resolve
 
 Spike evidence: `fleets.active` 70–120ms on slow `/api/game-state` while drawer only needs labels/timers.
@@ -185,9 +203,9 @@ GET /api/game-state
 │  ├─ _build_game_state_payload
 │  │  ├─ diet: finish_source=game_state
 │  │  │  └─ _load_page_live_context → read_player_live_state_for_poll
-│  │  │     ├─ finish_player_due_work  (conditional: due/dirty/throttled)
-│  │  │     │  └─ finish_due_work → … → process_fleet_tick (per-player)
-│  │  │     └─ update_planet_resources(skip_queue_finish=True)  (throttled persist)
+│  │  │     ├─ player_fleet_is_dirty → [?due] process_player_due_fleets_now (bounded short-TX)
+│  │  │     ├─ finish_player_due_work  (queue-only conditional safety-net)
+│  │  │     └─ update_planet_resources(skip_queue_finish=True)  (write only after real finish)
 │  │  ├─ panel: finish_source=game_state_panel
 │  │  │  └─ refresh_player_live_state → always finish + resource sync
 │  │  └─ _payload_from_live_context
@@ -211,7 +229,7 @@ GET /api/game-state
 ### What runs on diet (typical)
 
 - Queue finish only when due / dirty / pending interval
-- Per-player fleet tick inside finish (not global worker tick)
+- Per-player fleet deadline pass only when the indexed dirty probe finds an actually due phase (not a global worker tick)
 - Nav badges / live_events / score reads (not ranking recompute)
 - Ranking / global fleet / maintenance bag: **maintenance sidecar / cron**, not diet
 
