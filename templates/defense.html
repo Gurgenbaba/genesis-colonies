@@ -59,14 +59,14 @@
 
   <nav class="gc-page-tabs gc-page-tabs--cols-2 defense-mode-tabs" role="tablist" aria-label="{{ T('defense_title') }}">
     <a href="{{ url_for('defense_view', tab='structures', planet_id=_defense_scope_pid) if _defense_scope_pid else url_for('defense_view', tab='structures') }}"
-       class="gc-page-tab defense-mode-tab{% if defense_tab == 'structures' %} active{% endif %}"
+       class="gc-page-tab defense-mode-tab{% if defense_tab == 'structures' %} active{% endif %}" {# i18n-ok: technical class attribute #}
        data-defense-tab="structures"
-       role="tab"
+       role="tab" {# i18n-ok: technical ARIA role #}
        aria-selected="{{ 'true' if defense_tab == 'structures' else 'false' }}">{{ T("defense_tab_structures", "Orbitale Verteidigung") }}</a>
     <a href="{{ url_for('defense_view', tab='troops', planet_id=_defense_scope_pid) if _defense_scope_pid else url_for('defense_view', tab='troops') }}"
-       class="gc-page-tab defense-mode-tab{% if defense_tab == 'troops' %} active{% endif %}"
+       class="gc-page-tab defense-mode-tab{% if defense_tab == 'troops' %} active{% endif %}" {# i18n-ok: technical class attribute #}
        data-defense-tab="troops"
-       role="tab"
+       role="tab" {# i18n-ok: technical ARIA role #}
        aria-selected="{{ 'true' if defense_tab == 'troops' else 'false' }}">{{ T("defense_tab_troops", "Bodentruppen") }}</a>
   </nav>
 
