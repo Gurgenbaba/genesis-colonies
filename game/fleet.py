@@ -5454,6 +5454,26 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     resources = movement.get("resources") or {}
     movement_id = int(movement["id"])
     coords = movement.get("target_coords") or ""
+
+    # GC-PERF-MASS-EXPO-004: classic expedition arrival only transitions into
+    # the stay phase. Do it before locale/report lookups used by other missions.
+    if mission == "expedition":
+        stay_seconds = expedition_stay_seconds(
+            _expedition_hours_from_movement(movement)
+        )
+        holding_until = int(now) + stay_seconds
+        return bool(
+            _claim_movement_status(
+                conn,
+                movement_id,
+                ("outbound",),
+                "holding",
+                now,
+                extra_sql=", holding_until = ?",
+                extra_params=(holding_until,),
+            )
+        )
+
     from .i18n import get_player_locale, tr
 
     sender_locale = get_player_locale(player_id, conn=conn)
@@ -6151,20 +6171,6 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             conn=conn,
         )
         return True
-
-    if mission == "expedition":
-        stay_seconds = expedition_stay_seconds(_expedition_hours_from_movement(movement))
-        holding_until = int(now) + stay_seconds
-        claimed = _claim_movement_status(
-            conn,
-            movement_id,
-            ("outbound",),
-            "holding",
-            now,
-            extra_sql=", holding_until = ?",
-            extra_params=(holding_until,),
-        )
-        return bool(claimed)
 
     if mission == "colonize":
         from .planet_evolution.service import colonize_planet
