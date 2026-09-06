@@ -1031,7 +1031,15 @@ def defense_queue_for_client(
     }
 
 
-def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> Dict[str, Any]:
+def build_defense_api_payload(
+    player_id: int,
+    planet_id: int,
+    *,
+    conn=None,
+    buildings: Mapping[str, Any] | None = None,
+    research: Mapping[str, Any] | None = None,
+    stock: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
     own = conn is None
     if own:
         conn = db()
@@ -1044,12 +1052,24 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
         from .shipyard import shipyard_level_from_buildings
         from .technical_data import apply_combat_stats_to_catalog_entry, resolve_unit_effect_context
 
-        buildings = get_planet_buildings(int(planet_id), conn=conn)
-        research = get_research_levels(user_id=int(player_id), conn=conn)
-        factory_level = max(0, int(buildings.get("defense_factory") or 0))
-        sy_level = shipyard_level_from_buildings(buildings)
+        building_levels = (
+            buildings
+            if buildings is not None
+            else get_planet_buildings(int(planet_id), conn=conn)
+        )
+        research_levels = (
+            research
+            if research is not None
+            else get_research_levels(user_id=int(player_id), conn=conn)
+        )
+        defense_stock = (
+            stock
+            if stock is not None
+            else get_planet_defense(int(planet_id), conn=conn)
+        )
+        factory_level = max(0, int(building_levels.get("defense_factory") or 0))
+        sy_level = shipyard_level_from_buildings(building_levels)
         metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
-        stock = get_planet_defense(int(planet_id), conn=conn)
         buildable: List[Dict[str, Any]] = []
         queue_full = False
         if defense_queue_table_ready(conn):
@@ -1061,8 +1081,8 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
         except Exception:
             planet_row = None
         effect_ctx = resolve_unit_effect_context(
-            buildings=buildings,
-            research_levels=research,
+            buildings=building_levels,
+            research_levels=research_levels,
             player_id=int(player_id),
             conn=conn,
             planet=planet_row,
@@ -1075,8 +1095,8 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                 player_id=player_id,
                 planet_id=planet_id,
                 conn=conn,
-                buildings=buildings,
-                research=research,
+                buildings=building_levels,
+                research=research_levels,
             ):
                 continue
             cost = unit_build_cost(key)
@@ -1089,8 +1109,8 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                 player_id=player_id,
                 planet_id=planet_id,
                 conn=conn,
-                buildings=buildings,
-                research=research,
+                buildings=building_levels,
+                research=research_levels,
             )
             can_build = not queue_full and max_qty > 0
             block_reason = ""
@@ -1120,7 +1140,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                     "build_seconds": unit_build_seconds(key, sy_level, conn=conn),
                     "effective_batch_capacity": _batch_capacity_for_defense(key, sy_level),
                     "max_build": max_qty,
-                    "stock": int(stock.get(key, 0) or 0),
+                    "stock": int(defense_stock.get(key, 0) or 0),
                     "can_build": can_build,
                     "block_reason": block_reason,
                 }
@@ -1151,7 +1171,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
             "orbital_shipyard_level": sy_level,
             "production_batch_capacity": orbital_production_batch_capacity(sy_level),
             "buildable_defense": buildable,
-            "current_defense": stock,
+            "current_defense": defense_stock,
             "defense_queue": queue,
             "resources": {
                 "metal": int(metal),
