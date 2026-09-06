@@ -96,7 +96,8 @@ def test_poll_source_uses_caller_owned_savepoint():
     )[0]
     assert "gc_poll_live_write" in block
     assert "ROLLBACK TO SAVEPOINT" in block
-    assert "manage_transaction=bool(own_conn)" in block
+    assert "process_player_due_fleets_now(uid, now=now)" in block
+    assert "manage_transaction=bool(own_conn)" not in block
     assert "mark_request_poll_safety_net_write" in block
     assert "if own_conn:" in block and "commit(conn)" in block
     # Must not blanket-rollback caller-owned connections on lock soft-fail.

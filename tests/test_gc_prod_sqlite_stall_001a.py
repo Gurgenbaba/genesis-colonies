@@ -311,12 +311,13 @@ def test_poll_safety_net_marks_score_dirty(game_client, monkeypatch):
         conn.close()
 
 
-def test_fleet_heartbeat_fresh_defers_poll_fleet_tick(game_client, monkeypatch):
+def test_fleet_heartbeat_fresh_does_not_block_due_poll_fleet_tick(game_client, monkeypatch):
     _client, uid = game_client
     monkeypatch.setenv("GC_GAME_WORKER_PRIMARY", "1")
     monkeypatch.setenv("GC_RESOURCE_PERSIST_SEC", "600")
     monkeypatch.setenv("GC_FLEET_WORKER_FRESH_SEC", "120")
-    # Fresh queue tick so queues defer; fresh fleet so fleet defers
+    # Fresh queue tick keeps queue work deferred. Fleet heartbeat freshness must
+    # not suppress a genuinely due player fleet deadline.
     _stamp_queue_tick(at=time.time())
     record_fleet_worker_result(
         {
@@ -368,10 +369,10 @@ def test_fleet_heartbeat_fresh_defers_poll_fleet_tick(game_client, monkeypatch):
         read_player_live_state_for_poll(int(uid), conn=conn)
     finally:
         conn.close()
-    assert calls["n"] == 0
+    assert calls["n"] == 1
 
 
-def test_fleet_stale_uses_player_scoped_tick(game_client, monkeypatch):
+def test_fleet_stale_uses_player_scoped_short_tx_tick(game_client, monkeypatch):
     _client, uid = game_client
     monkeypatch.setenv("GC_GAME_WORKER_PRIMARY", "1")
     monkeypatch.setenv("GC_RESOURCE_PERSIST_SEC", "600")
@@ -414,6 +415,6 @@ def test_fleet_stale_uses_player_scoped_tick(game_client, monkeypatch):
     finally:
         conn.close()
     assert seen.get("player_id") == int(uid)
-    # Issue #140: caller-owned conn must use manage_transaction=False so a fleet
-    # lock soft-fail cannot rollback the shared request TX (initiation abort).
-    assert seen.get("manage_transaction") is False
+    # Deadline safety-net owns a dedicated connection/short-TX pass so a mass
+    # return cannot expand or roll back the caller-owned request transaction.
+    assert seen.get("manage_transaction") is True
