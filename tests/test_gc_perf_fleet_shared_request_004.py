@@ -1,4 +1,4 @@
-"""GC-PERF-FLEET-SHARED-004 — one maintenance/shared-state pass per /fleet SSR."""
+"""Fleet SSR perf contracts: shared state plus mode-specific heavy contexts."""
 
 from pathlib import Path
 
@@ -51,6 +51,6 @@ def test_fleet_builder_accepts_shared_planet_rows_with_historical_fallback():
 
     assert "planet_rows: Sequence[Mapping[str, Any]] | None = None" in block
     assert "planet_rows if planet_rows is not None else get_planets_by_player" in block
-    # Send remains the canonical maintenance owner for the combined /fleet SSR.
+    # Send remains the canonical maintenance owner when the Send mode is requested.
     assert "_finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))" in block
     assert "process_fleet_tick(player_id=int(player_id), conn=conn)" in block
