@@ -466,6 +466,29 @@ def emit_resource_produced_events(
     return apply_directive_events(int(player_id), events, conn=conn, now=now)
 
 
+def emit_fleet_missions_sent(
+    player_id: int,
+    *,
+    mission: str,
+    fleet_ids: Sequence[int],
+    conn: sqlite3.Connection,
+    now: float | None = None,
+) -> Dict[str, Any]:
+    """Batch fleet-send progress without reloading directive state per fleet."""
+    mission_key = str(mission or "").strip().lower()
+    events = [
+        {
+            "kind": "fleet_mission_sent",
+            "mission": mission_key,
+            "amount": 1,
+            "source_event_id": f"fleet_send:{int(fleet_id)}",
+        }
+        for fleet_id in fleet_ids
+        if int(fleet_id) > 0
+    ]
+    return apply_directive_events(int(player_id), events, conn=conn, now=now)
+
+
 def emit_fleet_mission_sent(
     player_id: int,
     *,
@@ -474,13 +497,13 @@ def emit_fleet_mission_sent(
     conn: sqlite3.Connection,
     now: float | None = None,
 ) -> Dict[str, Any]:
-    event = {
-        "kind": "fleet_mission_sent",
-        "mission": str(mission or "").strip().lower(),
-        "amount": 1,
-        "source_event_id": f"fleet_send:{int(fleet_id)}",
-    }
-    return apply_directive_events(int(player_id), [event], conn=conn, now=now)
+    return emit_fleet_missions_sent(
+        int(player_id),
+        mission=mission,
+        fleet_ids=[int(fleet_id)],
+        conn=conn,
+        now=now,
+    )
 
 
 def emit_expedition_complete_event(
