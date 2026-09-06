@@ -246,8 +246,15 @@
     page.addEventListener("click", function (e) {
       var tabBtn = e.target.closest("[data-defense-tab]");
       if (!tabBtn || !page.contains(tabBtn)) return;
-      e.preventDefault();
       var tab = tabBtn.getAttribute("data-defense-tab") || "structures";
+      var targetPanel = page.querySelector('[data-defense-tab-panel="' + tab + '"]');
+
+      // GC-PERF-DEFENSE-SSR-006: only the requested heavy tab is SSR-rendered.
+      // If its sibling panel is absent, leave the anchor click untouched so
+      // the existing PJAX navigation can fetch the requested mode.
+      if (!targetPanel) return;
+
+      e.preventDefault();
       page.querySelectorAll("[data-defense-tab]").forEach(function (btn) {
         var on = btn.getAttribute("data-defense-tab") === tab;
         btn.classList.toggle("active", on);
@@ -472,11 +479,21 @@
     var data =
       typeof GC.parseDefensePageData === "function" ? GC.parseDefensePageData(page) : null;
     if (!data) return;
-    applyDefenseState(page, data);
-    if (typeof GC.startDefenseTimers === "function") GC.startDefenseTimers();
-    if (typeof GC.registerCleanup === "function" && typeof GC.stopDefenseTimers === "function") {
-      GC.registerCleanup(GC.stopDefenseTimers);
+
+    var structuresPanel = page.querySelector('[data-defense-tab-panel="structures"]');
+    if (structuresPanel) {
+      applyDefenseState(page, data);
+      if (typeof GC.startDefenseTimers === "function") GC.startDefenseTimers();
+      if (typeof GC.registerCleanup === "function" && typeof GC.stopDefenseTimers === "function") {
+        GC.registerCleanup(GC.stopDefenseTimers);
+      }
     }
+
+    var troopsPanel = page.querySelector("[data-barracks-troops-panel]");
+    if (troopsPanel && data.troops) {
+      applyTroopsPayload(troopsPanel, data.troops, data.resources);
+    }
+
     if (typeof GC.startProgressTicker === "function") GC.startProgressTicker();
   }
 
