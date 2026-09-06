@@ -83,6 +83,7 @@ def test_runtime_sources_route_authoritative_production_around_float():
     resolver = (ROOT / "game" / "effects" / "effect_resolver.py").read_text(encoding="utf-8")
     resources = (ROOT / "game" / "resources.py").read_text(encoding="utf-8")
     economy = (ROOT / "game" / "economy_balance.py").read_text(encoding="utf-8")
+    models = (ROOT / "game" / "models.py").read_text(encoding="utf-8")
 
     assert "def mine_output_decimal" in production
     assert "def calculate_resource_output_decimal" in production
@@ -91,6 +92,7 @@ def test_runtime_sources_route_authoritative_production_around_float():
     assert "resolver.production_per_hour_exact(ratio)" in resources
     assert "decimal_mul_div_floor(metal_ph, delta, 3600)" in resources
     assert "mine_output_decimal(" in economy
+    assert "MAX(CAST(0 AS NUMERIC), CAST(? AS NUMERIC))" in models
 
 
 @requires_postgres
