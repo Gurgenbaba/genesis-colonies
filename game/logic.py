@@ -140,7 +140,8 @@ def read_player_live_state_for_poll(
     GC-PROD-SQLITE-STALL-001A:
     - Queue finish only when queue-tick heartbeat is missing/stale (never fleet/maint).
     - Single-flight ``try_claim_poll_due_finish`` before ``finish_player_due_work``.
-    - Fleet dirty deferred when fleet-worker heartbeat is fresh; else player-scoped tick.
+    - Fleet dirty runs a bounded player-scoped short-TX pass immediately; a healthy
+      60s worker heartbeat must never leave an online player's expired timer at 0s.
     - ``update_scores=True`` kept on safety-net finish: marks score dirty only
       (GC-SCORE-PERF-001); ``False`` would skip invalidation — do not flip without tests.
 
@@ -157,8 +158,6 @@ def read_player_live_state_for_poll(
         should_poll_attempt_queue_finish,
         try_claim_poll_due_finish,
     )
-    from .fleet_worker import is_fleet_worker_heartbeat_fresh
-
     uid = int(player_id)
     own_conn = conn is None
     if own_conn:
@@ -187,14 +186,51 @@ def read_player_live_state_for_poll(
         if attempt_queue:
             should_finish_queues = bool(try_claim_poll_due_finish(uid, conn=conn, now=now))
 
-        should_finish_fleet = False
-        if fleet_dirty and not should_finish_queues:
-            if not is_fleet_worker_heartbeat_fresh(conn=conn, now=now):
-                should_finish_fleet = True
-        elif fleet_dirty and should_finish_queues:
-            should_finish_fleet = False
+        # GC-PERF-FLEET-DEADLINE-005:
+        # A "fresh" global fleet-worker heartbeat only proves that the worker ran
+        # recently; it does NOT prove it has seen a deadline that expired after
+        # that run. With the 60s maintenance cadence this was the exact source of
+        # RUECKFLUG/HALTEND rows sitting at 0s for up to a minute.
+        #
+        # The indexed dirty probe above is already the due signal. Only when it is
+        # true do we open a dedicated connection and run a bounded, player-scoped
+        # short-TX pass. This keeps mass waves out of the request transaction and
+        # remains race-safe with the background worker via conditional status claims.
+        fleet_finish_result = None
+        if fleet_dirty:
+            fleet_t0 = time.perf_counter()
+            try:
+                from .fleet import process_player_due_fleets_now
 
-        should_finish = bool(should_finish_queues or should_finish_fleet)
+                fleet_finish_result = process_player_due_fleets_now(uid, now=now)
+                processed_fleet = (
+                    int(fleet_finish_result.get("processed_arrivals") or 0)
+                    + int(fleet_finish_result.get("processed_holding") or 0)
+                    + int(fleet_finish_result.get("processed_returns") or 0)
+                )
+                if processed_fleet > 0:
+                    # The dedicated fleet connection may have credited ships,
+                    # resources and inbox reports. Refresh the request snapshot
+                    # before building the HUD/state payload.
+                    planet = get_context_planet(uid, conn=conn)
+                    player = load_player(uid, conn=conn) or player
+            except Exception:
+                logger.exception(
+                    "poll deadline fleet safety-net failed player_id=%s",
+                    uid,
+                )
+            finally:
+                try:
+                    from .live_state import record_request_perf_phase
+
+                    record_request_perf_phase(
+                        "fleet_tick_ms",
+                        (time.perf_counter() - fleet_t0) * 1000.0,
+                    )
+                except Exception:
+                    pass
+
+        should_finish = bool(should_finish_queues)
         need_write = bool(should_finish)
 
         # Issue #140: caller-owned PG connections must not be left INERROR after a
@@ -246,20 +282,6 @@ def read_player_live_state_for_poll(
                     from .live_state import mark_request_live_refreshed
 
                     mark_request_live_refreshed()
-                elif should_finish_fleet:
-                    from .fleet import process_fleet_tick
-
-                    # Never manage_transaction on a caller-owned conn — that path
-                    # rollbacks the whole shared TX on failure (poisons initiation).
-                    process_fleet_tick(
-                        player_id=uid,
-                        conn=conn,
-                        manage_transaction=bool(own_conn),
-                    )
-                    from .live_state import mark_request_live_refreshed
-
-                    mark_request_live_refreshed()
-
                 if not in_transaction(conn):
                     begin_write_transaction(conn)
 
