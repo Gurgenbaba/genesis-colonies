@@ -1461,9 +1461,9 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
         cur.execute(
             """
             UPDATE planets
-            SET metal        = MAX(0, ?),
-                crystal      = MAX(0, ?),
-                fuel_cells   = MAX(0, ?),
+            SET metal        = MAX(CAST(0 AS NUMERIC), CAST(? AS NUMERIC)),
+                crystal      = MAX(CAST(0 AS NUMERIC), CAST(? AS NUMERIC)),
+                fuel_cells   = MAX(CAST(0 AS NUMERIC), CAST(? AS NUMERIC)),
                 last_update  = ?,
                 energy_total = ?,
                 energy_used  = ?
