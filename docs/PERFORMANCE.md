@@ -152,6 +152,20 @@ Code audit evidence: `/defense` rendered two mutually exclusive heavy surfaces i
 
 Regression: `tests/test_gc_perf_defense_ssr_006.py` + existing Defense single-request-connection test + Sentinel.
 
+### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
+
+Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
+
+- Online deadline pass and global Fleet worker could enter the same expedition `holding` resolution concurrently. The final status claim was atomic but happened **after** daily ledger/loot/report side effects. PostgreSQL therefore observed a duplicate `expedition_daily_recorded.movement_id`.
+- Mass-expedition success called `applyActionState(..., "fleet_mass_expo_success")` (which already schedules Fleet reconciliation) **and** directly awaited `refreshFleetState()`. Large launches therefore created redundant `/api/fleet/state` requests.
+
+Fix:
+
+- Expedition holding takes a PostgreSQL row lock on the movement before any side effect; the loser waits, observes the new status, and exits.
+- `record_expedition_daily_value()` claims its ledger row with `INSERT ... ON CONFLICT(movement_id) DO NOTHING`; only the successful insert advances the daily aggregate.
+- Mass-expedition success uses one deferred coalesced Fleet-state reconciliation, matching normal Fleet send.
+- Mutation action diet compacts `active_fleets` / `fleet_alerts` to their HUD slices before serialization.
+
 ### GC-PERF-FLEET-DEADLINE-005 — No more fleet rows stuck at 0s
 
 Production symptom: mass expeditions could show `RÜCKFLUG 0s` for tens of seconds; expedition reports could also appear late after `HALTEND` elapsed.
