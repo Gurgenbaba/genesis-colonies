@@ -72,6 +72,7 @@ on:
       - "tests/test_gc_big_number_runtime_stellar_forge.py"
       - "tests/test_gc_big_number_runtime_production.py"
       - "tests/test_gc_big_number_runtime_economy_curves.py"
+      - "tests/test_gc_big_number_runtime_unit_production.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
@@ -145,6 +146,7 @@ on:
       - "tests/test_gc_big_number_runtime_stellar_forge.py"
       - "tests/test_gc_big_number_runtime_production.py"
       - "tests/test_gc_big_number_runtime_economy_curves.py"
+      - "tests/test_gc_big_number_runtime_unit_production.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -214,7 +216,7 @@ jobs:
             game/spy.py game/commander_classes.py game/admin_balance.py game/overview_page.py \
             game/auction_house.py game/alliance.py game/alliance_catalog.py \
             game/planet_evolution/ascension.py game/planet_evolution/events.py game/planet_evolution/economy.py game/planet_evolution/mechanics.py game/planet_evolution/service.py game/planet_evolution/dashboard.py \
-            game/exact_math.py game/expedition_events.py game/chronicle_entries.py game/stellar_forge/service.py
+            game/exact_math.py game/expedition_events.py game/chronicle_entries.py game/stellar_forge/service.py game/stellar_forge/formulas.py
           git diff --check
 
       - name: Apply full PostgreSQL schema
