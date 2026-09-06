@@ -95,7 +95,8 @@
 
   <div class="fleet-ogame-stack">
 
-    <div class="fleet-ogame-send" data-fleet-mode-panel="send"{% if fleet_mode != 'send' %} hidden{% endif %}>
+    {% if fleet_mode == 'send' %}
+    <div class="fleet-ogame-send" data-fleet-mode-panel="send">
 
       <section class="gc-panel fleet-panel fleet-no-ships-panel" aria-live="polite"{% if fleet_ctx.has_ships %} hidden{% endif %}>
         <p class="fleet-empty">{{ T("fleet_no_ships_hint") }}</p>
@@ -582,8 +583,10 @@
 
       </div>
     </div>
+    {% endif %}
 
-    <div class="fleet-ogame-logistics" data-fleet-mode-panel="logistics"{% if fleet_mode not in ('collect', 'distribute') %} hidden{% endif %}>
+    {% if fleet_mode in ('collect', 'distribute') %}
+    <div class="fleet-ogame-logistics" data-fleet-mode-panel="logistics">
       {% if not log_ctx.ready %}
       <section class="gc-panel fleet-panel">
         <p class="fleet-unavailable">{{ T("fleet_unavailable") }}</p>
@@ -598,6 +601,7 @@
       </div>
       {% endif %}
     </div>
+    {% endif %}
 
   </div>
   {% endif %}

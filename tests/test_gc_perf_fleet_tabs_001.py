@@ -20,12 +20,17 @@ def test_fleet_fast_tabs_core_contract():
     assert "event.stopImmediatePropagation()" in src
     assert "GC.modules && GC.modules.logistics" in src
     assert "syncLogisticsPresentation" in src
+    assert "if (!logistics && !sendPanel) return false;" in src
+    assert "if (logistics && (!logisticsPanel || !syncLogisticsPresentation" in src
 
 
-def test_fleet_template_keeps_local_mode_payload_available():
+def test_fleet_template_renders_only_requested_heavy_mode():
     src = _read("templates/fleet.html")
+    assert "{% if fleet_mode == 'send' %}" in src
+    assert "{% if fleet_mode in ('collect', 'distribute') %}" in src
     assert 'data-fleet-mode-panel="send"' in src
     assert 'data-fleet-mode-panel="logistics"' in src
     assert 'id="logistics-page-state"' in src
     assert 'data-fleet-mode-tab="collect"' in src
     assert 'data-fleet-mode-tab="distribute"' in src
+    assert 'data-fleet-mode-panel="send"{% if fleet_mode != \'send\' %}' not in src
