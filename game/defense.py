@@ -163,6 +163,8 @@ def defense_unlocked(
     player_id: int | None = None,
     planet_id: int | None = None,
     conn=None,
+    buildings: Mapping[str, Any] | None = None,
+    research: Mapping[str, Any] | None = None,
 ) -> bool:
     spec = get_defense(defense_key)
     if not spec:
@@ -171,9 +173,21 @@ def defense_unlocked(
     if int(factory_level) < need:
         return False
     if player_id is not None and planet_id is not None:
-        buildings = get_planet_buildings(int(planet_id), conn=conn)
-        research = get_research_levels(user_id=int(player_id), conn=conn)
-        ok, _ = _check_defense_requirements(defense_key, buildings=buildings, research=research)
+        building_levels = (
+            buildings
+            if buildings is not None
+            else get_planet_buildings(int(planet_id), conn=conn)
+        )
+        research_levels = (
+            research
+            if research is not None
+            else get_research_levels(user_id=int(player_id), conn=conn)
+        )
+        ok, _ = _check_defense_requirements(
+            defense_key,
+            buildings=building_levels,
+            research=research_levels,
+        )
         return ok
     return True
 
@@ -717,10 +731,18 @@ def max_build_amount_for_planet(
     player_id: int | None = None,
     planet_id: int | None = None,
     conn=None,
+    buildings: Mapping[str, Any] | None = None,
+    research: Mapping[str, Any] | None = None,
 ) -> int:
     dk = str(defense_key or "").strip()
     if not defense_unlocked(
-        dk, factory_level, player_id=player_id, planet_id=planet_id, conn=conn
+        dk,
+        factory_level,
+        player_id=player_id,
+        planet_id=planet_id,
+        conn=conn,
+        buildings=buildings,
+        research=research,
     ):
         return 0
     cost = unit_build_cost(dk)
@@ -1014,20 +1036,24 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
     if own:
         conn = db()
     try:
-        factory_level = get_defense_factory_level(player_id, planet_id, conn=conn)
-        sy_level = _production_shipyard_level(planet_id, conn=conn)
+        # GC-PERF-DEFENSE-SSR-006: one shared building/research/stock snapshot
+        # for the full catalog. The old path reloaded Buildings + Research via
+        # defense_unlocked/max_build_amount once or twice per defense row.
+        from .defense_defs import defense_icon_static_path
+        from .models import get_planet_buildings, get_research_levels
+        from .shipyard import shipyard_level_from_buildings
+        from .technical_data import apply_combat_stats_to_catalog_entry, resolve_unit_effect_context
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        research = get_research_levels(user_id=int(player_id), conn=conn)
+        factory_level = max(0, int(buildings.get("defense_factory") or 0))
+        sy_level = shipyard_level_from_buildings(buildings)
         metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
         stock = get_planet_defense(int(planet_id), conn=conn)
         buildable: List[Dict[str, Any]] = []
         queue_full = False
         if defense_queue_table_ready(conn):
             queue_full = queue_count(planet_id, conn=conn) >= get_defense_queue_limit(conn=conn)
-        from .defense_defs import defense_icon_static_path
-        from .models import get_planet_buildings, get_research_levels
-        from .technical_data import apply_combat_stats_to_catalog_entry, resolve_unit_effect_context
-
-        buildings = get_planet_buildings(int(planet_id), conn=conn)
-        research = get_research_levels(user_id=int(player_id), conn=conn)
         try:
             from .planet_evolution.repository import get_context_planet
 
@@ -1044,7 +1070,13 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
 
         for key in sorted(ACTIVE_DEFENSE_KEYS):
             if not defense_unlocked(
-                key, factory_level, player_id=player_id, planet_id=planet_id, conn=conn
+                key,
+                factory_level,
+                player_id=player_id,
+                planet_id=planet_id,
+                conn=conn,
+                buildings=buildings,
+                research=research,
             ):
                 continue
             cost = unit_build_cost(key)
@@ -1057,6 +1089,8 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                 player_id=player_id,
                 planet_id=planet_id,
                 conn=conn,
+                buildings=buildings,
+                research=research,
             )
             can_build = not queue_full and max_qty > 0
             block_reason = ""
@@ -1117,7 +1151,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
             "orbital_shipyard_level": sy_level,
             "production_batch_capacity": orbital_production_batch_capacity(sy_level),
             "buildable_defense": buildable,
-            "current_defense": get_planet_defense(planet_id, conn=conn),
+            "current_defense": stock,
             "defense_queue": queue,
             "resources": {
                 "metal": int(metal),
