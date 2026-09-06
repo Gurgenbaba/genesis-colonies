@@ -13,6 +13,7 @@ from .db import (
     begin_write_transaction,
     commit,
     db,
+    get_db_backend,
     is_sqlite_lock_error,
     lock_planet_for_update,
     rollback,
@@ -6887,14 +6888,15 @@ def process_fleet_tick(
     return result
 
 
-def _fleet_due_ids(
+def _fleet_due_entries(
     conn,
     *,
     status: str,
     time_col: str,
     now: float,
     player_id: Optional[int],
-) -> List[int]:
+) -> List[Tuple[int, Optional[int], str]]:
+    """Due snapshot with telemetry metadata, avoiding a second pre-TX row load."""
     params: List[Any] = [str(status), float(now)]
     player_filter = ""
     if player_id is not None:
@@ -6903,13 +6905,21 @@ def _fleet_due_ids(
     cur = conn.cursor()
     cur.execute(
         f"""
-        SELECT id FROM fleet_movements
+        SELECT id, player_id, mission_type
+        FROM fleet_movements
         WHERE status = ? AND {time_col} <= ?{player_filter}
         ORDER BY {time_col} ASC, id ASC;
         """,
         params,
     )
-    return [int(r["id"]) for r in cur.fetchall()]
+    return [
+        (
+            int(r["id"]),
+            int(r["player_id"]) if r["player_id"] is not None else None,
+            str(r["mission_type"] or ""),
+        )
+        for r in cur.fetchall()
+    ]
 
 
 def _load_movement_row(conn, movement_id: int) -> Optional[Dict[str, Any]]:
@@ -7059,35 +7069,30 @@ def _run_one_movement_short_tx(
     now: float,
     fail_fn=None,
     fail_missions: Optional[Set[str]] = None,
+    context_player_id: Optional[int] = None,
+    context_mission: str = "",
 ) -> Tuple[bool, Optional[str]]:
-    """BEGIN → handle one movement → COMMIT. Returns (handled, error_message)."""
+    """Run one short fleet TX without a redundant pre-transaction SELECT."""
     from .tx_context import tx_context
 
     mid = int(movement_id)
     status = str(expect_status)
+    mission = str(context_mission or "")
+    player_id = int(context_player_id) if context_player_id else None
     phase = {
         "outbound": "arrival",
         "holding": "holding",
         "returning": "return",
     }.get(status, "other")
-    mission = ""
-    player_id = None
-    try:
-        peek = _load_movement_row(conn, mid)
-        if peek:
-            mission = str(peek.get("mission_type") or "")
-            player_id = int(peek.get("player_id") or 0) or None
-            if status == "outbound":
-                if mission in ("attack", "spy"):
-                    phase = "combat"
-                elif mission == "expedition":
-                    phase = "expedition"
-                elif mission in ("transport", "deploy", "collect", "recycle", "colonize"):
-                    phase = "transport/deploy"
-                elif mission == "hold":
-                    phase = "holding"
-    except Exception:
-        pass
+    if status == "outbound":
+        if mission in ("attack", "spy"):
+            phase = "combat"
+        elif mission == "expedition":
+            phase = "expedition"
+        elif mission in ("transport", "deploy", "collect", "recycle", "colonize"):
+            phase = "transport/deploy"
+        elif mission == "hold":
+            phase = "holding"
 
     with tx_context(
         sub_owner="fleet_movement",
@@ -7106,7 +7111,6 @@ def _run_one_movement_short_tx(
             fail_fn=fail_fn,
             fail_missions=fail_missions,
         )
-
 
 def _run_one_movement_short_tx_body(
     conn,
@@ -7190,12 +7194,21 @@ def _process_fleet_tick_short_tx(
     import os
     import time as _time
 
-    max_movements = int(os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", "50") or 50)
+    is_postgres = get_db_backend() == "postgres"
+    default_max_movements = 200 if is_postgres else 50
+    default_max_ms = 2500.0 if is_postgres else 800.0
+    max_movements = int(
+        os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", str(default_max_movements))
+        or default_max_movements
+    )
     max_movements = max(1, max_movements)
     try:
-        max_ms = float(os.environ.get("GC_FLEET_WORKER_MAX_MS", "800") or 800)
+        max_ms = float(
+            os.environ.get("GC_FLEET_WORKER_MAX_MS", str(default_max_ms))
+            or default_max_ms
+        )
     except (TypeError, ValueError):
-        max_ms = 800.0
+        max_ms = default_max_ms
     max_ms = max(50.0, max_ms)
 
     run_t0 = _time.perf_counter()
@@ -7217,19 +7230,19 @@ def _process_fleet_tick_short_tx(
         return elapsed_ms >= max_ms
 
     # Snapshot IDs without holding a write lock across the whole set.
-    outbound_ids = _fleet_due_ids(
+    outbound_entries = _fleet_due_entries(
         conn, status="outbound", time_col="arrival_at", now=now, player_id=player_id
     )
-    holding_ids = _fleet_due_ids(
+    holding_entries = _fleet_due_entries(
         conn, status="holding", time_col="holding_until", now=now, player_id=player_id
     )
-    returning_ids = _fleet_due_ids(
+    returning_entries = _fleet_due_entries(
         conn, status="returning", time_col="return_at", now=now, player_id=player_id
     )
 
-    def _run_batch(ids, *, expect_status, handler, counter_key, fail_fn=None, fail_missions=None):
+    def _run_batch(entries, *, expect_status, handler, counter_key, fail_fn=None, fail_missions=None):
         nonlocal started, deferred
-        for mid in ids:
+        for mid, due_player_id, due_mission in entries:
             if _budget_exhausted():
                 deferred += 1
                 continue
@@ -7242,6 +7255,8 @@ def _process_fleet_tick_short_tx(
                 now=now,
                 fail_fn=fail_fn,
                 fail_missions=fail_missions,
+                context_player_id=due_player_id,
+                context_mission=due_mission,
             )
             if handled:
                 result[counter_key] = int(result.get(counter_key) or 0) + 1
@@ -7249,7 +7264,7 @@ def _process_fleet_tick_short_tx(
                 result["errors"].append(err)
 
     _run_batch(
-        outbound_ids,
+        outbound_entries,
         expect_status="outbound",
         handler=_handle_arrival,
         counter_key="processed_arrivals",
@@ -7257,13 +7272,13 @@ def _process_fleet_tick_short_tx(
         fail_missions={"attack", "expedition"},
     )
     _run_batch(
-        holding_ids,
+        holding_entries,
         expect_status="holding",
         handler=_handle_holding_end,
         counter_key="processed_holding",
     )
     _run_batch(
-        returning_ids,
+        returning_entries,
         expect_status="returning",
         handler=_handle_return,
         counter_key="processed_returns",
