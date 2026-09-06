@@ -75,7 +75,7 @@ def test_storage_reference_capacity_survives_float_range():
 def test_decimal_tick_scaling_keeps_full_integer_precision():
     per_hour = Decimal("1234567890123456789012345678901234567890.75")
     assert decimal_mul_div_floor(per_hour, 3600, 3600) == int(per_hour)
-    assert decimal_mul_div_floor(per_hour, 1800, 3600) == int(per_hour / 2)
+    assert decimal_mul_div_floor(per_hour, 1800, 3600) == 617283945061728394506172839450617283945
 
 
 def test_runtime_sources_route_authoritative_production_around_float():
