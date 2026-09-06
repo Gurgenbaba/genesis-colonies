@@ -28,6 +28,7 @@ from .models import (
 )
 from .queue_engine import finish_due_work_once
 from .effects import EffectResolver, get_effect_resolver
+from .exact_math import decimal_mul_div_floor
 
 
 # ==========================================================================
@@ -258,11 +259,11 @@ def _apply_production_tick(
     floor_crystal = int(planet.get("crystal") or 0)
     floor_fuel = int(planet.get("fuel_cells") or 0)
 
-    m_rate, c_rate = resolver.production_rates_per_sec(ratio)
-    fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
-    delta_metal = int(m_rate * delta)
-    delta_crystal = int(c_rate * delta)
-    delta_fuel_cells = int(fc_rate * delta)
+    metal_ph, crystal_ph = resolver.production_per_hour_exact(ratio)
+    fuel_ph = resolver.fuel_cells_production_per_hour_exact(ratio)
+    delta_metal = decimal_mul_div_floor(metal_ph, delta, 3600)
+    delta_crystal = decimal_mul_div_floor(crystal_ph, delta, 3600)
+    delta_fuel_cells = decimal_mul_div_floor(fuel_ph, delta, 3600)
 
     apply_production_delta(
         planet,
@@ -426,11 +427,11 @@ def update_planet_resources(
         prod_delta_crystal = 0
         prod_delta_fuel = 0
         if delta > 0 and not vacation_frozen:
-            m_rate, c_rate = resolver.production_rates_per_sec(ratio)
-            fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
-            prod_delta_metal = int(m_rate * delta)
-            prod_delta_crystal = int(c_rate * delta)
-            prod_delta_fuel = int(fc_rate * delta)
+            metal_ph, crystal_ph = resolver.production_per_hour_exact(ratio)
+            fuel_ph = resolver.fuel_cells_production_per_hour_exact(ratio)
+            prod_delta_metal = decimal_mul_div_floor(metal_ph, delta, 3600)
+            prod_delta_crystal = decimal_mul_div_floor(crystal_ph, delta, 3600)
+            prod_delta_fuel = decimal_mul_div_floor(fuel_ph, delta, 3600)
 
             _apply_production_tick(
                 planet,

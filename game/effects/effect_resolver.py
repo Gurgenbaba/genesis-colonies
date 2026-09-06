@@ -16,9 +16,11 @@ from __future__ import annotations
 import logging
 import os
 from contextvars import ContextVar
+from decimal import Decimal, localcontext
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..economy_balance import STORAGE_BASE_CAPACITY
+from ..exact_math import bounded_ratio_float, scale_int
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
 from ..planet_evolution.repository import get_context_planet
 
@@ -1265,7 +1267,12 @@ class EffectResolver:
     def energy_ratio(energy_total: int, energy_used: int) -> float:
         if energy_total >= energy_used:
             return 1.0
-        return max(0.0, float(energy_total) / max(1.0, float(energy_used)))
+        return bounded_ratio_float(
+            energy_total,
+            max(1, int(energy_used)),
+            minimum="0",
+            maximum="1",
+        )
 
     def prod_overlay_factor(self, resource_type: str) -> float:
         """GD + diplomacy overlay for production (excludes research; slot/temp in production_formula)."""
@@ -1282,6 +1289,37 @@ class EffectResolver:
             full = _mod_float(mods, "fuel_prod_factor")
         return full / max(research_part, 1e-12)
 
+    def production_per_hour_exact(
+        self,
+        energy_ratio: float = 1.0,
+    ) -> Tuple[Decimal, Decimal]:
+        from ..production_formula import (
+            calculate_resource_output_decimal,
+            production_context_from_resolver,
+        )
+
+        ratio_f = max(0.0, float(energy_ratio))
+        ctx_m = production_context_from_resolver(self, "metal", energy_ratio=ratio_f)
+        ctx_c = production_context_from_resolver(self, "crystal", energy_ratio=ratio_f)
+        return (
+            calculate_resource_output_decimal("metal", ctx_m),
+            calculate_resource_output_decimal("crystal", ctx_c),
+        )
+
+    def production_rates_per_sec_exact(
+        self,
+        energy_ratio: float = 1.0,
+    ) -> Tuple[Decimal, Decimal]:
+        metal_ph, crystal_ph = self.production_per_hour_exact(energy_ratio)
+        with localcontext() as ctx:
+            ctx.prec = max(
+                96,
+                len(metal_ph.as_tuple().digits) + 64,
+                len(crystal_ph.as_tuple().digits) + 64,
+            )
+            divisor = Decimal(3600)
+            return metal_ph / divisor, crystal_ph / divisor
+
     def production_rates_per_sec(self, energy_ratio: float = 1.0) -> Tuple[float, float]:
         from ..production_formula import calculate_resource_output, production_context_from_resolver
 
@@ -1292,9 +1330,27 @@ class EffectResolver:
         crystal_ph = calculate_resource_output("crystal", ctx_c)
         return metal_ph / 3600.0, crystal_ph / 3600.0
 
+    def fuel_cells_rate_per_sec_exact(self, energy_ratio: float = 1.0) -> Decimal:
+        per_hour = self.fuel_cells_production_per_hour_exact(energy_ratio)
+        if per_hour <= 0:
+            return Decimal(0)
+        with localcontext() as ctx:
+            ctx.prec = max(96, len(per_hour.as_tuple().digits) + 64)
+            return per_hour / Decimal(3600)
+
     def fuel_cells_rate_per_sec(self, energy_ratio: float = 1.0) -> float:
         per_hour = self.fuel_cells_production_per_hour(energy_ratio)
         return per_hour / 3600.0 if per_hour > 0 else 0.0
+
+    def fuel_cells_production_per_hour_exact(self, energy_ratio: float = 1.0) -> Decimal:
+        from ..production_formula import (
+            calculate_resource_output_decimal,
+            production_context_from_resolver,
+        )
+
+        ratio_f = max(0.0, float(energy_ratio))
+        ctx = production_context_from_resolver(self, "fuel_cells", energy_ratio=ratio_f)
+        return calculate_resource_output_decimal("fuel_cells", ctx)
 
     def fuel_cells_production_per_hour(self, energy_ratio: float = 1.0) -> float:
         from ..production_formula import calculate_resource_output, production_context_from_resolver
@@ -1309,12 +1365,12 @@ class EffectResolver:
         b = self.buildings
 
         terra_lvl = _bld(b, "terraformer")
-        terra_factor = 1.0 + 0.05 * terra_lvl
-        storage_factor = _mod_float(mods, "storage_factor") * terra_factor
+        terra_factor = Decimal(1) + Decimal("0.05") * Decimal(terra_lvl)
+        storage_factor = _mod_float(mods, "storage_factor")
 
         f_lvl = _bld(b, "fuel_storage")
         f_cap = self._storage_base_cap("fuel_cells", f_lvl)
-        return int(f_cap * storage_factor)
+        return scale_int(f_cap, storage_factor, terra_factor)
 
     def fuel_cells_storage_capacity(self) -> int:
         """Authoritative fuel_cells cap — same base storage as metal/crystal without depot."""
@@ -1336,8 +1392,8 @@ class EffectResolver:
         b = self.buildings
 
         terra_lvl = _bld(b, "terraformer")
-        terra_factor = 1.0 + 0.05 * terra_lvl
-        storage_factor = _mod_float(mods, "storage_factor") * terra_factor
+        terra_factor = Decimal(1) + Decimal("0.05") * Decimal(terra_lvl)
+        storage_factor = _mod_float(mods, "storage_factor")
 
         m_lvl = _bld(b, "metal_storage")
         c_lvl = _bld(b, "crystal_storage")
@@ -1346,22 +1402,25 @@ class EffectResolver:
         c_cap = self._metal_crystal_storage_base_cap("crystal", c_lvl)
 
         return {
-            "metal": int(m_cap * storage_factor),
-            "crystal": int(c_cap * storage_factor),
+            "metal": scale_int(m_cap, storage_factor, terra_factor),
+            "crystal": scale_int(c_cap, storage_factor, terra_factor),
             "fuel_cells": self.fuel_cells_storage_capacity(),
         }
 
     def get_building_production_per_hour(self, ratio: float) -> Dict[str, int]:
-        from ..production_formula import calculate_resource_output, production_context_from_resolver
+        from ..production_formula import (
+            calculate_resource_output_decimal,
+            production_context_from_resolver,
+        )
 
         ratio_f = max(0.0, float(ratio))
-        metal_ph = int(calculate_resource_output(
+        metal_ph = int(calculate_resource_output_decimal(
             "metal", production_context_from_resolver(self, "metal", energy_ratio=ratio_f)
         ))
-        crystal_ph = int(calculate_resource_output(
+        crystal_ph = int(calculate_resource_output_decimal(
             "crystal", production_context_from_resolver(self, "crystal", energy_ratio=ratio_f)
         ))
-        fuel_cell_ph = int(calculate_resource_output(
+        fuel_cell_ph = int(calculate_resource_output_decimal(
             "fuel_cells", production_context_from_resolver(self, "fuel_cells", energy_ratio=ratio_f)
         ))
         return {

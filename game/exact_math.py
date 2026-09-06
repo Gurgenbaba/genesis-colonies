@@ -77,6 +77,19 @@ def sum_products_floor(terms: Iterable[Tuple[Any, Any]]) -> int:
         return int(total.to_integral_value(rounding=ROUND_FLOOR))
 
 
+def decimal_mul_div_floor(value: Any, numerator: Any, denominator: Any) -> int:
+    """floor(decimal_value * integer numerator / integer denominator) with guard precision."""
+    dec = decimal_value(value)
+    num = int(numerator or 0)
+    den = int(denominator or 0)
+    if den == 0:
+        raise ZeroDivisionError("denominator must not be zero")
+    digits = max(1, len(dec.as_tuple().digits))
+    with localcontext() as ctx:
+        ctx.prec = max(96, digits + len(str(abs(num))) + len(str(abs(den))) + 64)
+        out = dec * Decimal(num) / Decimal(den)
+        return int(out.to_integral_value(rounding=ROUND_FLOOR))
+
 def mul_div_floor(value: Any, numerator: Any, denominator: Any) -> int:
     """Exact floor(value * numerator / denominator) for integer operands."""
     v = int(value or 0)

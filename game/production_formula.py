@@ -10,7 +10,10 @@ Authoritative documentation: docs/PRODUCTION_FORMULA_SYSTEM.md
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal, localcontext
 from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING
+
+from .exact_math import decimal_value
 
 if TYPE_CHECKING:
     from .effects.effect_resolver import EffectResolver
@@ -88,6 +91,31 @@ def _normalize_resource_type(resource_type: str) -> str:
 def normalize_resource_type(resource_type: str) -> str:
     return _normalize_resource_type(resource_type)
 
+
+def _production_decimal_precision(level: int) -> int:
+    """Guard digits for the 1.075^level curve without using float(level)."""
+    lvl = max(0, int(level or 0))
+    # log10(1.075) ~= 0.031409; 32/1000 is a conservative integer upper bound.
+    growth_digits = (32 * lvl + 999) // 1000
+    return max(96, growth_digits + len(str(max(1, lvl))) + 96)
+
+
+def standard_output_decimal(resource_type: str) -> Decimal:
+    key = _normalize_resource_type(resource_type)
+    return decimal_value(STANDARD_PRODUCTION_PER_HOUR[key])
+
+
+def mine_output_decimal(resource_type: str, level: int) -> Decimal:
+    """Mine-only output with no IEEE-754 exponent ceiling."""
+    key = _normalize_resource_type(resource_type)
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        return Decimal(0)
+    with localcontext() as ctx:
+        ctx.prec = _production_decimal_precision(lvl)
+        base = decimal_value(LEVEL_GROWTH[key]["multiplier"])
+        growth = decimal_value(LEVEL_GROWTH_RATE)
+        return base * Decimal(lvl) * (growth ** lvl)
 
 def standard_output(resource_type: str) -> float:
     """Planet baseline income per hour (no mine required)."""
@@ -283,6 +311,25 @@ class ProductionModifiers:
     def combined(self) -> float:
         return self.combined_without_energy() * self.energy_modifier()
 
+
+def calculate_resource_output_decimal(
+    resource_type: str,
+    context: ProductionContext,
+) -> Decimal:
+    """Canonical production output/hour without converting the growth curve to float."""
+    key = _normalize_resource_type(resource_type)
+    lvl = max(0, int(context.level or 0))
+    with localcontext() as ctx:
+        ctx.prec = _production_decimal_precision(lvl)
+        speed = max(Decimal(0), decimal_value(context.production_speed, "1"))
+        mods = ProductionModifiers(context)
+        mod_shared = max(Decimal(0), decimal_value(mods.combined_without_energy(), "1"))
+        mod_with_energy = max(Decimal(0), decimal_value(mods.combined(), "1"))
+
+        standard_part = standard_output_decimal(key) * speed * mod_shared
+        mine_base = mine_output_decimal(key, lvl) * speed
+        mine_part = mine_base * mod_with_energy if mine_base > 0 else Decimal(0)
+        return max(Decimal(0), standard_part + mine_part)
 
 def calculate_resource_output(resource_type: str, context: ProductionContext) -> float:
     """

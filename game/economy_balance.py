@@ -17,6 +17,7 @@ from .production_formula import (
     ProductionContext,
     calculate_resource_output,
     mine_output,
+    mine_output_decimal,
     normalize_resource_type,
 )
 
@@ -401,10 +402,11 @@ def storage_capacity_at_depot_level(storage_level: int) -> int:
     if lvl <= 0:
         return STORAGE_BASE_CAPACITY
     reference_mine_level = lvl * int(STORAGE_REFERENCE_MINE_LEVEL_FACTOR)
-    reference_day_cap = mine_output(STORAGE_REFERENCE_RESOURCE, reference_mine_level) * float(
-        STORAGE_REFERENCE_HOURS
-    )
-    return max(STORAGE_BASE_CAPACITY, int(STORAGE_BASE_CAPACITY + reference_day_cap))
+    reference_day_cap = mine_output_decimal(
+        STORAGE_REFERENCE_RESOURCE,
+        reference_mine_level,
+    ) * STORAGE_REFERENCE_HOURS
+    return max(STORAGE_BASE_CAPACITY, STORAGE_BASE_CAPACITY + int(reference_day_cap))
 
 
 def storage_capacity_anchor(

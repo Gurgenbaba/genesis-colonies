@@ -5,6 +5,9 @@ on:
     paths:
       - "game/models.py"
       - "game/resources.py"
+      - "game/production_formula.py"
+      - "game/economy_balance.py"
+      - "game/effects/effect_resolver.py"
       - "game/inventory.py"
       - "game/exchange.py"
       - "game/combat.py"
@@ -67,12 +70,16 @@ on:
       - "tests/test_gc_big_number_runtime_case_battles.py"
       - "tests/test_gc_big_number_runtime_fleet.py"
       - "tests/test_gc_big_number_runtime_stellar_forge.py"
+      - "tests/test_gc_big_number_runtime_production.py"
       - ".github/workflows/pg-numeric-readiness.yml"
   push:
     branches: [main]
     paths:
       - "game/models.py"
       - "game/resources.py"
+      - "game/production_formula.py"
+      - "game/economy_balance.py"
+      - "game/effects/effect_resolver.py"
       - "game/inventory.py"
       - "game/exchange.py"
       - "game/combat.py"
@@ -135,6 +142,7 @@ on:
       - "tests/test_gc_big_number_runtime_case_battles.py"
       - "tests/test_gc_big_number_runtime_fleet.py"
       - "tests/test_gc_big_number_runtime_stellar_forge.py"
+      - "tests/test_gc_big_number_runtime_production.py"
       - ".github/workflows/pg-numeric-readiness.yml"
 
 permissions:
@@ -195,7 +203,7 @@ jobs:
           python -m py_compile \
             migrate.py \
             scripts/pg_numeric_readiness_audit.py \
-            game/models.py game/resources.py game/exchange.py \
+            game/models.py game/resources.py game/production_formula.py game/economy_balance.py game/effects/effect_resolver.py game/exchange.py \
             game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
             game/buildings.py game/research.py game/shipyard.py game/shipyard_queue.py game/defense.py \
             game/inactive_autoplay.py game/world_boss.py game/world_boss_companions.py \
@@ -233,4 +241,5 @@ jobs:
             tests/test_gc_big_number_runtime_directives.py \
             tests/test_gc_big_number_runtime_case_battles.py \
             tests/test_gc_big_number_runtime_fleet.py \
-            tests/test_gc_big_number_runtime_stellar_forge.py
+            tests/test_gc_big_number_runtime_stellar_forge.py \
+            tests/test_gc_big_number_runtime_production.py
