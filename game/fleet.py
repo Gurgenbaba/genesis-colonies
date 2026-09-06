@@ -6987,6 +6987,9 @@ def process_fleet_tick(
     now: Optional[float] = None,
     conn=None,
     manage_transaction: Optional[bool] = None,
+    max_movements: Optional[int] = None,
+    max_ms: Optional[float] = None,
+    prioritize_returns: bool = False,
 ) -> Dict[str, Any]:
     """Process due fleet arrivals and returns. Idempotent per movement status transition.
 
@@ -7023,6 +7026,9 @@ def process_fleet_tick(
                 player_id=player_id,
                 now=float(now),
                 result=result,
+                max_movements_override=max_movements,
+                max_ms_override=max_ms,
+                prioritize_returns=bool(prioritize_returns),
             )
         else:
             if own:
@@ -7364,6 +7370,9 @@ def _process_fleet_tick_short_tx(
     player_id: Optional[int],
     now: float,
     result: Dict[str, Any],
+    max_movements_override: Optional[int] = None,
+    max_ms_override: Optional[float] = None,
+    prioritize_returns: bool = False,
 ) -> None:
     """GC-PERF-LOCK-001: one short write TX per due movement.
 
@@ -7377,16 +7386,22 @@ def _process_fleet_tick_short_tx(
     is_postgres = get_db_backend() == "postgres"
     default_max_movements = 200 if is_postgres else 50
     default_max_ms = 2500.0 if is_postgres else 800.0
-    max_movements = int(
-        os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", str(default_max_movements))
-        or default_max_movements
-    )
+    if max_movements_override is None:
+        max_movements = int(
+            os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", str(default_max_movements))
+            or default_max_movements
+        )
+    else:
+        max_movements = int(max_movements_override)
     max_movements = max(1, max_movements)
     try:
-        max_ms = float(
-            os.environ.get("GC_FLEET_WORKER_MAX_MS", str(default_max_ms))
-            or default_max_ms
-        )
+        if max_ms_override is None:
+            max_ms = float(
+                os.environ.get("GC_FLEET_WORKER_MAX_MS", str(default_max_ms))
+                or default_max_ms
+            )
+        else:
+            max_ms = float(max_ms_override)
     except (TypeError, ValueError):
         max_ms = default_max_ms
     max_ms = max(50.0, max_ms)
@@ -7444,14 +7459,6 @@ def _process_fleet_tick_short_tx(
             if err:
                 result["errors"].append(err)
 
-    _run_batch(
-        outbound_entries,
-        expect_status="outbound",
-        handler=_handle_arrival,
-        counter_key="processed_arrivals",
-        fail_fn=_fail_outbound_movement,
-        fail_missions={"attack", "expedition"},
-    )
     def _handle_holding_cached(movement, *, conn, now):
         return _handle_holding_end(
             movement,
@@ -7460,25 +7467,99 @@ def _process_fleet_tick_short_tx(
             resolution_cache=expedition_resolution_cache,
         )
 
-    _run_batch(
-        holding_entries,
-        expect_status="holding",
-        handler=_handle_holding_cached,
-        counter_key="processed_holding",
-    )
-    _run_batch(
-        returning_entries,
-        expect_status="returning",
-        handler=_handle_return,
-        counter_key="processed_returns",
-        fail_fn=_fail_returning_movement,
-    )
+    def _run_outbound() -> None:
+        _run_batch(
+            outbound_entries,
+            expect_status="outbound",
+            handler=_handle_arrival,
+            counter_key="processed_arrivals",
+            fail_fn=_fail_outbound_movement,
+            fail_missions={"attack", "expedition"},
+        )
+
+    def _run_holding() -> None:
+        _run_batch(
+            holding_entries,
+            expect_status="holding",
+            handler=_handle_holding_cached,
+            counter_key="processed_holding",
+        )
+
+    def _run_returning() -> None:
+        _run_batch(
+            returning_entries,
+            expect_status="returning",
+            handler=_handle_return,
+            counter_key="processed_returns",
+            fail_fn=_fail_returning_movement,
+        )
+
+    # GC-PERF-FLEET-DEADLINE-005: the online safety-net prioritizes work that
+    # players experience as "stuck at 0s": returning fleets first (slots/loot),
+    # then holding expiries (expedition outcome/message), then fresh arrivals.
+    if prioritize_returns:
+        _run_returning()
+        _run_holding()
+        _run_outbound()
+    else:
+        _run_outbound()
+        _run_holding()
+        _run_returning()
 
     result["budget"]["started"] = started
     result["budget"]["deferred"] = deferred
     result["budget"]["hit_limit"] = deferred > 0
     result["budget"]["elapsed_ms"] = round((_time.perf_counter() - run_t0) * 1000.0, 2)
 
+
+def process_player_due_fleets_now(
+    player_id: int,
+    *,
+    now: Optional[float] = None,
+    max_movements: Optional[int] = None,
+    max_ms: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Bounded short-TX safety-net for an online player with genuinely due fleets.
+
+    This is not a second polling engine. Callers first use player_fleet_is_dirty
+    (indexed deadline probe) and invoke this only after a real deadline has passed.
+    A dedicated connection keeps a mass return wave out of the caller request TX.
+    """
+    import os
+
+    is_postgres = get_db_backend() == "postgres"
+    default_max_movements = 256 if is_postgres else 64
+    default_max_ms = 900.0 if is_postgres else 400.0
+
+    if max_movements is None:
+        try:
+            max_movements = int(
+                os.environ.get(
+                    "GC_POLL_FLEET_MAX_MOVEMENTS",
+                    str(default_max_movements),
+                )
+                or default_max_movements
+            )
+        except (TypeError, ValueError):
+            max_movements = default_max_movements
+    if max_ms is None:
+        try:
+            max_ms = float(
+                os.environ.get("GC_POLL_FLEET_MAX_MS", str(default_max_ms))
+                or default_max_ms
+            )
+        except (TypeError, ValueError):
+            max_ms = default_max_ms
+
+    return process_fleet_tick(
+        player_id=int(player_id),
+        now=now,
+        conn=None,
+        manage_transaction=True,
+        max_movements=max(1, int(max_movements)),
+        max_ms=max(50.0, float(max_ms)),
+        prioritize_returns=True,
+    )
 
 def mass_expedition_available_slots(player_id: int, *, conn) -> int:
     """Free fleet slots mass expedition may use — always leaves MASS_EXPEDITION_SLOT_RESERVE free."""
