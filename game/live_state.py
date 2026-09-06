@@ -1783,6 +1783,14 @@ def apply_action_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
         cmdr = dict(cmdr)
         cmdr.pop("classes", None)
         payload["commander"] = cmdr
+
+    # GC-PERF-EXPO-RACE-006: action responses only feed the global Fleet HUD.
+    # Keep the same compact fleet/alert slices as diet polls instead of
+    # serializing every raw movement field after a large batch launch.
+    if "active_fleets" in payload:
+        payload["active_fleets"] = active_fleets_poll_slice(payload.get("active_fleets"))
+    if "fleet_alerts" in payload:
+        payload["fleet_alerts"] = fleet_alerts_poll_slice(payload.get("fleet_alerts"))
     return payload
 
 
