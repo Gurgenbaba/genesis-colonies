@@ -258,8 +258,8 @@ def _apply_production_tick(
     floor_crystal = int(planet.get("crystal") or 0)
     floor_fuel = int(planet.get("fuel_cells") or 0)
 
-    m_rate, c_rate = resolver.production_rates_per_sec(ratio)
-    fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
+    m_rate, c_rate = resolver.production_rates_per_sec_exact(ratio)
+    fc_rate = resolver.fuel_cells_rate_per_sec_exact(ratio)
     delta_metal = int(m_rate * delta)
     delta_crystal = int(c_rate * delta)
     delta_fuel_cells = int(fc_rate * delta)
@@ -426,8 +426,8 @@ def update_planet_resources(
         prod_delta_crystal = 0
         prod_delta_fuel = 0
         if delta > 0 and not vacation_frozen:
-            m_rate, c_rate = resolver.production_rates_per_sec(ratio)
-            fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
+            m_rate, c_rate = resolver.production_rates_per_sec_exact(ratio)
+            fc_rate = resolver.fuel_cells_rate_per_sec_exact(ratio)
             prod_delta_metal = int(m_rate * delta)
             prod_delta_crystal = int(c_rate * delta)
             prod_delta_fuel = int(fc_rate * delta)
