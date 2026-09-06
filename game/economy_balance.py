@@ -17,6 +17,7 @@ from .production_formula import (
     LEVEL_GROWTH,
     ProductionContext,
     calculate_resource_output,
+    calculate_resource_output_decimal,
     mine_output,
     mine_output_decimal,
     normalize_resource_type,
@@ -626,14 +627,17 @@ def reference_production_per_hour(
     *,
     slot: int = NEUTRAL_BALANCE_SLOT,
     production_speed: float = 1.0,
-) -> float:
-    """Authoritative production reference for balance tables (delegates to GC-820)."""
+) -> float | Decimal:
+    """Authoritative production reference, exact once the float curve is unsafe."""
+    lvl = max(0, int(mine_level))
     ctx = ProductionContext(
         resource_type=normalize_resource_type(resource_type),
-        level=max(0, int(mine_level)),
+        level=lvl,
         slot=slot,
         production_speed=production_speed,
     )
+    if lvl > _EXACT_CURVE_LEVEL_THRESHOLD:
+        return calculate_resource_output_decimal(normalize_resource_type(resource_type), ctx)
     return calculate_resource_output(normalize_resource_type(resource_type), ctx)
 
 
@@ -643,7 +647,7 @@ def production_delta_per_hour(
     *,
     slot: int = NEUTRAL_BALANCE_SLOT,
     production_speed: float = 1.0,
-) -> float:
+) -> float | Decimal:
     """Hourly output gain from upgrading to level (vs level - 1)."""
     lvl = max(0, int(level))
     if lvl < 1:
@@ -654,6 +658,12 @@ def production_delta_per_hour(
     prev = reference_production_per_hour(
         resource_type, lvl - 1, slot=slot, production_speed=production_speed
     )
+    if isinstance(cur, Decimal) or isinstance(prev, Decimal):
+        cur_dec = decimal_value(cur)
+        prev_dec = decimal_value(prev)
+        with localcontext() as ctx:
+            ctx.prec = max(_decimal_digits(cur_dec), _decimal_digits(prev_dec)) + 64
+            return max(Decimal(0), cur_dec - prev_dec)
     return max(0.0, cur - prev)
 
 
@@ -662,9 +672,13 @@ def upgrade_roi_cost_basis(
     metal_cost: int = 0,
     crystal_cost: int = 0,
     fuel_cells_cost: int = 0,
-) -> float:
-    """Total upgrade cost for ROI (all resource types; missing fuel_cells → 0)."""
-    return float(metal_cost or 0) + float(crystal_cost or 0) + float(fuel_cells_cost or 0)
+) -> int:
+    """Exact total upgrade cost for ROI (all resource types)."""
+    return (
+        max(0, int(metal_cost or 0))
+        + max(0, int(crystal_cost or 0))
+        + max(0, int(fuel_cells_cost or 0))
+    )
 
 
 def upgrade_roi_hours(
@@ -672,20 +686,37 @@ def upgrade_roi_hours(
     metal_cost: int = 0,
     crystal_cost: int = 0,
     fuel_cells_cost: int = 0,
-    delta_per_hour: float = 0,
+    delta_per_hour: Any = 0,
 ) -> float:
-    """Payback hours: sum(upgrade costs) / hourly production delta."""
-    delta = float(delta_per_hour or 0)
-    if delta <= 0:
-        return float("inf")
+    """Payback hours without coercing an unbounded cost/delta through float."""
     basis = upgrade_roi_cost_basis(
         metal_cost=metal_cost,
         crystal_cost=crystal_cost,
         fuel_cells_cost=fuel_cells_cost,
     )
-    if basis <= 0:
+    delta_dec = decimal_value(delta_per_hour)
+    if basis <= 0 or delta_dec <= 0:
         return float("inf")
-    return basis / delta
+
+    # Preserve ordinary gameplay/balance outputs on the historical binary-float
+    # path. Once either operand is JS/float-unsafe, divide as Decimal first and
+    # only convert the bounded ROI ratio to float for display compatibility.
+    if basis <= _JS_SAFE_INTEGER_MAX:
+        try:
+            delta_float = float(delta_per_hour or 0)
+            if 0 < delta_float <= _JS_SAFE_INTEGER_MAX:
+                return float(basis) / delta_float
+        except (OverflowError, TypeError, ValueError):
+            pass
+
+    with localcontext() as ctx:
+        ctx.prec = max(len(str(basis)), _decimal_digits(delta_dec)) + 96
+        ratio = Decimal(basis) / delta_dec
+    try:
+        out = float(ratio)
+    except (OverflowError, ValueError):
+        return float("inf")
+    return out if math.isfinite(out) else float("inf")
 
 
 def mine_upgrade_roi_hours(
@@ -708,7 +739,7 @@ def mine_upgrade_roi_hours(
             resource, target_level, slot=slot, production_speed=production_speed
         )
     else:
-        delta = float(delta_per_hour)
+        delta = delta_per_hour
     return upgrade_roi_hours(
         metal_cost=int(metal_cost),
         crystal_cost=int(crystal_cost),
