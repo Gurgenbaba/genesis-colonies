@@ -555,19 +555,20 @@ def record_expedition_daily_value(
 
     now = float(ts if ts is not None else time.time())
     cur = conn.cursor()
-    cur.execute(
-        "SELECT 1 FROM expedition_daily_recorded WHERE movement_id = ? LIMIT 1;",
-        (mid,),
-    )
-    if cur.fetchone():
-        return False
+    # GC-PERF-EXPO-RACE-006: SELECT-then-INSERT is not concurrency-safe on
+    # PostgreSQL. The movement ledger is the idempotency owner, so claim it with
+    # one atomic INSERT. Only the transaction that inserted the movement may
+    # advance the daily aggregate.
     cur.execute(
         """
         INSERT INTO expedition_daily_recorded (movement_id, player_id, day_bucket, expo_value, recorded_at)
-        VALUES (?, ?, ?, ?, ?);
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(movement_id) DO NOTHING;
         """,
         (mid, pid, int(bucket), value, now),
     )
+    if int(cur.rowcount or 0) <= 0:
+        return False
     cur.execute(
         """
         INSERT INTO expedition_daily_value (player_id, day_bucket, expo_value_total, expedition_count, updated_at)
