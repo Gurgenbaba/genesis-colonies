@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
+from game.effects import EffectResolver
+
 from game.economy_balance import (
     NANOFACTORY_PERSISTED_COST_MAX,
     nanofactory_upgrade_cost,
@@ -39,6 +41,31 @@ def test_polynomial_build_time_handles_10_pow_400_level():
     seconds = power_build_seconds("metal_mine", 10**400)
     assert isinstance(seconds, int)
     assert seconds > 10**500
+
+
+def test_effect_resolver_preserves_10_pow_400_build_time():
+    level = 10**400
+    resolver = EffectResolver({}, {}, settings={"build_speed": 1.0})
+    base = power_build_seconds("metal_mine", level)
+    resolved = resolver.get_build_time_seconds("metal_mine", level)
+
+    assert resolved == base
+    assert resolved > 10**500
+
+
+def test_effect_reduction_helpers_do_not_float_coerce_huge_levels():
+    level = 10**400
+
+    assert EffectResolver.mine_energy_factor_for_level(level) == 0.0
+    assert EffectResolver.fuel_efficiency_factor_for_level(level) == 0.0
+    assert EffectResolver.mine_energy_reduction_pct(level) == level
+    assert EffectResolver.fuel_efficiency_reduction_pct(level) == level * 3
+    assert EffectResolver.buildtime_duration_factor_for_level(level) == 0.0
+
+    resolver = EffectResolver({}, {"buildtime_tech": level})
+    mods = resolver.get_modifiers()
+    assert mods["build_time_speed"] == 1_000_000_000_000.0
+    assert mods["research_time_speed"] == 1_000_000_000_000.0
 
 
 def test_exponential_mine_cost_survives_beyond_ieee754_output_range():
@@ -80,3 +107,12 @@ def test_economy_curve_source_has_no_nanofactory_runtime_cap():
     assert "growth = 1 << lvl" in source
     assert "if lvl > _EXACT_CURVE_LEVEL_THRESHOLD:" in source
     assert "_research_income_reference_decimal" in source
+
+
+def test_effect_time_source_has_no_huge_duration_float_roundtrip():
+    source = (ROOT / "game" / "effects" / "effect_resolver.py").read_text(encoding="utf-8")
+
+    assert "seconds = float(power_build_seconds" not in source
+    assert "duration_factor = float(BUILDTIME_TECH_DURATION ** lb)" not in source
+    assert "_BUILDTIME_TECH_EPS_LEVEL = 1829" in source
+    assert "base_seconds.bit_length() < 1024" in source
