@@ -13,6 +13,7 @@ from .db import (
     begin_write_transaction,
     commit,
     db,
+    get_db_backend,
     is_sqlite_lock_error,
     lock_planet_for_update,
     rollback,
@@ -854,14 +855,56 @@ def add_planet_ships(
     *,
     conn,
 ) -> None:
-    current = get_planet_ships(planet_id, conn=conn)
-    merged = dict(current)
+    """Increment only touched hangar rows; avoid full-hangar read/rewrite."""
+    now = _now()
+    positive: List[Tuple[Any, ...]] = []
+    negative: List[Tuple[Any, ...]] = []
     for key, amount in ships.items():
         sk = canonical_ship_key(str(key))
         if not is_known_ship_key(sk):
             continue
-        merged[sk] = max(0, int(merged.get(sk, 0)) + int(amount))
-    set_planet_ships(planet_id, player_id, merged, conn=conn)
+        delta = int(amount or 0)
+        if delta > 0:
+            positive.append(
+                (
+                    int(player_id),
+                    int(planet_id),
+                    sk,
+                    delta,
+                    now,
+                    now,
+                )
+            )
+        elif delta < 0:
+            negative.append((abs(delta), now, int(planet_id), sk))
+
+    cur = conn.cursor()
+    if positive:
+        cur.executemany(
+            """
+            INSERT INTO planet_ships (
+                player_id, planet_id, ship_key, amount, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(planet_id, ship_key) DO UPDATE SET
+                amount = planet_ships.amount + excluded.amount,
+                updated_at = excluded.updated_at;
+            """,
+            positive,
+        )
+    if negative:
+        cur.executemany(
+            """
+            UPDATE planet_ships
+            SET amount = MAX(0, amount - ?), updated_at = ?
+            WHERE planet_id = ? AND ship_key = ?;
+            """,
+            negative,
+        )
+        cur.execute(
+            "DELETE FROM planet_ships WHERE planet_id = ? AND amount <= 0;",
+            (int(planet_id),),
+        )
 
 
 def deduct_planet_ships(
@@ -870,30 +913,50 @@ def deduct_planet_ships(
     *,
     conn,
 ) -> Tuple[bool, str]:
-    current = get_planet_ships(planet_id, conn=conn)
+    """Deduct only requested hull rows instead of rewriting every ship type."""
+    requested: Dict[str, int] = {}
     for key, amount in ships.items():
-        sk = str(key)
-        need = int(amount)
-        if need <= 0:
+        sk = canonical_ship_key(str(key))
+        if not is_known_ship_key(sk):
             continue
-        have = int(current.get(sk, 0))
-        if have < need:
-            return False, "not_enough_ships"
-    updated = dict(current)
-    for key, amount in ships.items():
-        sk = str(key)
-        need = int(amount)
-        if need <= 0:
-            continue
-        updated[sk] = int(updated.get(sk, 0)) - need
-        if updated[sk] <= 0:
-            updated.pop(sk, None)
+        need = int(amount or 0)
+        if need > 0:
+            requested[sk] = requested.get(sk, 0) + need
+    if not requested:
+        return True, ""
+
+    keys = list(requested)
+    placeholders = ", ".join("?" for _ in keys)
     cur = conn.cursor()
-    cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
-    row = cur.fetchone()
-    if not row:
-        return False, "planet_not_found"
-    set_planet_ships(planet_id, int(row["player_id"]), updated, conn=conn)
+    cur.execute(
+        f"""
+        SELECT ship_key, amount
+        FROM planet_ships
+        WHERE planet_id = ? AND ship_key IN ({placeholders});
+        """,
+        [int(planet_id), *keys],
+    )
+    current = {str(row["ship_key"]): int(row["amount"] or 0) for row in cur.fetchall()}
+    for sk, need in requested.items():
+        if int(current.get(sk, 0)) < int(need):
+            return False, "not_enough_ships"
+
+    now = _now()
+    cur.executemany(
+        """
+        UPDATE planet_ships
+        SET amount = amount - ?, updated_at = ?
+        WHERE planet_id = ? AND ship_key = ?;
+        """,
+        [
+            (int(need), now, int(planet_id), sk)
+            for sk, need in requested.items()
+        ],
+    )
+    cur.execute(
+        "DELETE FROM planet_ships WHERE planet_id = ? AND amount <= 0;",
+        (int(planet_id),),
+    )
     return True, ""
 
 
@@ -5391,6 +5454,26 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     resources = movement.get("resources") or {}
     movement_id = int(movement["id"])
     coords = movement.get("target_coords") or ""
+
+    # GC-PERF-MASS-EXPO-004: classic expedition arrival only transitions into
+    # the stay phase. Do it before locale/report lookups used by other missions.
+    if mission == "expedition":
+        stay_seconds = expedition_stay_seconds(
+            _expedition_hours_from_movement(movement)
+        )
+        holding_until = int(now) + stay_seconds
+        return bool(
+            _claim_movement_status(
+                conn,
+                movement_id,
+                ("outbound",),
+                "holding",
+                now,
+                extra_sql=", holding_until = ?",
+                extra_params=(holding_until,),
+            )
+        )
+
     from .i18n import get_player_locale, tr
 
     sender_locale = get_player_locale(player_id, conn=conn)
@@ -6089,20 +6172,6 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         )
         return True
 
-    if mission == "expedition":
-        stay_seconds = expedition_stay_seconds(_expedition_hours_from_movement(movement))
-        holding_until = int(now) + stay_seconds
-        claimed = _claim_movement_status(
-            conn,
-            movement_id,
-            ("outbound",),
-            "holding",
-            now,
-            extra_sql=", holding_until = ?",
-            extra_params=(holding_until,),
-        )
-        return bool(claimed)
-
     if mission == "colonize":
         from .planet_evolution.service import colonize_planet
         from .planet_evolution.world_colonization import (
@@ -6364,13 +6433,129 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     return False
 
 
-def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float) -> bool:
+def _expedition_tick_shared_context(
+    movement: Mapping[str, Any],
+    *,
+    conn,
+    now: float,
+    cache: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, int, Dict[str, Any]]:
+    """Reuse expensive read-only expedition snapshots within one fleet tick."""
+    from .i18n import get_player_locale
+
+    player_id = int(movement.get("player_id") or 0)
+    root: Dict[str, Any] = cache if cache is not None else {}
+    players = root.setdefault("players", {})
+    pctx = players.get(player_id)
+    if pctx is None:
+        booster_flags: Dict[str, Any] = {}
+        try:
+            from .inventory_boosters import get_expedition_booster_flags
+
+            booster_flags = dict(
+                get_expedition_booster_flags(player_id, conn=conn) or {}
+            )
+        except Exception:
+            booster_flags = {}
+
+        alliance_mult = 1.0
+        alliance_event_bonus = 0.0
+        try:
+            from .alliance import get_alliance_effect_modifiers
+
+            alliance_mods = get_alliance_effect_modifiers(player_id, conn=conn)
+            alliance_mult = float(alliance_mods.get("expedition_loot_mult") or 1.0)
+            alliance_event_bonus = float(
+                alliance_mods.get("expedition_event_bonus") or 0.0
+            )
+        except Exception:
+            pass
+
+        from .empire_page import get_empire_production_aggregate
+
+        empire_prod = get_empire_production_aggregate(player_id, conn=conn)
+        pctx = {
+            "sender_locale": get_player_locale(player_id, conn=conn),
+            "empire_daily_total": int(empire_prod.get("total_per_day") or 0),
+            "booster_flags": booster_flags,
+            "alliance_mult": alliance_mult,
+            "alliance_event_bonus": alliance_event_bonus,
+        }
+        players[player_id] = pctx
+
+    origin_galaxy = int(
+        movement.get("origin_galaxy") or movement.get("galaxy") or 0
+    ) or None
+    if origin_galaxy is None:
+        origin_id = int(movement.get("origin_planet_id") or 0)
+        origins = root.setdefault("origin_galaxies", {})
+        if origin_id not in origins:
+            row = conn.execute(
+                "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+                (origin_id,),
+            ).fetchone()
+            origins[origin_id] = (
+                int(row["galaxy"])
+                if row and row["galaxy"] is not None
+                else 0
+            )
+        origin_galaxy = int(origins.get(origin_id) or 0) or None
+
+    galactic_cache = root.setdefault("galactic_flags", {})
+    galaxy_key = (player_id, int(origin_galaxy or 0))
+    base_flags = galactic_cache.get(galaxy_key)
+    if base_flags is None:
+        base_flags = {}
+        if origin_galaxy:
+            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+            base_flags = dict(
+                get_directive_flags_for_galaxy(origin_galaxy, conn=conn) or {}
+            )
+        galactic_cache[galaxy_key] = base_flags
+
+    directive_flags = {
+        **dict(base_flags or {}),
+        **dict(pctx.get("booster_flags") or {}),
+    }
+    alliance_mult = float(pctx.get("alliance_mult") or 1.0)
+    alliance_event_bonus = float(pctx.get("alliance_event_bonus") or 0.0)
+    if alliance_mult > 1.0:
+        directive_flags["expedition_loot_mult"] = float(
+            directive_flags.get("expedition_loot_mult") or 1.0
+        ) * alliance_mult
+    if alliance_event_bonus > 0.0:
+        directive_flags["expedition_event_bonus"] = float(
+            directive_flags.get("expedition_event_bonus") or 0.0
+        ) + alliance_event_bonus
+
+    return (
+        str(pctx.get("sender_locale") or "de"),
+        int(pctx.get("empire_daily_total") or 0),
+        directive_flags,
+    )
+
+
+def _handle_expedition_holding_end(
+    movement: Dict[str, Any],
+    *,
+    conn,
+    now: float,
+    resolution_cache: Optional[Dict[str, Any]] = None,
+) -> bool:
     """Resolve expedition loot after the stay phase, notify, then start return flight."""
-    from .i18n import get_player_locale, tr
+    from .i18n import tr
 
     movement_id = int(movement["id"])
     player_id = int(movement["player_id"])
-    sender_locale = get_player_locale(player_id, conn=conn)
+    sender_locale, empire_daily_total, directive_flags = (
+        _expedition_tick_shared_context(
+            movement,
+            conn=conn,
+            now=now,
+            cache=resolution_cache,
+        )
+    )
     ships = movement.get("ships") or {}
     coords = movement.get("target_coords") or ""
     raw_res = movement.get("resources") or {}
@@ -6387,52 +6572,14 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             world_context = None
     cargo_total = calculate_expedition_loot_cap(ships)
     flight_seconds_base = int(movement.get("flight_seconds") or 1)
-    origin_galaxy = int(movement.get("origin_galaxy") or movement.get("galaxy") or 0) or None
-    if origin_galaxy is None:
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
-                (int(movement.get("origin_planet_id") or 0),),
-            )
-            grow = cur.fetchone()
-            if grow and grow["galaxy"] is not None:
-                origin_galaxy = int(grow["galaxy"])
-        except Exception:
-            origin_galaxy = None
-    directive_flags: Dict[str, Any] = {}
-    if origin_galaxy:
-        from .galactic_directives.mechanics import get_directive_flags_for_galaxy
-
-        directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
-    try:
-        from .inventory_boosters import get_expedition_booster_flags
-
-        directive_flags = {**directive_flags, **get_expedition_booster_flags(player_id, conn=conn)}
-    except Exception:
-        pass
-    try:
-        from .alliance import get_alliance_effect_modifiers
-
-        alliance_mods = get_alliance_effect_modifiers(player_id, conn=conn)
-        alliance_mult = float(alliance_mods.get("expedition_loot_mult") or 1.0)
-        alliance_event_bonus = float(alliance_mods.get("expedition_event_bonus") or 0.0)
-        if alliance_mult > 1.0:
-            directive_flags["expedition_loot_mult"] = float(
-                directive_flags.get("expedition_loot_mult") or 1.0
-            ) * alliance_mult
-        if alliance_event_bonus > 0.0:
-            directive_flags["expedition_event_bonus"] = float(
-                directive_flags.get("expedition_event_bonus") or 0.0
-            ) + alliance_event_bonus
-    except Exception:
-        pass
-    from .empire_page import get_empire_production_aggregate
-
-    empire_prod = get_empire_production_aggregate(player_id, conn=conn)
-    empire_daily_total = int(empire_prod.get("total_per_day") or 0)
-    daily_expedition_count = get_expedition_daily_count(player_id, conn=conn, ts=now)
-    daily_efficiency_mult = expedition_daily_efficiency_multiplier(daily_expedition_count)
+    daily_expedition_count = get_expedition_daily_count(
+        player_id,
+        conn=conn,
+        ts=now,
+    )
+    daily_efficiency_mult = expedition_daily_efficiency_multiplier(
+        daily_expedition_count
+    )
     familiarity_status = None
     if world_key:
         try:
@@ -6669,24 +6816,52 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     return True
 
 
-def _handle_holding_end(movement: Dict[str, Any], *, conn, now: float) -> bool:
+def _handle_holding_end(
+    movement: Dict[str, Any],
+    *,
+    conn,
+    now: float,
+    resolution_cache: Optional[Dict[str, Any]] = None,
+) -> bool:
     mission = str(movement.get("mission_type") or "")
     if mission == "expedition":
-        return _handle_expedition_holding_end(movement, conn=conn, now=now)
+        return _handle_expedition_holding_end(
+            movement,
+            conn=conn,
+            now=now,
+            resolution_cache=resolution_cache,
+        )
     return _start_return(movement, conn=conn, now=now)
 
 
 def _handle_return(movement: Dict[str, Any], *, conn, now: float) -> bool:
-    from .i18n import get_player_locale, tr
-
     movement_id = int(movement["id"])
     player_id = int(movement["player_id"])
-    sender_locale = get_player_locale(player_id, conn=conn)
     mission = str(movement.get("mission_type") or "")
     origin_id = int(movement["origin_planet_id"])
-    target_id = _safe_int(movement.get("target_planet_id"))
     ships = movement.get("ships") or {}
     resources = movement.get("resources") or {}
+
+    # GC-PERF-MASS-EXPO-004: expedition returns have no dedicated return report.
+    # Finish + credit directly instead of loading locale, planet names and batch
+    # metadata for every wave.
+    if mission == "expedition":
+        if not _complete_movement(
+            movement_id,
+            conn=conn,
+            now=now,
+            from_status="returning",
+        ):
+            return False
+        add_planet_ships(origin_id, player_id, ships, conn=conn)
+        if loaded_resource_total(resources) > 0:
+            _credit_planet_resources(origin_id, resources, conn=conn)
+        return True
+
+    from .i18n import get_player_locale, tr
+
+    sender_locale = get_player_locale(player_id, conn=conn)
+    target_id = _safe_int(movement.get("target_planet_id"))
     coords = movement.get("target_coords") or ""
     cur = conn.cursor()
     cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
@@ -6887,14 +7062,15 @@ def process_fleet_tick(
     return result
 
 
-def _fleet_due_ids(
+def _fleet_due_entries(
     conn,
     *,
     status: str,
     time_col: str,
     now: float,
     player_id: Optional[int],
-) -> List[int]:
+) -> List[Tuple[int, Optional[int], str]]:
+    """Due snapshot with telemetry metadata, avoiding a second pre-TX row load."""
     params: List[Any] = [str(status), float(now)]
     player_filter = ""
     if player_id is not None:
@@ -6903,13 +7079,21 @@ def _fleet_due_ids(
     cur = conn.cursor()
     cur.execute(
         f"""
-        SELECT id FROM fleet_movements
+        SELECT id, player_id, mission_type
+        FROM fleet_movements
         WHERE status = ? AND {time_col} <= ?{player_filter}
         ORDER BY {time_col} ASC, id ASC;
         """,
         params,
     )
-    return [int(r["id"]) for r in cur.fetchall()]
+    return [
+        (
+            int(r["id"]),
+            int(r["player_id"]) if r["player_id"] is not None else None,
+            str(r["mission_type"] or ""),
+        )
+        for r in cur.fetchall()
+    ]
 
 
 def _load_movement_row(conn, movement_id: int) -> Optional[Dict[str, Any]]:
@@ -6955,6 +7139,7 @@ def _process_fleet_tick_shared_tx(
 ) -> None:
     """Legacy path: all due work on the caller's open write transaction."""
     cur = conn.cursor()
+    expedition_resolution_cache: Dict[str, Any] = {}
     params: List[Any] = [now]
     player_filter = ""
     if player_id is not None:
@@ -7010,7 +7195,12 @@ def _process_fleet_tick_shared_tx(
                 conn,
                 phase="holding",
                 movement_id=int(mv["id"]),
-                fn=lambda: _handle_holding_end(mv, conn=conn, now=now),
+                fn=lambda: _handle_holding_end(
+                    mv,
+                    conn=conn,
+                    now=now,
+                    resolution_cache=expedition_resolution_cache,
+                ),
             ):
                 result["processed_holding"] += 1
         except Exception as exc:
@@ -7059,35 +7249,30 @@ def _run_one_movement_short_tx(
     now: float,
     fail_fn=None,
     fail_missions: Optional[Set[str]] = None,
+    context_player_id: Optional[int] = None,
+    context_mission: str = "",
 ) -> Tuple[bool, Optional[str]]:
-    """BEGIN → handle one movement → COMMIT. Returns (handled, error_message)."""
+    """Run one short fleet TX without a redundant pre-transaction SELECT."""
     from .tx_context import tx_context
 
     mid = int(movement_id)
     status = str(expect_status)
+    mission = str(context_mission or "")
+    player_id = int(context_player_id) if context_player_id else None
     phase = {
         "outbound": "arrival",
         "holding": "holding",
         "returning": "return",
     }.get(status, "other")
-    mission = ""
-    player_id = None
-    try:
-        peek = _load_movement_row(conn, mid)
-        if peek:
-            mission = str(peek.get("mission_type") or "")
-            player_id = int(peek.get("player_id") or 0) or None
-            if status == "outbound":
-                if mission in ("attack", "spy"):
-                    phase = "combat"
-                elif mission == "expedition":
-                    phase = "expedition"
-                elif mission in ("transport", "deploy", "collect", "recycle", "colonize"):
-                    phase = "transport/deploy"
-                elif mission == "hold":
-                    phase = "holding"
-    except Exception:
-        pass
+    if status == "outbound":
+        if mission in ("attack", "spy"):
+            phase = "combat"
+        elif mission == "expedition":
+            phase = "expedition"
+        elif mission in ("transport", "deploy", "collect", "recycle", "colonize"):
+            phase = "transport/deploy"
+        elif mission == "hold":
+            phase = "holding"
 
     with tx_context(
         sub_owner="fleet_movement",
@@ -7106,7 +7291,6 @@ def _run_one_movement_short_tx(
             fail_fn=fail_fn,
             fail_missions=fail_missions,
         )
-
 
 def _run_one_movement_short_tx_body(
     conn,
@@ -7190,17 +7374,27 @@ def _process_fleet_tick_short_tx(
     import os
     import time as _time
 
-    max_movements = int(os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", "50") or 50)
+    is_postgres = get_db_backend() == "postgres"
+    default_max_movements = 200 if is_postgres else 50
+    default_max_ms = 2500.0 if is_postgres else 800.0
+    max_movements = int(
+        os.environ.get("GC_FLEET_WORKER_MAX_MOVEMENTS", str(default_max_movements))
+        or default_max_movements
+    )
     max_movements = max(1, max_movements)
     try:
-        max_ms = float(os.environ.get("GC_FLEET_WORKER_MAX_MS", "800") or 800)
+        max_ms = float(
+            os.environ.get("GC_FLEET_WORKER_MAX_MS", str(default_max_ms))
+            or default_max_ms
+        )
     except (TypeError, ValueError):
-        max_ms = 800.0
+        max_ms = default_max_ms
     max_ms = max(50.0, max_ms)
 
     run_t0 = _time.perf_counter()
     started = 0
     deferred = 0
+    expedition_resolution_cache: Dict[str, Any] = {}
     result.setdefault("budget", {})
     result["budget"] = {
         "max_movements": max_movements,
@@ -7217,19 +7411,19 @@ def _process_fleet_tick_short_tx(
         return elapsed_ms >= max_ms
 
     # Snapshot IDs without holding a write lock across the whole set.
-    outbound_ids = _fleet_due_ids(
+    outbound_entries = _fleet_due_entries(
         conn, status="outbound", time_col="arrival_at", now=now, player_id=player_id
     )
-    holding_ids = _fleet_due_ids(
+    holding_entries = _fleet_due_entries(
         conn, status="holding", time_col="holding_until", now=now, player_id=player_id
     )
-    returning_ids = _fleet_due_ids(
+    returning_entries = _fleet_due_entries(
         conn, status="returning", time_col="return_at", now=now, player_id=player_id
     )
 
-    def _run_batch(ids, *, expect_status, handler, counter_key, fail_fn=None, fail_missions=None):
+    def _run_batch(entries, *, expect_status, handler, counter_key, fail_fn=None, fail_missions=None):
         nonlocal started, deferred
-        for mid in ids:
+        for mid, due_player_id, due_mission in entries:
             if _budget_exhausted():
                 deferred += 1
                 continue
@@ -7242,6 +7436,8 @@ def _process_fleet_tick_short_tx(
                 now=now,
                 fail_fn=fail_fn,
                 fail_missions=fail_missions,
+                context_player_id=due_player_id,
+                context_mission=due_mission,
             )
             if handled:
                 result[counter_key] = int(result.get(counter_key) or 0) + 1
@@ -7249,21 +7445,29 @@ def _process_fleet_tick_short_tx(
                 result["errors"].append(err)
 
     _run_batch(
-        outbound_ids,
+        outbound_entries,
         expect_status="outbound",
         handler=_handle_arrival,
         counter_key="processed_arrivals",
         fail_fn=_fail_outbound_movement,
         fail_missions={"attack", "expedition"},
     )
+    def _handle_holding_cached(movement, *, conn, now):
+        return _handle_holding_end(
+            movement,
+            conn=conn,
+            now=now,
+            resolution_cache=expedition_resolution_cache,
+        )
+
     _run_batch(
-        holding_ids,
+        holding_entries,
         expect_status="holding",
-        handler=_handle_holding_end,
+        handler=_handle_holding_cached,
         counter_key="processed_holding",
     )
     _run_batch(
-        returning_ids,
+        returning_entries,
         expect_status="returning",
         handler=_handle_return,
         counter_key="processed_returns",
@@ -7429,7 +7633,7 @@ def mass_expedition_from_ships(
     speed_percent: int = 100,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """GC-981 — split selected ships evenly across free expedition slots."""
+    """GC-981 / GC-PERF-MASS-EXPO-004 — bulk-create identical expedition waves."""
     own = conn is None
     if own:
         conn = db()
@@ -7450,32 +7654,15 @@ def mass_expedition_from_ships(
         if pct < 10 or pct > 100:
             pct = 100
 
-        slots = get_fleet_slot_status(int(player_id), conn=conn)
-        max_start = mass_expedition_available_slots(int(player_id), conn=conn)
-
         if own:
             begin_write_transaction(conn)
 
-        now = _now()
+        # One origin lock + one authoritative validation for the whole identical
+        # wave set. The old path invoked the generic sender N times and repeated the
+        # planet read, lock, resource tick, target resolution, slot query,
+        # hangar deduction and planet resource UPDATE for every wave.
+        lock_planet_for_update(conn, int(origin_planet_id))
         cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO fleet_batches (player_id, batch_type, label, status, total_fleets, created_at, updated_at)
-            VALUES (?, 'mass_expedition', ?, 'running', ?, ?, ?);
-            """,
-            (
-                int(player_id),
-                f"Mass expedition x{slot_count}",
-                slot_count,
-                now,
-                now,
-            ),
-        )
-        batch_id = int(cur.lastrowid)
-
-        started: List[Dict[str, Any]] = []
-        skipped: List[Dict[str, Any]] = []
-
         cur.execute(
             "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
             (int(origin_planet_id), int(player_id)),
@@ -7490,82 +7677,300 @@ def mass_expedition_from_ships(
         tg, ts, _ = origin_coords
         target_position = EXPEDITION_POSITION
 
-        # GC-PERF-MASS-EXPO-003: all waves share one origin and one atomic
-        # transaction, so resolve fleet effects once for the whole batch.
         batch_fleet_modifiers = _fleet_galactic_modifiers(
             int(player_id),
             conn,
             galaxy=int(origin_planet.get("galaxy") or tg or 0) or None,
         )
-
-        for wave in range(slot_count):
-            if len(started) >= max_start:
-                skipped.append({"wave": wave + 1, "reason": "fleet_slots_full"})
-                continue
-
-            ok, send_reason, payload = send_fleet(
-                player_id=player_id,
-                origin_planet_id=origin_planet_id,
-                target_galaxy=tg,
-                target_system=ts,
-                target_position=target_position,
-                mission_type="expedition",
-                ships=per_slot,
-                resources={},
-                speed_percent=pct,
-                batch_id=batch_id,
-                departure_at=int(now) + len(started) * MASS_EXPEDITION_STAGGER_SECONDS,
-                conn=conn,
-                fleet_modifiers=batch_fleet_modifiers,
-                compact_result=True,
-            )
-            if ok and payload:
-                started.append({"wave": wave + 1, "fleet_id": payload["fleet"]["id"]})
-            else:
-                skipped.append({"wave": wave + 1, "reason": send_reason or "send_failed"})
-
-        if not started:
-            # Mirror logistics: never soft-succeed with zero fleets launched.
+        ok_send, send_reason, send_ctx = validate_fleet_send(
+            player_id=int(player_id),
+            origin_planet_id=int(origin_planet_id),
+            target_galaxy=int(tg),
+            target_system=int(ts),
+            target_position=int(target_position),
+            mission_type="expedition",
+            ships=per_slot,
+            resources={},
+            speed_percent=pct,
+            conn=conn,
+            fleet_modifiers=batch_fleet_modifiers,
+            persist_resources=True,
+        )
+        if not ok_send or not send_ctx:
             if own:
                 rollback(conn)
-            fail_reason = (
-                str((skipped[0] or {}).get("reason") or "")
-                if skipped
-                else "send_failed"
-            ) or "send_failed"
-            return False, fail_reason, {
+            return False, send_reason or "send_failed", {
                 "started": [],
-                "skipped": skipped,
+                "skipped": [],
                 "per_fleet_ships": per_slot,
                 "leftover_ships": leftover,
                 "started_count": 0,
                 "active_slots": get_fleet_slot_status(player_id, conn=conn),
             }
 
+        origin_planet = dict(send_ctx["origin_planet"])
+        flight_preview = dict(send_ctx["preview"])
+        target_info = dict(send_ctx.get("target") or {})
+        resolved_target = send_ctx.get("resolved_target")
+        target = (
+            tuple(resolved_target)
+            if resolved_target
+            else (int(tg), int(ts), int(EXPEDITION_POSITION))
+        )
+        target_position = int(target[2])
+
+        # Slot state can change between preview and the write transaction, so
+        # resolve the actual launch ceiling once after the origin row is locked.
+        slot_limit = min(
+            int(slot_count),
+            int(mass_expedition_available_slots(int(player_id), conn=conn)),
+        )
+        fuel_cost_per_wave = max(0, int(flight_preview.get("fuel_cost") or 0))
+        fuel_have = max(0, int(origin_planet.get("fuel_cells") or 0))
+        fuel_limit = (
+            slot_limit
+            if fuel_cost_per_wave <= 0
+            else min(slot_limit, fuel_have // fuel_cost_per_wave)
+        )
+        start_count = max(0, int(fuel_limit))
+
+        if start_count <= 0:
+            if own:
+                rollback(conn)
+            fail_reason = "fleet_slots_full" if slot_limit <= 0 else "not_enough_resources"
+            return False, fail_reason, {
+                "started": [],
+                "skipped": [
+                    {"wave": wave + 1, "reason": fail_reason}
+                    for wave in range(slot_count)
+                ],
+                "per_fleet_ships": per_slot,
+                "leftover_ships": leftover,
+                "started_count": 0,
+                "active_slots": get_fleet_slot_status(player_id, conn=conn),
+            }
+
+        total_ships = {
+            str(key): int(amount) * start_count
+            for key, amount in per_slot.items()
+            if int(amount) > 0
+        }
+        ok_deduct, deduct_reason = deduct_planet_ships(
+            int(origin_planet_id),
+            total_ships,
+            conn=conn,
+        )
+        if not ok_deduct:
+            if own:
+                rollback(conn)
+            return False, deduct_reason or "not_enough_ships", None
+
+        total_fuel_cost = fuel_cost_per_wave * start_count
+        metal_have = int(origin_planet.get("metal") or 0)
+        crystal_have = int(origin_planet.get("crystal") or 0)
+        new_metal, new_crystal, new_fuel_cells = apply_departure_deduction(
+            metal_have,
+            crystal_have,
+            fuel_have,
+            {},
+            total_fuel_cost,
+        )
+        if new_fuel_cells < 0:
+            if own:
+                rollback(conn)
+            return False, "not_enough_resources", None
+
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (
+                resource_db_param(new_metal),
+                resource_db_param(new_crystal),
+                resource_db_param(new_fuel_cells),
+                int(origin_planet_id),
+            ),
+        )
+
+        now = _now()
+        batch_label = f"Mass expedition x{slot_count}"
+        cur.execute(
+            """
+            INSERT INTO fleet_batches (
+                player_id, batch_type, label, status,
+                total_fleets, created_at, updated_at
+            )
+            VALUES (?, 'mass_expedition', ?, 'running', ?, ?, ?);
+            """,
+            (
+                int(player_id),
+                batch_label,
+                start_count,
+                now,
+                now,
+            ),
+        )
+        batch_id = int(cur.lastrowid)
+
+        flight_seconds = int(flight_preview["flight_seconds"])
+        distance = int(flight_preview["distance"])
+        resources_store = {
+            "expedition_hours": normalize_expedition_hours(None),
+        }
+        target_planet_id = target_info.get("target_planet_id")
+        has_troops_col = fleet_troops_column_ready(conn)
+        movement_params: List[Tuple[Any, ...]] = []
+
+        for wave in range(start_count):
+            dep_ts = int(now) + wave * MASS_EXPEDITION_STAGGER_SECONDS
+            outbound = build_outbound_timing(
+                departure_at=dep_ts,
+                duration_seconds=flight_seconds,
+            )
+            common = (
+                int(player_id),
+                int(origin_planet_id),
+                target_planet_id,
+                int(target[0]),
+                int(target[1]),
+                int(target_position),
+                "expedition",
+                outbound["departure_at"],
+                outbound["arrival_at"],
+                _json_dumps(per_slot),
+                _json_dumps(resources_store),
+            )
+            if has_troops_col:
+                movement_params.append(
+                    common
+                    + (
+                        _json_dumps({}),
+                        fuel_cost_per_wave,
+                        pct,
+                        distance,
+                        flight_seconds,
+                        None,
+                        batch_id,
+                        now,
+                        now,
+                    )
+                )
+            else:
+                movement_params.append(
+                    common
+                    + (
+                        fuel_cost_per_wave,
+                        pct,
+                        distance,
+                        flight_seconds,
+                        None,
+                        batch_id,
+                        now,
+                        now,
+                    )
+                )
+
+        if has_troops_col:
+            cur.executemany(
+                """
+                INSERT INTO fleet_movements (
+                    player_id, origin_planet_id, target_planet_id,
+                    target_galaxy, target_system, target_position,
+                    mission_type, status, departure_at, arrival_at, return_at, holding_until,
+                    ships_json, resources_json, troops_json, fuel_cost,
+                    speed_percent, distance, flight_seconds, preset_id,
+                    parent_batch_id, created_at, updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                );
+                """,
+                movement_params,
+            )
+        else:
+            cur.executemany(
+                """
+                INSERT INTO fleet_movements (
+                    player_id, origin_planet_id, target_planet_id,
+                    target_galaxy, target_system, target_position,
+                    mission_type, status, departure_at, arrival_at, return_at, holding_until,
+                    ships_json, resources_json, fuel_cost,
+                    speed_percent, distance, flight_seconds, preset_id,
+                    parent_batch_id, created_at, updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                );
+                """,
+                movement_params,
+            )
+
+        fleet_rows = conn.execute(
+            """
+            SELECT id
+            FROM fleet_movements
+            WHERE player_id = ? AND parent_batch_id = ?
+            ORDER BY id ASC;
+            """,
+            (int(player_id), int(batch_id)),
+        ).fetchall()
+        fleet_ids = [int(row["id"]) for row in fleet_rows]
+        if len(fleet_ids) != start_count:
+            raise RuntimeError(
+                f"mass expedition bulk insert mismatch: expected={start_count} got={len(fleet_ids)}"
+            )
+
+        started = [
+            {"wave": wave + 1, "fleet_id": fleet_id}
+            for wave, fleet_id in enumerate(fleet_ids)
+        ]
+        skipped: List[Dict[str, Any]] = []
+        for wave in range(start_count, slot_count):
+            reason_key = (
+                "fleet_slots_full"
+                if wave >= slot_limit
+                else "not_enough_resources"
+            )
+            skipped.append({"wave": wave + 1, "reason": reason_key})
+
         conn.execute(
             "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
-            ("completed", len(started), now, batch_id),
+            ("completed", start_count, now, batch_id),
         )
+
+        try:
+            from .directives.progress import emit_fleet_missions_sent
+
+            emit_fleet_missions_sent(
+                int(player_id),
+                mission="expedition",
+                fleet_ids=fleet_ids,
+                conn=conn,
+                now=now,
+            )
+        except Exception:
+            logger.exception(
+                "imperial_directives mass expedition send progress failed player=%s batch=%s",
+                player_id,
+                batch_id,
+            )
 
         if own:
             commit(conn)
 
-        cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
-        batch_row = dict(cur.fetchone())
-
         return True, "", {
             "batch": {
                 "id": batch_id,
-                "batch_type": batch_row["batch_type"],
-                "status": batch_row["status"],
-                "total_fleets": len(started),
-                "label": batch_row["label"],
+                "batch_type": "mass_expedition",
+                "status": "completed",
+                "total_fleets": start_count,
+                "label": batch_label,
             },
             "started": started,
             "skipped": skipped,
             "per_fleet_ships": per_slot,
             "leftover_ships": leftover,
-            "started_count": len(started),
+            "started_count": start_count,
             "active_slots": get_fleet_slot_status(player_id, conn=conn),
         }
     except Exception:
@@ -7575,7 +7980,6 @@ def mass_expedition_from_ships(
     finally:
         if own and conn is not None:
             conn.close()
-
 
 def mass_expedition(
     *,
