@@ -288,7 +288,9 @@ Planet-Scope: Hub = aktiver Kontext-Planet (`get_context_planet`) bzw. explizit 
 - Hold-Ende → return
 - Returns abschließen
 
-**Globaler Worker:** `game/fleet_worker.run_fleet_worker()` — verarbeitet fällige Bewegungen **aller** Spieler, auch wenn niemand online ist. HTTP cron: `POST /api/internal/cron/fleet-tick` (Bearer `GC_INTERNAL_CRON_TOKEN`); piggyback auf Ranking-Cron; throttled safety net bei Live-Requests (`_load_page_live_context`). Intervall: `GC_FLEET_WORKER_INTERVAL_SEC` (default 60); bei global fälligen Flotten wird sofort getickt.
+**Globaler Worker:** `game/fleet_worker.run_fleet_worker()` — verarbeitet fällige Bewegungen **aller** Spieler, auch wenn niemand online ist. HTTP cron: `POST /api/internal/cron/fleet-tick` (Bearer `GC_INTERNAL_CRON_TOKEN`); Intervall `GC_FLEET_WORKER_INTERVAL_SEC` (default 60).
+
+**GC-PERF-FLEET-DEADLINE-005:** Online-Spieler warten bei einem echten Deadline-Ablauf nicht auf den nächsten globalen 60-s-Tick. Der vorhandene Game-State-Poll prüft über `player_fleet_is_dirty()` nur per indexiertem EXISTS, ob überhaupt eine Phase fällig ist. Nur dann läuft `process_player_due_fleets_now()`: eigene Connection, kurze per-Movement-Transaktionen, begrenztes Zeit-/Movement-Budget und Priorität **Return → Holding → Outbound**. Damit werden Rückkehr/Slots/Loot sowie Expeditionsergebnis + Nachricht direkt nach Ablauf sichtbar, ohne einen neuen Dauer-Poller einzuführen.
 
 Aufgerufen von:
 
