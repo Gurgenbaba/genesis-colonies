@@ -3079,6 +3079,14 @@ def fleet_view():
                         conn=conn,
                         planet_rows=page_planets,
                     )
+                    # Keep only the tiny Fleet shell contract so initFleet can
+                    # accept SSR as ready without fetching the hidden Send catalog.
+                    fleet_ctx = {
+                        "ready": bool(logistics_ctx.get("ready")),
+                        "planet_id": int(planet["id"]),
+                        "fuel_resource": "fuel_cells",
+                        "expedition_position": 16,
+                    }
     finally:
         conn.close()
 
