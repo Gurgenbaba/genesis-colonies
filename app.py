@@ -3027,6 +3027,9 @@ def fleet_view():
     start_ssr_perf("/fleet")
     ssr = current_ssr_perf()
 
+    requested_mode = str(request.args.get("mode", "send") or "send").strip().lower()
+    fleet_mode = requested_mode if requested_mode in {"send", "collect", "distribute"} else "send"
+
     conn = db()
     try:
         ctx_t0 = time.perf_counter()
@@ -3050,32 +3053,32 @@ def fleet_view():
         logistics_ctx: Dict[str, Any] = {"ready": False}
         if fleet_schema_ready(conn):
             from game.live_state import perf_span
+            from game.models import get_planets_by_player
 
             planet_dict = dict(planet)
             player_id = int(player_view["id"])
-            # GC-PERF-FLEET-SHARED-004: both Fleet panels belong to one SSR
-            # request. Reuse its planet list + canonical maintenance results.
-            from game.models import get_planets_by_player
-
             page_planets = [dict(p) for p in get_planets_by_player(player_id, conn=conn)]
+
+            # GC-PERF-FLEET-SSR-005: only build the context the requested mode
+            # can actually render. Hidden Send/Logistics panels no longer make
+            # every /fleet SSR pay both catalogs and their request-local reads.
             with perf_span("page_context.fleet"):
-                fleet_ctx = build_fleet_page_context(
-                    player_id=player_id,
-                    planet_id=int(planet["id"]),
-                    planet=planet_dict,
-                    conn=conn,
-                    planet_rows=page_planets,
-                )
-                logistics_ctx = build_logistics_page_context(
-                    player_id=player_id,
-                    planet_id=int(planet["id"]),
-                    planet=planet_dict,
-                    conn=conn,
-                    planet_rows=page_planets,
-                    maintenance_prepared=True,
-                    fleet_slots=fleet_ctx.get("fleet_slots"),
-                    mission_locks=fleet_ctx.get("mission_locks"),
-                )
+                if fleet_mode == "send":
+                    fleet_ctx = build_fleet_page_context(
+                        player_id=player_id,
+                        planet_id=int(planet["id"]),
+                        planet=planet_dict,
+                        conn=conn,
+                        planet_rows=page_planets,
+                    )
+                else:
+                    logistics_ctx = build_logistics_page_context(
+                        player_id=player_id,
+                        planet_id=int(planet["id"]),
+                        planet=planet_dict,
+                        conn=conn,
+                        planet_rows=page_planets,
+                    )
     finally:
         conn.close()
 
