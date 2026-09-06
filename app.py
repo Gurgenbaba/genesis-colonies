@@ -2906,10 +2906,18 @@ def shipyard_view():
 def defense_view():
     import time
 
-    from game.live_state import current_ssr_perf, finish_ssr_perf, start_ssr_perf
+    from game.live_state import (
+        current_ssr_perf,
+        finish_ssr_perf,
+        perf_span,
+        start_ssr_perf,
+    )
 
     start_ssr_perf("/defense")
     ssr = current_ssr_perf()
+
+    requested_tab = str(request.args.get("tab", "structures") or "structures").strip().lower()
+    defense_tab = requested_tab if requested_tab in {"structures", "troops"} else "structures"
 
     data_t0 = time.perf_counter()
     conn = db()
@@ -2926,11 +2934,13 @@ def defense_view():
         planet = ctx.get("planet")
         if not planet:
             planet = get_request_context_planet(int(session.get("user_id") or 0), conn=conn)
-        defense_ctx = build_defense_page_context(
-            int(session.get("user_id") or 0),
-            planet,
-            conn=conn,
-        )
+        with perf_span("page_context.defense"):
+            defense_ctx = build_defense_page_context(
+                int(session.get("user_id") or 0),
+                planet,
+                conn=conn,
+                tab=defense_tab,
+            )
     finally:
         conn.close()
 

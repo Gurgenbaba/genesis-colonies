@@ -50,6 +50,7 @@ _PHASE_ALIASES = {
     "page_context.overview": "page_context_overview_ms",
     "page_context.shipyard": "page_context_shipyard_ms",
     "page_context.fleet": "page_context_fleet_ms",
+    "page_context.defense": "page_context_defense_ms",
     # GC-PERF-AUTO-007B — fleets_hud / live_context children
     "fleets.dirty_tick": "fleets_dirty_tick_ms",
     "fleets.alerts": "fleets_alerts_ms",
@@ -97,6 +98,7 @@ _COMPONENT_DISPLAY = {
     "page_context_overview_ms": "page_context.overview",
     "page_context_shipyard_ms": "page_context.shipyard",
     "page_context_fleet_ms": "page_context.fleet",
+    "page_context_defense_ms": "page_context.defense",
     "live_state_ms": "live_state",
     "db_query_ms": "database",
     "template_ms": "template",
