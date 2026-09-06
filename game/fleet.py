@@ -6365,13 +6365,129 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     return False
 
 
-def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float) -> bool:
+def _expedition_tick_shared_context(
+    movement: Mapping[str, Any],
+    *,
+    conn,
+    now: float,
+    cache: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, int, Dict[str, Any]]:
+    """Reuse expensive read-only expedition snapshots within one fleet tick."""
+    from .i18n import get_player_locale
+
+    player_id = int(movement.get("player_id") or 0)
+    root: Dict[str, Any] = cache if cache is not None else {}
+    players = root.setdefault("players", {})
+    pctx = players.get(player_id)
+    if pctx is None:
+        booster_flags: Dict[str, Any] = {}
+        try:
+            from .inventory_boosters import get_expedition_booster_flags
+
+            booster_flags = dict(
+                get_expedition_booster_flags(player_id, conn=conn) or {}
+            )
+        except Exception:
+            booster_flags = {}
+
+        alliance_mult = 1.0
+        alliance_event_bonus = 0.0
+        try:
+            from .alliance import get_alliance_effect_modifiers
+
+            alliance_mods = get_alliance_effect_modifiers(player_id, conn=conn)
+            alliance_mult = float(alliance_mods.get("expedition_loot_mult") or 1.0)
+            alliance_event_bonus = float(
+                alliance_mods.get("expedition_event_bonus") or 0.0
+            )
+        except Exception:
+            pass
+
+        from .empire_page import get_empire_production_aggregate
+
+        empire_prod = get_empire_production_aggregate(player_id, conn=conn)
+        pctx = {
+            "sender_locale": get_player_locale(player_id, conn=conn),
+            "empire_daily_total": int(empire_prod.get("total_per_day") or 0),
+            "booster_flags": booster_flags,
+            "alliance_mult": alliance_mult,
+            "alliance_event_bonus": alliance_event_bonus,
+        }
+        players[player_id] = pctx
+
+    origin_galaxy = int(
+        movement.get("origin_galaxy") or movement.get("galaxy") or 0
+    ) or None
+    if origin_galaxy is None:
+        origin_id = int(movement.get("origin_planet_id") or 0)
+        origins = root.setdefault("origin_galaxies", {})
+        if origin_id not in origins:
+            row = conn.execute(
+                "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+                (origin_id,),
+            ).fetchone()
+            origins[origin_id] = (
+                int(row["galaxy"])
+                if row and row["galaxy"] is not None
+                else 0
+            )
+        origin_galaxy = int(origins.get(origin_id) or 0) or None
+
+    galactic_cache = root.setdefault("galactic_flags", {})
+    galaxy_key = (player_id, int(origin_galaxy or 0))
+    base_flags = galactic_cache.get(galaxy_key)
+    if base_flags is None:
+        base_flags = {}
+        if origin_galaxy:
+            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+            base_flags = dict(
+                get_directive_flags_for_galaxy(origin_galaxy, conn=conn) or {}
+            )
+        galactic_cache[galaxy_key] = base_flags
+
+    directive_flags = {
+        **dict(base_flags or {}),
+        **dict(pctx.get("booster_flags") or {}),
+    }
+    alliance_mult = float(pctx.get("alliance_mult") or 1.0)
+    alliance_event_bonus = float(pctx.get("alliance_event_bonus") or 0.0)
+    if alliance_mult > 1.0:
+        directive_flags["expedition_loot_mult"] = float(
+            directive_flags.get("expedition_loot_mult") or 1.0
+        ) * alliance_mult
+    if alliance_event_bonus > 0.0:
+        directive_flags["expedition_event_bonus"] = float(
+            directive_flags.get("expedition_event_bonus") or 0.0
+        ) + alliance_event_bonus
+
+    return (
+        str(pctx.get("sender_locale") or "de"),
+        int(pctx.get("empire_daily_total") or 0),
+        directive_flags,
+    )
+
+
+def _handle_expedition_holding_end(
+    movement: Dict[str, Any],
+    *,
+    conn,
+    now: float,
+    resolution_cache: Optional[Dict[str, Any]] = None,
+) -> bool:
     """Resolve expedition loot after the stay phase, notify, then start return flight."""
-    from .i18n import get_player_locale, tr
+    from .i18n import tr
 
     movement_id = int(movement["id"])
     player_id = int(movement["player_id"])
-    sender_locale = get_player_locale(player_id, conn=conn)
+    sender_locale, empire_daily_total, directive_flags = (
+        _expedition_tick_shared_context(
+            movement,
+            conn=conn,
+            now=now,
+            cache=resolution_cache,
+        )
+    )
     ships = movement.get("ships") or {}
     coords = movement.get("target_coords") or ""
     raw_res = movement.get("resources") or {}
@@ -6388,52 +6504,14 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             world_context = None
     cargo_total = calculate_expedition_loot_cap(ships)
     flight_seconds_base = int(movement.get("flight_seconds") or 1)
-    origin_galaxy = int(movement.get("origin_galaxy") or movement.get("galaxy") or 0) or None
-    if origin_galaxy is None:
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
-                (int(movement.get("origin_planet_id") or 0),),
-            )
-            grow = cur.fetchone()
-            if grow and grow["galaxy"] is not None:
-                origin_galaxy = int(grow["galaxy"])
-        except Exception:
-            origin_galaxy = None
-    directive_flags: Dict[str, Any] = {}
-    if origin_galaxy:
-        from .galactic_directives.mechanics import get_directive_flags_for_galaxy
-
-        directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
-    try:
-        from .inventory_boosters import get_expedition_booster_flags
-
-        directive_flags = {**directive_flags, **get_expedition_booster_flags(player_id, conn=conn)}
-    except Exception:
-        pass
-    try:
-        from .alliance import get_alliance_effect_modifiers
-
-        alliance_mods = get_alliance_effect_modifiers(player_id, conn=conn)
-        alliance_mult = float(alliance_mods.get("expedition_loot_mult") or 1.0)
-        alliance_event_bonus = float(alliance_mods.get("expedition_event_bonus") or 0.0)
-        if alliance_mult > 1.0:
-            directive_flags["expedition_loot_mult"] = float(
-                directive_flags.get("expedition_loot_mult") or 1.0
-            ) * alliance_mult
-        if alliance_event_bonus > 0.0:
-            directive_flags["expedition_event_bonus"] = float(
-                directive_flags.get("expedition_event_bonus") or 0.0
-            ) + alliance_event_bonus
-    except Exception:
-        pass
-    from .empire_page import get_empire_production_aggregate
-
-    empire_prod = get_empire_production_aggregate(player_id, conn=conn)
-    empire_daily_total = int(empire_prod.get("total_per_day") or 0)
-    daily_expedition_count = get_expedition_daily_count(player_id, conn=conn, ts=now)
-    daily_efficiency_mult = expedition_daily_efficiency_multiplier(daily_expedition_count)
+    daily_expedition_count = get_expedition_daily_count(
+        player_id,
+        conn=conn,
+        ts=now,
+    )
+    daily_efficiency_mult = expedition_daily_efficiency_multiplier(
+        daily_expedition_count
+    )
     familiarity_status = None
     if world_key:
         try:
@@ -6670,10 +6748,21 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     return True
 
 
-def _handle_holding_end(movement: Dict[str, Any], *, conn, now: float) -> bool:
+def _handle_holding_end(
+    movement: Dict[str, Any],
+    *,
+    conn,
+    now: float,
+    resolution_cache: Optional[Dict[str, Any]] = None,
+) -> bool:
     mission = str(movement.get("mission_type") or "")
     if mission == "expedition":
-        return _handle_expedition_holding_end(movement, conn=conn, now=now)
+        return _handle_expedition_holding_end(
+            movement,
+            conn=conn,
+            now=now,
+            resolution_cache=resolution_cache,
+        )
     return _start_return(movement, conn=conn, now=now)
 
 
@@ -6965,6 +7054,7 @@ def _process_fleet_tick_shared_tx(
 ) -> None:
     """Legacy path: all due work on the caller's open write transaction."""
     cur = conn.cursor()
+    expedition_resolution_cache: Dict[str, Any] = {}
     params: List[Any] = [now]
     player_filter = ""
     if player_id is not None:
@@ -7020,7 +7110,12 @@ def _process_fleet_tick_shared_tx(
                 conn,
                 phase="holding",
                 movement_id=int(mv["id"]),
-                fn=lambda: _handle_holding_end(mv, conn=conn, now=now),
+                fn=lambda: _handle_holding_end(
+                    mv,
+                    conn=conn,
+                    now=now,
+                    resolution_cache=expedition_resolution_cache,
+                ),
             ):
                 result["processed_holding"] += 1
         except Exception as exc:
@@ -7214,6 +7309,7 @@ def _process_fleet_tick_short_tx(
     run_t0 = _time.perf_counter()
     started = 0
     deferred = 0
+    expedition_resolution_cache: Dict[str, Any] = {}
     result.setdefault("budget", {})
     result["budget"] = {
         "max_movements": max_movements,
@@ -7271,10 +7367,18 @@ def _process_fleet_tick_short_tx(
         fail_fn=_fail_outbound_movement,
         fail_missions={"attack", "expedition"},
     )
+    def _handle_holding_cached(movement, *, conn, now):
+        return _handle_holding_end(
+            movement,
+            conn=conn,
+            now=now,
+            resolution_cache=expedition_resolution_cache,
+        )
+
     _run_batch(
         holding_entries,
         expect_status="holding",
-        handler=_handle_holding_end,
+        handler=_handle_holding_cached,
         counter_key="processed_holding",
     )
     _run_batch(
