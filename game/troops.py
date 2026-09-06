@@ -11,6 +11,7 @@ from .shipyard import (
     BUILD_TIME_LEVEL_FACTOR,
     orbital_production_batch_capacity,
     production_job_duration_seconds,
+    production_level_cycle_seconds,
     production_live_order_remaining_seconds,
     production_progressive_units_to_deliver,
     production_schedule_matches_live_params,
@@ -44,8 +45,11 @@ def unit_train_seconds(troop_key: str, barracks_level: int) -> int:
     """Cycle length for one batch at this barracks level (yard-style decay)."""
     base = base_unit_seconds_for_troop(troop_key)
     lvl = max(1, int(barracks_level or 1))
-    seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
-    return max(1, seconds)
+    return production_level_cycle_seconds(
+        base,
+        lvl,
+        level_factor=BUILD_TIME_LEVEL_FACTOR,
+    )
 
 
 def _job_duration_seconds(troop_key: str, amount: int, barracks_level: int) -> int:
