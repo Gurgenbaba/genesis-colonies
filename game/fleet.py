@@ -7658,7 +7658,7 @@ def mass_expedition_from_ships(
             begin_write_transaction(conn)
 
         # One origin lock + one authoritative validation for the whole identical
-        # wave set. The old path called send_fleet() N times and repeated the
+        # wave set. The old path invoked the generic sender N times and repeated the
         # planet read, lock, resource tick, target resolution, slot query,
         # hangar deduction and planet resource UPDATE for every wave.
         lock_planet_for_update(conn, int(origin_planet_id))
