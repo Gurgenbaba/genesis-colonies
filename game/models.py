@@ -1473,9 +1473,9 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
                 # PostgreSQL NUMERIC receives Python ints losslessly. SQLite keeps
                 # the legacy REAL fallback only when a value exceeds signed i64.
                 # Do not clamp here: SQL preserves the existing non-negative contract.
-                resource_db_param(planet["metal"]),
-                resource_db_param(planet["crystal"]),
-                resource_db_param(planet.get("fuel_cells", 0)),
+                resource_numeric_cast_param(planet["metal"]),
+                resource_numeric_cast_param(planet["crystal"]),
+                resource_numeric_cast_param(planet.get("fuel_cells", 0)),
                 float(planet.get("last_update", time.time())),
                 int(planet.get("energy_total", 0)),
                 int(planet.get("energy_used", 0)),
@@ -1539,6 +1539,17 @@ def resource_db_param(value: Any) -> int | float:
         return amount
     return float(amount)
 
+
+def resource_numeric_cast_param(value: Any) -> str | int | float:
+    """Bind a resource for an explicit CAST(? AS NUMERIC) persistence boundary."""
+    amount = int(Decimal(str(value or 0)))
+    from .db import get_db_backend
+
+    if get_db_backend() == "postgres":
+        # Text + explicit SQL CAST avoids any driver-side integer/float OID
+        # inference for values far beyond IEEE-754 and signed i64.
+        return str(amount)
+    return resource_db_param(amount)
 
 def _resource_cost_db_param(value: int) -> int | float:
     """Compatibility wrapper for atomic resource spends."""
