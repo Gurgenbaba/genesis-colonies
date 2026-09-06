@@ -7429,7 +7429,7 @@ def mass_expedition_from_ships(
     speed_percent: int = 100,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """GC-981 — split selected ships evenly across free expedition slots."""
+    """GC-981 / GC-PERF-MASS-EXPO-004 — bulk-create identical expedition waves."""
     own = conn is None
     if own:
         conn = db()
@@ -7450,32 +7450,15 @@ def mass_expedition_from_ships(
         if pct < 10 or pct > 100:
             pct = 100
 
-        slots = get_fleet_slot_status(int(player_id), conn=conn)
-        max_start = mass_expedition_available_slots(int(player_id), conn=conn)
-
         if own:
             begin_write_transaction(conn)
 
-        now = _now()
+        # One origin lock + one authoritative validation for the whole identical
+        # wave set. The old path called send_fleet() N times and repeated the
+        # planet read, lock, resource tick, target resolution, slot query,
+        # hangar deduction and planet resource UPDATE for every wave.
+        lock_planet_for_update(conn, int(origin_planet_id))
         cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO fleet_batches (player_id, batch_type, label, status, total_fleets, created_at, updated_at)
-            VALUES (?, 'mass_expedition', ?, 'running', ?, ?, ?);
-            """,
-            (
-                int(player_id),
-                f"Mass expedition x{slot_count}",
-                slot_count,
-                now,
-                now,
-            ),
-        )
-        batch_id = int(cur.lastrowid)
-
-        started: List[Dict[str, Any]] = []
-        skipped: List[Dict[str, Any]] = []
-
         cur.execute(
             "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
             (int(origin_planet_id), int(player_id)),
@@ -7490,82 +7473,300 @@ def mass_expedition_from_ships(
         tg, ts, _ = origin_coords
         target_position = EXPEDITION_POSITION
 
-        # GC-PERF-MASS-EXPO-003: all waves share one origin and one atomic
-        # transaction, so resolve fleet effects once for the whole batch.
         batch_fleet_modifiers = _fleet_galactic_modifiers(
             int(player_id),
             conn,
             galaxy=int(origin_planet.get("galaxy") or tg or 0) or None,
         )
-
-        for wave in range(slot_count):
-            if len(started) >= max_start:
-                skipped.append({"wave": wave + 1, "reason": "fleet_slots_full"})
-                continue
-
-            ok, send_reason, payload = send_fleet(
-                player_id=player_id,
-                origin_planet_id=origin_planet_id,
-                target_galaxy=tg,
-                target_system=ts,
-                target_position=target_position,
-                mission_type="expedition",
-                ships=per_slot,
-                resources={},
-                speed_percent=pct,
-                batch_id=batch_id,
-                departure_at=int(now) + len(started) * MASS_EXPEDITION_STAGGER_SECONDS,
-                conn=conn,
-                fleet_modifiers=batch_fleet_modifiers,
-                compact_result=True,
-            )
-            if ok and payload:
-                started.append({"wave": wave + 1, "fleet_id": payload["fleet"]["id"]})
-            else:
-                skipped.append({"wave": wave + 1, "reason": send_reason or "send_failed"})
-
-        if not started:
-            # Mirror logistics: never soft-succeed with zero fleets launched.
+        ok_send, send_reason, send_ctx = validate_fleet_send(
+            player_id=int(player_id),
+            origin_planet_id=int(origin_planet_id),
+            target_galaxy=int(tg),
+            target_system=int(ts),
+            target_position=int(target_position),
+            mission_type="expedition",
+            ships=per_slot,
+            resources={},
+            speed_percent=pct,
+            conn=conn,
+            fleet_modifiers=batch_fleet_modifiers,
+            persist_resources=True,
+        )
+        if not ok_send or not send_ctx:
             if own:
                 rollback(conn)
-            fail_reason = (
-                str((skipped[0] or {}).get("reason") or "")
-                if skipped
-                else "send_failed"
-            ) or "send_failed"
-            return False, fail_reason, {
+            return False, send_reason or "send_failed", {
                 "started": [],
-                "skipped": skipped,
+                "skipped": [],
                 "per_fleet_ships": per_slot,
                 "leftover_ships": leftover,
                 "started_count": 0,
                 "active_slots": get_fleet_slot_status(player_id, conn=conn),
             }
 
+        origin_planet = dict(send_ctx["origin_planet"])
+        flight_preview = dict(send_ctx["preview"])
+        target_info = dict(send_ctx.get("target") or {})
+        resolved_target = send_ctx.get("resolved_target")
+        target = (
+            tuple(resolved_target)
+            if resolved_target
+            else (int(tg), int(ts), int(EXPEDITION_POSITION))
+        )
+        target_position = int(target[2])
+
+        # Slot state can change between preview and the write transaction, so
+        # resolve the actual launch ceiling once after the origin row is locked.
+        slot_limit = min(
+            int(slot_count),
+            int(mass_expedition_available_slots(int(player_id), conn=conn)),
+        )
+        fuel_cost_per_wave = max(0, int(flight_preview.get("fuel_cost") or 0))
+        fuel_have = max(0, int(origin_planet.get("fuel_cells") or 0))
+        fuel_limit = (
+            slot_limit
+            if fuel_cost_per_wave <= 0
+            else min(slot_limit, fuel_have // fuel_cost_per_wave)
+        )
+        start_count = max(0, int(fuel_limit))
+
+        if start_count <= 0:
+            if own:
+                rollback(conn)
+            fail_reason = "fleet_slots_full" if slot_limit <= 0 else "not_enough_resources"
+            return False, fail_reason, {
+                "started": [],
+                "skipped": [
+                    {"wave": wave + 1, "reason": fail_reason}
+                    for wave in range(slot_count)
+                ],
+                "per_fleet_ships": per_slot,
+                "leftover_ships": leftover,
+                "started_count": 0,
+                "active_slots": get_fleet_slot_status(player_id, conn=conn),
+            }
+
+        total_ships = {
+            str(key): int(amount) * start_count
+            for key, amount in per_slot.items()
+            if int(amount) > 0
+        }
+        ok_deduct, deduct_reason = deduct_planet_ships(
+            int(origin_planet_id),
+            total_ships,
+            conn=conn,
+        )
+        if not ok_deduct:
+            if own:
+                rollback(conn)
+            return False, deduct_reason or "not_enough_ships", None
+
+        total_fuel_cost = fuel_cost_per_wave * start_count
+        metal_have = int(origin_planet.get("metal") or 0)
+        crystal_have = int(origin_planet.get("crystal") or 0)
+        new_metal, new_crystal, new_fuel_cells = apply_departure_deduction(
+            metal_have,
+            crystal_have,
+            fuel_have,
+            {},
+            total_fuel_cost,
+        )
+        if new_fuel_cells < 0:
+            if own:
+                rollback(conn)
+            return False, "not_enough_resources", None
+
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (
+                resource_db_param(new_metal),
+                resource_db_param(new_crystal),
+                resource_db_param(new_fuel_cells),
+                int(origin_planet_id),
+            ),
+        )
+
+        now = _now()
+        batch_label = f"Mass expedition x{slot_count}"
+        cur.execute(
+            """
+            INSERT INTO fleet_batches (
+                player_id, batch_type, label, status,
+                total_fleets, created_at, updated_at
+            )
+            VALUES (?, 'mass_expedition', ?, 'running', ?, ?, ?);
+            """,
+            (
+                int(player_id),
+                batch_label,
+                start_count,
+                now,
+                now,
+            ),
+        )
+        batch_id = int(cur.lastrowid)
+
+        flight_seconds = int(flight_preview["flight_seconds"])
+        distance = int(flight_preview["distance"])
+        resources_store = {
+            "expedition_hours": normalize_expedition_hours(None),
+        }
+        target_planet_id = target_info.get("target_planet_id")
+        has_troops_col = fleet_troops_column_ready(conn)
+        movement_params: List[Tuple[Any, ...]] = []
+
+        for wave in range(start_count):
+            dep_ts = int(now) + wave * MASS_EXPEDITION_STAGGER_SECONDS
+            outbound = build_outbound_timing(
+                departure_at=dep_ts,
+                duration_seconds=flight_seconds,
+            )
+            common = (
+                int(player_id),
+                int(origin_planet_id),
+                target_planet_id,
+                int(target[0]),
+                int(target[1]),
+                int(target_position),
+                "expedition",
+                outbound["departure_at"],
+                outbound["arrival_at"],
+                _json_dumps(per_slot),
+                _json_dumps(resources_store),
+            )
+            if has_troops_col:
+                movement_params.append(
+                    common
+                    + (
+                        _json_dumps({}),
+                        fuel_cost_per_wave,
+                        pct,
+                        distance,
+                        flight_seconds,
+                        None,
+                        batch_id,
+                        now,
+                        now,
+                    )
+                )
+            else:
+                movement_params.append(
+                    common
+                    + (
+                        fuel_cost_per_wave,
+                        pct,
+                        distance,
+                        flight_seconds,
+                        None,
+                        batch_id,
+                        now,
+                        now,
+                    )
+                )
+
+        if has_troops_col:
+            cur.executemany(
+                """
+                INSERT INTO fleet_movements (
+                    player_id, origin_planet_id, target_planet_id,
+                    target_galaxy, target_system, target_position,
+                    mission_type, status, departure_at, arrival_at, return_at, holding_until,
+                    ships_json, resources_json, troops_json, fuel_cost,
+                    speed_percent, distance, flight_seconds, preset_id,
+                    parent_batch_id, created_at, updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                );
+                """,
+                movement_params,
+            )
+        else:
+            cur.executemany(
+                """
+                INSERT INTO fleet_movements (
+                    player_id, origin_planet_id, target_planet_id,
+                    target_galaxy, target_system, target_position,
+                    mission_type, status, departure_at, arrival_at, return_at, holding_until,
+                    ships_json, resources_json, fuel_cost,
+                    speed_percent, distance, flight_seconds, preset_id,
+                    parent_batch_id, created_at, updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                );
+                """,
+                movement_params,
+            )
+
+        fleet_rows = conn.execute(
+            """
+            SELECT id
+            FROM fleet_movements
+            WHERE player_id = ? AND parent_batch_id = ?
+            ORDER BY id ASC;
+            """,
+            (int(player_id), int(batch_id)),
+        ).fetchall()
+        fleet_ids = [int(row["id"]) for row in fleet_rows]
+        if len(fleet_ids) != start_count:
+            raise RuntimeError(
+                f"mass expedition bulk insert mismatch: expected={start_count} got={len(fleet_ids)}"
+            )
+
+        started = [
+            {"wave": wave + 1, "fleet_id": fleet_id}
+            for wave, fleet_id in enumerate(fleet_ids)
+        ]
+        skipped: List[Dict[str, Any]] = []
+        for wave in range(start_count, slot_count):
+            reason_key = (
+                "fleet_slots_full"
+                if wave >= slot_limit
+                else "not_enough_resources"
+            )
+            skipped.append({"wave": wave + 1, "reason": reason_key})
+
         conn.execute(
             "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
-            ("completed", len(started), now, batch_id),
+            ("completed", start_count, now, batch_id),
         )
+
+        try:
+            from .directives.progress import emit_fleet_missions_sent
+
+            emit_fleet_missions_sent(
+                int(player_id),
+                mission="expedition",
+                fleet_ids=fleet_ids,
+                conn=conn,
+                now=now,
+            )
+        except Exception:
+            logger.exception(
+                "imperial_directives mass expedition send progress failed player=%s batch=%s",
+                player_id,
+                batch_id,
+            )
 
         if own:
             commit(conn)
 
-        cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
-        batch_row = dict(cur.fetchone())
-
         return True, "", {
             "batch": {
                 "id": batch_id,
-                "batch_type": batch_row["batch_type"],
-                "status": batch_row["status"],
-                "total_fleets": len(started),
-                "label": batch_row["label"],
+                "batch_type": "mass_expedition",
+                "status": "completed",
+                "total_fleets": start_count,
+                "label": batch_label,
             },
             "started": started,
             "skipped": skipped,
             "per_fleet_ships": per_slot,
             "leftover_ships": leftover,
-            "started_count": len(started),
+            "started_count": start_count,
             "active_slots": get_fleet_slot_status(player_id, conn=conn),
         }
     except Exception:
@@ -7575,7 +7776,6 @@ def mass_expedition_from_ships(
     finally:
         if own and conn is not None:
             conn.close()
-
 
 def mass_expedition(
     *,
