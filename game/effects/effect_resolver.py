@@ -20,7 +20,7 @@ from decimal import Decimal, localcontext
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..economy_balance import STORAGE_BASE_CAPACITY
-from ..exact_math import bounded_ratio_float
+from ..exact_math import bounded_ratio_float, scale_int
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
 from ..planet_evolution.repository import get_context_planet
 
@@ -1365,12 +1365,12 @@ class EffectResolver:
         b = self.buildings
 
         terra_lvl = _bld(b, "terraformer")
-        terra_factor = 1.0 + 0.05 * terra_lvl
-        storage_factor = _mod_float(mods, "storage_factor") * terra_factor
+        terra_factor = Decimal(1) + Decimal("0.05") * Decimal(terra_lvl)
+        storage_factor = _mod_float(mods, "storage_factor")
 
         f_lvl = _bld(b, "fuel_storage")
         f_cap = self._storage_base_cap("fuel_cells", f_lvl)
-        return int(f_cap * storage_factor)
+        return scale_int(f_cap, storage_factor, terra_factor)
 
     def fuel_cells_storage_capacity(self) -> int:
         """Authoritative fuel_cells cap — same base storage as metal/crystal without depot."""
@@ -1392,8 +1392,8 @@ class EffectResolver:
         b = self.buildings
 
         terra_lvl = _bld(b, "terraformer")
-        terra_factor = 1.0 + 0.05 * terra_lvl
-        storage_factor = _mod_float(mods, "storage_factor") * terra_factor
+        terra_factor = Decimal(1) + Decimal("0.05") * Decimal(terra_lvl)
+        storage_factor = _mod_float(mods, "storage_factor")
 
         m_lvl = _bld(b, "metal_storage")
         c_lvl = _bld(b, "crystal_storage")
@@ -1402,8 +1402,8 @@ class EffectResolver:
         c_cap = self._metal_crystal_storage_base_cap("crystal", c_lvl)
 
         return {
-            "metal": int(m_cap * storage_factor),
-            "crystal": int(c_cap * storage_factor),
+            "metal": scale_int(m_cap, storage_factor, terra_factor),
+            "crystal": scale_int(c_cap, storage_factor, terra_factor),
             "fuel_cells": self.fuel_cells_storage_capacity(),
         }
 
