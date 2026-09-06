@@ -6829,16 +6829,33 @@ def _handle_holding_end(
 
 
 def _handle_return(movement: Dict[str, Any], *, conn, now: float) -> bool:
-    from .i18n import get_player_locale, tr
-
     movement_id = int(movement["id"])
     player_id = int(movement["player_id"])
-    sender_locale = get_player_locale(player_id, conn=conn)
     mission = str(movement.get("mission_type") or "")
     origin_id = int(movement["origin_planet_id"])
-    target_id = _safe_int(movement.get("target_planet_id"))
     ships = movement.get("ships") or {}
     resources = movement.get("resources") or {}
+
+    # GC-PERF-MASS-EXPO-004: expedition returns have no dedicated return report.
+    # Finish + credit directly instead of loading locale, planet names and batch
+    # metadata for every wave.
+    if mission == "expedition":
+        if not _complete_movement(
+            movement_id,
+            conn=conn,
+            now=now,
+            from_status="returning",
+        ):
+            return False
+        add_planet_ships(origin_id, player_id, ships, conn=conn)
+        if loaded_resource_total(resources) > 0:
+            _credit_planet_resources(origin_id, resources, conn=conn)
+        return True
+
+    from .i18n import get_player_locale, tr
+
+    sender_locale = get_player_locale(player_id, conn=conn)
+    target_id = _safe_int(movement.get("target_planet_id"))
     coords = movement.get("target_coords") or ""
     cur = conn.cursor()
     cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
