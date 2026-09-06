@@ -9,17 +9,25 @@ def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_fleet_route_reuses_one_planet_list_and_send_results():
+def test_fleet_route_builds_only_the_requested_heavy_context():
     app = _read("app.py")
     route = app.split('def fleet_view():', 1)[1].split('\n@app.route("/alliance")', 1)[0]
 
-    assert "GC-PERF-FLEET-SHARED-004" in route
+    assert "GC-PERF-FLEET-SSR-005" in route
+    assert 'request.args.get("mode", "send")' in route
+    assert 'if fleet_mode == "send":' in route
     assert route.count("get_planets_by_player(") == 1
     assert "page_planets = [dict(p) for p in get_planets_by_player" in route
     assert route.count("planet_rows=page_planets") == 2
-    assert "maintenance_prepared=True" in route
-    assert 'fleet_slots=fleet_ctx.get("fleet_slots")' in route
-    assert 'mission_locks=fleet_ctx.get("mission_locks")' in route
+    assert "maintenance_prepared=True" not in route
+
+    branches = route.split('                if fleet_mode == "send":', 1)[1]
+    send_branch, logistics_branch = branches.split('                else:', 1)
+    assert "build_fleet_page_context(" in send_branch
+    assert "build_logistics_page_context(" not in send_branch
+    assert "build_logistics_page_context(" in logistics_branch
+    assert '"ready": bool(logistics_ctx.get("ready"))' in logistics_branch
+    assert "build_fleet_page_context(" not in logistics_branch
 
 
 def test_logistics_builder_only_skips_maintenance_when_explicitly_prepared():
