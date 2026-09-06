@@ -16,8 +16,10 @@ from game.expedition_events import (
 
 @pytest.mark.skipif(get_db_backend() != "postgres", reason="PostgreSQL concurrency contract")
 def test_concurrent_duplicate_expedition_daily_record_is_exactly_once():
-    movement_id = 9_006_000_000 + int(time.time() * 1000) % 1_000_000
-    player_id = 8_006_000_000 + int(time.time() * 1000) % 1_000_000
+    # These are relational IDs, not gameplay quantities; keep synthetic values
+    # inside the schema's PostgreSQL INTEGER range.
+    movement_id = 1_906_000_000 + int(time.time() * 1000) % 1_000_000
+    player_id = 1_806_000_000 + int(time.time() * 1000) % 1_000_000
     ts = float(time.time())
     bucket = expedition_daily_day_bucket(ts)
     value = 987_654_321
