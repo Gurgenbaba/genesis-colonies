@@ -63,6 +63,9 @@ def test_structures_ssr_shares_one_catalog_snapshot():
     assert payload.count("get_planet_buildings(") == 1
     assert payload.count("get_research_levels(") == 1
     assert payload.count("get_planet_defense(") == 1
+    assert payload.count("_defense_speed_multiplier(") == 1
+    assert "defense_build_speed = _defense_speed_multiplier(conn=conn)" in payload
+    assert "build_time_speed=defense_build_speed" in payload
     assert "buildings=building_levels" in payload
     assert "research=research_levels" in payload
     assert '"current_defense": defense_stock' in payload
