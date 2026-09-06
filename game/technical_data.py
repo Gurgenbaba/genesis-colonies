@@ -8,9 +8,12 @@ Frontend renders ``display`` blocks only — no game-mechanics math in JS.
 from __future__ import annotations
 
 import math
+from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .economy_balance import power_upgrade_cost, upgrade_roi_hours
+from .exact_math import decimal_value
+from .json_transport import JS_SAFE_INTEGER_MAX
 from .production_formula import (
     FERDI_GROWTH_RATE,
     LEVEL_GROWTH,
@@ -19,8 +22,10 @@ from .production_formula import (
     ProductionContext,
     ProductionModifiers,
     calculate_resource_output,
+    calculate_resource_output_decimal,
     level_growth,
     mine_output,
+    mine_output_decimal,
     normalize_resource_type,
     production_context_from_resolver,
     research_modifier_for,
@@ -40,6 +45,36 @@ MINE_BUILDINGS = frozenset(BUILDING_PRODUCTION_MAP.keys())
 TECHNICAL_MILESTONE_LEVELS: Tuple[int, ...] = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120)
 TECHNICAL_EARLY_GAME_MAX_LEVEL = 5
 TECHNICAL_PREVIEW_AHEAD = 5
+_EXACT_TECH_DISPLAY_LEVEL_THRESHOLD = 5_000
+
+
+def _decimal_display_precision(*values: Any) -> int:
+    digits = 1
+    for value in values:
+        dec = decimal_value(value)
+        if not dec:
+            continue
+        digits = max(digits, len(dec.as_tuple().digits), dec.adjusted() + 1)
+    return max(96, digits + 64)
+
+
+def _duration_hours_display(seconds: int) -> float | int:
+    """Hours for technical UI without forcing astronomical seconds through float."""
+    sec = max(0, int(seconds or 0))
+    if sec <= 0:
+        return 0.0
+    # Preserve all ordinary UI values exactly as before.
+    if sec <= JS_SAFE_INTEGER_MAX:
+        return round(sec / 3600.0, 1)
+
+    # At this magnitude tenths of an hour have no useful visual meaning. Return
+    # exact whole hours; the global JSON provider transports the huge int as text.
+    hours, rem = divmod(sec, 3600)
+    doubled = rem * 2
+    if doubled > 3600 or (doubled == 3600 and hours % 2):
+        hours += 1
+    return hours
+
 
 STORAGE_BUILDING_RESOURCES: Dict[str, str] = {
     "metal_storage": "metal",
@@ -160,6 +195,8 @@ def _building_output_at(
             planet_id=planet_id,
         )
         resource = BUILDING_PRODUCTION_MAP[building_type]
+        if max(0, int(level)) > _EXACT_TECH_DISPLAY_LEVEL_THRESHOLD:
+            return int(calculate_resource_output_decimal(resource, ctx))
         return int(calculate_resource_output(resource, ctx))
 
     from .logic import get_building_production_per_hour
@@ -210,7 +247,7 @@ def _upgrade_roi_hours(
         metal_cost=int(metal_cost or 0),
         crystal_cost=int(crystal_cost or 0),
         fuel_cells_cost=int(fuel_cells_cost or 0),
-        delta_per_hour=float(delta_per_hour or 0),
+        delta_per_hour=int(delta_per_hour or 0),
     )
     if not math.isfinite(roi):
         return None
@@ -283,7 +320,16 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
     standard_part = int(standard_output(key) * speed * mod_shared)
     mine_part = 0
     if lvl > 0:
-        mine_part = int(mine_output(key, lvl) * speed * mods.combined())
+        if lvl > _EXACT_TECH_DISPLAY_LEVEL_THRESHOLD:
+            with localcontext() as dec_ctx:
+                dec_ctx.prec = _decimal_display_precision(mine_output_decimal(key, lvl))
+                mine_part = int(
+                    mine_output_decimal(key, lvl)
+                    * decimal_value(speed, "1")
+                    * decimal_value(mods.combined(), "1")
+                )
+        else:
+            mine_part = int(mine_output(key, lvl) * speed * mods.combined())
 
     steps: List[Dict[str, Any]] = [
         {
@@ -297,7 +343,11 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
             {
                 "label_key": "technical_formula_base",
                 "detail": f"{cfg['multiplier']:g} × level × {LEVEL_GROWTH_RATE}^level",
-                "value_per_hour": int(mine_output(key, lvl) * speed),
+                "value_per_hour": (
+                    int(mine_output_decimal(key, lvl) * decimal_value(speed, "1"))
+                    if lvl > _EXACT_TECH_DISPLAY_LEVEL_THRESHOLD
+                    else int(mine_output(key, lvl) * speed)
+                ),
             }
         )
         if abs(mods.energy_modifier() - 1.0) > 0.0005 or abs(mod_shared - 1.0) > 0.0005:
@@ -309,7 +359,11 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
                 }
             )
 
-    total = int(calculate_resource_output(key, context))
+    total = (
+        int(calculate_resource_output_decimal(key, context))
+        if lvl > _EXACT_TECH_DISPLAY_LEVEL_THRESHOLD
+        else int(calculate_resource_output(key, context))
+    )
     steps.append({"label_key": "technical_formula_total", "value_per_hour": total, "is_total": True})
     return steps
 
@@ -420,11 +474,23 @@ def build_effect_percent_display(
     }
 
 
-def _impact_delta_pct(current: float, nxt: float) -> Optional[float]:
-    cur = float(current or 0)
+def _impact_delta_pct(current: Any, nxt: Any) -> Optional[float]:
+    """Optional percent hint derived after exact absolute values are known."""
+    cur = decimal_value(current)
+    nxt_dec = decimal_value(nxt)
     if cur <= 0:
         return None
-    return round(100.0 * (float(nxt) - cur) / cur, 1)
+    with localcontext() as ctx:
+        ctx.prec = _decimal_display_precision(cur, nxt_dec)
+        pct = ((nxt_dec - cur) * Decimal(100) / cur).quantize(
+            Decimal("0.1"),
+            rounding=ROUND_HALF_EVEN,
+        )
+    try:
+        out = float(pct)
+    except (OverflowError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
 
 
 def build_impact_summary(
@@ -456,7 +522,7 @@ def build_impact_summary(
     pct = next_delta_pct
     if pct is None and from_v is not None and to_v is not None:
         try:
-            pct = _impact_delta_pct(float(from_v), float(to_v))
+            pct = _impact_delta_pct(from_v, to_v)
         except (TypeError, ValueError):
             pct = None
     impact: Dict[str, Any] = {
@@ -1017,7 +1083,7 @@ def enrich_building_technical_row(
         display["capacity_step_delta"] = max(0, cap_cur - cap_prev) if lvl > 0 else 0
         time_s = int(row.get("time_seconds") or 0)
         if lvl >= 1 and time_s > 0:
-            display["upgrade_roi_hours"] = round(time_s / 3600.0, 1)
+            display["upgrade_roi_hours"] = _duration_hours_display(time_s)
         row["display"] = display
         return
 
@@ -1660,7 +1726,7 @@ def build_research_technical_summary(
     nxt = cur + 1
     effect = get_research_effect_preview(key, cur, nxt)
     time_s = int(next_row.get("time_seconds") or 0)
-    roi_hours = round(time_s / 3600.0, 1) if time_s > 0 else None
+    roi_hours = _duration_hours_display(time_s) if time_s > 0 else None
 
     if key == "energy_tech":
         from .effects import EffectResolver
