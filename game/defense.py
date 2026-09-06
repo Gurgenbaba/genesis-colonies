@@ -82,6 +82,7 @@ def _effective_build_seconds(
     *,
     conn=None,
     planet_id: int | None = None,
+    build_time_speed: float | None = None,
 ) -> int:
     """Per-unit build time — scaled by Orbital Shipyard level (shared with shipyard)."""
     spec = get_defense(defense_key)
@@ -96,7 +97,11 @@ def _effective_build_seconds(
         lvl,
         level_factor=BUILD_TIME_LEVEL_FACTOR,
     )
-    speed = _defense_speed_multiplier(conn=conn)
+    speed = (
+        max(0.000001, float(build_time_speed))
+        if build_time_speed is not None
+        else _defense_speed_multiplier(conn=conn)
+    )
     if planet_id and conn:
         from .shipyard import _directive_time_speed
 
@@ -110,9 +115,14 @@ def unit_build_seconds(
     *,
     conn=None,
     planet_id: int | None = None,
+    build_time_speed: float | None = None,
 ) -> int:
     return _effective_build_seconds(
-        defense_key, shipyard_level, conn=conn, planet_id=planet_id
+        defense_key,
+        shipyard_level,
+        conn=conn,
+        planet_id=planet_id,
+        build_time_speed=build_time_speed,
     )
 
 
@@ -1074,6 +1084,7 @@ def build_defense_api_payload(
         queue_full = False
         if defense_queue_table_ready(conn):
             queue_full = queue_count(planet_id, conn=conn) >= get_defense_queue_limit(conn=conn)
+        defense_build_speed = _defense_speed_multiplier(conn=conn)
         try:
             from .planet_evolution.repository import get_context_planet
 
@@ -1137,7 +1148,12 @@ def build_defense_api_payload(
                     "cost_metal": cost["metal"],
                     "cost_crystal": cost["crystal"],
                     "cost_fuel_cells": cost["fuel_cells"],
-                    "build_seconds": unit_build_seconds(key, sy_level, conn=conn),
+                    "build_seconds": unit_build_seconds(
+                        key,
+                        sy_level,
+                        conn=conn,
+                        build_time_speed=defense_build_speed,
+                    ),
                     "effective_batch_capacity": _batch_capacity_for_defense(key, sy_level),
                     "max_build": max_qty,
                     "stock": int(defense_stock.get(key, 0) or 0),
