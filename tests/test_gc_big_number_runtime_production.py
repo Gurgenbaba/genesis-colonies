@@ -21,6 +21,7 @@ from game.production_formula import (
 from tests.pg_fixtures import close_pg_pool, requires_postgres
 
 ROOT = Path(__file__).resolve().parents[1]
+CONSTRAINT_MIGRATION = ROOT / "migrations" / "174_pg_core_resource_numeric_constraints.sql"
 FLOAT_OVERFLOW_LEVEL = 20_000
 
 
@@ -64,6 +65,14 @@ def test_bigint_energy_ratio_is_bounded_without_float_conversion():
     huge = 10**400
     assert EffectResolver.energy_ratio(huge, huge * 2) == 0.5
     assert EffectResolver.energy_ratio(huge * 2, huge) == 1.0
+
+
+def test_resource_numeric_constraint_migration_rebuilds_float8_checks():
+    sql = CONSTRAINT_MIGRATION.read_text(encoding="utf-8")
+    for resource in ("metal", "crystal", "fuel_cells"):
+        assert f"DROP CONSTRAINT IF EXISTS planets_{resource}_check" in sql
+        assert f"ADD CONSTRAINT planets_{resource}_check" in sql
+    assert "CAST(0 AS NUMERIC)" in sql
 
 
 def test_postgres_numeric_cast_param_uses_decimal_text(monkeypatch):
@@ -153,6 +162,25 @@ def test_live_postgres_projection_roundtrip_above_float_range(pg_parity_db):
         commit(conn)
 
         planet = dict(get_homeworld(player_id=player_id, conn=conn))
+        constraint_rows = conn.execute(
+            """
+            SELECT conname, pg_get_constraintdef(oid) AS definition
+            FROM pg_constraint
+            WHERE conrelid = 'planets'::regclass
+              AND conname IN (
+                'planets_metal_check',
+                'planets_crystal_check',
+                'planets_fuel_cells_check'
+              )
+            ORDER BY conname;
+            """
+        ).fetchall()
+        assert len(constraint_rows) == 3
+        for constraint_row in constraint_rows:
+            definition = str(constraint_row["definition"]).lower()
+            assert "double precision" not in definition
+            assert "numeric" in definition
+
         projected = project_planet_resource_balances(
             planet,
             conn=conn,
