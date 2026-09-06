@@ -67,8 +67,9 @@ def test_normal_balance_values_remain_stable():
     assert nanofactory_upgrade_cost(10) == (10_240_000, 5_120_000)
     assert nanofactory_upgrade_cost(25) == (335_544_320_000, 167_772_160_000)
 
-    assert power_upgrade_cost("research_lab", 50) == power_upgrade_cost("research_lab", 50)
-    assert power_build_seconds("metal_mine", 120) > power_build_seconds("metal_mine", 60)
+    assert power_upgrade_cost("research_lab", 50) == (5_949_749, 12_079_793)
+    assert power_build_seconds("metal_mine", 60) == 28_668
+    assert power_build_seconds("metal_mine", 120) == 73_080
 
 
 def test_economy_curve_source_has_no_nanofactory_runtime_cap():
