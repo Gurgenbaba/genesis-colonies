@@ -58,3 +58,96 @@ def test_timekeeper_commit_does_not_reread_balance_before_existing_state_rebuild
     assert "conn.close()" in success
     assert "_timekeeper_apply_game_state(" in success
     assert "post_mutation_committed=True" in success
+
+def test_postgres_timekeeper_debit_returns_balance_without_select_reread(monkeypatch):
+    import game.timekeeper as tk
+
+    class Cursor:
+        rowcount = 1
+
+        def __init__(self):
+            self.sql = ""
+            self.params = None
+
+        def execute(self, sql, params=None):
+            self.sql = str(sql)
+            self.params = params
+            return self
+
+        def fetchone(self):
+            return {"balance_sec": 2700}
+
+    class Conn:
+        def __init__(self):
+            self.cur = Cursor()
+
+        def cursor(self):
+            return self.cur
+
+    conn = Conn()
+    ledger = []
+    monkeypatch.setattr(tk, "schema_ready", lambda _conn: True)
+    monkeypatch.setattr(tk, "get_db_backend", lambda: "postgres")
+    monkeypatch.setattr(
+        tk,
+        "get_balance",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("PostgreSQL debit must not SELECT balance")
+        ),
+    )
+    monkeypatch.setattr(
+        tk,
+        "_record_transaction",
+        lambda player_id, delta_sec, balance_after, source, *, conn: ledger.append(
+            (player_id, delta_sec, balance_after, source)
+        ),
+    )
+
+    balance = tk.debit(7, 900, "apply:build", conn=conn)
+
+    assert balance == 2700
+    assert "RETURNING balance_sec" in conn.cur.sql
+    assert conn.cur.params[0] == 900
+    assert conn.cur.params[3] == 900
+    assert ledger == [(7, -900, 2700, "apply:build")]
+
+
+def test_postgres_timekeeper_debit_keeps_atomic_insufficient_guard(monkeypatch):
+    import pytest
+    import game.timekeeper as tk
+
+    class Cursor:
+        rowcount = 0
+
+        def execute(self, sql, params=None):
+            self.sql = str(sql)
+            self.params = params
+            return self
+
+        def fetchone(self):
+            return None
+
+    class Conn:
+        def __init__(self):
+            self.cur = Cursor()
+
+        def cursor(self):
+            return self.cur
+
+    conn = Conn()
+    monkeypatch.setattr(tk, "schema_ready", lambda _conn: True)
+    monkeypatch.setattr(tk, "get_db_backend", lambda: "postgres")
+    monkeypatch.setattr(
+        tk,
+        "get_balance",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("insufficient PG debit must be decided by guarded UPDATE")
+        ),
+    )
+
+    with pytest.raises(tk.InsufficientTimekeeperBalance):
+        tk.debit(7, 900, "apply:build", conn=conn)
+
+    assert "balance_sec >= ?" in conn.cur.sql
+    assert "RETURNING balance_sec" in conn.cur.sql
+
