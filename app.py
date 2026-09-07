@@ -4160,18 +4160,28 @@ def api_timekeeper_apply():
         # GC-PERF-TK-CONN-012: mutation is committed; reuse this checkout for
         # the read-only response rebuild instead of returning it to the pool and
         # immediately checking out another connection.
+        jobs_finished = bool(result.get("jobs_finished"))
+        finished_building_key = str(
+            result.get("finished_building_key") or ""
+        ).strip()
+        panel_delta_keys = (
+            [finished_building_key]
+            if domain == "build" and jobs_finished and finished_building_key
+            else None
+        )
+
         t_state0 = time.perf_counter()
         state = _timekeeper_apply_game_state(
             domain,
             post_mutation_committed=True,
             conn=conn,
             user_id=user_id,
+            panel_delta_keys=panel_delta_keys,
         )
         state_ms = (time.perf_counter() - t_state0) * 1000.0
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
         if isinstance(state, dict) and tk_slice:
             state["timekeeper"] = tk_slice
-        jobs_finished = bool(result.get("jobs_finished"))
         # Surfaced on state so applyActionState / panel sync see the finish flag.
         if isinstance(state, dict):
             state["jobs_finished"] = jobs_finished
@@ -11744,12 +11754,14 @@ def _timekeeper_apply_game_state(
     post_mutation_committed: bool = False,
     conn=None,
     user_id: Optional[int] = None,
+    panel_delta_keys: Optional[List[str]] = None,
 ) -> dict:
     """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source="api_timekeeper_apply",
         action_slim=True,
+        panel_delta_keys=panel_delta_keys,
         post_mutation_committed=bool(post_mutation_committed),
         conn=conn,
         authenticated_user_id=int(user_id) if user_id is not None else None,
