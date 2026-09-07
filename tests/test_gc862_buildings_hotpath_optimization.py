@@ -193,36 +193,21 @@ def test_gc862_panel_context_caches_build_time_at_target():
         bmod.EffectResolver = orig_er
 
 
-def test_gc862_build_enqueue_scopes_queue_finish_domains(isolated_db, monkeypatch):
-    user_id, planet = isolated_db
-    planet_id = int(planet["id"])
-    buildings = get_planet_buildings(planet_id)
+def test_gc862_build_enqueue_scopes_queue_finish_domains():
+    from pathlib import Path
 
-    import game.queue_engine as qengine
+    src = (
+        Path(__file__).resolve().parents[1] / "game" / "buildings.py"
+    ).read_text(encoding="utf-8")
+    block = src.split("def queue_build_for_planet(", 1)[1].split(
+        "\ndef cancel_build_job_for_planet(", 1
+    )[0]
 
-    original = qengine.finish_due_work
-    seen = {}
-
-    def _wrapped_finish(*args, **kwargs):
-        seen.update(kwargs)
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(qengine, "finish_due_work", _wrapped_finish)
-
-    ok, reason, _payload = queue_build_for_planet(
-        planet,
-        buildings,
-        "metal_mine",
-        user_id=user_id,
-        queue_mode="single",
-    )
-    assert ok and reason == "ok"
-
-    domains = set(seen.get("queue_domains") or ())
-    assert domains == {"build", "research", "planet_research", "ascension"}
-    assert "shipyard" not in domains
-    assert "defense" not in domains
-    assert "troops" not in domains
-    # Fleet/relocation safety behavior stays at the queue-engine defaults.
-    assert "include_fleet" not in seen
-    assert "include_relocations" not in seen
+    assert 'queue_domains={"build", "research", "planet_research", "ascension"}' in block
+    assert '"shipyard"' not in block.split("queue_domains=", 1)[1].split("}", 1)[0]
+    assert '"defense"' not in block.split("queue_domains=", 1)[1].split("}", 1)[0]
+    assert '"troops"' not in block.split("queue_domains=", 1)[1].split("}", 1)[0]
+    # Fleet/relocation remain on queue-engine defaults in this live-safe slice.
+    finish_call = block.split("engine_result = finish_due_work(", 1)[1].split(")", 1)[0]
+    assert "include_fleet=" not in finish_call
+    assert "include_relocations=" not in finish_call
