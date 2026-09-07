@@ -11178,17 +11178,28 @@ def _payload_from_live_context(
         battle_pass_state = {"ready": False}
 
     live_events_snapshot: List[Dict[str, Any]] = []
+    server_event_rows = None
     with perf_span("payload.nav_badges"):
+        try:
+            from game.server_events import list_active_events as list_server_events
+
+            # GC-PERF-LIVEOPS-014: Server Event factors + banner rows originate
+            # from the same active set. Load it once for this state request.
+            server_event_rows = list_server_events(conn=conn)
+        except Exception:
+            server_event_rows = None
+
         try:
             from game.i18n import current_locale
             from game.overview_page import build_overview_live_events
 
-            # GC-PERF-LIVEOPS-013: nav badges already need the LiveOps rows.
-            # Build them once here and reuse the same snapshot for the header rail.
+            # GC-PERF-LIVEOPS-013/014: nav badges already need the LiveOps rows.
+            # Build them once and reuse the same Server Event + LiveOps snapshots.
             live_events_snapshot = build_overview_live_events(
                 conn=conn,
                 user_id=user_id,
                 locale=current_locale(),
+                server_events=server_event_rows,
             )
         except Exception:
             live_events_snapshot = []
@@ -11254,7 +11265,10 @@ def _payload_from_live_context(
         try:
             from game.server_events import serialize_active_events
 
-            payload["server_events"] = serialize_active_events(conn=conn)
+            payload["server_events"] = serialize_active_events(
+                conn=conn,
+                active_events=server_event_rows,
+            )
         except Exception:
             payload["server_events"] = {
                 "events": [],
