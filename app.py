@@ -4157,24 +4157,22 @@ def api_timekeeper_apply():
         tk_slice = result.get("timekeeper") or {}
         expected_bal = int(tk_slice.get("balance_sec") or 0)
 
-        jobs_finished = bool(result.get("jobs_finished"))
+        # Release apply conn before state rebuild (separate write TX).
+        conn.close()
+        conn = None
 
-        # GC-PERF-TK-PG-011: reuse the committed mutation checkout for the
-        # queue-only response snapshot. Opening a second pooled connection and
-        # rebuilding the generic action state was the dominant PG regression.
         t_state0 = time.perf_counter()
         state = _timekeeper_apply_game_state(
             domain,
             post_mutation_committed=True,
-            conn=conn,
-            user_id=user_id,
-            planet_id=planet_id,
-            timekeeper=tk_slice,
-            jobs_finished=jobs_finished,
         )
         state_ms = (time.perf_counter() - t_state0) * 1000.0
+        # Apply ledger wins over rebuild so HUD never keeps a stale balance.
         if isinstance(state, dict) and tk_slice:
             state["timekeeper"] = tk_slice
+        jobs_finished = bool(result.get("jobs_finished"))
+        # Surfaced on state so applyActionState / panel sync see the finish flag.
+        if isinstance(state, dict):
             state["jobs_finished"] = jobs_finished
         logger.info(
             "timekeeper_apply user_id=%s domain=%s ok=1 reason=ok seconds_applied=%s "
@@ -11733,65 +11731,15 @@ def _timekeeper_apply_game_state(
     domain: str | None = None,
     *,
     post_mutation_committed: bool = False,
-    conn=None,
-    user_id: int | None = None,
-    planet_id: int | None = None,
-    timekeeper: Optional[Dict[str, Any]] = None,
-    jobs_finished: bool = False,
 ) -> dict:
-    """Timekeeper response state; committed Build/Research uses queue-only fastpath."""
-    dom = str(domain or "").strip().lower()
-    uid = int(user_id or session.get("user_id") or 0)
-
-    # GC-PERF-TK-PG-011: after commit, Build/Research needs only the queue
-    # that changed plus the TK ledger. Do not rebuild score, messages, nav
-    # badges, fleets, switcher, battle pass, boosters, etc. Those unrelated
-    # slices were cheap with local SQLite but turn into serial PG round-trips.
-    if post_mutation_committed and conn is not None and uid > 0 and dom in ("build", "research"):
-        pid = int(planet_id or 0)
-        if pid <= 0:
-            from game.planet_evolution.repository import get_context_planet
-
-            planet = get_context_planet(uid, conn=conn)
-            pid = int(planet["id"]) if planet else 0
-
-        state: Dict[str, Any] = {
-            "ok": True,
-            "player_id": uid,
-            "active_planet_id": pid,
-            "jobs_finished": bool(jobs_finished),
-        }
-        if timekeeper is not None:
-            state["timekeeper"] = dict(timekeeper)
-
-        if dom == "build" and pid > 0:
-            from game.buildings import get_build_queue_status_for_planet
-
-            state["build_queue"] = get_build_queue_status_for_planet(
-                pid,
-                conn=conn,
-                skip_finish=True,
-            )
-        elif dom == "research":
-            from game.research import get_research_status
-
-            state["research"] = get_research_status(
-                uid,
-                skip_finish=True,
-                include_techs=False,
-                conn=conn,
-            )
-
-        from game.logic import attach_canonical_server_time
-
-        return attach_canonical_server_time(state)
-
+    """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source="api_timekeeper_apply",
         action_slim=True,
         post_mutation_committed=bool(post_mutation_committed),
     )
+    dom = str(domain or "").strip().lower()
     if dom in ("shipyard", "defense", "troops"):
         try:
             from game.live_state import attach_timekeeper_domain_queue_slices
