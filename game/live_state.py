@@ -755,6 +755,84 @@ def shipyard_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, A
     }
 
 
+def _timekeeper_shipyard_queue_slice(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Queue-only Shipyard slice after Timekeeper already settled due work."""
+    from game.fleet import fleet_schema_ready
+    from game.models import get_planet_buildings
+    from game.queue_card import (
+        enrich_mini_queue_jobs_batch_size,
+        group_card_jobs_by_owner_key,
+        map_card_jobs_to_mini_queue_jobs,
+        map_shipyard_queue_to_card_jobs,
+    )
+    from game.shipyard import shipyard_level_from_buildings
+    from game.shipyard_queue import shipyard_queue_for_client, shipyard_queue_table_ready
+
+    if not fleet_schema_ready(conn) or not shipyard_queue_table_ready(conn):
+        return None
+    planet = get_request_context_planet(int(user_id), conn=conn)
+    if not planet:
+        return None
+    pid = int(planet["id"])
+    buildings = get_planet_buildings(pid, conn=conn) or {}
+    sy_level = shipyard_level_from_buildings(buildings)
+    queue = dict(
+        shipyard_queue_for_client(
+            int(user_id),
+            pid,
+            int(sy_level),
+            conn=conn,
+            skip_finish=True,
+        )
+    )
+    card_jobs = map_shipyard_queue_to_card_jobs(queue)
+    queue["card_jobs_by_owner"] = group_card_jobs_by_owner_key(card_jobs)
+    queue["mini_queue_jobs"] = enrich_mini_queue_jobs_batch_size(
+        map_card_jobs_to_mini_queue_jobs(card_jobs, domain="shipyard"),
+        domain="shipyard",
+        shipyard_level=int(sy_level),
+    )
+    return queue
+
+
+def _timekeeper_defense_queue_slice(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Queue-only Defense slice after Timekeeper already settled due work."""
+    from game.defense import defense_queue_for_client, defense_queue_table_ready
+    from game.models import defense_schema_ready, get_planet_buildings
+    from game.queue_card import (
+        enrich_mini_queue_jobs_batch_size,
+        group_card_jobs_by_owner_key,
+        map_card_jobs_to_mini_queue_jobs,
+        map_defense_queue_to_card_jobs,
+    )
+    from game.shipyard import shipyard_level_from_buildings
+
+    if not defense_schema_ready(conn) or not defense_queue_table_ready(conn):
+        return None
+    planet = get_request_context_planet(int(user_id), conn=conn)
+    if not planet:
+        return None
+    pid = int(planet["id"])
+    buildings = get_planet_buildings(pid, conn=conn) or {}
+    sy_level = shipyard_level_from_buildings(buildings)
+    queue = dict(
+        defense_queue_for_client(
+            int(user_id),
+            pid,
+            conn=conn,
+            skip_finish=True,
+        )
+    )
+    card_jobs = map_defense_queue_to_card_jobs(queue)
+    queue["card_jobs_by_owner"] = group_card_jobs_by_owner_key(card_jobs)
+    queue["mini_queue_jobs"] = enrich_mini_queue_jobs_batch_size(
+        map_card_jobs_to_mini_queue_jobs(card_jobs, domain="defense"),
+        domain="defense",
+        shipyard_level=int(sy_level),
+    )
+    return queue
+
+
 def attach_timekeeper_domain_queue_slices(
     payload: Dict[str, Any],
     user_id: int,
@@ -777,23 +855,20 @@ def attach_timekeeper_domain_queue_slices(
         dom = "build"
     if dom == "shipyard":
         try:
-            panel = shipyard_panel_for_game_state(int(user_id), conn=conn)
+            queue = _timekeeper_shipyard_queue_slice(int(user_id), conn=conn)
         except Exception:
-            panel = None
-        if panel and isinstance(panel.get("queue"), dict):
-            payload["shipyard"] = {"queue": panel["queue"]}
-            payload["shipyard_queue"] = panel["queue"]
+            queue = None
+        if isinstance(queue, dict):
+            payload["shipyard"] = {"queue": queue}
+            payload["shipyard_queue"] = queue
     elif dom == "defense":
         try:
-            panel = defense_panel_for_game_state(int(user_id), conn=conn)
+            queue = _timekeeper_defense_queue_slice(int(user_id), conn=conn)
         except Exception:
-            panel = None
-        if panel and isinstance(panel.get("queue"), dict):
-            # Queue only — mirror shipyard slim shape for patchDefensePanelFromGameState
-            slim: Dict[str, Any] = {"queue": panel["queue"]}
-            if isinstance(panel.get("troops"), dict):
-                slim["troops"] = panel["troops"]
-            payload["defense"] = slim
+            queue = None
+        if isinstance(queue, dict):
+            # Timekeeper changes Defense queue timing only; do not rebuild stock/catalog.
+            payload["defense"] = {"queue": queue}
     elif dom == "troops":
         try:
             panel = defense_panel_for_game_state(int(user_id), conn=conn)

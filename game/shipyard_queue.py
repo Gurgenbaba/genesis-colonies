@@ -803,10 +803,11 @@ def shipyard_queue_for_client(
     *,
     conn,
     now: Optional[float] = None,
+    skip_finish: bool = False,
 ) -> Dict[str, Any]:
     """Queue list + summary for API/UI."""
     ts = float(now if now is not None else _now())
-    if shipyard_queue_table_ready(conn):
+    if shipyard_queue_table_ready(conn) and not skip_finish:
         finish_due_shipyard_jobs_for_planet(
             conn, int(planet_id), int(player_id), now=ts
         )
