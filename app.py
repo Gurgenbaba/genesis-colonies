@@ -4137,7 +4137,14 @@ def api_timekeeper_apply():
             rollback(conn)
             conn.close()
             conn = None
-            state = _timekeeper_apply_game_state(domain, user_id=user_id)
+            error_tk_slice = result.get("timekeeper")
+            state = _timekeeper_apply_game_state(
+                domain,
+                user_id=user_id,
+                timekeeper_snapshot=error_tk_slice
+                if isinstance(error_tk_slice, dict)
+                else None,
+            )
             body = {"ok": False, "reason": reason, "state": state}
             if result.get("timekeeper"):
                 body["timekeeper"] = result["timekeeper"]
@@ -4166,6 +4173,7 @@ def api_timekeeper_apply():
             post_mutation_committed=True,
             conn=conn,
             user_id=user_id,
+            timekeeper_snapshot=tk_slice,
         )
         state_ms = (time.perf_counter() - t_state0) * 1000.0
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
@@ -10827,6 +10835,7 @@ def _payload_from_live_context(
     action_slim: bool = False,
     panel_page: str = "",
     panel_tab: Optional[str] = None,
+    timekeeper_snapshot: Optional[Dict[str, Any]] = None,
     conn=None,
 ) -> Dict[str, Any]:
     """Build JSON payload from an already-refreshed live context."""
@@ -10916,12 +10925,17 @@ def _payload_from_live_context(
         payload.pop("building_queue", None)
         payload.pop("research_queue", None)
 
-    try:
-        from game.timekeeper import serialize_for_client
+    if isinstance(timekeeper_snapshot, dict):
+        # GC-PERF-TK-019: mutation owner already has the authoritative ledger
+        # balance. Reuse it instead of SELECTing the same Timekeeper row again.
+        payload["timekeeper"] = dict(timekeeper_snapshot)
+    else:
+        try:
+            from game.timekeeper import serialize_for_client
 
-        payload["timekeeper"] = serialize_for_client(int(user_id), conn=conn)
-    except Exception:
-        payload["timekeeper"] = {"ready": False, "balance_sec": 0, "label": "0min"}
+            payload["timekeeper"] = serialize_for_client(int(user_id), conn=conn)
+        except Exception:
+            payload["timekeeper"] = {"ready": False, "balance_sec": 0, "label": "0min"}
 
     try:
         from game.commander_classes import serialize_for_client as serialize_commander
@@ -11610,6 +11624,7 @@ def _build_game_state_payload(
     post_mutation_committed: bool = False,
     conn=None,
     authenticated_user_id: Optional[int] = None,
+    timekeeper_snapshot: Optional[Dict[str, Any]] = None,
 ) -> Tuple[dict, int]:
     """
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
@@ -11665,6 +11680,7 @@ def _build_game_state_payload(
             action_slim=action_slim,
             panel_page=page,
             panel_tab=panel_tab,
+            timekeeper_snapshot=timekeeper_snapshot,
             conn=conn,
         )
         from game.live_state import current_action_perf
@@ -11781,6 +11797,7 @@ def _timekeeper_apply_game_state(
     post_mutation_committed: bool = False,
     conn=None,
     user_id: Optional[int] = None,
+    timekeeper_snapshot: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
     state, _ = _build_game_state_payload(
@@ -11790,6 +11807,7 @@ def _timekeeper_apply_game_state(
         post_mutation_committed=bool(post_mutation_committed),
         conn=conn,
         authenticated_user_id=int(user_id) if user_id is not None else None,
+        timekeeper_snapshot=timekeeper_snapshot,
     )
     dom = str(domain or "").strip().lower()
     if dom in ("shipyard", "defense", "troops"):
