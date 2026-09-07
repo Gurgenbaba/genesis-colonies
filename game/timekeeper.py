@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .db import lock_planet_for_update, table_exists
+from .db import get_db_backend, lock_planet_for_update, table_exists
 from .inventory_catalog import BOOSTER_QUEUE_TARGET, BOOSTER_TIME_SECONDS
 
 DEPOSIT_DOMAINS = frozenset({"build", "research", "shipyard"})
@@ -154,22 +154,39 @@ def debit(
     if amt <= 0:
         return get_balance(int(player_id), conn=conn)
     uid = int(player_id)
-    balance = get_balance(uid, conn=conn)
-    if balance < amt:
-        raise InsufficientTimekeeperBalance("insufficient_timekeeper")
     now = float(time.time())
     cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE timekeeper_balances
-        SET balance_sec = balance_sec - ?, updated_at = ?
-        WHERE player_id = ? AND balance_sec >= ?;
-        """,
-        (amt, now, uid, amt),
-    )
-    if int(cur.rowcount or 0) <= 0:
-        raise InsufficientTimekeeperBalance("insufficient_timekeeper")
-    new_bal = get_balance(uid, conn=conn)
+
+    # GC-PERF-TK-018: the guarded UPDATE is the authoritative balance check.
+    # PostgreSQL can return the resulting balance in the same network round-trip,
+    # avoiding the historical SELECT -> UPDATE -> SELECT debit sequence.
+    if get_db_backend() == "postgres":
+        cur.execute(
+            """
+            UPDATE timekeeper_balances
+            SET balance_sec = balance_sec - ?, updated_at = ?
+            WHERE player_id = ? AND balance_sec >= ?
+            RETURNING balance_sec;
+            """,
+            (amt, now, uid, amt),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise InsufficientTimekeeperBalance("insufficient_timekeeper")
+        new_bal = int(row["balance_sec"] or 0)
+    else:
+        cur.execute(
+            """
+            UPDATE timekeeper_balances
+            SET balance_sec = balance_sec - ?, updated_at = ?
+            WHERE player_id = ? AND balance_sec >= ?;
+            """,
+            (amt, now, uid, amt),
+        )
+        if int(cur.rowcount or 0) <= 0:
+            raise InsufficientTimekeeperBalance("insufficient_timekeeper")
+        new_bal = get_balance(uid, conn=conn)
+
     _record_transaction(uid, -amt, new_bal, str(source or "debit"), conn=conn)
     return new_bal
 
