@@ -361,3 +361,55 @@ def test_inventory_booster_state_passes_loaded_rows_to_hud_projection():
 
     assert block.count("list_active_boosters(user_id, conn=conn)") == 1
     assert "active_rows=rows" in block
+
+
+
+def test_liveops_booster_projection_can_skip_resource_impact_enrichment(monkeypatch):
+    import game.inventory_boosters as boosters
+
+    now = float(time.time())
+    rows = [
+        {
+            "effect_key": "metal_prod_factor",
+            "multiplier": 1.25,
+            "expires_at": now + 3600,
+            "source_item_key": "booster_production_25",
+        }
+    ]
+
+    def unexpected_impacts(*args, **kwargs):
+        raise AssertionError("LiveOps booster cards must not build resource impacts")
+
+    monkeypatch.setattr(
+        boosters,
+        "enrich_active_effects_with_resource_impacts",
+        unexpected_impacts,
+    )
+
+    effects = boosters.build_active_effects_for_hud(
+        7,
+        conn=object(),
+        locale="en",
+        now=now,
+        include_server_events=False,
+        active_rows=rows,
+        include_resource_impacts=False,
+    )
+
+    assert effects
+    assert any(str(row.get("affected_domain") or "") == "production" for row in effects)
+
+
+def test_overview_live_events_explicitly_skip_unused_booster_resource_impacts():
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[1] / "game" / "overview_page.py"
+    ).read_text(encoding="utf-8")
+    block = src.split("def _player_booster_live_events(", 1)[1].split(
+        "\ndef build_overview_status(",
+        1,
+    )[0]
+
+    assert "include_server_events=False" in block
+    assert "include_resource_impacts=False" in block
