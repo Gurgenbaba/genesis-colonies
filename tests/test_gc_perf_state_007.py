@@ -139,3 +139,55 @@ def test_nav_liveops_sources_are_not_double_loaded_on_normal_path(state_007_db, 
         assert calls["world_boss"] == 1
     finally:
         conn.close()
+
+
+
+def test_nav_badges_reuse_supplied_live_events_snapshot(state_007_db, monkeypatch):
+    import game.overview_page as overview_page
+
+    conn = db()
+    try:
+        uid = _player(conn)
+
+        def unexpected_rebuild(*args, **kwargs):
+            raise AssertionError("LiveOps snapshot must not be rebuilt for nav badges")
+
+        monkeypatch.setattr(
+            overview_page,
+            "build_overview_live_events",
+            unexpected_rebuild,
+        )
+
+        badges = nav_badges_for_game_state(
+            uid,
+            conn=conn,
+            battle_pass={"ready": True, "claimable_count": 0},
+            live_events=[
+                {"kind": "world_boss", "id": 1},
+                {"kind": "server_event", "id": 2},
+            ],
+        )
+
+        assert badges["world_boss"]["active"] is True
+        assert badges["world_boss"]["count"] == 1
+        assert badges["live_events"]["active"] is True
+        assert badges["live_events"]["count"] == 2
+    finally:
+        conn.close()
+
+
+def test_game_state_builds_live_events_once_and_shares_snapshot_with_nav():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+        encoding="utf-8"
+    )
+    block = src.split("def _payload_from_live_context(", 1)[1].split(
+        "\ndef _build_game_state_payload(",
+        1,
+    )[0]
+
+    assert block.count("build_overview_live_events(") == 1
+    assert "live_events_snapshot = build_overview_live_events(" in block
+    assert "payload[\"live_events\"] = live_events_snapshot" in block
+    assert "live_events=live_events_snapshot" in block
