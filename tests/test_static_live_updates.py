@@ -3686,3 +3686,18 @@ def test_main_js_timekeeper_partial_state_cache_preserves_omitted_hud_fields():
     )
     assert "const merged = { ...data };" not in tk
 
+def test_timekeeper_partial_missing_fleet_preserves_client_fleet_state():
+    src = _read("static/main.js")
+
+    busy = src.split("function syncActiveFleetBusyFromState(data)")[1].split(
+        "/** Client-side resource projection", 1
+    )[0]
+    assert 'Object.prototype.hasOwnProperty.call(data, "active_fleets")' in busy
+    assert "return;" in busy.split("const now = getTimerServerNow()", 1)[0]
+
+    action = src.split("function patchFleetHudFromActionPayload(json, reason)")[1].split(
+        "GC.patchFleetHudFromActionPayload = patchFleetHudFromActionPayload", 1
+    )[0]
+    assert 'reasonStr !== "timekeeper_apply"' in action
+    assert "bumpFleetHudActionVersion" in action
+
