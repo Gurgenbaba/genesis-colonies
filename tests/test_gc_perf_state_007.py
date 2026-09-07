@@ -191,3 +191,58 @@ def test_game_state_builds_live_events_once_and_shares_snapshot_with_nav():
     assert "live_events_snapshot = build_overview_live_events(" in block
     assert "payload[\"live_events\"] = live_events_snapshot" in block
     assert "live_events=live_events_snapshot" in block
+
+
+
+def test_server_event_serializers_reuse_preloaded_active_rows(monkeypatch):
+    import game.server_events as server_events
+
+    rows = [
+        {
+            "id": 91,
+            "slug": "shared_rows",
+            "title": "Shared Rows",
+            "title_key": "",
+            "starts_at": 100,
+            "ends_at": 300,
+            "effects": [{"kind": "production_mult", "mult": 2.0}],
+        }
+    ]
+
+    def unexpected_reload(*args, **kwargs):
+        raise AssertionError("preloaded Server Event rows must not be reloaded")
+
+    monkeypatch.setattr(server_events, "list_active_events", unexpected_reload)
+
+    state = server_events.serialize_active_events(
+        now=150.0,
+        conn=object(),
+        active_events=rows,
+    )
+    banner = server_events.active_events_banner(
+        now=150.0,
+        conn=object(),
+        locale="de",
+        active_events=rows,
+    )
+
+    assert state["production_mult"] == pytest.approx(2.0)
+    assert len(state["events"]) == 1
+    assert len(banner) == 1
+    assert banner[0]["slug"] == "shared_rows"
+
+
+def test_game_state_shares_active_server_event_rows_across_liveops_serializers():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+        encoding="utf-8"
+    )
+    block = src.split("def _payload_from_live_context(", 1)[1].split(
+        "\ndef _build_game_state_payload(",
+        1,
+    )[0]
+
+    assert block.count("server_event_rows = list_server_events(conn=conn)") == 1
+    assert "server_events=server_event_rows" in block
+    assert "active_events=server_event_rows" in block
