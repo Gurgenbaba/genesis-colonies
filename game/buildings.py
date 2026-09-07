@@ -2433,6 +2433,11 @@ def queue_build_for_planet(
     # checkout. The old route loaded player/planet/buildings on separate
     # connections before this mutation opened yet another one.
     conn = db()
+    ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)
+    if not ok_vacation:
+        conn.close()
+        return False, vac_reason, {}
+
     finished_any = False
     try:
         if planet is None:
@@ -2442,10 +2447,6 @@ def queue_build_for_planet(
         if not planet:
             return False, "invalid", {"msg": "Planet not found"}
         planet_id = int(planet["id"])
-
-        ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)
-        if not ok_vacation:
-            return False, vac_reason, {}
 
         begin_write_transaction(conn)
         lock_planet_for_update(conn, planet_id)
