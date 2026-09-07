@@ -331,6 +331,8 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     assert isinstance(state.get("account_safety"), dict)
     assert isinstance(state.get("initiation"), dict)
     for omitted in (
+        "commander",
+        "score",
         "nav_badges",
         "imperial_directives",
         "server_events",
