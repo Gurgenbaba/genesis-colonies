@@ -79,3 +79,55 @@ def test_overview_connection_ownership_is_untouched():
     src = _read("app.py")
     block = _block(src, "def overview(", "\n@app.route")
     assert "own_conn = conn is None" not in block
+
+def test_timekeeper_state_builder_accepts_authoritative_snapshot():
+    src = _read("app.py")
+    payload = _block(
+        src,
+        "def _payload_from_live_context(",
+        "\ndef _build_game_state_payload(",
+    )
+    signature = payload.split(") -> Dict[str, Any]:", 1)[0]
+    assert "timekeeper_snapshot: Optional[Dict[str, Any]] = None" in signature
+    assert "if isinstance(timekeeper_snapshot, dict):" in payload
+    assert 'payload["timekeeper"] = dict(timekeeper_snapshot)' in payload
+
+    builder = _block(
+        src,
+        "def _build_game_state_payload(",
+        "\ndef _player_context_for_action(",
+    )
+    assert "timekeeper_snapshot: Optional[Dict[str, Any]] = None" in builder.split(
+        ") -> Tuple[dict, int]:", 1
+    )[0]
+    payload_call = builder.split("payload = _payload_from_live_context(", 1)[1].split(
+        "\n        )", 1
+    )[0]
+    assert "timekeeper_snapshot=timekeeper_snapshot" in payload_call
+
+
+def test_timekeeper_apply_feeds_ledger_snapshot_into_response_rebuild():
+    src = _read("app.py")
+    helper = _block(
+        src,
+        "def _timekeeper_apply_game_state(",
+        "\ndef _is_buildings_queue_action_source(",
+    )
+    assert "timekeeper_snapshot: Optional[Dict[str, Any]] = None" in helper.split(
+        ") -> dict:", 1
+    )[0]
+    assert "timekeeper_snapshot=timekeeper_snapshot" in helper
+
+    route = _block(
+        src,
+        "def api_timekeeper_apply():",
+        '\n\n@app.route("/api/inventory/craft"',
+    )
+    success = route.split("commit(conn)", 1)[1]
+    call = success.split("_timekeeper_apply_game_state(", 1)[1].split(")", 1)[0]
+    assert "timekeeper_snapshot=tk_slice" in call
+
+    failure = route.split("if not ok:", 1)[1].split("commit(conn)", 1)[0]
+    assert 'error_tk_slice = result.get("timekeeper")' in failure
+    assert "timekeeper_snapshot=error_tk_slice" in failure
+
