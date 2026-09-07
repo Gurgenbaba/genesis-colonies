@@ -166,3 +166,25 @@ def test_timekeeper_partial_projection_skips_unchanged_meta_domains():
     assert "account_safety_hud_for_game_state" in projection_tail
     assert "initiation_for_game_state" in payload
 
+def test_timekeeper_partial_projection_skips_commander_and_ranking_reads():
+    src = _read("app.py")
+    payload = _block(
+        src,
+        "def _payload_from_live_context(",
+        "\ndef _build_game_state_payload(",
+    )
+    assert (
+        "if not timekeeper_partial:\n"
+        "        try:\n"
+        "            from game.commander_classes import serialize_for_client as serialize_commander"
+        in payload
+    )
+    assert (
+        'if not timekeeper_partial:\n        with perf_span("payload.score")'
+        in payload
+    )
+
+    # Notifications remain live immediately after the projected progression blocks.
+    notifications = payload.split('with perf_span("payload.notifications")', 1)[1]
+    assert "messages_logic.unread_count" in notifications
+
