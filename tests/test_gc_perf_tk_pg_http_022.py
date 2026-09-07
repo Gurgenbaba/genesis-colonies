@@ -85,6 +85,18 @@ def _profile_request(monkeypatch, request_fn: Callable[[], Any]) -> tuple[Any, d
                 "db_query_ms": round(float(state.db_query_ms), 1),
                 "phases": dict(state.phases),
                 "meta": dict(state.meta),
+                "sql_signatures": sorted(
+                    (
+                        {
+                            "signature": str(signature),
+                            "count": int(values.get("count", 0.0)),
+                            "total_ms": round(float(values.get("total_ms", 0.0)), 1),
+                            "max_ms": round(float(values.get("max_ms", 0.0)), 1),
+                        }
+                        for signature, values in state.sql_signature_stats.items()
+                    ),
+                    key=lambda row: (-int(row["count"]), -float(row["total_ms"])),
+                )[:12],
             }
         )
         return original(state, *args, **kwargs)
@@ -110,6 +122,13 @@ def _print_profile(label: str, perf: dict[str, Any]) -> None:
         f"panel_ms={round(float(phases.get('panel_total_ms') or phases.get('payload_panel_ms') or 0), 1)}",
         flush=True,
     )
+    for row in perf.get("sql_signatures") or []:
+        print(
+            "[TK-PG-022-SQL] "
+            f"{label} count={row['count']} total_ms={row['total_ms']} "
+            f"max_ms={row['max_ms']} sig={row['signature']}",
+            flush=True,
+        )
 
 
 @pytest.fixture(autouse=True)
