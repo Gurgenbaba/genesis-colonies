@@ -4161,12 +4161,13 @@ def api_timekeeper_apply():
         # the read-only response rebuild instead of returning it to the pool and
         # immediately checking out another connection.
         jobs_finished = bool(result.get("jobs_finished"))
+        applied_domain = str(result.get("domain") or domain or "").strip().lower()
         finished_building_key = str(
             result.get("finished_building_key") or ""
         ).strip()
         panel_delta_keys = (
             [finished_building_key]
-            if domain == "build" and jobs_finished and finished_building_key
+            if applied_domain == "build" and jobs_finished and finished_building_key
             else None
         )
 
