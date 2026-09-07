@@ -24,6 +24,7 @@ from .definitions import (
     directives_schema_ready,
     effective_base_target,
     get_definition,
+    get_definitions,
     list_definitions_for_cadence,
     rarity_for_roll,
 )
@@ -227,7 +228,12 @@ def _player_scaling_context(player_id: int, *, conn: sqlite3.Connection) -> Dict
     return {"total_score": score, "daily_production": daily}
 
 
-def _directive_row_stale(row: Mapping[str, Any], *, conn: sqlite3.Connection) -> bool:
+def _directive_row_stale(
+    row: Mapping[str, Any],
+    *,
+    conn: sqlite3.Connection,
+    definitions: Optional[Mapping[str, Mapping[str, Any]]] = None,
+) -> bool:
     """True when an active row should be replaced (missing/disabled def or over hard cap)."""
     status = str(row.get("status") or STATUS_ACTIVE)
     if status in (STATUS_CLAIMED, STATUS_COMPLETED):
@@ -235,7 +241,11 @@ def _directive_row_stale(row: Mapping[str, Any], *, conn: sqlite3.Connection) ->
     definition_key = str(row.get("definition_key") or "").strip()
     if not definition_key:
         return True
-    definition = get_definition(definition_key, conn=conn)
+    definition = (
+        definitions.get(definition_key)
+        if definitions is not None
+        else get_definition(definition_key, conn=conn)
+    )
     if not definition:
         return True
     if not definition_is_rollable(definition):
@@ -287,11 +297,19 @@ def generate_directives_for_cadence(
         conn=conn,
     )
 
+    existing_definitions = get_definitions(
+        [str(row.get("definition_key") or "") for row in existing_rows],
+        conn=conn,
+    )
     if not force:
         stale_ids = [
             int(row["id"])
             for row in existing_rows
-            if _directive_row_stale(row, conn=conn)
+            if _directive_row_stale(
+                row,
+                conn=conn,
+                definitions=existing_definitions,
+            )
         ]
         if stale_ids:
             placeholders = ",".join("?" * len(stale_ids))
@@ -334,7 +352,7 @@ def generate_directives_for_cadence(
     exclude = list(dict.fromkeys([*existing_keys, *anti_repeat_keys]))
     seed_categories: List[str] = []
     for row in existing_rows:
-        defn = get_definition(str(row.get("definition_key") or ""), conn=conn)
+        defn = existing_definitions.get(str(row.get("definition_key") or ""))
         if defn:
             seed_categories.append(str(defn.get("category") or ""))
 
