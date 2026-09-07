@@ -732,6 +732,7 @@ def finish_due_work(
     include_fleet: bool = True,
     include_relocations: bool = True,
     skip_locked_planets: bool = False,
+    queue_domains: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
     """
     Central finish pipeline: due build + research jobs, batch score, single rank pass.
@@ -754,6 +755,27 @@ def finish_due_work(
     if now is None:
         now = time.time()
 
+    domain_filter = (
+        None
+        if queue_domains is None
+        else {
+            str(name or "").strip().lower()
+            for name in queue_domains
+            if str(name or "").strip()
+        }
+    )
+
+    def _domain_enabled(name: str) -> bool:
+        return domain_filter is None or str(name) in domain_filter
+
+    run_build = _domain_enabled("build")
+    run_planet_research = _domain_enabled("planet_research")
+    run_ascension = _domain_enabled("ascension")
+    run_shipyard = _domain_enabled("shipyard")
+    run_defense = _domain_enabled("defense")
+    run_troops = _domain_enabled("troops")
+    run_research = _domain_enabled("research")
+
     affected_players: Set[int] = set()
     affected_planets: Set[int] = set()
 
@@ -763,11 +785,19 @@ def finish_due_work(
         planet_targets = (
             _resolve_planet_targets(conn, player_id, planet_id)
             if include_planet_queues
+            and (
+                run_build
+                or run_planet_research
+                or run_ascension
+                or run_shipyard
+                or run_defense
+                or run_troops
+            )
             else []
         )
         research_targets = (
             _resolve_research_targets(conn, player_id, planet_id)
-            if include_account_research
+            if include_account_research and run_research
             else []
         )
 
@@ -789,7 +819,11 @@ def finish_due_work(
                 def _build():
                     return finish_planet_build_jobs(conn, pid_planet, pid_player, float(now))
 
-                n = _run_finish_step(conn, f"build:{pid_planet}", _build)
+                n = (
+                    _run_finish_step(conn, f"build:{pid_planet}", _build)
+                    if run_build
+                    else 0
+                )
                 if n > 0:
                     result["finished"]["buildings"] += n
                     affected_players.add(pid_player)
@@ -809,18 +843,21 @@ def finish_due_work(
                     from .planet_evolution.planet_research import finish_planet_research_jobs
                     from .planet_evolution.ascension import finish_ascension_jobs
 
-                    n_pr = finish_planet_research_jobs(conn, pid_planet, float(now))
-                    if n_pr > 0:
-                        result["finished"]["planet_research"] += n_pr
-                        affected_players.add(pid_player)
-                        affected_planets.add(pid_planet)
-                    n_as = finish_ascension_jobs(conn, pid_planet, float(now))
-                    if n_as > 0:
-                        result["finished"]["ascension"] += n_as
-                        affected_players.add(pid_player)
-                        affected_planets.add(pid_planet)
+                    if run_planet_research:
+                        n_pr = finish_planet_research_jobs(conn, pid_planet, float(now))
+                        if n_pr > 0:
+                            result["finished"]["planet_research"] += n_pr
+                            affected_players.add(pid_player)
+                            affected_planets.add(pid_planet)
+                    if run_ascension:
+                        n_as = finish_ascension_jobs(conn, pid_planet, float(now))
+                        if n_as > 0:
+                            result["finished"]["ascension"] += n_as
+                            affected_players.add(pid_player)
+                            affected_planets.add(pid_planet)
 
-                _run_finish_step(conn, f"pe:{pid_planet}", _pe)
+                if run_planet_research or run_ascension:
+                    _run_finish_step(conn, f"pe:{pid_planet}", _pe)
             except Exception as exc:
                 result["ok"] = False
                 msg = f"planet_evolution planet={pid_planet}: {exc}"
@@ -833,7 +870,11 @@ def finish_due_work(
                         conn, pid_planet, pid_player, float(now)
                     )
 
-                n_sy = _run_finish_step(conn, f"sy:{pid_planet}", _sy)
+                n_sy = (
+                    _run_finish_step(conn, f"sy:{pid_planet}", _sy)
+                    if run_shipyard
+                    else 0
+                )
                 if n_sy > 0:
                     result["finished"]["shipyard"] += n_sy
                     affected_players.add(pid_player)
@@ -850,7 +891,11 @@ def finish_due_work(
                         conn, pid_planet, pid_player, float(now)
                     )
 
-                n_def = _run_finish_step(conn, f"def:{pid_planet}", _df)
+                n_def = (
+                    _run_finish_step(conn, f"def:{pid_planet}", _df)
+                    if run_defense
+                    else 0
+                )
                 if n_def > 0:
                     result["finished"]["defense"] += n_def
                     affected_players.add(pid_player)
@@ -865,7 +910,11 @@ def finish_due_work(
                 def _tr():
                     return finish_planet_troop_jobs(conn, pid_planet, float(now))
 
-                n_tr = _run_finish_step(conn, f"troops:{pid_planet}", _tr)
+                n_tr = (
+                    _run_finish_step(conn, f"troops:{pid_planet}", _tr)
+                    if run_troops
+                    else 0
+                )
                 if n_tr > 0:
                     result["finished"]["troops"] += n_tr
                     affected_players.add(pid_player)
@@ -955,8 +1004,6 @@ def finish_due_work(
 
         try:
             def _scores():
-                if not (update_scores and affected_players):
-                    return
                 from .score_events import apply_score_updates_for_players
 
                 # GC-SCORE-PERF-001: finish TX only marks dirty; worker recomputes.
@@ -968,7 +1015,8 @@ def finish_due_work(
                 )
                 result["rank_recalculated"] = False
 
-            _run_finish_step(conn, "scores", _scores)
+            if update_scores and affected_players:
+                _run_finish_step(conn, "scores", _scores)
         except Exception as exc:
             result["ok"] = False
             msg = f"score updates: {exc}"

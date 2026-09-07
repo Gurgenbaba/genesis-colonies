@@ -51,7 +51,7 @@ def test_apply_domain_shift_reuses_preloaded_queue_rows():
     assert kwargs["finish_col"] == "finish_time"
 
 
-def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
+def test_apply_timekeeper_partial_build_reuses_single_queue_snapshot():
     rows_before = [{"id": 11, "start_time": 100.0, "finish_time": 200.0}]
     rows_after = [{"id": 11, "start_time": 70.0, "finish_time": 170.0}]
     conn = _SavepointConn()
@@ -63,7 +63,7 @@ def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
         return_value={"ok": True, "errors": []},
     ), patch(
         "game.timekeeper._load_domain_rows",
-        side_effect=[(rows_before, "finish_time"), (rows_after, "finish_time")],
+        return_value=(rows_before, "finish_time"),
     ) as load_rows, patch(
         "game.timekeeper._apply_domain_shift",
         return_value={"seconds_shifted": 30},
@@ -85,7 +85,7 @@ def test_apply_timekeeper_loads_queue_only_before_and_after_shift():
     assert ok is True
     assert reason == "ok"
     assert payload["seconds_applied"] == 30
-    assert load_rows.call_count == 2
+    assert load_rows.call_count == 1
     apply_shift.assert_called_once()
     kwargs = apply_shift.call_args.kwargs
     assert kwargs["rows"] is rows_before

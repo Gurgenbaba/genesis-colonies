@@ -319,16 +319,32 @@ def _resolve_apply_seconds(
     return min(bal, rem, req)
 
 
-def _finish_before_apply(conn, user_id: int, planet_id: Optional[int]) -> Dict[str, Any]:
+def _finish_before_apply(
+    conn,
+    user_id: int,
+    planet_id: Optional[int],
+    domain: Optional[str] = None,
+) -> Dict[str, Any]:
     from .inventory_use import _finish_inventory_due_work
 
     uid = int(user_id)
+    dom = str(DOMAIN_ALIASES.get(str(domain or "").strip().lower(), str(domain or "").strip().lower()) or "")
+    domains = [dom] if dom in TIMEKEEPER_DOMAINS else None
     if planet_id is not None:
         result = _finish_inventory_due_work(
-            conn, uid, planet_id=int(planet_id), source="timekeeper_apply"
+            conn,
+            uid,
+            planet_id=int(planet_id),
+            source="timekeeper_apply",
+            domains=domains,
         )
     else:
-        result = _finish_inventory_due_work(conn, uid, source="timekeeper_apply")
+        result = _finish_inventory_due_work(
+            conn,
+            uid,
+            source="timekeeper_apply",
+            domains=domains,
+        )
     return dict(result or {"ok": True, "errors": []})
 
 
@@ -521,13 +537,40 @@ def apply_timekeeper(
         return False, "insufficient_timekeeper", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
     now = float(time.time())
-    pre_finish = _finish_before_apply(conn, uid, pid if pid > 0 else None)
-    if pre_finish.get("ok") is False:
-        return False, "queue_finish_failed", {
-            "errors": list(pre_finish.get("errors") or [])[:5],
-            "timekeeper": serialize_for_client(uid, conn=conn),
-        }
-    rows, finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
+
+    # GC-PERF-TK-PG-011: build/research are non-progressive queues. Read the
+    # head first and only run a pre-finish when it is actually due. Shipyard,
+    # defense and troops keep their pre-finish because progressive delivery can
+    # be due before the order's final finish_at.
+    rows: List[Mapping[str, Any]]
+    finish_col: str
+    if dom in ("build", "research"):
+        rows, finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
+        if rows:
+            from .queue_poll import due_cutoff_ts
+
+            head_finish = float(_row_field(rows[0], finish_col) or 0)
+            if head_finish > 0 and head_finish <= float(due_cutoff_ts(now)):
+                pre_finish = _finish_before_apply(
+                    conn, uid, pid if pid > 0 else None, dom
+                )
+                if pre_finish.get("ok") is False:
+                    return False, "queue_finish_failed", {
+                        "errors": list(pre_finish.get("errors") or [])[:5],
+                        "timekeeper": serialize_for_client(uid, conn=conn),
+                    }
+                rows, finish_col = _load_domain_rows(
+                    dom, uid, pid, conn=conn, now=float(time.time())
+                )
+    else:
+        pre_finish = _finish_before_apply(conn, uid, pid if pid > 0 else None, dom)
+        if pre_finish.get("ok") is False:
+            return False, "queue_finish_failed", {
+                "errors": list(pre_finish.get("errors") or [])[:5],
+                "timekeeper": serialize_for_client(uid, conn=conn),
+            }
+        rows, finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
+
     if not rows:
         return False, "no_queue", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
@@ -564,13 +607,27 @@ def apply_timekeeper(
             _tk_savepoint_rollback(conn)
             return False, "no_effect", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
-        post_finish = _finish_before_apply(conn, uid, pid if pid > 0 else None)
-        if post_finish.get("ok") is False:
-            _tk_savepoint_rollback(conn)
-            return False, "queue_finish_failed", {
-                "errors": list(post_finish.get("errors") or [])[:5],
-                "timekeeper": serialize_for_client(uid, conn=conn),
-            }
+        # Progressive production may deliver units throughout the order, so
+        # it still needs the targeted post-shift delivery pass. Build/research
+        # only need it when the shift actually pushes the head into the due
+        # window.
+        post_finish_needed = dom not in ("build", "research")
+        if not post_finish_needed:
+            from .queue_poll import due_cutoff_ts
+
+            shifted_finish = float(_row_field(rows[0], finish_col) or 0) - float(shifted)
+            post_finish_needed = shifted_finish <= float(due_cutoff_ts(time.time()))
+
+        if post_finish_needed:
+            post_finish = _finish_before_apply(
+                conn, uid, pid if pid > 0 else None, dom
+            )
+            if post_finish.get("ok") is False:
+                _tk_savepoint_rollback(conn)
+                return False, "queue_finish_failed", {
+                    "errors": list(post_finish.get("errors") or [])[:5],
+                    "timekeeper": serialize_for_client(uid, conn=conn),
+                }
 
         try:
             new_bal = debit(uid, shifted, f"apply:{dom}", conn=conn)
@@ -580,10 +637,22 @@ def apply_timekeeper(
                 "timekeeper": serialize_for_client(uid, conn=conn)
             }
 
-        now_after = float(time.time())
-        rows_after, _ = _load_domain_rows(dom, uid, pid, conn=conn, now=now_after)
-        head_id_after = _row_field(rows_after[0], "id") if rows_after else None
-        jobs_finished = head_id_before is not None and head_id_before != head_id_after
+        if post_finish_needed and dom in ("build", "research"):
+            # Targeted central finisher already tells us whether the active
+            # non-progressive head completed. Avoid re-reading the queue.
+            finished_key = "buildings" if dom == "build" else "research"
+            jobs_finished = int(
+                (post_finish.get("finished") or {}).get(finished_key) or 0
+            ) > 0
+        elif post_finish_needed:
+            now_after = float(time.time())
+            rows_after, _ = _load_domain_rows(dom, uid, pid, conn=conn, now=now_after)
+            head_id_after = _row_field(rows_after[0], "id") if rows_after else None
+            jobs_finished = head_id_before is not None and head_id_before != head_id_after
+        else:
+            # No delivery pass means the same head is still active; avoid a
+            # second queue SELECT just to rediscover that fact.
+            jobs_finished = False
         _tk_savepoint_release(conn)
     except Exception:
         try:
@@ -593,7 +662,13 @@ def apply_timekeeper(
         raise
 
     return True, "ok", {
-        "timekeeper": serialize_for_client(uid, conn=conn),
+        # debit() already returned the authoritative post-update balance.
+        # Do not SELECT it again just to serialize the same HUD value.
+        "timekeeper": {
+            "ready": True,
+            "balance_sec": int(new_bal),
+            "label": format_balance_label(int(new_bal)),
+        },
         "domain": dom,
         "seconds_applied": shifted,
         "seconds_requested": boost_seconds,

@@ -4151,39 +4151,11 @@ def api_timekeeper_apply():
         commit(conn)
         apply_ms = (time.perf_counter() - t_apply0) * 1000.0
 
-        # GC-PERF-TK-002: verify debit persisted (read-only — avoid INSERT OR IGNORE
-        # starting a new write TX on this conn that would block state rebuild).
+        # Successful commit is the persistence boundary. Re-reading the same
+        # Timekeeper row here added a remote PG round-trip to every boost.
         applied = int(result.get("seconds_applied") or 0)
         tk_slice = result.get("timekeeper") or {}
         expected_bal = int(tk_slice.get("balance_sec") or 0)
-        row = conn.execute(
-            "SELECT balance_sec FROM timekeeper_balances WHERE player_id = ? LIMIT 1;",
-            (user_id,),
-        ).fetchone()
-        persisted_bal = int(row["balance_sec"] or 0) if row else -1
-        if applied > 0 and persisted_bal != expected_bal:
-            logger.error(
-                "timekeeper_apply not persisted user_id=%s domain=%s applied=%s expected_bal=%s got_bal=%s",
-                user_id,
-                domain,
-                applied,
-                expected_bal,
-                persisted_bal,
-            )
-            conn.close()
-            conn = None
-            state = _timekeeper_apply_game_state(domain)
-            if isinstance(state, dict) and tk_slice:
-                state["timekeeper"] = tk_slice
-            return jsonify(
-                {
-                    "ok": False,
-                    "reason": "apply_not_persisted",
-                    "state": state,
-                    "timekeeper": tk_slice,
-                    "seconds_applied": 0,
-                }
-            ), 500
 
         # Release apply conn before state rebuild (separate write TX).
         conn.close()

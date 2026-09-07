@@ -2321,7 +2321,7 @@ def get_build_queue_status_for_planet(
                 "finish_time": finish_time,
             })
 
-        queue_limit = _resolve_build_queue_limit()
+        queue_limit = _resolve_build_queue_limit(conn=conn)
 
         summary = {
             "count": len(queue),
