@@ -11322,31 +11322,41 @@ def _payload_from_live_context(
             # Reuse the rows already loaded for nav badge counts above.
             payload["live_events"] = live_events_snapshot
 
-    with perf_span("payload.fleets_hud"):
-        try:
-            from game.live_state import fleet_hud_for_game_state
+    if not timekeeper_partial:
+        with perf_span("payload.fleets_hud"):
+            try:
+                from game.live_state import fleet_hud_for_game_state
 
-            fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
-            if fleet_hud is not None:
-                from game.fleet import FLEET_DRAWER_VISIBLE_LIMIT
+                fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
+                if fleet_hud is not None:
+                    from game.fleet import FLEET_DRAWER_VISIBLE_LIMIT
 
-                payload["active_fleets"] = fleet_hud.get("active_fleets") or {
-                    "count": 0,
-                    "active_fleet_count": 0,
-                    "fleets_confirmed_empty": True,
-                    "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
-                    "next_remaining_seconds": 0,
-                    "items": [],
-                }
-                payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
-                payload["fleet_alerts"] = fleet_hud.get("fleet_alerts") or {
-                    "incoming_attack_count": 0,
-                    "next_attack_arrival": None,
-                    "has_incoming_attack": False,
-                    "alert_key": "",
-                    "incoming_attacks": [],
-                }
-            else:
+                    payload["active_fleets"] = fleet_hud.get("active_fleets") or {
+                        "count": 0,
+                        "active_fleet_count": 0,
+                        "fleets_confirmed_empty": True,
+                        "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
+                        "next_remaining_seconds": 0,
+                        "items": [],
+                    }
+                    payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
+                    payload["fleet_alerts"] = fleet_hud.get("fleet_alerts") or {
+                        "incoming_attack_count": 0,
+                        "next_attack_arrival": None,
+                        "has_incoming_attack": False,
+                        "alert_key": "",
+                        "incoming_attacks": [],
+                    }
+                else:
+                    payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+                    payload["fleet_alerts"] = {
+                        "incoming_attack_count": 0,
+                        "next_attack_arrival": None,
+                        "has_incoming_attack": False,
+                        "alert_key": "",
+                        "incoming_attacks": [],
+                    }
+            except Exception:
                 payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
                 payload["fleet_alerts"] = {
                     "incoming_attack_count": 0,
@@ -11355,15 +11365,6 @@ def _payload_from_live_context(
                     "alert_key": "",
                     "incoming_attacks": [],
                 }
-        except Exception:
-            payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
-            payload["fleet_alerts"] = {
-                "incoming_attack_count": 0,
-                "next_attack_arrival": None,
-                "has_incoming_attack": False,
-                "alert_key": "",
-                "incoming_attacks": [],
-            }
 
     if not timekeeper_partial:
         try:

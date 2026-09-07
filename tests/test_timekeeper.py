@@ -321,11 +321,10 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     assert "shipyard" not in state
     assert "defense" not in state
 
-    # GC-PERF-TK-021/023: TK apply keeps mutation-critical queue/resources
-    # plus Fleet HUD fresh; unrelated HUD domains remain cached client-side.
+    # GC-PERF-TK-021/025: TK apply keeps mutation-critical queue/resources;
+    # unrelated HUD domains, including Fleet HUD, remain cached client-side.
     assert isinstance(state.get("resources"), dict)
     assert isinstance(state.get("research"), dict)
-    assert isinstance(state.get("fleet_alerts"), dict)
     for omitted in (
         "nav_badges",
         "imperial_directives",
@@ -341,6 +340,9 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
         "notifications",
         "account_safety",
         "initiation",
+        "active_fleets",
+        "fleet_slots",
+        "fleet_alerts",
         "planets",
         "planet_limit",
         "planet_relocation",

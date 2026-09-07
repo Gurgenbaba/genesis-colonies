@@ -160,10 +160,10 @@ def test_timekeeper_partial_projection_skips_unchanged_meta_domains():
         in payload
     )
 
-    # Fleet busy-state is still mutation-response critical until the client
-    # explicitly preserves missing active_fleets.
-    projection_tail = payload.split('with perf_span("payload.fleets_hud")', 1)[1]
-    assert "fleet_hud_for_game_state" in projection_tail
+    fleet_pos = payload.index('with perf_span("payload.fleets_hud")')
+    fleet_prefix = payload[max(0, fleet_pos - 80):fleet_pos]
+    assert "if not timekeeper_partial:" in fleet_prefix
+    assert "fleet_hud_for_game_state" in payload
 
 def test_timekeeper_partial_projection_skips_commander_and_score_reads():
     src = _read("app.py")
@@ -182,10 +182,8 @@ def test_timekeeper_partial_projection_skips_commander_and_score_reads():
     score_prefix = payload[max(0, score_pos - 80):score_pos]
     assert "if not timekeeper_partial:" in score_prefix
 
-    # Critical mutation-owned slices remain outside the skip.
+    # Critical mutation-owned Timekeeper slice remains outside the skip.
     assert 'payload["timekeeper"] = dict(timekeeper_snapshot)' in payload
-    assert 'with perf_span("payload.notifications")' in payload
-    assert 'with perf_span("payload.fleets_hud")' in payload
 
 def test_timekeeper_partial_projection_skips_unrelated_notification_and_safety_reads():
     src = _read("app.py")
@@ -209,8 +207,8 @@ def test_timekeeper_partial_projection_skips_unrelated_notification_and_safety_r
     safety_prefix = payload[max(0, safety_pos - 120):safety_pos]
     assert "if not timekeeper_partial:" in safety_prefix
 
-    # Fleet intentionally remains outside the partial skip for now.
+    # Fleet omission is now safe because GC-PERF-TK-024 preserves missing Fleet state.
     fleet_pos = payload.index('with perf_span("payload.fleets_hud")')
     fleet_prefix = payload[max(0, fleet_pos - 80):fleet_pos]
-    assert "if not timekeeper_partial:" not in fleet_prefix
+    assert "if not timekeeper_partial:" in fleet_prefix
 
