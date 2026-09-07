@@ -140,6 +140,41 @@ def definition_is_rollable(definition: Mapping[str, Any] | None) -> bool:
     return int(definition.get("weight") or 0) > 0
 
 
+def get_definitions(
+    keys: List[str],
+    *,
+    conn,
+) -> Dict[str, Dict[str, Any]]:
+    """Bulk definition lookup for existing player directives.
+
+    Unlike rollable catalog listing, this deliberately keeps disabled/weight=0
+    definitions because already-issued rows still need stable serialization.
+    """
+    wanted = list(
+        dict.fromkeys(
+            str(key or "").strip()
+            for key in keys
+            if str(key or "").strip()
+        )
+    )
+    if not wanted or not directives_schema_ready(conn):
+        return {}
+    placeholders = ",".join("?" for _ in wanted)
+    rows = conn.execute(
+        f"""
+        SELECT key, category, cadence, objective_kind, base_target, scale_profile,
+               weight, min_rarity, max_rarity, filters_json, title_key, description_key, sort_order
+        FROM directive_definitions
+        WHERE key IN ({placeholders});
+        """,
+        tuple(wanted),
+    ).fetchall()
+    return {
+        str(row["key"]): _parse_row(row)
+        for row in rows
+    }
+
+
 def get_definition(key: str, *, conn) -> Optional[Dict[str, Any]]:
     if not directives_schema_ready(conn):
         return None
