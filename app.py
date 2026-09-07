@@ -1428,6 +1428,7 @@ def _load_page_live_context(
         conn = db()
     use_poll_live_path = _use_poll_live_path(src)
     use_planet_switch_live_path = src == "api_planets_active"
+    use_post_mutation_live_path = _use_post_mutation_read_path(src)
     try:
         try:
             wrote_live = False
@@ -1438,6 +1439,15 @@ def _load_page_live_context(
 
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                     read_player_live_state_for_planet_switch(user_id, conn=conn)
+                )
+            elif use_post_mutation_live_path:
+                # GC-PERF-ACTION-009: mutation owners already ran their required
+                # finish-before-mutate pass. Rebuilding action state must not run
+                # finish_player_due_work + resource materialization a second time.
+                from game.logic import read_player_live_state_after_mutation
+
+                player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
+                    read_player_live_state_after_mutation(user_id, conn=conn)
                 )
             elif use_poll_live_path:
                 from game.logic import read_player_live_state_for_poll
@@ -1606,7 +1616,11 @@ def _load_page_live_context(
                     _flask_g.gc_prod_per_hour = prod_per_hour
             except Exception:
                 pass
-            if not use_poll_live_path and not use_planet_switch_live_path:
+            if (
+                not use_poll_live_path
+                and not use_planet_switch_live_path
+                and not use_post_mutation_live_path
+            ):
                 _stash_shell_boot_for_inject(user_id, conn)
         except RuntimeError:
             return None
@@ -1687,7 +1701,11 @@ def _load_page_live_context(
                     _flask_g.gc_prod_per_hour = prod_per_hour
             except Exception:
                 pass
-            if not use_poll_live_path and not use_planet_switch_live_path:
+            if (
+                not use_poll_live_path
+                and not use_planet_switch_live_path
+                and not use_post_mutation_live_path
+            ):
                 _stash_shell_boot_for_inject(user_id, conn)
     except Exception:
         rollback(conn)
@@ -1757,6 +1775,19 @@ _FLEET_MUTATION_LIVE_SOURCES = frozenset(
         "api_fleet_mass_expedition",
     }
 )
+
+_POST_MUTATION_READ_ONLY_LIVE_SOURCES = frozenset(
+    {
+        "api_buildings_upgrade",
+        "api_buildings_cancel",
+        "api_timekeeper_apply",
+    }
+)
+
+
+def _use_post_mutation_read_path(finish_source: str) -> bool:
+    """Actions whose mutation owner already ran the canonical due-work pass."""
+    return str(finish_source or "") in _POST_MUTATION_READ_ONLY_LIVE_SOURCES
 
 
 def _use_poll_live_path(finish_source: str) -> bool:
@@ -14398,12 +14429,9 @@ def api_buildings_upgrade():
         state, _ = _build_game_state_payload(include_panel=True)
         return jsonify({"ok": False, "reason": "missing_building_type", "state": state}), 400
 
-    ctx = _player_context_for_action()
-    if ctx is None:
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
-    player_view, buildings = ctx
-
-    user_id = int(player_view["id"])
     request_id = _extract_request_id(data)
     if request_id:
         cached = get_idempotent_action(user_id, request_id)
@@ -14422,7 +14450,7 @@ def api_buildings_upgrade():
                         cached["_action_perf"] = {**perf_data, "cached": True}
             return jsonify(cached)
 
-    ok, reason, extra = queue_build(player_view, buildings, building_type, queue_mode=_queue_mode(data))
+    ok, reason, extra = queue_build({"id": user_id}, {}, building_type, queue_mode=_queue_mode(data))
     resp = _action_json_response(
         ok,
         reason,

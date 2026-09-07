@@ -2405,7 +2405,7 @@ def complete_finished_builds_for_planet(planet_id: int, conn=None) -> Dict[str, 
 
 
 def queue_build_for_planet(
-    planet: dict,
+    planet: Optional[dict],
     buildings: Dict[str, int],
     building_type: str,
     user_id: Optional[int] = None,
@@ -2415,8 +2415,9 @@ def queue_build_for_planet(
     if building_type not in BASE_COST:
         return False, "invalid", {"msg": "Unknown building type"}
 
-    planet_id = int(planet["id"])
     if user_id is None:
+        if not planet:
+            raise RuntimeError("queue_build_for_planet: user_id oder planet erforderlich")
         pid = planet.get("player_id")
         if pid is None:
             raise RuntimeError("queue_build_for_planet: planet hat kein 'player_id'")
@@ -2428,16 +2429,24 @@ def queue_build_for_planet(
 
     want_max = str(queue_mode or "single").strip().lower() == "max"
 
-    # P0 PG: the vacation probe must share the mutation-owned checkout.
-    # The old vacation_blocks_outbound(user_id, conn=db()) orphaned a pooled
-    # connection before every build enqueue.
+    # GC-PERF-ACTION-009: context planet + vacation + queue mutation share one
+    # checkout. The old route loaded player/planet/buildings on separate
+    # connections before this mutation opened yet another one.
     conn = db()
-    ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)
-    if not ok_vacation:
-        conn.close()
-        return False, vac_reason, {}
     finished_any = False
     try:
+        if planet is None:
+            from .planet_evolution.repository import get_context_planet
+
+            planet = get_context_planet(user_id, conn=conn)
+        if not planet:
+            return False, "invalid", {"msg": "Planet not found"}
+        planet_id = int(planet["id"])
+
+        ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)
+        if not ok_vacation:
+            return False, vac_reason, {}
+
         begin_write_transaction(conn)
         lock_planet_for_update(conn, planet_id)
         now = time.time()
