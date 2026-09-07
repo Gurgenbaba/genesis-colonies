@@ -11179,6 +11179,7 @@ def _payload_from_live_context(
 
     live_events_snapshot: List[Dict[str, Any]] = []
     server_event_rows = None
+    active_booster_rows = None
     with perf_span("payload.nav_badges"):
         try:
             from game.server_events import list_active_events as list_server_events
@@ -11188,6 +11189,15 @@ def _payload_from_live_context(
             server_event_rows = list_server_events(conn=conn)
         except Exception:
             server_event_rows = None
+
+        try:
+            from game.inventory_boosters import list_active_boosters
+
+            # GC-PERF-BOOST-017: Live Events and active_boosters use the same
+            # active DB rows. One request snapshot avoids a second PG round-trip.
+            active_booster_rows = list_active_boosters(user_id, conn=conn)
+        except Exception:
+            active_booster_rows = None
 
         try:
             from game.i18n import current_locale
@@ -11200,6 +11210,7 @@ def _payload_from_live_context(
                 user_id=user_id,
                 locale=current_locale(),
                 server_events=server_event_rows,
+                booster_rows=active_booster_rows,
             )
         except Exception:
             live_events_snapshot = []
@@ -11347,7 +11358,10 @@ def _payload_from_live_context(
 
         player_locale = get_player_locale(user_id, conn=conn)
         payload["active_boosters"] = build_inventory_boosters_state(
-            user_id, conn=conn, locale=player_locale
+            user_id,
+            conn=conn,
+            locale=player_locale,
+            active_rows=active_booster_rows,
         )
     except Exception:
         payload["active_boosters"] = {"ready": False, "active": [], "active_effects": []}
