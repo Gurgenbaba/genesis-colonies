@@ -4137,7 +4137,7 @@ def api_timekeeper_apply():
             rollback(conn)
             conn.close()
             conn = None
-            state = _timekeeper_apply_game_state(domain)
+            state = _timekeeper_apply_game_state(domain, user_id=user_id)
             body = {"ok": False, "reason": reason, "state": state}
             if result.get("timekeeper"):
                 body["timekeeper"] = result["timekeeper"]
@@ -4157,14 +4157,15 @@ def api_timekeeper_apply():
         tk_slice = result.get("timekeeper") or {}
         expected_bal = int(tk_slice.get("balance_sec") or 0)
 
-        # Release apply conn before state rebuild (separate write TX).
-        conn.close()
-        conn = None
-
+        # GC-PERF-TK-CONN-012: mutation is committed; reuse this checkout for
+        # the read-only response rebuild instead of returning it to the pool and
+        # immediately checking out another connection.
         t_state0 = time.perf_counter()
         state = _timekeeper_apply_game_state(
             domain,
             post_mutation_committed=True,
+            conn=conn,
+            user_id=user_id,
         )
         state_ms = (time.perf_counter() - t_state0) * 1000.0
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
@@ -11570,16 +11571,23 @@ def _build_game_state_payload(
     panel_page: str = "",
     panel_tab: Optional[str] = None,
     post_mutation_committed: bool = False,
+    conn=None,
+    authenticated_user_id: Optional[int] = None,
 ) -> Tuple[dict, int]:
     """
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
     Returns (payload, player_id).
     """
-    user = get_current_user()
-    if not user:
-        return {"ok": False, "error": "not_logged_in"}, 0
-
-    user_id = int(user["id"])
+    if authenticated_user_id is not None:
+        user_id = int(authenticated_user_id or 0)
+        session_user_id = int(session.get("user_id") or 0)
+        if user_id <= 0 or session_user_id != user_id:
+            return {"ok": False, "error": "not_logged_in"}, 0
+    else:
+        user = get_current_user()
+        if not user:
+            return {"ok": False, "error": "not_logged_in"}, 0
+        user_id = int(user["id"])
     lightweight = _is_game_state_poll_source(finish_source)
     if lightweight and not force_include_panel:
         include_panel = False
@@ -11593,7 +11601,9 @@ def _build_game_state_payload(
     if panel_delta_keys:
         set_request_perf_meta("panel_delta", 1)
 
-    conn = db()
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
     try:
         ctx_t0 = time.perf_counter()
         ctx = _load_page_live_context(
@@ -11645,7 +11655,8 @@ def _build_game_state_payload(
                 commit(conn)
         except Exception:
             pass
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 def _player_context_for_action() -> Optional[Tuple[Any, Dict[str, int]]]:
@@ -11731,6 +11742,8 @@ def _timekeeper_apply_game_state(
     domain: str | None = None,
     *,
     post_mutation_committed: bool = False,
+    conn=None,
+    user_id: Optional[int] = None,
 ) -> dict:
     """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
     state, _ = _build_game_state_payload(
@@ -11738,19 +11751,28 @@ def _timekeeper_apply_game_state(
         finish_source="api_timekeeper_apply",
         action_slim=True,
         post_mutation_committed=bool(post_mutation_committed),
+        conn=conn,
+        authenticated_user_id=int(user_id) if user_id is not None else None,
     )
     dom = str(domain or "").strip().lower()
     if dom in ("shipyard", "defense", "troops"):
         try:
             from game.live_state import attach_timekeeper_domain_queue_slices
 
-            conn = db()
+            attach_conn = conn
+            own_attach_conn = attach_conn is None
+            if own_attach_conn:
+                attach_conn = db()
             try:
                 attach_timekeeper_domain_queue_slices(
-                    state, int(session.get("user_id") or 0), dom, conn=conn
+                    state,
+                    int(user_id or session.get("user_id") or 0),
+                    dom,
+                    conn=attach_conn,
                 )
             finally:
-                conn.close()
+                if own_attach_conn:
+                    attach_conn.close()
         except Exception:
             logger.exception(
                 "timekeeper_apply queue slice attach failed domain=%s",
