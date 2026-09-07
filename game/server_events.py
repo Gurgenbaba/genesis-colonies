@@ -593,9 +593,18 @@ def list_active_events(*, now: Optional[float] = None, conn=None) -> List[Dict[s
             conn.close()
 
 
-def serialize_active_events(*, now: Optional[float] = None, conn=None) -> Dict[str, Any]:
+def serialize_active_events(
+    *,
+    now: Optional[float] = None,
+    conn=None,
+    active_events: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Player-facing active events + combined factors."""
-    active = list_active_events(now=now, conn=conn)
+    active = (
+        list(active_events)
+        if active_events is not None
+        else list_active_events(now=now, conn=conn)
+    )
     factors = _combine_factors(active)
     return {
         "events": [
@@ -672,11 +681,22 @@ def effect_summary_short(effects: Any, *, locale: Optional[str] = None) -> List[
     return out
 
 
-def active_events_banner(*, now: Optional[float] = None, conn=None, locale: Optional[str] = None) -> List[Dict[str, Any]]:
+def active_events_banner(
+    *,
+    now: Optional[float] = None,
+    conn=None,
+    locale: Optional[str] = None,
+    active_events: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
     """UI teaser rows for Overview / Login Rewards (active server events only)."""
     ts = float(now if now is not None else time.time())
     out: List[Dict[str, Any]] = []
-    for ev in list_active_events(now=ts, conn=conn):
+    rows = (
+        list(active_events)
+        if active_events is not None
+        else list_active_events(now=ts, conn=conn)
+    )
+    for ev in rows:
         ends = int(ev.get("ends_at") or 0)
         effects = ev.get("effects") or []
         has_prod = any(
