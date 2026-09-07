@@ -48,14 +48,17 @@ def test_directive_claims_reuse_mutation_connection_for_page_state():
 
     assert "imperial_directives = get_imperial_directives_state(user_id, conn=conn)" in single
     assert "imperial_directives = get_imperial_directives_state(user_id, conn=conn)" in claim_all
-    assert (
-        'else:\n        state = _hud_only_game_state("api_imperial_directives_claim")\n'
-        "        imperial_directives = get_imperial_directives_state(user_id, conn=conn)"
-    ) in single
-    assert (
-        'else:\n        state = _hud_only_game_state("api_imperial_directives_claim_all")\n'
-        "        imperial_directives = get_imperial_directives_state(user_id, conn=conn)"
-    ) in claim_all
+
+    for block, source in (
+        (single, "api_imperial_directives_claim"),
+        (claim_all, "api_imperial_directives_claim_all"),
+    ):
+        success = block.rsplit("    else:\n", 1)[1].split("    finally:", 1)[0]
+        hud_pos = success.index(f'_hud_only_game_state("{source}")')
+        cards_pos = success.index(
+            "get_imperial_directives_state(user_id, conn=conn)"
+        )
+        assert hud_pos < cards_pos
 
 
 def test_directives_state_bulk_loads_definitions_once():
