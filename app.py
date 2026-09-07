@@ -7340,11 +7340,6 @@ def api_imperial_directives_claim():
             commit(conn)
         else:
             rollback(conn)
-
-        # GC-PERF-DIRECTIVES-008: the page needs the authoritative Directives
-        # state after the mutation. Reuse this connection instead of opening a
-        # third one after constructing a full panel game-state.
-        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
     except Exception:
         rollback(conn)
         logger.exception(
@@ -7354,12 +7349,15 @@ def api_imperial_directives_claim():
         )
         state = _hud_only_game_state("api_imperial_directives_claim")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    else:
+        # GC-PERF-DIRECTIVES-008: live refresh may finish queues and advance
+        # directive progress. Refresh HUD first, then serialize page cards from
+        # the still-open mutation connection so both payloads describe the
+        # same post-finish state without a third checkout.
+        state = _hud_only_game_state("api_imperial_directives_claim")
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
     finally:
         conn.close()
-
-    # Directives DOM is patched from imperial_directives above. The global
-    # action state only needs HUD/queues/nav badges, never include_panel=True.
-    state = _hud_only_game_state("api_imperial_directives_claim")
 
     resp: Dict[str, Any] = {
         "ok": bool(ok),
@@ -7400,16 +7398,16 @@ def api_imperial_directives_claim_all():
             commit(conn)
         else:
             rollback(conn)
-        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
     except Exception:
         rollback(conn)
         logger.exception("imperial directive claim-all failed user_id=%s", user_id)
         state = _hud_only_game_state("api_imperial_directives_claim_all")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    else:
+        state = _hud_only_game_state("api_imperial_directives_claim_all")
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
     finally:
         conn.close()
-
-    state = _hud_only_game_state("api_imperial_directives_claim_all")
 
     resp: Dict[str, Any] = {
         "ok": bool(ok),

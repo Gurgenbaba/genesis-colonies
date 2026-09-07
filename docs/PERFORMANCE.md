@@ -165,7 +165,7 @@ The Directives UI already consumes these separately: `state` only feeds `applyAc
 Fix:
 
 - Claim and Claim-All use `_hud_only_game_state()`; no full panel/catalog build.
-- Authoritative Directives page-state is rebuilt on the already-open mutation connection.
+- HUD/live-state refresh runs first; authoritative Directives page-state is then rebuilt on the still-open mutation connection so queue-finish progress cannot be overwritten by stale cards.
 - `get_imperial_directives_state()` bulk-loads all referenced definitions once instead of one SQL lookup per directive.
 - Existing directive validation/generation shares the same bulk definition snapshot for stale checks and category seeding.
 - Bulk lookup deliberately retains disabled/weight-0 definitions so already-issued historical directives serialize correctly.
