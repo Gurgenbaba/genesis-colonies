@@ -157,7 +157,7 @@ def test_gc862_max_queue_reduces_db_reads(isolated_db, monkeypatch):
     jobs = int(payload.get("jobs_queued") or 1)
     assert jobs >= 2
     assert calls["buildings"] == 1
-    assert calls["queue"] == 2  # recalc + initial load; not per MAX iteration
+    assert calls["queue"] == 1  # shared enqueue/recalc snapshot; never per MAX iteration
 
 
 def test_gc862_panel_context_caches_build_time_at_target():
