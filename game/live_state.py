@@ -492,6 +492,7 @@ def nav_badges_for_game_state(
     *,
     conn,
     battle_pass: Optional[Dict[str, Any]] = None,
+    live_events: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Action hints for left-menu navigation (GC-702)."""
     from game.galactic_directives.state import count_pending_government_votes
@@ -550,13 +551,19 @@ def nav_badges_for_game_state(
 
     live_events_count = 0
     try:
-        from game.overview_page import build_overview_live_events
+        if live_events is None:
+            from game.overview_page import build_overview_live_events
 
-        live_event_rows = [
-            row
-            for row in build_overview_live_events(user_id=uid, conn=conn)
-            if isinstance(row, dict)
-        ]
+            live_event_rows = [
+                row
+                for row in build_overview_live_events(user_id=uid, conn=conn)
+                if isinstance(row, dict)
+            ]
+        else:
+            # GC-PERF-LIVEOPS-013: game-state already built this exact LiveOps
+            # snapshot for the header rail. Reuse it for badge counts instead
+            # of repeating Server Events + World Boss + Booster reads.
+            live_event_rows = [row for row in live_events if isinstance(row, dict)]
         live_events_count = len(live_event_rows)
         wb_count = sum(
             1 for row in live_event_rows if str(row.get("kind") or "") == "world_boss"
