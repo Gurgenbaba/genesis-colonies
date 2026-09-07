@@ -25,7 +25,7 @@ def test_build_and_timekeeper_action_state_use_post_mutation_read_path():
     assert '"api_timekeeper_apply"' in constants
 
     live = _block(src, "def _load_page_live_context(", "\ndef _stash_shell_boot_for_inject")
-    assert "use_post_mutation_live_path = _use_post_mutation_read_path(src)" in live
+    assert "use_post_mutation_live_path = bool(post_mutation_committed) and _use_post_mutation_read_path(src)" in live
     assert "read_player_live_state_after_mutation(user_id, conn=conn)" in live
     assert "and not use_post_mutation_live_path" in live
 
