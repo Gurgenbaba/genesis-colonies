@@ -152,6 +152,26 @@ Code audit evidence: `/defense` rendered two mutually exclusive heavy surfaces i
 
 Regression: `tests/test_gc_perf_defense_ssr_006.py` + existing Defense single-request-connection test + Sentinel.
 
+### GC-PERF-DIRECTIVES-008 — Directives claim + page-state hotpath
+
+Railway showed `POST /api/imperial-directives/claim` around ~3 s. The route performed three distinct post-click costs:
+
+- mutate/commit the reward,
+- build a full `include_panel=True` game-state,
+- open another connection and rebuild Imperial Directives state.
+
+The Directives UI already consumes these separately: `state` only feeds `applyActionState()`; `imperial_directives` feeds the page cards.
+
+Fix:
+
+- Claim and Claim-All use `_hud_only_game_state()`; no full panel/catalog build.
+- Authoritative Directives page-state is rebuilt on the already-open mutation connection.
+- `get_imperial_directives_state()` bulk-loads all referenced definitions once instead of one SQL lookup per directive.
+- Existing directive validation/generation shares the same bulk definition snapshot for stale checks and category seeding.
+- Bulk lookup deliberately retains disabled/weight-0 definitions so already-issued historical directives serialize correctly.
+
+Regression: `tests/test_gc_perf_directives_008.py` + API claim contract + Smoke + Sentinel.
+
 ### GC-PERF-NAV-007 — Core navigation + mutation payload hotpath
 
 Production evidence after the Fleet deadline deploy still showed common HTML pages around ~1–2 s and HUD mutation clicks in the multi-second range. Audit found work that was independent of the requested page/action:
