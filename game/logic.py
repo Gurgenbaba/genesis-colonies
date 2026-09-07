@@ -130,6 +130,39 @@ def read_player_live_state_for_planet_switch(
             conn.close()
 
 
+def read_player_live_state_after_mutation(
+    player_id: int,
+    conn=None,
+) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
+    """
+    Read-only action response projection after a mutation owner already settled due work.
+
+    Build/Timekeeper mutations perform their mandatory finish-before-mutate work
+    inside the mutation transaction. Their JSON response must not run the global
+    finisher or persist resources again just to rebuild HUD/queue state.
+    """
+    from .models import db as _db, load_player
+    from .live_state import mark_request_live_refreshed
+
+    uid = int(player_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+    try:
+        from .planet_evolution.repository import get_context_planet
+
+        player = load_player(uid, conn=conn)
+        if not player:
+            raise RuntimeError(f"player {uid} not found")
+        planet = get_context_planet(uid, conn=conn)
+        projected = _read_player_live_state_no_writes(uid, conn, player, planet)
+        mark_request_live_refreshed()
+        return projected
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
 def read_player_live_state_for_poll(
     player_id: int,
     conn=None,
@@ -768,13 +801,14 @@ def queue_build(
         - unknown_building
     """
     user_id = int(player.get("id"))
-    from .planet_evolution.repository import get_context_planet
-
-    planet = get_context_planet(user_id)
+    # GC-PERF-ACTION-009: queue_build_for_planet resolves the context planet on
+    # its mutation-owned connection. The route's legacy buildings snapshot is
+    # intentionally ignored; the mutation reloads authoritative levels after lock.
+    _ = buildings
 
     ok, reason, payload = _queue_build_for_planet(
-        planet=planet,
-        buildings=buildings,
+        planet=None,
+        buildings={},
         building_type=building_type,
         user_id=user_id,
         queue_mode=queue_mode,
