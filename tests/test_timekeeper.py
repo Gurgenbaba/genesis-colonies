@@ -317,6 +317,7 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     assert payload.get("timekeeper", {}).get("balance_sec") == 1800
     # GC-PERF-TK-003: action diet — no full panel catalogs on apply response
     assert "buildings_panel" not in state
+    assert "buildings_panel_delta" not in state
     assert "codex" not in state
     assert "shipyard" not in state
     assert "defense" not in state
@@ -422,8 +423,16 @@ def test_api_timekeeper_apply_jobs_finished_triggers_flag(timekeeper_db, monkeyp
     assert payload.get("jobs_finished") is True
     state = payload.get("state") or {}
     assert state.get("jobs_finished") is True
-    # Still slim — client fetches include_panel after finish, not on apply
+    # Still slim: only the finished card is patched immediately. The existing
+    # include_panel reconcile remains the browser safety net after this response.
     assert "buildings_panel" not in state
+    delta = state.get("buildings_panel_delta") or {}
+    delta_keys = [
+        str(row.get("key") or "")
+        for rows in delta.values()
+        for row in (rows or [])
+    ]
+    assert delta_keys == ["metal_mine"]
     assert "codex" not in state
 
     conn = db()
@@ -512,6 +521,8 @@ def test_timekeeper_finish_only_active_head_not_full_queue(timekeeper_db):
 
         applied = int(result.get("seconds_applied") or 0)
         assert applied <= 120
+        assert result.get("jobs_finished") is True
+        assert result.get("finished_building_key") == "metal_mine"
         rows = conn.execute(
             "SELECT building_type, finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC;",
             (pid,),
