@@ -289,6 +289,7 @@ def commander_tip_for_date(
     *,
     when: date | None = None,
     conn: sqlite3.Connection | None = None,
+    unlocked_ids: Optional[Set[str]] = None,
 ) -> Optional[Dict[str, str]]:
     pool = list(load_catalog().get("commander_tips_pool") or [])
     if not pool:
@@ -297,7 +298,10 @@ def commander_tip_for_date(
     idx = hash(day.isoformat()) % len(pool)
     entry = pool[idx]
     codex_id = str(entry.get("codex_id") or "")
-    if not is_codex_unlocked(int(player_id), codex_id, conn=conn):
+    if unlocked_ids is not None:
+        if codex_id not in unlocked_ids:
+            return None
+    elif not is_codex_unlocked(int(player_id), codex_id, conn=conn):
         return None
     # Find tip index within article
     tips = [
@@ -313,11 +317,20 @@ def commander_tip_for_date(
     }
 
 
-def build_codex_panel_state(player_id: int, *, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+def build_codex_panel_state(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection | None = None,
+    unlocked_ids: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
     own = conn is None
     c = conn or db()
     try:
-        unlocked = unlocked_codex_ids(int(player_id), conn=c)
+        unlocked = (
+            set(unlocked_ids)
+            if unlocked_ids is not None
+            else unlocked_codex_ids(int(player_id), conn=c)
+        )
         catalog = load_catalog()
         bands_order = ["I", "II", "III", "IV", "—"]
         bands_out: List[Dict[str, Any]] = []
@@ -431,13 +444,18 @@ def build_codex_article_client_entry(
     *,
     conn: sqlite3.Connection,
     locale: str | None = None,
+    unlocked_ids: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
     """Resolved article payload for Codex detail panel (GC-950 client contract)."""
     cid = str(codex_id or "").strip()
     art = catalog_articles().get(cid) or {}
     loc = locale or current_locale()
     prefix = f"codex_{cid}"
-    locked = not is_codex_unlocked(int(player_id), cid, conn=conn)
+    locked = (
+        cid not in unlocked_ids
+        if unlocked_ids is not None
+        else not is_codex_unlocked(int(player_id), cid, conn=conn)
+    )
     teaser_key = str(art.get("teaser_key") or "").strip()
     teaser = _codex_locale_text(teaser_key, "", locale=loc) if teaser_key else ""
     unlock_label = _codex_unlock_label(art, locale=loc)
@@ -510,15 +528,25 @@ def build_codex_client_config(
     *,
     conn: sqlite3.Connection | None = None,
     locale: str | None = None,
+    unlocked_ids: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
     own = conn is None
     c = conn or db()
     try:
         loc = locale or current_locale()
+        unlocked = (
+            set(unlocked_ids)
+            if unlocked_ids is not None
+            else unlocked_codex_ids(int(player_id), conn=c)
+        )
         articles: Dict[str, Any] = {}
         for cid in catalog_articles().keys():
             articles[cid] = build_codex_article_client_entry(
-                int(player_id), cid, conn=c, locale=loc
+                int(player_id),
+                cid,
+                conn=c,
+                locale=loc,
+                unlocked_ids=unlocked,
             )
         return {"articles": articles}
     finally:
@@ -538,11 +566,28 @@ def build_codex_template_context(
         record_codex_route_visit(int(player_id), route, conn=conn)
     route_key = route or str(endpoint or "").strip()
     primary = primary_codex_for_route(route_key)
+
+    # GC-PERF-NAV-007: one unlock snapshot feeds the panel, commander tip and
+    # client article catalog. Previously panel + client walked the full unlock
+    # catalog independently, multiplying DB probes on every HTML render.
+    unlocked = unlocked_codex_ids(int(player_id), conn=conn)
     return {
-        "CODEX_PANEL": build_codex_panel_state(int(player_id), conn=conn),
-        "CODEX_COMMANDER_TIP": commander_tip_for_date(int(player_id), conn=conn),
+        "CODEX_PANEL": build_codex_panel_state(
+            int(player_id),
+            conn=conn,
+            unlocked_ids=unlocked,
+        ),
+        "CODEX_COMMANDER_TIP": commander_tip_for_date(
+            int(player_id),
+            conn=conn,
+            unlocked_ids=unlocked,
+        ),
         "CODEX_PRIMARY": primary,
-        "CODEX_CLIENT": build_codex_client_config(int(player_id), conn=conn),
+        "CODEX_CLIENT": build_codex_client_config(
+            int(player_id),
+            conn=conn,
+            unlocked_ids=unlocked,
+        ),
     }
 
 
