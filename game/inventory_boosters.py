@@ -410,6 +410,7 @@ def build_active_effects_for_hud(
     now: Optional[float] = None,
     include_server_events: bool = True,
     active_rows: Optional[List[Dict[str, Any]]] = None,
+    include_resource_impacts: bool = True,
 ) -> List[Dict[str, Any]]:
     """HUD-ready active timed boosters — labels resolved server-side (GC-968B)."""
     rows = (
@@ -522,6 +523,8 @@ def build_active_effects_for_hud(
     )
     if include_server_events:
         _merge_server_event_production_into_hud(out, now=ts, locale=locale, conn=conn)
+    if not include_resource_impacts:
+        return out
     return enrich_active_effects_with_resource_impacts(
         user_id,
         conn=conn,
