@@ -44,29 +44,17 @@ def test_timekeeper_calls_domain_scoped_finisher_and_skips_partial_build_post_pa
     assert 'run_troops = _domain_enabled("troops")' in engine
 
 
-def test_committed_build_response_reuses_mutation_connection_and_skips_generic_state():
+def test_timekeeper_commit_does_not_reread_balance_before_existing_state_rebuild():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     app = (root / "app.py").read_text(encoding="utf-8")
-
-    helper = app.split("def _timekeeper_apply_game_state(", 1)[1].split(
-        "\ndef _is_buildings_queue_action_source(", 1
-    )[0]
-    fast = helper.split(
-        'if post_mutation_committed and conn is not None and uid > 0 and dom in ("build", "research"):',
-        1,
-    )[1].split('    state, _ = _build_game_state_payload(', 1)[0]
-    assert "get_build_queue_status_for_planet(" in fast
-    assert "skip_finish=True" in fast
-    assert "_build_game_state_payload(" not in fast
-    assert '"nav_badges"' not in fast
-    assert '"score"' not in fast
-    assert '"active_fleets"' not in fast
-
     route = app.split("def api_timekeeper_apply():", 1)[1].split(
         '\n\n@app.route("/api/inventory/craft"', 1
     )[0]
     success = route.split("commit(conn)", 1)[1]
-    assert "conn=conn" in success.split("_timekeeper_apply_game_state(", 1)[1]
+
     assert "SELECT balance_sec FROM timekeeper_balances" not in success
+    assert "conn.close()" in success
+    assert "_timekeeper_apply_game_state(" in success
+    assert "post_mutation_committed=True" in success
