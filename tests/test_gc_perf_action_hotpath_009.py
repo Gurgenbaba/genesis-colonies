@@ -71,3 +71,19 @@ def test_build_wrapper_defers_planet_resolution_to_mutation_connection():
     assert "planet: Optional[dict]" in mutation
     assert "planet = get_context_planet(user_id, conn=conn)" in mutation
     assert "ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=conn)" in mutation
+
+
+def test_post_mutation_read_path_is_gated_on_confirmed_commit():
+    src = _read("app.py")
+    live = _block(src, "def _load_page_live_context(", "\ndef _stash_shell_boot_for_inject")
+    assert "post_mutation_committed: bool = False" in live
+    assert (
+        "use_post_mutation_live_path = bool(post_mutation_committed) "
+        "and _use_post_mutation_read_path(src)"
+    ) in live
+
+    action = _block(src, "def _action_json_response(", "\ndef _defense_json_response(")
+    assert "post_mutation_committed=bool(ok)" in action
+
+    tk = _block(src, "def api_timekeeper_apply():", '\n\n@app.route("/api/inventory/craft"')
+    assert "post_mutation_committed=True" in tk
