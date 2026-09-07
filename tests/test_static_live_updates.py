@@ -3672,3 +3672,17 @@ def test_gc_perf_overview_ttfb_shell_stash_contract():
     assert "gc_fleet_hud" in hud
     assert "build_overview_live_events" in hud
     assert 'header_hud_boot["live_events"]' in hud
+
+def test_main_js_timekeeper_partial_state_cache_preserves_omitted_hud_fields():
+    src = _read("static/main.js")
+    cache = src.split("function commitGameStateCache(data, reason, opts)", 1)[1].split(
+        "function syncHudQueueLiveStatesFromPoll", 1
+    )[0]
+    tk = cache.split('reasonStr === "timekeeper_apply"', 1)[1]
+    assert "const merged = { ...prev, ...data };" in tk
+    assert (
+        "merged.research = { ...(prev.research || {}), ...data.research };"
+        in tk
+    )
+    assert "const merged = { ...data };" not in tk
+
