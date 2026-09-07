@@ -11201,9 +11201,6 @@ def _payload_from_live_context(
         except Exception:
             battle_pass_state = {"ready": False}
 
-        live_events_snapshot: List[Dict[str, Any]] = []
-        server_event_rows = None
-        active_booster_rows = None
         with perf_span("payload.nav_badges"):
             try:
                 from game.server_events import list_active_events as list_server_events
