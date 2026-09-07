@@ -409,9 +409,14 @@ def build_active_effects_for_hud(
     locale: Optional[str] = None,
     now: Optional[float] = None,
     include_server_events: bool = True,
+    active_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """HUD-ready active timed boosters — labels resolved server-side (GC-968B)."""
-    rows = list_active_boosters(user_id, conn=conn, now=now)
+    rows = (
+        list(active_rows)
+        if active_rows is not None
+        else list_active_boosters(user_id, conn=conn, now=now)
+    )
     ts = float(now if now is not None else time.time())
     prod_rows = [r for r in rows if str(r.get("effect_key") or "") in PRODUCTION_EFFECT_KEYS]
     other_rows = [r for r in rows if str(r.get("effect_key") or "") not in PRODUCTION_EFFECT_KEYS]
@@ -738,7 +743,14 @@ def build_inventory_boosters_state(
     locale: Optional[str] = None,
 ) -> Dict[str, Any]:
     rows = list_active_boosters(user_id, conn=conn)
-    active_effects = build_active_effects_for_hud(user_id, conn=conn, locale=locale)
+    # GC-PERF-BOOST-015: the HUD projection is derived from the exact same
+    # active booster rows; do not query player_active_boosters a second time.
+    active_effects = build_active_effects_for_hud(
+        user_id,
+        conn=conn,
+        locale=locale,
+        active_rows=rows,
+    )
     return {
         "ready": boosters_schema_ready(conn),
         "active": rows,
