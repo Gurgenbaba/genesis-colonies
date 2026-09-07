@@ -15179,7 +15179,10 @@
     // GC-PERF-TK-004: slim TK apply must not wipe production queue caches.
     if (reasonStr === "timekeeper_apply" && GC.lastState && data && typeof data === "object") {
       const prev = GC.lastState;
-      const merged = { ...data };
+      const merged = { ...prev, ...data };
+      if (data.research && typeof data.research === "object") {
+        merged.research = { ...(prev.research || {}), ...data.research };
+      }
       if (merged.shipyard == null && prev.shipyard != null) merged.shipyard = prev.shipyard;
       if (merged.shipyard_queue == null && prev.shipyard_queue != null) {
         merged.shipyard_queue = prev.shipyard_queue;
