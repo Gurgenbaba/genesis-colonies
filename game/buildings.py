@@ -588,21 +588,39 @@ def recalculate_build_queue_finish_times(
     *,
     conn,
     now: Optional[float] = None,
-) -> None:
+    rows: Optional[Sequence[Any]] = None,
+    buildings: Optional[Dict[str, int]] = None,
+    research_levels: Optional[Dict[str, int]] = None,
+    hotpath: Optional[BuildingsPanelContext] = None,
+) -> List[Dict[str, Any]]:
     """
     Reschedule all build jobs on a planet after cancel or before enqueue.
-    In-progress first job (start <= now < finish) keeps its window; followers chain from its finish or now.
+
+    Optional snapshots let mutation owners reuse one authoritative
+    Buildings/Research/Queue/Resolver state instead of repeating remote
+    PostgreSQL reads. Existing callers may omit all snapshots.
     """
     planet_id = int(planet_id)
     uid = int(user_id)
     ts = float(now if now is not None else time.time())
-    rows = get_build_queue_rows(planet_id, conn=conn)
-    if not rows:
-        return
+    rows_out: List[Dict[str, Any]] = [
+        dict(row)
+        for row in (
+            rows if rows is not None else get_build_queue_rows(planet_id, conn=conn)
+        )
+    ]
+    if not rows_out:
+        return []
 
-    buildings = get_planet_buildings(planet_id, conn=conn)
-    research_levels = get_research_levels(user_id=uid, conn=conn)
-    hotpath = BuildingsPanelContext.for_queue_recalc(uid, buildings, research_levels, conn=conn)
+    if buildings is None:
+        buildings = get_planet_buildings(planet_id, conn=conn)
+    if research_levels is None:
+        research_levels = get_research_levels(user_id=uid, conn=conn)
+    if hotpath is None:
+        hotpath = BuildingsPanelContext.for_queue_recalc(
+            uid, buildings, research_levels, conn=conn
+        )
+
     cur = conn.cursor()
     schedule_at = ts
     queued_counts: Dict[str, int] = {}
@@ -610,7 +628,7 @@ def recalculate_build_queue_finish_times(
 
     finish_cutoff = due_cutoff_ts(ts)
 
-    for idx, row in enumerate(rows):
+    for idx, row in enumerate(rows_out):
         btype = str(row["building_type"])
         current = int(buildings.get(btype, 0) or 0)
         queued_same = int(queued_counts.get(btype, 0))
@@ -640,8 +658,12 @@ def recalculate_build_queue_finish_times(
             """,
             (float(start_time), float(finish_time), int(row["id"])),
         )
+        row["start_time"] = float(start_time)
+        row["finish_time"] = float(finish_time)
         queued_counts[btype] = queued_same + 1
         schedule_at = finish_time
+
+    return rows_out
 
 
 # =============================================================================
@@ -2488,8 +2510,26 @@ def queue_build_for_planet(
         except Exception:
             pass
 
-        recalculate_build_queue_finish_times(
-            planet_id, user_id, conn=conn, now=now
+        # GC-PERF-BUILD-PG-013: load the authoritative mutation snapshot once.
+        # Recalc mutates only queue timestamps, so the same Buildings/Research/
+        # Resolver snapshot remains valid for the enqueue decision afterwards.
+        buildings = get_planet_buildings(planet_id, conn=conn)
+        research_levels = get_research_levels(user_id=user_id, conn=conn)
+        hotpath = BuildingsPanelContext.for_queue_recalc(
+            user_id, buildings, research_levels, conn=conn
+        )
+        rows_db: List[Dict[str, Any]] = [
+            dict(row) for row in get_build_queue_rows(planet_id, conn=conn)
+        ]
+        rows_db = recalculate_build_queue_finish_times(
+            planet_id,
+            user_id,
+            conn=conn,
+            now=now,
+            rows=rows_db,
+            buildings=buildings,
+            research_levels=research_levels,
+            hotpath=hotpath,
         )
 
         settings = get_game_settings(conn=conn)
@@ -2502,13 +2542,6 @@ def queue_build_for_planet(
         last_reason = "invalid"
         last_fail: Dict[str, Any] = {}
         max_attempts = 1
-
-        buildings = get_planet_buildings(planet_id, conn=conn)
-        research_levels = get_research_levels(user_id=user_id, conn=conn)
-        hotpath = BuildingsPanelContext.for_queue_recalc(
-            user_id, buildings, research_levels, conn=conn
-        )
-        rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))
 
         from .mine_evolution import (
             get_evolution_rank,
