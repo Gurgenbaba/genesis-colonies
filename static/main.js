@@ -33012,6 +33012,12 @@
     if (data.active_planet && data.active_planet.sidebar_nav) {
       return data.active_planet.sidebar_nav;
     }
+    if (
+      !data.active_planet
+      && !(Array.isArray(data.planets) && data.planets.length > 0)
+    ) {
+      return null;
+    }
     const activeId = Number(data.active_planet_id || data.active_planet?.planet_id || 0);
     if (!activeId) return null;
     let roleKey = "general";
