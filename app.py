@@ -767,7 +767,7 @@ def inject_globals():
     codex_primary: str | None = None
     codex_client: dict[str, Any] = {"articles": {}}
     try:
-        if auth_user and auth_user.get("id"):
+        if auth_user and auth_user.get("id") and not simple_layout:
             from flask import request
 
             from game.codex import build_codex_template_context
@@ -778,6 +778,7 @@ def inject_globals():
                     int(auth_user["id"]),
                     str(request.endpoint or ""),
                     conn=_codex_conn,
+                    record_visit=False,
                 )
                 codex_panel = _codex_ctx["CODEX_PANEL"]
                 codex_commander_tip = _codex_ctx["CODEX_COMMANDER_TIP"]
@@ -830,15 +831,20 @@ def inject_globals():
         "asset_version": get_asset_version(),
     }
     try:
-        if auth_user and auth_user.get("id"):
+        if auth_user and auth_user.get("id") and not simple_layout:
             from game.options import get_buildings_ui_settings
 
-            client_runtime_config = {
-                **client_runtime_config,
-                **get_notify_sound_settings(int(auth_user["id"])),
-                **get_spy_probe_settings(int(auth_user["id"])),
-                **get_buildings_ui_settings(int(auth_user["id"])),
-            }
+            _options_conn = db()
+            try:
+                _uid = int(auth_user["id"])
+                client_runtime_config = {
+                    **client_runtime_config,
+                    **get_notify_sound_settings(_uid, conn=_options_conn),
+                    **get_spy_probe_settings(_uid, conn=_options_conn),
+                    **get_buildings_ui_settings(_uid, conn=_options_conn),
+                }
+            finally:
+                _options_conn.close()
     except Exception:
         pass
 
@@ -1425,6 +1431,7 @@ def _load_page_live_context(
     try:
         try:
             wrote_live = False
+            codex_visit_recorded = False
             if use_planet_switch_live_path:
                 # GC-PERF-PLANET-SWITCH-003: no empire finish / write TX on switch.
                 from game.logic import read_player_live_state_for_planet_switch
@@ -1524,13 +1531,37 @@ def _load_page_live_context(
                 if not visit_recorded:
                     try_visit = False
 
+            # GC-PERF-NAV-007: route-visit unlocks belong to the page live
+            # transaction, not the template context processor. PJAX can therefore
+            # skip rebuilding the full Codex catalog without losing visit unlocks.
+            try:
+                from flask import has_request_context as _has_request_context
+                from flask import request as _request
+                from game.codex import codex_route_for_endpoint, record_codex_route_visit
+
+                if _has_request_context():
+                    _codex_route = codex_route_for_endpoint(str(_request.endpoint or ""))
+                    if _codex_route:
+                        record_codex_route_visit(
+                            user_id,
+                            _codex_route,
+                            conn=conn,
+                        )
+                        codex_visit_recorded = True
+            except Exception:
+                logger.exception(
+                    "codex route visit failed user_id=%s source=%s",
+                    user_id,
+                    src,
+                )
+
             from game.live_state import (
                 consume_request_poll_safety_net_write,
                 get_request_context_planet,
                 perf_span as _live_perf_span,
             )
 
-            if wrote_live or try_visit or consume_request_poll_safety_net_write():
+            if wrote_live or try_visit or codex_visit_recorded or consume_request_poll_safety_net_write():
                 commit(conn)
             from game.buildings import get_build_queue_status_for_planet
 
