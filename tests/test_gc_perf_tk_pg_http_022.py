@@ -111,9 +111,10 @@ def _profile_request(monkeypatch, request_fn: Callable[[], Any]) -> tuple[Any, d
         )
         return original(state, *args, **kwargs)
 
-    monkeypatch.setattr(live_state, "_emit_request_perf_log", _capture)
     started = time.perf_counter()
-    response = request_fn()
+    with monkeypatch.context() as scoped:
+        scoped.setattr(live_state, "_emit_request_perf_log", _capture)
+        response = request_fn()
     captured["wall_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
     assert captured, "request perf state was not emitted"
     assert captured.get("sampled") is True
