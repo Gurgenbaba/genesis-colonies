@@ -575,6 +575,11 @@ def apply_timekeeper(
         return False, "no_queue", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
     head_id_before = _row_field(rows[0], "id")
+    head_building_key = (
+        str(_row_field(rows[0], "building_type") or "").strip()
+        if dom == "build"
+        else ""
+    )
     remaining = _active_head_remaining_seconds(rows, now=now, finish_col=finish_col)
     boost_seconds = _resolve_apply_seconds(
         balance=balance,
@@ -674,6 +679,9 @@ def apply_timekeeper(
         "seconds_requested": boost_seconds,
         "mode": str(mode or "partial"),
         "jobs_finished": bool(jobs_finished),
+        "finished_building_key": (
+            head_building_key if dom == "build" and jobs_finished else ""
+        ),
     }
 
 
