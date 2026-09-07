@@ -68,6 +68,16 @@ def _client_for(uid: int):
     return client
 
 
+def _warm_loaded_buildings_page(client) -> None:
+    """Model production: player already has the Buildings page loaded before clicking TK."""
+    response = client.get(
+        "/api/game-state?include_panel=1&panel_page=buildings&panel_tab=resources"
+    )
+    body = response.get_json() or {}
+    assert response.status_code == 200, body
+    assert body.get("ok") is True
+
+
 def _profile_request(monkeypatch, request_fn: Callable[[], Any]) -> tuple[Any, dict[str, Any]]:
     """Capture the existing request perf state; do not invent a second profiler."""
     from game import live_state
@@ -142,6 +152,7 @@ def _force_perf_sample(monkeypatch):
 def test_pg_timekeeper_partial_build_http_profile(pg_parity_db, monkeypatch):
     uid, pid = _seed_build_timekeeper(finish_in=7200, credit_seconds=900)
     client = _client_for(uid)
+    _warm_loaded_buildings_page(client)
 
     response, perf = _profile_request(
         monkeypatch,
@@ -168,6 +179,7 @@ def test_pg_timekeeper_partial_build_http_profile(pg_parity_db, monkeypatch):
 def test_pg_timekeeper_finish_plus_buildings_reconcile_profile(pg_parity_db, monkeypatch):
     uid, pid = _seed_build_timekeeper(finish_in=90, credit_seconds=3600)
     client = _client_for(uid)
+    _warm_loaded_buildings_page(client)
 
     apply_response, apply_perf = _profile_request(
         monkeypatch,
