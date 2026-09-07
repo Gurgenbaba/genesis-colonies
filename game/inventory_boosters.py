@@ -744,8 +744,13 @@ def build_inventory_boosters_state(
     *,
     conn,
     locale: Optional[str] = None,
+    active_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    rows = list_active_boosters(user_id, conn=conn)
+    rows = (
+        list(active_rows)
+        if active_rows is not None
+        else list_active_boosters(user_id, conn=conn)
+    )
     # GC-PERF-BOOST-015: the HUD projection is derived from the exact same
     # active booster rows; do not query player_active_boosters a second time.
     active_effects = build_active_effects_for_hud(
