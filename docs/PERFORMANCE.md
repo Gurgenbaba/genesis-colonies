@@ -152,6 +152,29 @@ Code audit evidence: `/defense` rendered two mutually exclusive heavy surfaces i
 
 Regression: `tests/test_gc_perf_defense_ssr_006.py` + existing Defense single-request-connection test + Sentinel.
 
+### GC-PERF-NAV-007 — Core navigation + mutation payload hotpath
+
+Production evidence after the Fleet deadline deploy still showed common HTML pages around ~1–2 s and HUD mutation clicks in the multi-second range. Audit found work that was independent of the requested page/action:
+
+- PJAX renders kept the existing shell DOM but `inject_globals()` still rebuilt the full Codex template/client catalog and three persisted user-option reads.
+- Codex full render evaluated the complete unlock catalog separately for panel/client/tip surfaces.
+- `_payload_from_live_context()` opened fresh score/rank connections although it already owned a request connection.
+- lightweight polls and `action_slim` mutation states built universe-wide `player_stats` and then discarded them.
+- `action_slim` also built Planet Teaser + Codex and discarded both in `apply_action_state_diet()`.
+- mutation state serialized full Battle Pass reward tracks even though claim routes return their updated Battle Pass payload separately.
+
+Fix:
+
+- Codex route-visit ownership moves to the existing page live-state connection, preserving unlock semantics on full + PJAX navigation.
+- PJAX skips full Codex and user-option shell rebuilds.
+- Full shell options share one DB connection.
+- Full Codex computes one unlock snapshot and reuses it across panel, commander tip and client article config.
+- score/rank/player-stats reuse the request connection.
+- diet/action states do not construct `player_stats`; action state does not construct Planet Teaser or Codex.
+- `action_slim` requests Battle Pass without full reward tracks; dedicated Battle Pass mutation payload remains authoritative for the Premium UI.
+
+Regression: `tests/test_gc_perf_core_navigation_007.py` + normal Smoke + Sentinel.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
