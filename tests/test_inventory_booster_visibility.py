@@ -314,3 +314,50 @@ def test_booster_items_not_collector_inputs():
         "booster_energy_surge_24h",
     ):
         assert key not in trade
+
+
+
+def test_active_effects_can_reuse_preloaded_booster_rows(monkeypatch):
+    import game.inventory_boosters as boosters
+
+    now = float(time.time())
+    rows = [
+        {
+            "effect_key": "research_time_speed",
+            "multiplier": 2.0,
+            "expires_at": now + 3600,
+            "source_item_key": "booster_research_pct_2_24h",
+        }
+    ]
+
+    def unexpected_reload(*args, **kwargs):
+        raise AssertionError("preloaded active booster rows must not be reloaded")
+
+    monkeypatch.setattr(boosters, "list_active_boosters", unexpected_reload)
+
+    effects = boosters.build_active_effects_for_hud(
+        7,
+        conn=object(),
+        locale="en",
+        now=now,
+        include_server_events=False,
+        active_rows=rows,
+    )
+
+    assert effects
+    assert any(
+        str(row.get("effect_key") or "") == "research_time_speed"
+        for row in effects
+    )
+
+
+def test_inventory_booster_state_passes_loaded_rows_to_hud_projection():
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[1] / "game" / "inventory_boosters.py"
+    ).read_text(encoding="utf-8")
+    block = src.split("def build_inventory_boosters_state(", 1)[1]
+
+    assert block.count("list_active_boosters(user_id, conn=conn)") == 1
+    assert "active_rows=rows" in block
