@@ -11150,40 +11150,41 @@ def _payload_from_live_context(
                 "total_players": int(total_players) if total_players else None,
             }
 
-    with perf_span("payload.notifications"):
-        try:
-            payload["unread_messages_count"] = messages_logic.unread_count(
-                user_id,
-                conn=conn,
-                prepare=not lightweight,
-            )
-            latest_message_id = messages_logic.latest_inbox_message_id(
-                user_id,
-                conn=conn,
-                prepare=not lightweight,
-            )
-            payload["latest_message_id"] = int(latest_message_id) if latest_message_id else None
-            toast_items = []
-            if int(payload["unread_messages_count"] or 0) > 0:
-                toast_items = messages_logic.notification_toast_items(
+    if not timekeeper_partial:
+        with perf_span("payload.notifications"):
+            try:
+                payload["unread_messages_count"] = messages_logic.unread_count(
                     user_id,
-                    limit=16,
                     conn=conn,
-                    prepare=False,
+                    prepare=not lightweight,
                 )
-            payload["notifications"] = {
-                "unread_count": max(0, int(payload["unread_messages_count"] or 0)),
-                "newest_id": payload["latest_message_id"],
-                "new_items": toast_items,
-            }
-        except Exception:
-            payload["unread_messages_count"] = 0
-            payload["latest_message_id"] = None
-            payload["notifications"] = {
-                "unread_count": 0,
-                "newest_id": None,
-                "new_items": [],
-            }
+                latest_message_id = messages_logic.latest_inbox_message_id(
+                    user_id,
+                    conn=conn,
+                    prepare=not lightweight,
+                )
+                payload["latest_message_id"] = int(latest_message_id) if latest_message_id else None
+                toast_items = []
+                if int(payload["unread_messages_count"] or 0) > 0:
+                    toast_items = messages_logic.notification_toast_items(
+                        user_id,
+                        limit=16,
+                        conn=conn,
+                        prepare=False,
+                    )
+                payload["notifications"] = {
+                    "unread_count": max(0, int(payload["unread_messages_count"] or 0)),
+                    "newest_id": payload["latest_message_id"],
+                    "new_items": toast_items,
+                }
+            except Exception:
+                payload["unread_messages_count"] = 0
+                payload["latest_message_id"] = None
+                payload["notifications"] = {
+                    "unread_count": 0,
+                    "newest_id": None,
+                    "new_items": [],
+                }
 
     battle_pass_state = None
     live_events_snapshot: List[Dict[str, Any]] = []
@@ -11274,26 +11275,27 @@ def _payload_from_live_context(
                     "weekly_reset_at": 0,
                 }
 
-    try:
-        from game.live_state import initiation_for_game_state
+    if not timekeeper_partial:
+        try:
+            from game.live_state import initiation_for_game_state
 
-        # Diet-safe: keep on lightweight polls so HUD chip stays live.
-        payload["initiation"] = initiation_for_game_state(user_id, conn=conn)
-    except Exception:
-        payload["initiation"] = {
-            "ready": False,
-            "active": False,
-            "completed": False,
-            "step_index": 0,
-            "step_count": 0,
-            "progress": 0,
-            "target": 0,
-            "route": "",
-            "title_key": "",
-            "hint_key": "",
-            "step_id": "",
-            "phase_id": "",
-        }
+            # Diet-safe on normal polls; TK apply preserves the cached HUD slice.
+            payload["initiation"] = initiation_for_game_state(user_id, conn=conn)
+        except Exception:
+            payload["initiation"] = {
+                "ready": False,
+                "active": False,
+                "completed": False,
+                "step_index": 0,
+                "step_count": 0,
+                "progress": 0,
+                "target": 0,
+                "route": "",
+                "title_key": "",
+                "hint_key": "",
+                "step_id": "",
+                "phase_id": "",
+            }
 
     if not timekeeper_partial:
         with perf_span("payload.liveops"):
@@ -11363,19 +11365,20 @@ def _payload_from_live_context(
                 "incoming_attacks": [],
             }
 
-    try:
-        from game.live_state import account_safety_hud_for_game_state
+    if not timekeeper_partial:
+        try:
+            from game.live_state import account_safety_hud_for_game_state
 
-        payload["account_safety"] = account_safety_hud_for_game_state(user_id, conn=conn)
-    except Exception:
-        payload["account_safety"] = {
-            "vacation_active": False,
-            "vacation_locked_until": None,
-            "vacation_can_disable": False,
-            "deletion_pending": False,
-            "deletion_due_at": None,
-            "deletion_seconds_remaining": 0,
-        }
+            payload["account_safety"] = account_safety_hud_for_game_state(user_id, conn=conn)
+        except Exception:
+            payload["account_safety"] = {
+                "vacation_active": False,
+                "vacation_locked_until": None,
+                "vacation_can_disable": False,
+                "deletion_pending": False,
+                "deletion_due_at": None,
+                "deletion_seconds_remaining": 0,
+            }
 
     if not timekeeper_partial:
         try:
