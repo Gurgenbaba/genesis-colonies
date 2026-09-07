@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .planet_evolution.ux_copy import planet_class_label_key
 
@@ -477,6 +477,7 @@ def build_overview_live_events(
     now: Optional[float] = None,
     user_id: Optional[int] = None,
     locale: Optional[str] = None,
+    server_events: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Active LiveOps teasers for header rail (server events + world boss + player boosters)."""
     ts = float(now if now is not None else time.time())
@@ -491,7 +492,14 @@ def build_overview_live_events(
             from .server_events import active_events_banner, schema_ready as events_ready
 
             if events_ready(conn):
-                items.extend(active_events_banner(now=ts, conn=conn, locale=locale))
+                items.extend(
+                    active_events_banner(
+                        now=ts,
+                        conn=conn,
+                        locale=locale,
+                        active_events=server_events,
+                    )
+                )
         except Exception:
             pass
         try:
