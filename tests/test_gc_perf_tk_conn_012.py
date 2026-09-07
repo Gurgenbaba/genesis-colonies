@@ -166,3 +166,25 @@ def test_timekeeper_partial_projection_skips_unchanged_meta_domains():
     assert "account_safety_hud_for_game_state" in projection_tail
     assert "initiation_for_game_state" in payload
 
+def test_timekeeper_partial_projection_skips_commander_and_score_reads():
+    src = _read("app.py")
+    payload = _block(
+        src,
+        "def _payload_from_live_context(",
+        "\ndef _build_game_state_payload(",
+    )
+
+    commander = payload.split(
+        "from game.commander_classes import serialize_for_client as serialize_commander", 1
+    )[0]
+    assert commander.rstrip().endswith("if not timekeeper_partial:\n        try:")
+
+    score_pos = payload.index('with perf_span("payload.score")')
+    score_prefix = payload[max(0, score_pos - 80):score_pos]
+    assert "if not timekeeper_partial:" in score_prefix
+
+    # Critical mutation-owned slices remain outside the skip.
+    assert 'payload["timekeeper"] = dict(timekeeper_snapshot)' in payload
+    assert 'with perf_span("payload.notifications")' in payload
+    assert 'with perf_span("payload.fleets_hud")' in payload
+

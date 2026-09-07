@@ -338,6 +338,8 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
         "active_boosters",
         "login_rewards",
         "battle_pass",
+        "commander",
+        "score",
         "planets",
         "planet_limit",
         "planet_relocation",

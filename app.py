@@ -10942,12 +10942,13 @@ def _payload_from_live_context(
         except Exception:
             payload["timekeeper"] = {"ready": False, "balance_sec": 0, "label": "0min"}
 
-    try:
-        from game.commander_classes import serialize_for_client as serialize_commander
+    if not timekeeper_partial:
+        try:
+            from game.commander_classes import serialize_for_client as serialize_commander
 
-        payload["commander"] = serialize_commander(int(user_id), conn=conn)
-    except Exception:
-        payload["commander"] = {"ready": False}
+            payload["commander"] = serialize_commander(int(user_id), conn=conn)
+        except Exception:
+            payload["commander"] = {"ready": False}
 
     # GC-PERF-PANEL-SCOPE-002: heavy catalogs only for resolved panel_page (never unscoped all).
     from game.live_state import record_request_perf_phase, set_request_perf_meta
@@ -11132,21 +11133,22 @@ def _payload_from_live_context(
                 ),
             }
 
-    with perf_span("payload.score"):
-        score = get_player_score_cached(user_id, read_only=True, conn=conn) or {
-            "total": 0,
-            "buildings": 0,
-            "research": 0,
-        }
-        rank, total_players = get_player_rank(user_id, conn=conn)
+    if not timekeeper_partial:
+        with perf_span("payload.score"):
+            score = get_player_score_cached(user_id, read_only=True, conn=conn) or {
+                "total": 0,
+                "buildings": 0,
+                "research": 0,
+            }
+            rank, total_players = get_player_rank(user_id, conn=conn)
 
-        payload["score"] = {
-            "total": int(score.get("total", 0) or 0),
-            "buildings": int(score.get("buildings", 0) or 0),
-            "research": int(score.get("research", 0) or 0),
-            "rank": int(rank) if rank else None,
-            "total_players": int(total_players) if total_players else None,
-        }
+            payload["score"] = {
+                "total": int(score.get("total", 0) or 0),
+                "buildings": int(score.get("buildings", 0) or 0),
+                "research": int(score.get("research", 0) or 0),
+                "rank": int(rank) if rank else None,
+                "total_players": int(total_players) if total_players else None,
+            }
 
     with perf_span("payload.notifications"):
         try:
