@@ -321,15 +321,11 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     assert "shipyard" not in state
     assert "defense" not in state
 
-    # GC-PERF-TK-021: TK apply is a true partial projection. Critical queue,
-    # alert and safety slices stay fresh; unrelated meta domains remain cached
-    # client-side via GC-PERF-TK-020 instead of being re-read from PostgreSQL.
+    # GC-PERF-TK-021/023: TK apply keeps mutation-critical queue/resources
+    # plus Fleet HUD fresh; unrelated HUD domains remain cached client-side.
     assert isinstance(state.get("resources"), dict)
     assert isinstance(state.get("research"), dict)
-    assert isinstance(state.get("notifications"), dict)
     assert isinstance(state.get("fleet_alerts"), dict)
-    assert isinstance(state.get("account_safety"), dict)
-    assert isinstance(state.get("initiation"), dict)
     for omitted in (
         "nav_badges",
         "imperial_directives",
@@ -340,6 +336,11 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
         "battle_pass",
         "commander",
         "score",
+        "unread_messages_count",
+        "latest_message_id",
+        "notifications",
+        "account_safety",
+        "initiation",
         "planets",
         "planet_limit",
         "planet_relocation",
