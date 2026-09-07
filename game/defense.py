@@ -1008,10 +1008,11 @@ def defense_queue_for_client(
     *,
     conn,
     now: Optional[float] = None,
+    skip_finish: bool = False,
 ) -> Dict[str, Any]:
     sy_level = _production_shipyard_level(planet_id, conn=conn)
     ts = float(now if now is not None else _now())
-    if defense_queue_table_ready(conn):
+    if defense_queue_table_ready(conn) and not skip_finish:
         finish_due_defense_jobs_for_planet(conn, int(planet_id), int(player_id), now=ts)
         sync_defense_queue_finish_times(int(planet_id), conn=conn, now=ts)
 
