@@ -321,6 +321,30 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     assert "shipyard" not in state
     assert "defense" not in state
 
+    # GC-PERF-TK-021: TK apply is a true partial projection. Critical queue,
+    # alert and safety slices stay fresh; unrelated meta domains remain cached
+    # client-side via GC-PERF-TK-020 instead of being re-read from PostgreSQL.
+    assert isinstance(state.get("resources"), dict)
+    assert isinstance(state.get("research"), dict)
+    assert isinstance(state.get("notifications"), dict)
+    assert isinstance(state.get("fleet_alerts"), dict)
+    assert isinstance(state.get("account_safety"), dict)
+    assert isinstance(state.get("initiation"), dict)
+    for omitted in (
+        "nav_badges",
+        "imperial_directives",
+        "server_events",
+        "live_events",
+        "active_boosters",
+        "login_rewards",
+        "battle_pass",
+        "planets",
+        "planet_limit",
+        "planet_relocation",
+        "has_seed_ark",
+    ):
+        assert omitted not in state
+
     bq = state.get("build_queue") or {}
     queue = bq.get("queue") if isinstance(bq, dict) else None
     assert isinstance(queue, list) and queue, "build_queue.queue must be present after partial boost"

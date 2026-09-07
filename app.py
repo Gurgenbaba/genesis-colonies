@@ -10925,6 +10925,11 @@ def _payload_from_live_context(
         payload.pop("building_queue", None)
         payload.pop("research_queue", None)
 
+    # GC-PERF-TK-021: an authoritative TK mutation snapshot marks a true
+    # partial response. The client merges omitted domains onto GC.lastState
+    # (GC-PERF-TK-020), so unchanged meta HUD domains do not need PG reads.
+    timekeeper_partial = bool(action_slim and isinstance(timekeeper_snapshot, dict))
+
     if isinstance(timekeeper_snapshot, dict):
         # GC-PERF-TK-019: mutation owner already has the authoritative ledger
         # balance. Reuse it instead of SELECTing the same Timekeeper row again.
@@ -11178,92 +11183,94 @@ def _payload_from_live_context(
                 "new_items": [],
             }
 
-    try:
-        from game.battle_pass import serialize_for_client as bp_serialize
-
-        # Build once per game-state request. The same state feeds the premium payload
-        # and the nav claimable badge.
-        battle_pass_state = bp_serialize(
-            int(user_id),
-            conn=conn,
-            include_tracks=not lightweight and not action_slim,
-        )
-    except Exception:
-        battle_pass_state = {"ready": False}
-
+    battle_pass_state = None
     live_events_snapshot: List[Dict[str, Any]] = []
     server_event_rows = None
     active_booster_rows = None
-    with perf_span("payload.nav_badges"):
+    if not timekeeper_partial:
         try:
-            from game.server_events import list_active_events as list_server_events
+            from game.battle_pass import serialize_for_client as bp_serialize
 
-            # GC-PERF-LIVEOPS-014: Server Event factors + banner rows originate
-            # from the same active set. Load it once for this state request.
-            server_event_rows = list_server_events(conn=conn)
-        except Exception:
-            server_event_rows = None
-
-        try:
-            from game.inventory_boosters import list_active_boosters
-
-            # GC-PERF-BOOST-017: Live Events and active_boosters use the same
-            # active DB rows. One request snapshot avoids a second PG round-trip.
-            active_booster_rows = list_active_boosters(user_id, conn=conn)
-        except Exception:
-            active_booster_rows = None
-
-        try:
-            from game.i18n import current_locale
-            from game.overview_page import build_overview_live_events
-
-            # GC-PERF-LIVEOPS-013/014: nav badges already need the LiveOps rows.
-            # Build them once and reuse the same Server Event + LiveOps snapshots.
-            live_events_snapshot = build_overview_live_events(
+            # Build once per game-state request. The same state feeds the premium payload
+            # and the nav claimable badge.
+            battle_pass_state = bp_serialize(
+                int(user_id),
                 conn=conn,
-                user_id=user_id,
-                locale=current_locale(),
-                server_events=server_event_rows,
-                booster_rows=active_booster_rows,
+                include_tracks=not lightweight and not action_slim,
             )
         except Exception:
-            live_events_snapshot = []
+            battle_pass_state = {"ready": False}
+
+        with perf_span("payload.nav_badges"):
+            try:
+                from game.server_events import list_active_events as list_server_events
+
+                # GC-PERF-LIVEOPS-014: Server Event factors + banner rows originate
+                # from the same active set. Load it once for this state request.
+                server_event_rows = list_server_events(conn=conn)
+            except Exception:
+                server_event_rows = None
+
+            try:
+                from game.inventory_boosters import list_active_boosters
+
+                # GC-PERF-BOOST-017: Live Events and active_boosters use the same
+                # active DB rows. One request snapshot avoids a second PG round-trip.
+                active_booster_rows = list_active_boosters(user_id, conn=conn)
+            except Exception:
+                active_booster_rows = None
+
+            try:
+                from game.i18n import current_locale
+                from game.overview_page import build_overview_live_events
+
+                # GC-PERF-LIVEOPS-013/014: nav badges already need the LiveOps rows.
+                # Build them once and reuse the same Server Event + LiveOps snapshots.
+                live_events_snapshot = build_overview_live_events(
+                    conn=conn,
+                    user_id=user_id,
+                    locale=current_locale(),
+                    server_events=server_event_rows,
+                    booster_rows=active_booster_rows,
+                )
+            except Exception:
+                live_events_snapshot = []
+
+            try:
+                from game.live_state import nav_badges_for_game_state
+
+                payload["nav_badges"] = nav_badges_for_game_state(
+                    user_id,
+                    conn=conn,
+                    battle_pass=battle_pass_state,
+                    live_events=live_events_snapshot,
+                )
+            except Exception:
+                payload["nav_badges"] = {
+                    "vote_center": {"active": False, "count": 0, "label": ""},
+                    "government": {"active": False, "count": 0, "label": ""},
+                    "referrals": {"active": False, "count": 0, "label": ""},
+                    "imperial_directives": {"active": False, "count": 0, "label": ""},
+                    "auction_house": {"active": False, "count": 0, "label": ""},
+                }
 
         try:
-            from game.live_state import nav_badges_for_game_state
+            from game.live_state import imperial_directives_for_game_state
 
-            payload["nav_badges"] = nav_badges_for_game_state(
-                user_id,
-                conn=conn,
-                battle_pass=battle_pass_state,
-                live_events=live_events_snapshot,
-            )
+            if not lightweight:
+                payload["imperial_directives"] = imperial_directives_for_game_state(user_id, conn=conn)
         except Exception:
-            payload["nav_badges"] = {
-                "vote_center": {"active": False, "count": 0, "label": ""},
-                "government": {"active": False, "count": 0, "label": ""},
-                "referrals": {"active": False, "count": 0, "label": ""},
-                "imperial_directives": {"active": False, "count": 0, "label": ""},
-                "auction_house": {"active": False, "count": 0, "label": ""},
-            }
-
-    try:
-        from game.live_state import imperial_directives_for_game_state
-
-        if not lightweight:
-            payload["imperial_directives"] = imperial_directives_for_game_state(user_id, conn=conn)
-    except Exception:
-        if not lightweight:
-            payload["imperial_directives"] = {
-                "ready": False,
-                "daily_completed": 0,
-                "daily_total": 0,
-                "weekly_completed": 0,
-                "weekly_total": 0,
-                "claimable_count": 0,
-                "daily_reset_at": 0,
-                "weekly_reset_at": 0,
-            }
+            if not lightweight:
+                payload["imperial_directives"] = {
+                    "ready": False,
+                    "daily_completed": 0,
+                    "daily_total": 0,
+                    "weekly_completed": 0,
+                    "weekly_total": 0,
+                    "claimable_count": 0,
+                    "daily_reset_at": 0,
+                    "weekly_reset_at": 0,
+                }
 
     try:
         from game.live_state import initiation_for_game_state
@@ -11286,29 +11293,30 @@ def _payload_from_live_context(
             "phase_id": "",
         }
 
-    with perf_span("payload.liveops"):
-        try:
-            from game.server_events import serialize_active_events
+    if not timekeeper_partial:
+        with perf_span("payload.liveops"):
+            try:
+                from game.server_events import serialize_active_events
 
-            payload["server_events"] = serialize_active_events(
-                conn=conn,
-                active_events=server_event_rows,
-            )
-        except Exception:
-            payload["server_events"] = {
-                "events": [],
-                "production_mult": 1.0,
-                "expedition_hold_mult": 1.0,
-                "shop_discount_bps": 0,
-                "build_time_speed": 1.0,
-                "research_time_speed": 1.0,
-                "asteroid_spawn_mult": 1.0,
-                "world_boss_spawn_mult": 1.0,
-                "inactive_farm_mult": 1.0,
-            }
+                payload["server_events"] = serialize_active_events(
+                    conn=conn,
+                    active_events=server_event_rows,
+                )
+            except Exception:
+                payload["server_events"] = {
+                    "events": [],
+                    "production_mult": 1.0,
+                    "expedition_hold_mult": 1.0,
+                    "shop_discount_bps": 0,
+                    "build_time_speed": 1.0,
+                    "research_time_speed": 1.0,
+                    "asteroid_spawn_mult": 1.0,
+                    "world_boss_spawn_mult": 1.0,
+                    "inactive_farm_mult": 1.0,
+                }
 
-        # Reuse the rows already loaded for nav badge counts above.
-        payload["live_events"] = live_events_snapshot
+            # Reuse the rows already loaded for nav badge counts above.
+            payload["live_events"] = live_events_snapshot
 
     with perf_span("payload.fleets_hud"):
         try:
@@ -11367,27 +11375,28 @@ def _payload_from_live_context(
             "deletion_seconds_remaining": 0,
         }
 
-    try:
-        from game.inventory_boosters import build_inventory_boosters_state
+    if not timekeeper_partial:
+        try:
+            from game.inventory_boosters import build_inventory_boosters_state
 
-        player_locale = get_player_locale(user_id, conn=conn)
-        payload["active_boosters"] = build_inventory_boosters_state(
-            user_id,
-            conn=conn,
-            locale=player_locale,
-            active_rows=active_booster_rows,
-        )
-    except Exception:
-        payload["active_boosters"] = {"ready": False, "active": [], "active_effects": []}
+            player_locale = get_player_locale(user_id, conn=conn)
+            payload["active_boosters"] = build_inventory_boosters_state(
+                user_id,
+                conn=conn,
+                locale=player_locale,
+                active_rows=active_booster_rows,
+            )
+        except Exception:
+            payload["active_boosters"] = {"ready": False, "active": [], "active_effects": []}
 
-    try:
-        from game.login_rewards import serialize_for_client as lr_serialize
+        try:
+            from game.login_rewards import serialize_for_client as lr_serialize
 
-        payload["login_rewards"] = lr_serialize(int(user_id), conn=conn)
-    except Exception:
-        payload["login_rewards"] = {"ready": False, "available": False}
+            payload["login_rewards"] = lr_serialize(int(user_id), conn=conn)
+        except Exception:
+            payload["login_rewards"] = {"ready": False, "available": False}
 
-    payload["battle_pass"] = battle_pass_state
+        payload["battle_pass"] = battle_pass_state
 
     if include_panel:
         try:
@@ -11422,49 +11431,50 @@ def _payload_from_live_context(
         except Exception:
             payload["player_stats"] = {"online_now": 0, "total_players": 0}
 
-    try:
-        from game.planet_evolution.service import list_player_planets_for_switcher
-        from game.planet_visuals import apply_herocard_urls_to_switcher_planets
-
-        payload["planets"] = apply_herocard_urls_to_switcher_planets(
-            list_player_planets_for_switcher(user_id, conn=conn),
-            versioned_static_url,
-        )
-    except Exception:
-        payload["planets"] = []
-
-    try:
-        from game.logic import get_planet_limit_block
-
-        payload["planet_limit"] = get_planet_limit_block(user_id, conn=conn)
-    except Exception:
-        payload["planet_limit"] = {
-            "current": len(payload.get("planets") or []) or 1,
-            "max": 9,
-        }
-
-    try:
-        from game.galaxy import get_relocation_client_state, relocation_schema_ready
-
-        if not lightweight and relocation_schema_ready(conn):
-            payload["planet_relocation"] = get_relocation_client_state(
-                int(active_planet_id),
-                conn=conn,
-                now=time.time(),
-            )
-        elif not lightweight:
-            payload["planet_relocation"] = {"active": False, "can_start": False}
-    except Exception:
-        if not lightweight:
-            payload["planet_relocation"] = {"active": False, "can_start": False}
-
-    if not lightweight:
+    if not timekeeper_partial:
         try:
-            from game.galaxy import player_has_seed_ark
+            from game.planet_evolution.service import list_player_planets_for_switcher
+            from game.planet_visuals import apply_herocard_urls_to_switcher_planets
 
-            payload["has_seed_ark"] = player_has_seed_ark(user_id, conn=conn)
+            payload["planets"] = apply_herocard_urls_to_switcher_planets(
+                list_player_planets_for_switcher(user_id, conn=conn),
+                versioned_static_url,
+            )
         except Exception:
-            payload["has_seed_ark"] = False
+            payload["planets"] = []
+
+        try:
+            from game.logic import get_planet_limit_block
+
+            payload["planet_limit"] = get_planet_limit_block(user_id, conn=conn)
+        except Exception:
+            payload["planet_limit"] = {
+                "current": len(payload.get("planets") or []) or 1,
+                "max": 9,
+            }
+
+        try:
+            from game.galaxy import get_relocation_client_state, relocation_schema_ready
+
+            if not lightweight and relocation_schema_ready(conn):
+                payload["planet_relocation"] = get_relocation_client_state(
+                    int(active_planet_id),
+                    conn=conn,
+                    now=time.time(),
+                )
+            elif not lightweight:
+                payload["planet_relocation"] = {"active": False, "can_start": False}
+        except Exception:
+            if not lightweight:
+                payload["planet_relocation"] = {"active": False, "can_start": False}
+
+        if not lightweight:
+            try:
+                from game.galaxy import player_has_seed_ark
+
+                payload["has_seed_ark"] = player_has_seed_ark(user_id, conn=conn)
+            except Exception:
+                payload["has_seed_ark"] = False
 
     # Heavy trader / combat catalogs — only when SCOPE-002 page asks for them.
     if include_panel and "exchange" in heavy:
