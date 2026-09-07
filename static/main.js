@@ -11248,6 +11248,7 @@
   }
 
   function syncActiveFleetBusyFromState(data) {
+    if (!data || !Object.prototype.hasOwnProperty.call(data, "active_fleets")) return;
     const now = getTimerServerNow();
     const fleets = normalizeActiveFleetsPayload(data?.active_fleets);
     let busy = Number(fleets.count || 0) > 0;
@@ -12159,7 +12160,10 @@
           allowEmptyClear: canClearEmpty,
         });
       }
-    } else if (isMutationStatePatchReason(reasonStr)) {
+    } else if (
+      isMutationStatePatchReason(reasonStr)
+      && reasonStr !== "timekeeper_apply"
+    ) {
       bumpFleetHudActionVersion(state || { server_time: getTimerServerNow() });
     }
   }
