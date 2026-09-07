@@ -478,6 +478,7 @@ def build_overview_live_events(
     user_id: Optional[int] = None,
     locale: Optional[str] = None,
     server_events: Optional[Sequence[Mapping[str, Any]]] = None,
+    booster_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Active LiveOps teasers for header rail (server events + world boss + player boosters)."""
     ts = float(now if now is not None else time.time())
@@ -537,6 +538,7 @@ def build_overview_live_events(
                         conn=conn,
                         now=ts,
                         locale=locale,
+                        active_rows=booster_rows,
                     )
                 )
             except Exception:
@@ -618,6 +620,7 @@ def _player_booster_live_events(
     conn,
     now: float,
     locale: Optional[str] = None,
+    active_rows: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Map inventory HUD boosters into live-events rows (no second expiry engine).
 
@@ -633,6 +636,7 @@ def _player_booster_live_events(
         locale=locale,
         now=now,
         include_server_events=False,
+        active_rows=active_rows,
         include_resource_impacts=False,
     )
     prod_agg: Optional[Dict[str, Any]] = None
