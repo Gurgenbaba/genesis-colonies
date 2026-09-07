@@ -63,11 +63,9 @@ def test_failed_post_boost_finish_rolls_back_shift_and_tk_even_if_outer_commits(
 
         calls = 0
 
-        def fake_finish(_conn, _uid, _pid):
+        def fake_finish(_conn, _uid, _pid, _domain=None):
             nonlocal calls
             calls += 1
-            if calls == 1:
-                return {"ok": True, "errors": []}
             return {
                 "ok": False,
                 "errors": ["shipyard planet=175: canceling statement due to lock timeout"],
@@ -87,6 +85,7 @@ def test_failed_post_boost_finish_rolls_back_shift_and_tk_even_if_outer_commits(
         assert ok is False
         assert reason == "queue_finish_failed"
         assert "lock timeout" in " ".join(payload.get("errors") or [])
+        assert calls == 1  # build head was not due before shift; only post-finish ran
 
         # Deliberately commit the outer transaction: the service savepoint must
         # already have undone both the queue shift and any value mutation.

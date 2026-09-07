@@ -45,6 +45,7 @@ def _finish_inventory_due_work(
     *,
     planet_id: Optional[int] = None,
     source: str = "inventory_use",
+    domains: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Finish due queue work and surface the final queue-engine result.
 
@@ -71,9 +72,14 @@ def _finish_inventory_due_work(
             manage_transaction=False,
             include_fleet=False,
             include_relocations=False,
+            queue_domains=set(domains) if domains else None,
         )
         if isinstance(result, dict):
             last_result = result
+        # Domain-targeted finishers already loop their own due head(s). Do not
+        # keep retrying because an unrelated queue on the same planet is due.
+        if domains:
+            break
         if pid is not None:
             if not player_has_due_queue_work(uid, conn=conn, planet_id=pid):
                 break
