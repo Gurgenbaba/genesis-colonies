@@ -633,6 +633,7 @@ def _player_booster_live_events(
         locale=locale,
         now=now,
         include_server_events=False,
+        include_resource_impacts=False,
     )
     prod_agg: Optional[Dict[str, Any]] = None
     prod_tiers: List[Dict[str, Any]] = []
