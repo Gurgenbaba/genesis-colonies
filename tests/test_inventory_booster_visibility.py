@@ -413,3 +413,51 @@ def test_overview_live_events_explicitly_skip_unused_booster_resource_impacts():
 
     assert "include_server_events=False" in block
     assert "include_resource_impacts=False" in block
+
+
+
+def test_inventory_booster_state_reuses_supplied_request_rows(monkeypatch):
+    import game.inventory_boosters as boosters
+
+    now = float(time.time())
+    rows = [
+        {
+            "effect_key": "research_time_speed",
+            "multiplier": 2.0,
+            "expires_at": now + 3600,
+            "source_item_key": "booster_research_pct_2_24h",
+        }
+    ]
+
+    def unexpected_reload(*args, **kwargs):
+        raise AssertionError("request-scoped booster rows must not be reloaded")
+
+    monkeypatch.setattr(boosters, "list_active_boosters", unexpected_reload)
+    monkeypatch.setattr(boosters, "boosters_schema_ready", lambda _conn: True)
+
+    state = boosters.build_inventory_boosters_state(
+        7,
+        conn=object(),
+        locale="en",
+        active_rows=rows,
+    )
+
+    assert state["ready"] is True
+    assert state["active"] == rows
+    assert state["active_effects"]
+
+
+def test_game_state_shares_one_active_booster_snapshot_across_liveops_and_hud():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "app.py").read_text(
+        encoding="utf-8"
+    )
+    block = src.split("def _payload_from_live_context(", 1)[1].split(
+        "\ndef _build_game_state_payload(",
+        1,
+    )[0]
+
+    assert block.count("active_booster_rows = list_active_boosters(user_id, conn=conn)") == 1
+    assert "booster_rows=active_booster_rows" in block
+    assert "active_rows=active_booster_rows" in block
