@@ -3,6 +3,12 @@ name: PostgreSQL Numeric Readiness
 on:
   pull_request:
     paths:
+      - "app.py"
+      - "game/timekeeper.py"
+      - "game/live_state.py"
+      - "game/inventory_use.py"
+      - "game/queue_engine.py"
+      - "tests/test_gc_perf_tk_pg_http_022.py"
       - "game/models.py"
       - "game/resources.py"
       - "game/production_formula.py"
@@ -78,6 +84,12 @@ on:
   push:
     branches: [main]
     paths:
+      - "app.py"
+      - "game/timekeeper.py"
+      - "game/live_state.py"
+      - "game/inventory_use.py"
+      - "game/queue_engine.py"
+      - "tests/test_gc_perf_tk_pg_http_022.py"
       - "game/models.py"
       - "game/resources.py"
       - "game/production_formula.py"
@@ -207,7 +219,9 @@ jobs:
       - name: Compile numeric owners
         run: |
           python -m py_compile \
+            app.py \
             migrate.py \
+            game/timekeeper.py game/live_state.py game/inventory_use.py game/queue_engine.py \
             scripts/pg_numeric_readiness_audit.py \
             game/models.py game/resources.py game/production_formula.py game/economy_balance.py game/effects/effect_resolver.py game/exchange.py \
             game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
@@ -252,3 +266,8 @@ jobs:
             tests/test_gc_big_number_runtime_production.py \
             tests/test_gc_big_number_runtime_economy_curves.py \
             tests/test_gc_big_number_runtime_unit_production.py
+      - name: Timekeeper PostgreSQL HTTP performance sentinel
+        run: |
+          python -m pytest -q -s --tb=line \
+            tests/test_gc_perf_tk_pg_http_022.py
+
