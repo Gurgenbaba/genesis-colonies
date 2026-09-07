@@ -2464,6 +2464,11 @@ def queue_build_for_planet(
             conn=conn,
             source="action",
             recalc_ranks=False,
+            # GC-PERF-BUILD-PG-012: Build decisions depend on due Build,
+            # account Research and Planet-Evolution progression. Shipyard,
+            # Defense and Troops are unrelated production queues and must not
+            # add serial PostgreSQL round-trips to every enqueue.
+            queue_domains={"build", "research", "planet_research", "ascension"},
         )
         if perf is not None:
             perf.add_finish_ms((time.perf_counter() - finish_t0) * 1000.0)
