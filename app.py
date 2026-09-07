@@ -7327,6 +7327,7 @@ def api_imperial_directives_claim():
     from game.directives.rewards import claim_directive_reward
     from game.directives.service import get_imperial_directives_state
 
+    imperial_directives: Dict[str, Any] = {}
     conn = db()
     try:
         begin_write_transaction(conn)
@@ -7346,24 +7347,17 @@ def api_imperial_directives_claim():
             user_id,
             directive_id,
         )
-        state, _ = _build_game_state_payload(
-            include_panel=True,
-            finish_source="api_imperial_directives_claim",
-        )
+        state = _hud_only_game_state("api_imperial_directives_claim")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    else:
+        # GC-PERF-DIRECTIVES-008: live refresh may finish queues and advance
+        # directive progress. Refresh HUD first, then serialize page cards from
+        # the still-open mutation connection so both payloads describe the
+        # same post-finish state without a third checkout.
+        state = _hud_only_game_state("api_imperial_directives_claim")
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
     finally:
         conn.close()
-
-    state, _ = _build_game_state_payload(
-        include_panel=True,
-        finish_source="api_imperial_directives_claim",
-    )
-    imperial_directives: Dict[str, Any] = {}
-    conn2 = db()
-    try:
-        imperial_directives = get_imperial_directives_state(user_id, conn=conn2)
-    finally:
-        conn2.close()
 
     resp: Dict[str, Any] = {
         "ok": bool(ok),
@@ -7395,6 +7389,7 @@ def api_imperial_directives_claim_all():
     from game.directives.rewards import claim_all_directive_rewards
     from game.directives.service import get_imperial_directives_state
 
+    imperial_directives: Dict[str, Any] = {}
     conn = db()
     try:
         begin_write_transaction(conn)
@@ -7406,24 +7401,13 @@ def api_imperial_directives_claim_all():
     except Exception:
         rollback(conn)
         logger.exception("imperial directive claim-all failed user_id=%s", user_id)
-        state, _ = _build_game_state_payload(
-            include_panel=True,
-            finish_source="api_imperial_directives_claim_all",
-        )
+        state = _hud_only_game_state("api_imperial_directives_claim_all")
         return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    else:
+        state = _hud_only_game_state("api_imperial_directives_claim_all")
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
     finally:
         conn.close()
-
-    state, _ = _build_game_state_payload(
-        include_panel=True,
-        finish_source="api_imperial_directives_claim_all",
-    )
-    imperial_directives: Dict[str, Any] = {}
-    conn2 = db()
-    try:
-        imperial_directives = get_imperial_directives_state(user_id, conn=conn2)
-    finally:
-        conn2.close()
 
     resp: Dict[str, Any] = {
         "ok": bool(ok),
@@ -11705,6 +11689,8 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_galactic_politics_res_vote",
         "api_referrals_apply",
         "api_referrals_claim",
+        "api_imperial_directives_claim",
+        "api_imperial_directives_claim_all",
     )
 
 
