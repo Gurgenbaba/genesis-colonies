@@ -11177,12 +11177,48 @@ def _payload_from_live_context(
     except Exception:
         battle_pass_state = {"ready": False}
 
+    live_events_snapshot: List[Dict[str, Any]] = []
+    with perf_span("payload.liveops"):
+        try:
+            from game.server_events import serialize_active_events
+
+            payload["server_events"] = serialize_active_events(conn=conn)
+        except Exception:
+            payload["server_events"] = {
+                "events": [],
+                "production_mult": 1.0,
+                "expedition_hold_mult": 1.0,
+                "shop_discount_bps": 0,
+                "build_time_speed": 1.0,
+                "research_time_speed": 1.0,
+                "asteroid_spawn_mult": 1.0,
+                "world_boss_spawn_mult": 1.0,
+                "inactive_farm_mult": 1.0,
+            }
+
+        try:
+            from game.overview_page import build_overview_live_events
+            from game.i18n import current_locale
+
+            live_events_snapshot = build_overview_live_events(
+                conn=conn,
+                user_id=user_id,
+                locale=current_locale(),
+            )
+            payload["live_events"] = live_events_snapshot
+        except Exception:
+            live_events_snapshot = []
+            payload["live_events"] = live_events_snapshot
+
     with perf_span("payload.nav_badges"):
         try:
             from game.live_state import nav_badges_for_game_state
 
             payload["nav_badges"] = nav_badges_for_game_state(
-                user_id, conn=conn, battle_pass=battle_pass_state
+                user_id,
+                conn=conn,
+                battle_pass=battle_pass_state,
+                live_events=live_events_snapshot,
             )
         except Exception:
             payload["nav_badges"] = {
@@ -11231,36 +11267,6 @@ def _payload_from_live_context(
             "step_id": "",
             "phase_id": "",
         }
-
-    with perf_span("payload.liveops"):
-        try:
-            from game.server_events import serialize_active_events
-
-            payload["server_events"] = serialize_active_events(conn=conn)
-        except Exception:
-            payload["server_events"] = {
-                "events": [],
-                "production_mult": 1.0,
-                "expedition_hold_mult": 1.0,
-                "shop_discount_bps": 0,
-                "build_time_speed": 1.0,
-                "research_time_speed": 1.0,
-                "asteroid_spawn_mult": 1.0,
-                "world_boss_spawn_mult": 1.0,
-                "inactive_farm_mult": 1.0,
-            }
-
-        try:
-            from game.overview_page import build_overview_live_events
-            from game.i18n import current_locale
-
-            payload["live_events"] = build_overview_live_events(
-                conn=conn,
-                user_id=user_id,
-                locale=current_locale(),
-            )
-        except Exception:
-            payload["live_events"] = []
 
     with perf_span("payload.fleets_hud"):
         try:
