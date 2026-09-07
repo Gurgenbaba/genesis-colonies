@@ -131,3 +131,38 @@ def test_timekeeper_apply_feeds_ledger_snapshot_into_response_rebuild():
     assert 'error_tk_slice = result.get("timekeeper")' in failure
     assert "timekeeper_snapshot=error_tk_slice" in failure
 
+def test_timekeeper_partial_projection_skips_unchanged_meta_domains():
+    src = _read("app.py")
+    payload = _block(
+        src,
+        "def _payload_from_live_context(",
+        "\ndef _build_game_state_payload(",
+    )
+    assert (
+        "timekeeper_partial = bool(action_slim and isinstance(timekeeper_snapshot, dict))"
+        in payload
+    )
+    assert 'if not timekeeper_partial:\n        try:\n            from game.battle_pass' in payload
+    assert (
+        'if not timekeeper_partial:\n        with perf_span("payload.liveops")'
+        in payload
+    )
+    assert (
+        "if not timekeeper_partial:\n"
+        "        try:\n"
+        "            from game.inventory_boosters import build_inventory_boosters_state"
+        in payload
+    )
+    assert (
+        "if not timekeeper_partial:\n"
+        "        try:\n"
+        "            from game.planet_evolution.service import list_player_planets_for_switcher"
+        in payload
+    )
+
+    # Time-sensitive state must remain outside the projection skip.
+    projection_tail = payload.split('with perf_span("payload.fleets_hud")', 1)[1]
+    assert "fleet_hud_for_game_state" in projection_tail
+    assert "account_safety_hud_for_game_state" in projection_tail
+    assert "initiation_for_game_state" in payload
+
