@@ -1393,6 +1393,7 @@ def _load_page_live_context(
     panel_page: str = "",
     conn=None,
     close_conn: bool = True,
+    post_mutation_committed: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """
     One finish + derived sync + read-only queue/research per page/API request.
@@ -1428,7 +1429,7 @@ def _load_page_live_context(
         conn = db()
     use_poll_live_path = _use_poll_live_path(src)
     use_planet_switch_live_path = src == "api_planets_active"
-    use_post_mutation_live_path = _use_post_mutation_read_path(src)
+    use_post_mutation_live_path = bool(post_mutation_committed) and _use_post_mutation_read_path(src)
     try:
         try:
             wrote_live = False
@@ -4189,7 +4190,10 @@ def api_timekeeper_apply():
         conn = None
 
         t_state0 = time.perf_counter()
-        state = _timekeeper_apply_game_state(domain)
+        state = _timekeeper_apply_game_state(
+            domain,
+            post_mutation_committed=True,
+        )
         state_ms = (time.perf_counter() - t_state0) * 1000.0
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
         if isinstance(state, dict) and tk_slice:
@@ -11593,6 +11597,7 @@ def _build_game_state_payload(
     action_slim: bool = False,
     panel_page: str = "",
     panel_tab: Optional[str] = None,
+    post_mutation_committed: bool = False,
 ) -> Tuple[dict, int]:
     """
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
@@ -11625,6 +11630,7 @@ def _build_game_state_payload(
             panel_page=page,
             conn=conn,
             close_conn=False,
+            post_mutation_committed=bool(post_mutation_committed),
         )
         record_request_perf_phase("live_context_ms", (time.perf_counter() - ctx_t0) * 1000.0)
         if ctx is None:
@@ -11749,12 +11755,17 @@ def _fleet_mutation_game_state(finish_source: str) -> dict:
         return {}
 
 
-def _timekeeper_apply_game_state(domain: str | None = None) -> dict:
+def _timekeeper_apply_game_state(
+    domain: str | None = None,
+    *,
+    post_mutation_committed: bool = False,
+) -> dict:
     """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source="api_timekeeper_apply",
         action_slim=True,
+        post_mutation_committed=bool(post_mutation_committed),
     )
     dom = str(domain or "").strip().lower()
     if dom in ("shipyard", "defense", "troops"):
@@ -11812,6 +11823,7 @@ def _action_json_response(
         finish_source=finish_source,
         panel_delta_keys=panel_delta_keys if use_panel_delta else None,
         action_slim=use_slim,
+        post_mutation_committed=bool(ok),
     )
     resp: Dict[str, Any] = {
         "ok": bool(ok),
