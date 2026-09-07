@@ -1087,41 +1087,44 @@ def get_registered_player_count(*, conn: sqlite3.Connection | None = None) -> in
     return count
 
 
-def get_player_stats() -> dict:
+def get_player_stats(*, conn: sqlite3.Connection | None = None) -> dict:
     now = _now_ts()
     day_ago = now - 24 * 3600
     week_ago = now - 7 * 24 * 3600
 
-    conn = db()
-    cur = conn.cursor()
+    own_conn = conn is None
+    c = conn or db()
+    try:
+        cur = c.cursor()
 
-    total_players = get_registered_player_count(conn=conn)
+        total_players = get_registered_player_count(conn=c)
 
-    from .presence_store import effective_last_seen_scalar_sql
+        from .presence_store import effective_last_seen_scalar_sql
 
-    last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
-    cur.execute(
-        f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
-        (day_ago,),
-    )
-    active_24h = int(cur.fetchone()["c"])
+        last_seen_expr = effective_last_seen_scalar_sql(player_alias="p")
+        cur.execute(
+            f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
+            (day_ago,),
+        )
+        active_24h = int(cur.fetchone()["c"])
 
-    cur.execute(
-        f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
-        (week_ago,),
-    )
-    active_7d = int(cur.fetchone()["c"])
+        cur.execute(
+            f"SELECT COUNT(*) AS c FROM players p WHERE {last_seen_expr} >= ?",
+            (week_ago,),
+        )
+        active_7d = int(cur.fetchone()["c"])
 
-    online_now = get_online_player_count(conn=conn, now=now)
+        online_now = get_online_player_count(conn=c, now=now)
 
-    conn.close()
-
-    return {
-        "total_players": total_players,
-        "active_24h": active_24h,
-        "active_7d": active_7d,
-        "online_now": online_now,
-    }
+        return {
+            "total_players": total_players,
+            "active_24h": active_24h,
+            "active_7d": active_7d,
+            "online_now": online_now,
+        }
+    finally:
+        if own_conn:
+            c.close()
 
 
 def ensure_player_and_homeworld(
