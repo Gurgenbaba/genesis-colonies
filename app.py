@@ -11122,12 +11122,12 @@ def _payload_from_live_context(
             }
 
     with perf_span("payload.score"):
-        score = get_player_score_cached(user_id, read_only=True) or {
+        score = get_player_score_cached(user_id, read_only=True, conn=conn) or {
             "total": 0,
             "buildings": 0,
             "research": 0,
         }
-        rank, total_players = get_player_rank(user_id)
+        rank, total_players = get_player_rank(user_id, conn=conn)
 
         payload["score"] = {
             "total": int(score.get("total", 0) or 0),
@@ -11178,7 +11178,9 @@ def _payload_from_live_context(
         # Build once per game-state request. The same state feeds the premium payload
         # and the nav claimable badge.
         battle_pass_state = bp_serialize(
-            int(user_id), conn=conn, include_tracks=not lightweight
+            int(user_id),
+            conn=conn,
+            include_tracks=not lightweight and not action_slim,
         )
     except Exception:
         battle_pass_state = {"ready": False}
@@ -11363,16 +11365,19 @@ def _payload_from_live_context(
                 "planet_name": str(payload.get("active_planet_name") or ""),
             }
 
-    try:
-        from game.models import get_player_stats
+    # GC-PERF-NAV-007: diet + mutation action states both discard
+    # player_stats. Do not run universe-wide presence counts just to pop them.
+    if not lightweight and not action_slim:
+        try:
+            from game.models import get_player_stats
 
-        ps = get_player_stats() or {}
-        payload["player_stats"] = {
-            "online_now": int(ps.get("online_now") or 0),
-            "total_players": int(ps.get("total_players") or 0),
-        }
-    except Exception:
-        payload["player_stats"] = {"online_now": 0, "total_players": 0}
+            ps = get_player_stats(conn=conn) or {}
+            payload["player_stats"] = {
+                "online_now": int(ps.get("online_now") or 0),
+                "total_players": int(ps.get("total_players") or 0),
+            }
+        except Exception:
+            payload["player_stats"] = {"online_now": 0, "total_players": 0}
 
     try:
         from game.planet_evolution.service import list_player_planets_for_switcher
@@ -11516,7 +11521,7 @@ def _payload_from_live_context(
     except Exception:
         pass
 
-    if not lightweight:
+    if not lightweight and not action_slim:
         try:
             from game.planet_evolution.teaser import get_overview_planet_teaser
 
@@ -11536,7 +11541,7 @@ def _payload_from_live_context(
         except Exception:
             payload["planet_teaser"] = {"visible": False}
 
-    if not lightweight:
+    if not lightweight and not action_slim:
         try:
             from game.codex import codex_for_game_state
 
