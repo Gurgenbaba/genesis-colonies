@@ -191,3 +191,23 @@ def test_gc862_panel_context_caches_build_time_at_target():
         assert bmod.EffectResolver.call_count == 1
     finally:
         bmod.EffectResolver = orig_er
+
+
+def test_gc862_build_enqueue_scopes_queue_finish_domains():
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[1] / "game" / "buildings.py"
+    ).read_text(encoding="utf-8")
+    block = src.split("def queue_build_for_planet(", 1)[1].split(
+        "\ndef cancel_build_job_for_planet(", 1
+    )[0]
+
+    assert 'queue_domains={"build", "research", "planet_research", "ascension"}' in block
+    assert '"shipyard"' not in block.split("queue_domains=", 1)[1].split("}", 1)[0]
+    assert '"defense"' not in block.split("queue_domains=", 1)[1].split("}", 1)[0]
+    assert '"troops"' not in block.split("queue_domains=", 1)[1].split("}", 1)[0]
+    # Fleet/relocation remain on queue-engine defaults in this live-safe slice.
+    finish_call = block.split("engine_result = finish_due_work(", 1)[1].split(")", 1)[0]
+    assert "include_fleet=" not in finish_call
+    assert "include_relocations=" not in finish_call
