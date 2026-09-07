@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from ..db import commit
 from ..inventory_catalog import container_image_path, item_catalog_entry
-from .definitions import directives_schema_ready, get_definition
+from .definitions import directives_schema_ready, get_definitions
 from .generator import (
     STATUS_ACTIVE,
     STATUS_CLAIMED,
@@ -138,10 +138,18 @@ def get_imperial_directives_state(
     except Exception:
         pass
 
-    directives: List[Dict[str, Any]] = []
-    for row in list(raw.get("daily") or []) + list(raw.get("weekly") or []):
-        defn = get_definition(str(row.get("definition_key") or ""), conn=conn)
-        directives.append(serialize_directive_row(row, defn))
+    rows = list(raw.get("daily") or []) + list(raw.get("weekly") or [])
+    definitions = get_definitions(
+        [str(row.get("definition_key") or "") for row in rows],
+        conn=conn,
+    )
+    directives: List[Dict[str, Any]] = [
+        serialize_directive_row(
+            row,
+            definitions.get(str(row.get("definition_key") or "")),
+        )
+        for row in rows
+    ]
 
     claimable = sum(1 for d in directives if d.get("claimable"))
     return {
