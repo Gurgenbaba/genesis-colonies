@@ -160,11 +160,10 @@ def test_timekeeper_partial_projection_skips_unchanged_meta_domains():
         in payload
     )
 
-    # Time-sensitive state must remain outside the projection skip.
+    # Fleet busy-state is still mutation-response critical until the client
+    # explicitly preserves missing active_fleets.
     projection_tail = payload.split('with perf_span("payload.fleets_hud")', 1)[1]
     assert "fleet_hud_for_game_state" in projection_tail
-    assert "account_safety_hud_for_game_state" in projection_tail
-    assert "initiation_for_game_state" in payload
 
 def test_timekeeper_partial_projection_skips_commander_and_score_reads():
     src = _read("app.py")
@@ -187,4 +186,31 @@ def test_timekeeper_partial_projection_skips_commander_and_score_reads():
     assert 'payload["timekeeper"] = dict(timekeeper_snapshot)' in payload
     assert 'with perf_span("payload.notifications")' in payload
     assert 'with perf_span("payload.fleets_hud")' in payload
+
+def test_timekeeper_partial_projection_skips_unrelated_notification_and_safety_reads():
+    src = _read("app.py")
+    payload = _block(
+        src,
+        "def _payload_from_live_context(",
+        "\ndef _build_game_state_payload(",
+    )
+
+    notifications_pos = payload.index('with perf_span("payload.notifications")')
+    notifications_prefix = payload[max(0, notifications_pos - 80):notifications_pos]
+    assert "if not timekeeper_partial:" in notifications_prefix
+
+    initiation_pos = payload.index("from game.live_state import initiation_for_game_state")
+    initiation_prefix = payload[max(0, initiation_pos - 120):initiation_pos]
+    assert "if not timekeeper_partial:" in initiation_prefix
+
+    safety_pos = payload.index(
+        "from game.live_state import account_safety_hud_for_game_state"
+    )
+    safety_prefix = payload[max(0, safety_pos - 120):safety_pos]
+    assert "if not timekeeper_partial:" in safety_prefix
+
+    # Fleet intentionally remains outside the partial skip for now.
+    fleet_pos = payload.index('with perf_span("payload.fleets_hud")')
+    fleet_prefix = payload[max(0, fleet_pos - 80):fleet_pos]
+    assert "if not timekeeper_partial:" not in fleet_prefix
 
