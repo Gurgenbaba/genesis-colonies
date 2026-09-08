@@ -178,23 +178,42 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                 )
 
         def _world_boss() -> None:
-            from .world_boss import maybe_tick_world_boss_schedule
+            from .world_boss import (
+                maybe_tick_world_boss_schedule,
+                tick_world_boss_auto_attacks_short_tx,
+            )
             from .world_boss_companions import tick_companion_missions
 
-            wb_tick = maybe_tick_world_boss_schedule(conn=conn)
-            companion_tick = tick_companion_missions(conn=conn)
-            auto = wb_tick.get("auto_attack") or {}
+            # GC-PERF-WB-TX-028: keep schedule/companion state atomic, but do not
+            # hold that transaction across every auto attacker. Each auto strike
+            # commits independently so HTTP can interleave between players.
+            begin_write_transaction(conn)
+            try:
+                wb_tick = maybe_tick_world_boss_schedule(
+                    conn=conn,
+                    include_auto_attack=False,
+                )
+                companion_tick = tick_companion_missions(conn=conn)
+                commit(conn)
+            except Exception:
+                rollback(conn)
+                raise
+
+            auto = tick_world_boss_auto_attacks_short_tx(conn=conn)
             if (
                 wb_tick.get("expired_ids")
                 or wb_tick.get("spawned_event_id")
                 or int(auto.get("fired") or 0) > 0
                 or int(auto.get("stopped") or 0) > 0
                 or int(companion_tick.get("marked_ready") or 0) > 0
+                or auto.get("errors")
             ):
                 _worker_log(
                     f"world-boss expired={wb_tick.get('expired_ids')} "
                     f"spawned={wb_tick.get('spawned_event_id')} "
                     f"auto_fired={auto.get('fired')} auto_stopped={auto.get('stopped')} "
+                    f"auto_commits={auto.get('write_commits')} "
+                    f"auto_errors={len(auto.get('errors') or [])} "
                     f"missions_ready={companion_tick.get('marked_ready')}"
                 )
 
@@ -270,7 +289,7 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         _run_stage("combat_bots", _combat_bots, manage_tx=False)
         # Materialize scheduled LiveOps windows before WB/asteroid ticks read factors.
         _run_stage("liveops_schedules", _liveops_schedules)
-        _run_stage("world_boss", _world_boss)
+        _run_stage("world_boss", _world_boss, manage_tx=False)
         _run_stage("asteroids", _asteroids)
         # GC-2610: inactive_autoplay before pirates — pirate economy-for-all-bots is
         # the most expensive stage and must not starve inactive accounts of budget.
@@ -495,17 +514,9 @@ def run_fleet_worker(
             # Auto-attack must not wait on fleet arrivals — cheap tick even when idle-skipped.
             auto_attack: Dict[str, Any] = {}
             try:
-                from .world_boss import tick_world_boss_auto_attacks
-                from .tx_context import tx_context
+                from .world_boss import tick_world_boss_auto_attacks_short_tx
 
-                with tx_context(sub_owner="world_boss_auto"):
-                    begin_write_transaction(conn)
-                    try:
-                        auto_attack = tick_world_boss_auto_attacks(conn=conn)
-                        commit(conn)
-                    except Exception:
-                        rollback(conn)
-                        raise
+                auto_attack = tick_world_boss_auto_attacks_short_tx(conn=conn)
                 if int(auto_attack.get("fired") or 0) > 0 or int(auto_attack.get("stopped") or 0) > 0:
                     _worker_log(
                         f"world-boss auto (idle-skip) fired={auto_attack.get('fired')} "
