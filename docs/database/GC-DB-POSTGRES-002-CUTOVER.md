@@ -1,9 +1,9 @@
 # GC-DB-POSTGRES-002 — Production Cutover Preparation
 
-> **Mode:** PREPARATION / REHEARSAL ONLY  
+> **Mode:** HISTORICAL CUTOVER RUNBOOK + POST-CUTOVER OPERATOR NOTES  
 > **Base:** `main` @ `7af2cd2b50dccee506819366a7a79f0c04457923` (PR #127 merge)  
 > **Prerequisite:** [GC-DB-POSTGRES-001-PHASE1.md](GC-DB-POSTGRES-001-PHASE1.md) — technical READY YES  
-> **This ticket does NOT:** switch production, change Railway variables, detach/delete the SQLite volume, or open live Postgres writes.
+> **Historical scope:** this document was written before the production switch. Production is now PostgreSQL; current operator notes below supersede legacy one-worker guidance.
 
 **CUTOVER RUNBOOK READY: YES**
 
@@ -41,7 +41,7 @@ Owner: [`scripts/docker-entrypoint.sh`](../../scripts/docker-entrypoint.sh) ← 
 | Knob | Default | Production expectation |
 |------|---------|------------------------|
 | `GUNICORN_WORKER_CLASS` | `gthread` | `gthread` |
-| `GUNICORN_WORKERS` | `1` | `1` |
+| `GUNICORN_WORKERS` | backend-aware: SQLite `1`, PostgreSQL `2` | PostgreSQL Production **≥2** |
 | `GUNICORN_THREADS` | `4` (floored to ≥2 for gthread) | `4` |
 | Timeout | `--timeout 120` | unchanged |
 | Bind | `0.0.0.0:$PORT` | Railway `PORT` |
@@ -49,7 +49,7 @@ Owner: [`scripts/docker-entrypoint.sh`](../../scripts/docker-entrypoint.sh) ← 
 Effective cmdline:
 
 ```text
-gunicorn -k gthread -w 1 --threads 4 -b 0.0.0.0:$PORT --timeout 120 app:app
+gunicorn -k gthread -w 2 --threads 4 -b 0.0.0.0:$PORT --timeout 120 app:app
 ```
 
 Maintenance sidecar (same container, same env):
@@ -94,7 +94,7 @@ Silent fallback does **not** exist: `GC_DB_BACKEND=postgres` without a usable po
 |----------|---------|------|
 | `GC_PG_POOL_MAX` | `10` | `psycopg_pool` max size |
 | `GC_PG_CONNECT_TIMEOUT` | `20` | connect timeout (s) |
-| `GC_PG_POOL_TIMEOUT` | `30` | checkout timeout (s) |
+| `GC_PG_POOL_TIMEOUT` | `3` | checkout timeout (s); fail fast instead of parking a web thread |
 | `GC_PG_STATEMENT_TIMEOUT` | `60s` | session `statement_timeout` |
 | `GC_PG_LOCK_TIMEOUT` | `15s` | session `lock_timeout` |
 
@@ -103,7 +103,7 @@ Silent fallback does **not** exist: `GC_DB_BACKEND=postgres` without a usable po
 | Variable | Default | Role |
 |----------|---------|------|
 | `GUNICORN_WORKER_CLASS` | `gthread` | HTTP worker class |
-| `GUNICORN_WORKERS` | `1` | HTTP workers |
+| `GUNICORN_WORKERS` | SQLite `1` / PostgreSQL `2` | HTTP workers; Production PG floors legacy `1` to `2` |
 | `GUNICORN_THREADS` | `4` | threads when gthread/sync |
 | `GC_MAINTENANCE_WORKER` | `1` | Sidecar bag owner |
 | `GC_EMBEDDED_CRON` | prod default on unless sidecar forces off | In-process bag (legacy) |
@@ -328,11 +328,13 @@ On the **web** Railway service (single service topology):
 | Set | `DATABASE_URL=<Railway Postgres URL>` |
 | Set | `GC_ALLOW_POSTGRES_PROD=1` |
 | Keep | `GC_DB_PATH=/data/game.db` |
-| Keep | `GUNICORN_WORKER_CLASS=gthread`, `GUNICORN_WORKERS=1`, `GUNICORN_THREADS=4` |
+| Keep | `GUNICORN_WORKER_CLASS=gthread`, `GUNICORN_THREADS=4`; **unset legacy `GUNICORN_WORKERS=1`** (recommended) or set `GUNICORN_WORKERS=2` |
 | **Keep off until Write-Open Gate** | `GC_MAINTENANCE_WORKER=0`, `GC_EMBEDDED_CRON=0` |
 | After ★ Write-Open Gate | `GC_MAINTENANCE_WORKER=1` (sidecar on); traffic still held until controlled mutations pass |
 
 Atomic from operator view: save PG backend variables → redeploy/restart **one** web service → entrypoint migrates → gunicorn boots on Postgres **without** sidecar → read-only smoke → ★ Write-Open Gate → enable sidecar → controlled mutations → reopen traffic.
+
+> **Post-cutover concurrency rule (GC-PERF-PG-WEB-031):** PostgreSQL Production must never run the legacy one-worker web topology. Leave `GUNICORN_WORKERS` unset for the backend default of `2`, or set a value ≥2. Runtime code floors a persisted PG Production value of `1` to `2`, so an old Railway variable cannot silently restore global HTTP head-of-line blocking.
 
 ### Startup proof (must capture)
 
