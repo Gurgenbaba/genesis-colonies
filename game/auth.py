@@ -261,12 +261,13 @@ _BAN_NEG_TTL_SEC = 15.0
 _ban_neg_until: dict[int, float] = {}
 _ban_neg_lock = threading.Lock()
 
-# GC-PG-BUSY-NAV-001: auth is on every protected route. A rapid action ->
-# navigation burst must not consume another PG checkout merely to reload the
-# same player row. Fresh cache is intentionally tiny; stale use is allowed
-# only as a fail-soft path for safe non-API GET/HEAD navigation after a pool
-# timeout. Mutating/API requests never use stale auth state.
+# GC-PG-BUSY-NAV-001 / GC-PERF-AUTH-NAV-026: auth is on every protected route.
+# API/mutation freshness stays tight, while safe HTML/PJAX navigation may reuse
+# the already validated player row for the same 15s window as the existing
+# negative ban cache. This removes a separate PG checkout from normal menu
+# bursts without letting mutation/API guards consume older auth state.
 _PLAYER_GUARD_TTL_SEC = 2.0
+_PLAYER_GUARD_NAV_TTL_SEC = 15.0
 _PLAYER_GUARD_STALE_SEC = 30.0
 _player_guard_cache: dict[int, tuple[float, Dict[str, Any]]] = {}
 _player_guard_lock = threading.Lock()
@@ -277,9 +278,19 @@ def _cache_guard_player(player_id: int, player: Dict[str, Any]) -> None:
         _player_guard_cache[int(player_id)] = (time.monotonic(), dict(player))
 
 
-def _cached_guard_player(player_id: int, *, allow_stale: bool = False) -> Optional[Dict[str, Any]]:
+def _cached_guard_player(
+    player_id: int,
+    *,
+    allow_stale: bool = False,
+    safe_navigation: bool = False,
+) -> Optional[Dict[str, Any]]:
     now_m = time.monotonic()
-    max_age = _PLAYER_GUARD_STALE_SEC if allow_stale else _PLAYER_GUARD_TTL_SEC
+    if allow_stale:
+        max_age = _PLAYER_GUARD_STALE_SEC
+    elif safe_navigation:
+        max_age = _PLAYER_GUARD_NAV_TTL_SEC
+    else:
+        max_age = _PLAYER_GUARD_TTL_SEC
     with _player_guard_lock:
         entry = _player_guard_cache.get(int(player_id))
         if entry is None:
@@ -547,12 +558,13 @@ def require_login(func: ViewFunc) -> ViewFunc:
             session.clear()
             return redirect(url_for("login"))
 
-        player = _cached_guard_player(pid)
+        safe_navigation = _safe_html_navigation_request()
+        player = _cached_guard_player(pid, safe_navigation=safe_navigation)
         if player is None:
             try:
                 player = get_player_by_user_id(pid)
             except DbPoolTimeout:
-                if _safe_html_navigation_request():
+                if safe_navigation:
                     player = _cached_guard_player(pid, allow_stale=True)
                     if player is not None:
                         logger.warning(
