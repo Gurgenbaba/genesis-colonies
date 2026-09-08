@@ -2511,11 +2511,6 @@ def techtree_view():
 @require_login
 def galaxy_view():
     user_id = int(session["user_id"])
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
-        "galaxy"
-    )
-    if player_view is None:
-        return redirect(url_for("login"))
 
     from game.galaxy import (
         build_galaxy_nav,
@@ -2570,10 +2565,26 @@ def galaxy_view():
     system_data: dict[str, Any] = {"galaxy": galaxy, "system": system, "slots": []}
     expedition_slot = None
     try:
+        # GC-PERF-GALAXY-CONN-024: one request connection owns both live context
+        # and Galaxy composition. PostgreSQL must not pay a second pool checkout
+        # between HUD projection and the page-specific bulk reads.
+        ctx = _load_page_live_context(
+            finish_source="galaxy",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
+        player_view = ctx["player_view"]
+        energy_total = ctx["energy_total"]
+        energy_used = ctx["energy_used"]
+        storage_caps = ctx["storage_caps"]
+        context_planet = ctx.get("planet")
+
         try:
             active_planet_id = get_active_planet_id(user_id, conn=conn) or None
             if not has_url_view:
-                planet = get_context_planet(user_id, conn=conn)
+                planet = context_planet or get_context_planet(user_id, conn=conn)
                 coords = get_planet_coordinates(planet)
                 galaxy = int(coords["galaxy"])
                 system = int(coords["system"])

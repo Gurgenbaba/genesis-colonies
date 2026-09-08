@@ -141,6 +141,8 @@ Client may animate between authoritative snapshots; **server reconstructs truth*
 
 ✅ Shipped (`#136` / main) — `list_system` bulk maps, write-free debris filter, SQL/opens gates in `tests/test_gc_pg_highspeed_001a.py`. Live measure after deploy still required for Admin p95.
 
+**GC-PERF-GALAXY-CONN-024:** the HTML/PJAX `/galaxy` wrapper now reuses one request-owned connection for live-context projection and Galaxy composition. It also reuses the context planet already loaded by live-state for default coordinates. This closes the remaining route-level double-checkout left after 001A; asteroid bootstrap semantics are unchanged and remain a separate WRITE-MIN follow-up.
+
 ### Why first
 
 Live evidence: Galaxy **~500 SQL + 100+ opens** is the clearest PostgreSQL network-RTT failure mode. Fixing it unlocks perceptible page speed without touching mutation semantics.
