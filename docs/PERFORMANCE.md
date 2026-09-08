@@ -270,6 +270,33 @@ Hard structural budget on the repeated pass: `writes == 0` and `db_connections <
 
 Core matrix: Overview, Buildings, Research, Shipyard, Defense, Fleet, Galaxy, Empire, Combat Simulator, Inventory, Vote Center and Galactic Politics.
 
+### GC-PERF-PG-WEB-031 — PostgreSQL web concurrency removes single-worker head-of-line blocking
+
+Production still started Gunicorn with a hardcoded `GUNICORN_WORKERS=1` fallback even after the database cutover. That left one gthread process as the global HTTP choke point: one slow request could occupy enough of the process to make unrelated menu navigation feel frozen.
+
+GC-PERF-PG-NAV-030 provides the key counter-evidence against intrinsic page slowness. On real PostgreSQL 16, the repeated PJAX matrix currently measures:
+
+- 12 core routes;
+- exactly **1 DB connection per route**;
+- **0 writes** on every repeated navigation;
+- server time about **113–154 ms**;
+- DB query time about **64–88 ms**;
+- 168–249 SQL statements depending on page.
+
+So the ordinary PJAX handler is no longer a 5–10 second path in isolation. Production stalls are therefore treated as concurrency / network / contention problems first, not an excuse to add a parallel state engine.
+
+Fix:
+
+- `scripts/docker-entrypoint.sh` loads `.env` through `init_config()` before resolving worker count.
+- Worker count comes from the single owner `game.config.get_gunicorn_workers()`.
+- SQLite remains one worker by default.
+- PostgreSQL defaults to two gthread workers.
+- PostgreSQL **Production floors a persisted legacy `GUNICORN_WORKERS=1` to 2**; higher explicit values remain allowed.
+- Existing lazy per-process PG pools, maintenance sidecar and queue-worker ownership remain unchanged.
+- Railway production must use the private `DATABASE_URL`, never `DATABASE_PUBLIC_URL`, for service-to-database traffic.
+
+Regression covers SQLite default, PostgreSQL default, Production legacy-floor behavior, development override behavior and entrypoint env-loading order.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
