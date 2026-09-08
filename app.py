@@ -572,22 +572,39 @@ def inject_globals():
     my_rank = None
     total_players = None
 
+    # GC-PERF-PJAX-SHELL-023: a PJAX response only contributes #main-content.
+    # require_login already resolved the player into g.player, and the persistent
+    # shell keeps GAME_SETTINGS from the full page. Avoid two redundant pool
+    # checkouts before the lightweight-layout guards below.
+    pjax_layout = _is_pjax_request()
+    simple_layout = _is_lightweight_layout_request()
+
     # current user (safe)
     try:
-        auth_user = get_current_user()
+        if pjax_layout:
+            from flask import g as _flask_g
+
+            _guard_player = getattr(_flask_g, "player", None)
+            if isinstance(_guard_player, dict):
+                auth_user = dict(_guard_player)
+                auth_user.setdefault("player_name", auth_user.get("name"))
+            else:
+                # Defensive fallback for an unusual PJAX route without require_login.
+                auth_user = get_current_user()
+        else:
+            auth_user = get_current_user()
         auth_admin = bool(auth_user and auth_user.get("is_admin"))
     except Exception:
         auth_user = None
         auth_admin = False
 
-    # settings (safe)
+    # settings (safe). PJAX never replaces the shell consumers of GAME_SETTINGS.
     try:
-        settings = get_game_settings() or {}
+        settings = {} if pjax_layout else (get_game_settings() or {})
     except Exception:
         settings = {}
 
     # motd / universe news (safe) — skip on auth/simple pages and PJAX (GC-741, GC-745)
-    simple_layout = _is_lightweight_layout_request()
     try:
         if not simple_layout:
             raw_motd_enabled = settings.get("motd_enabled", "0")
