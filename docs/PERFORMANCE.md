@@ -294,8 +294,9 @@ Fix:
 - PostgreSQL **Production floors a persisted legacy `GUNICORN_WORKERS=1` to 2**; higher explicit values remain allowed.
 - Existing lazy per-process PG pools, maintenance sidecar and queue-worker ownership remain unchanged.
 - Railway production must use the private `DATABASE_URL`, never `DATABASE_PUBLIC_URL`, for service-to-database traffic.
+- GC-PERF-PG-NET-032 classifies the configured DSN without exposing credentials/hostname and surfaces `railway_private`, `railway_public_proxy`, `external`, or `local` through deep health. A public-proxy Production DSN emits a config warning but does **not** block startup.
 
-Regression covers SQLite default, PostgreSQL default, Production legacy-floor behavior, development override behavior and entrypoint env-loading order.
+Regression covers SQLite default, PostgreSQL default, Production legacy-floor behavior, development override behavior, entrypoint env-loading order and safe PG network-path diagnostics.
 
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
