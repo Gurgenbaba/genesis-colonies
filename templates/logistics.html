@@ -2,7 +2,6 @@
 {% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/empire_resource_relay.css') }}?v={{ GC_ASSET_VERSION }}">
 <style>
 .logistics-page--compact .logistics-headline { margin-bottom: 8px; }
 .logistics-page--compact .section-title { font-size: 1.05rem; margin-bottom: 2px; }
@@ -179,5 +178,4 @@
 
 {% block extra_scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/empire_resource_relay.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
