@@ -242,6 +242,18 @@ Fix:
 
 Regression ages a cached player by five seconds and requires HTML navigation to perform zero player reload checkout; API stale-cache behavior remains strict.
 
+### GC-PERF-NAV-CONN-027 — Read-page routes reuse the live-context connection
+
+Post-Timekeeper audit found several older HTML/PJAX routes still doing `live context -> close -> page-state on a second connection` even though their page builders are read-only.
+
+Fix:
+
+- Combat Simulator, Vote Center, Galactic Politics and Inventory now create one request connection before live-context refresh and pass it through page-state composition.
+- Inventory reuses the already resolved live-context planet for its page-level planet identity instead of performing another explicit context-planet read.
+- Mutation-bearing surfaces (Auction, Story, Initiation, Referrals qualification, Creator, Planet Evolution) are intentionally excluded and remain separate follow-ups.
+
+Regression structurally requires exactly one route-owned `db()` checkout, `conn=conn` + `close_conn=False` on live context, and the same connection on each page builder.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
