@@ -14,6 +14,39 @@ def test_gunicorn_workers_default_one_for_sqlite(monkeypatch):
     assert get_gunicorn_workers() == 1
 
 
+def test_gunicorn_workers_default_two_for_postgres(monkeypatch):
+    monkeypatch.delenv("GUNICORN_WORKERS", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("FLASK_ENV", "development")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+
+    from game.config import get_gunicorn_workers
+
+    assert get_gunicorn_workers() == 2
+
+
+def test_gunicorn_workers_production_postgres_floors_legacy_one(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.setenv("GUNICORN_WORKERS", "1")
+
+    from game.config import get_gunicorn_workers
+
+    assert get_gunicorn_workers() == 2
+
+
+def test_gunicorn_workers_development_postgres_can_explicitly_use_one(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("FLASK_ENV", "development")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.setenv("GUNICORN_WORKERS", "1")
+
+    from game.config import get_gunicorn_workers
+
+    assert get_gunicorn_workers() == 1
+
+
 def test_gunicorn_workers_env_override(monkeypatch):
     monkeypatch.setenv("GUNICORN_WORKERS", "3")
     monkeypatch.setenv("GC_DB_BACKEND", "sqlite")
@@ -63,7 +96,12 @@ def test_docker_entrypoint_defaults_gthread_availability():
     text = (Path(__file__).resolve().parent.parent / "scripts" / "docker-entrypoint.sh").read_text(
         encoding="utf-8"
     )
-    assert 'WORKERS="${GUNICORN_WORKERS:-1}"' in text
+    assert "from game.config import init_config, get_gunicorn_workers" in text
+    worker_resolver = text.split('WORKERS="$(python -c ', 1)[1].split(')"', 1)[0]
+    assert "init_config()" in worker_resolver
+    assert worker_resolver.index("init_config()") < worker_resolver.index("get_gunicorn_workers()")
+    assert "print(get_gunicorn_workers())" in text
+    assert 'WORKERS="${GUNICORN_WORKERS:-1}"' not in text
     assert 'WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gthread}"' in text
     assert 'THREADS="${GUNICORN_THREADS:-4}"' in text
     assert '--threads ${THREADS}' in text or '--threads "${THREADS}"' in text
