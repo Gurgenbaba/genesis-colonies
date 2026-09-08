@@ -85,6 +85,7 @@ def test_postgres_relay_preserves_huge_numeric_and_direction_cooldowns(pg_parity
 
     assert distributed["processed_count"] == 2
     assert int(distributed["debited"]["metal"]) == huge
+    delivered = []
     for source in sources:
         cooldowns = conn.execute(
             """
@@ -102,9 +103,14 @@ def test_postgres_relay_preserves_huge_numeric_and_direction_cooldowns(pg_parity
             "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;",
             (int(source),),
         ).fetchone()
-        assert int(stock["metal"]) == huge // 2
-        assert int(stock["crystal"]) == huge // 2
-        assert int(stock["fuel_cells"]) == huge // 2
+        delivered.append(
+            (int(stock["metal"]), int(stock["crystal"]), int(stock["fuel_cells"]))
+        )
+
+    for resource_idx in range(3):
+        values = sorted(row[resource_idx] for row in delivered)
+        assert sum(values) == huge
+        assert values[-1] - values[0] <= 1
 
     meta = conn.execute(
         """
