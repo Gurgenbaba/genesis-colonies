@@ -15,6 +15,7 @@ on:
       - "game/galaxy.py"
       - "game/fleet.py"
       - "game/fleet_calc.py"
+      - "game/empire_relay.py"
       - "game/ranking.py"
       - "game/scrapyard.py"
       - "game/buildings.py"
@@ -63,6 +64,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
+      - "tests/test_gc_pg_empire_relay_002.py"
       - "tests/test_gc_pg_expedition_ledger_race_006.py"
       - "tests/test_gc_big_number_runtime_expeditions.py"
       - "tests/test_gc_big_number_runtime_pirates.py"
@@ -90,6 +92,7 @@ on:
       - "game/galaxy.py"
       - "game/fleet.py"
       - "game/fleet_calc.py"
+      - "game/empire_relay.py"
       - "game/ranking.py"
       - "game/scrapyard.py"
       - "game/buildings.py"
@@ -138,6 +141,7 @@ on:
       - "tests/test_gc_pg_numeric_p1_planet_economy.py"
       - "tests/test_gc_pg_schema_final_pass.py"
       - "tests/test_gc_pg_numeric_final_no_max.py"
+      - "tests/test_gc_pg_empire_relay_002.py"
       - "tests/test_gc_pg_expedition_ledger_race_006.py"
       - "tests/test_gc_big_number_runtime_expeditions.py"
       - "tests/test_gc_big_number_runtime_pirates.py"
@@ -210,7 +214,7 @@ jobs:
             migrate.py \
             scripts/pg_numeric_readiness_audit.py \
             game/models.py game/resources.py game/production_formula.py game/economy_balance.py game/effects/effect_resolver.py game/exchange.py \
-            game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py \
+            game/combat.py game/asteroids.py game/fleet.py game/fleet_calc.py game/empire_relay.py \
             game/buildings.py game/research.py game/shipyard.py game/shipyard_queue.py game/defense.py \
             game/inactive_autoplay.py game/world_boss.py game/world_boss_companions.py \
             game/pirates/bases.py game/pirates/brain.py game/pirates/threat.py game/combat_hof.py game/directives/definitions.py game/directives/scaling.py game/directives/balancing.py game/directives/progress.py game/directives/generator.py game/case_battles.py \
@@ -241,6 +245,7 @@ jobs:
             tests/test_gc_pg_numeric_p1_planet_economy.py \
             tests/test_gc_pg_schema_final_pass.py \
             tests/test_gc_pg_numeric_final_no_max.py \
+            tests/test_gc_pg_empire_relay_002.py \
             tests/test_gc_pg_expedition_ledger_race_006.py \
             tests/test_gc_big_number_runtime_expeditions.py \
             tests/test_gc_big_number_runtime_pirates.py \
