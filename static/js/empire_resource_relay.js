@@ -421,22 +421,37 @@
     true
   );
 
-  document.addEventListener("change", (event) => {
-    const page = root();
-    if (!page || !page.contains(event.target)) return;
-    if (event.target.matches?.("[data-logistics-hub]")) {
-      syncHubPresentation(page);
-      syncCooldownUi(page);
-      return;
-    }
-    if (event.target.matches?.("[data-logistics-colony-cb]")) syncButtons(page);
-  });
+  document.addEventListener(
+    "change",
+    (event) => {
+      const page = root();
+      if (!page || !page.contains(event.target)) return;
+      if (event.target.matches?.("[data-logistics-hub]")) {
+        event.stopImmediatePropagation();
+        syncHubPresentation(page);
+        syncCooldownUi(page);
+        return;
+      }
+      if (event.target.matches?.("[data-logistics-colony-cb]")) {
+        event.stopImmediatePropagation();
+        syncButtons(page);
+      }
+    },
+    true
+  );
 
-  document.addEventListener("input", (event) => {
-    const page = root();
-    if (!page || !page.contains(event.target)) return;
-    if (event.target.matches?.("[data-logistics-resource]")) syncButtons(page);
-  });
+  document.addEventListener(
+    "input",
+    (event) => {
+      const page = root();
+      if (!page || !page.contains(event.target)) return;
+      if (event.target.matches?.("[data-logistics-resource]")) {
+        event.stopImmediatePropagation();
+        syncButtons(page);
+      }
+    },
+    true
+  );
 
   const shell = document.getElementById("main-content") || document.body;
   const observer = new MutationObserver(() => {
