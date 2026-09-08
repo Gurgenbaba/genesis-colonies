@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from game.config import (
+    classify_postgres_network_path,
     get_app_version,
     is_debug_enabled,
     is_production,
@@ -65,12 +66,18 @@ def check_writable() -> Dict[str, Any]:
 
 def check_database() -> Dict[str, Any]:
     db_path = resolve_db_path()
+    backend = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
     info: Dict[str, Any] = {
         "ok": False,
-        "backend": os.environ.get("GC_DB_BACKEND", "sqlite"),
+        "backend": backend,
         "path": str(db_path),
         "exists": db_path.exists(),
     }
+    if backend == "postgres":
+        network_path = classify_postgres_network_path()
+        info["network_path"] = network_path
+        if network_path == "railway_public_proxy":
+            info["performance_warning"] = "postgres_public_proxy"
     try:
         conn = db()
         conn.execute("SELECT 1;")
