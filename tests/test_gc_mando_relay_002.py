@@ -13,7 +13,7 @@ from game.empire_relay import (
     collect_empire_resources,
     distribute_empire_resources,
 )
-from game.models import create_user, ensure_player_and_homeworld
+from game.models import create_user
 from tests.test_fleet_logistics import _hub_and_sources, _player, logistics_db
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -274,8 +274,9 @@ def test_collect_rejects_foreign_planet_before_any_transfer(logistics_db):
     _set_stock(conn, sources[0], metal=777, crystal=0, fuel_cells=0, now=now)
     conn.commit()
 
-    other_uid = create_user("relay-other", "secret123")
-    ensure_player_and_homeworld(player_id=other_uid, player_name="relay-other", conn=conn)
+    ok_other, err_other, other_user = create_user("relay-other", "secret123")
+    assert ok_other, err_other
+    other_uid = int(other_user["id"])
     foreign = conn.execute(
         "SELECT id FROM planets WHERE player_id = ? ORDER BY id ASC LIMIT 1;",
         (int(other_uid),),
