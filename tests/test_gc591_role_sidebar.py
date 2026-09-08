@@ -191,3 +191,18 @@ def test_overview_renders_role_sidebar_attrs(gc591_db, monkeypatch):
     raw = html2.split(cfg_el, 1)[1].split('</script>', 1)[0]
     cfg = json.loads(raw.split('>', 1)[1].strip())
     assert cfg['prominent_by_role']['research']
+
+def test_partial_state_without_planet_identity_preserves_role_sidebar():
+    src = _read("static/main.js")
+    resolver = src.split("function resolveSidebarNavFromState(data)")[1].split(
+        "const MOBILE_BOTTOM_PRIORITY", 1
+    )[0]
+
+    assert "!data.active_planet" in resolver
+    assert "Array.isArray(data.planets)" in resolver
+    assert "data.planets.length > 0" in resolver
+    partial_guard = resolver.split(
+        "const activeId = Number(data.active_planet_id", 1
+    )[0]
+    assert "return null;" in partial_guard
+
