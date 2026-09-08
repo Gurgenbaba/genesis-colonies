@@ -1,0 +1,114 @@
+/* GC-MANDO-NUMBERS-001 — exact huge-number layout for HUD, Records and Hall of Fame.
+   Values stay exact; constrained surfaces gain width/scroll instead of scientific notation. */
+
+.resource-bar-cmd .hud-res-panel,
+.resource-bar-cmd .hud-res-body,
+.resource-bar-cmd .hud-res-amount {
+  min-width: 0;
+}
+
+.resource-bar-cmd .res-value,
+.resource-bar-cmd .res-cap,
+.resource-bar-cmd .res-rate {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: -0.035em;
+}
+
+.resource-bar-cmd .res-value,
+.resource-bar-cmd .res-cap {
+  font-size: clamp(0.68rem, 0.72vw, 0.9rem);
+}
+
+.resource-bar-cmd .hud-res-cap-line {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.gc-records-workspace-body,
+.gc-hof-body,
+.gc-hof-desktop,
+.gc-hof-desktop .ranking-table-wrapper {
+  min-width: 0;
+}
+
+.gc-records-row {
+  display: grid;
+  grid-template-columns: 46px minmax(150px, 1.35fr) minmax(150px, 1fr) minmax(220px, auto);
+  align-items: center;
+  column-gap: 14px;
+}
+
+.gc-records-row-label,
+.gc-records-row-holder {
+  min-width: 0;
+}
+
+.gc-records-row-value {
+  min-width: 220px;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-hof-desktop .ranking-table-wrapper {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.gc-hof-table {
+  min-width: 1120px;
+  table-layout: auto;
+}
+
+.gc-hof-table .gc-hof-col-num {
+  min-width: 190px;
+  width: 190px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-hof-table .gc-hof-col-name {
+  min-width: 170px;
+}
+
+@media (max-width: 760px) {
+  .resource-bar-cmd .res-value,
+  .resource-bar-cmd .res-cap {
+    font-size: 0.7rem;
+  }
+
+  .gc-records-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    row-gap: 6px;
+  }
+
+  .gc-records-row-icon {
+    grid-row: 1 / span 3;
+  }
+
+  .gc-records-row-label,
+  .gc-records-row-holder,
+  .gc-records-row-value {
+    grid-column: 2;
+  }
+
+  .gc-records-row-value {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .gc-hof-mobile-stats dd {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    font-variant-numeric: tabular-nums;
+  }
+}
