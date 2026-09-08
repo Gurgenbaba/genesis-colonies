@@ -88,19 +88,41 @@ def test_pg_core_pjax_navigation_structural_budget(pg_parity_db, monkeypatch):
         resp = client.get(route, headers=headers)
         assert resp.status_code == 200, (route, resp.status_code, resp.get_data(as_text=True)[:500])
 
+    import game.live_state as live_state
+
+    real_sql_timing = live_state.record_request_perf_sql_timing
+    current_route = {"value": ""}
+    write_sql: dict[str, list[str]] = {}
+
+    def trace_sql(sql: str, duration_ms: float) -> None:
+        text = str(sql or "").strip()
+        if text.upper().startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
+            route_key = current_route["value"] or "unknown"
+            write_sql.setdefault(route_key, []).append(" ".join(text.split())[:500])
+        real_sql_timing(sql, duration_ms)
+
+    monkeypatch.setattr(live_state, "record_request_perf_sql_timing", trace_sql)
+
     samples = []
+    violations = []
     for route in ROUTES:
+        current_route["value"] = route
         resp = client.get(route, headers=headers)
         assert resp.status_code == 200, (route, resp.status_code, resp.get_data(as_text=True)[:500])
 
         sample = {"route": route}
         for key in PERF_HEADERS:
             sample[key] = _metric(resp, key)
+        sample["write_sql"] = write_sql.get(route, [])
         samples.append(sample)
         print("[PG NAV PERF] " + json.dumps(sample, sort_keys=True), flush=True)
 
-        assert sample["writes"] == 0, sample
-        assert sample["db_connections"] <= 1, sample
+        if sample["writes"] != 0:
+            violations.append({"reason": "writes", **sample})
+        if sample["db_connections"] > 1:
+            violations.append({"reason": "db_connections", **sample})
+
+    current_route["value"] = ""
 
     # Keep the aggregate visible in CI logs for follow-up SQL-budget slicing.
     summary = {
@@ -112,5 +134,8 @@ def test_pg_core_pjax_navigation_structural_budget(pg_parity_db, monkeypatch):
         "total_writes": sum(s["writes"] for s in samples),
     }
     print("[PG NAV SUMMARY] " + json.dumps(summary, sort_keys=True), flush=True)
+    if violations:
+        print("[PG NAV VIOLATIONS] " + json.dumps(violations, sort_keys=True), flush=True)
 
+    assert not violations, violations
     close_pg_pool()
