@@ -5,6 +5,54 @@ from __future__ import annotations
 import pytest
 
 
+def test_postgres_network_path_classification():
+    from game.config import classify_postgres_network_path
+
+    assert (
+        classify_postgres_network_path(
+            "postgresql://user:secret@postgres.railway.internal:5432/railway"
+        )
+        == "railway_private"
+    )
+    assert (
+        classify_postgres_network_path(
+            "postgresql://user:secret@viaduct.proxy.rlwy.net:12345/railway"
+        )
+        == "railway_public_proxy"
+    )
+    assert classify_postgres_network_path("postgresql://u:p@127.0.0.1:5432/db") == "local"
+    assert classify_postgres_network_path("postgresql://u:p@db.example.com:5432/db") == "external"
+    assert classify_postgres_network_path("") == "unset"
+
+
+def test_health_marks_public_postgres_proxy_without_exposing_dsn(monkeypatch):
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://user:super-secret@viaduct.proxy.rlwy.net:12345/railway",
+    )
+
+    import game.health as health
+
+    class _Conn:
+        def execute(self, _sql):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(health, "db", lambda: _Conn())
+    result = health.check_database()
+
+    assert result["ok"] is True
+    assert result["backend"] == "postgres"
+    assert result["network_path"] == "railway_public_proxy"
+    assert result["performance_warning"] == "postgres_public_proxy"
+    serialized = str(result)
+    assert "super-secret" not in serialized
+    assert "viaduct.proxy.rlwy.net" not in serialized
+
+
 def test_gunicorn_workers_default_one_for_sqlite(monkeypatch):
     monkeypatch.delenv("GUNICORN_WORKERS", raising=False)
     monkeypatch.setenv("GC_DB_BACKEND", "sqlite")
