@@ -128,24 +128,25 @@ def _visit_unlock_key(route: str) -> str:
     return f"codex_visit:{route}"
 
 
-def record_codex_route_visit(player_id: int, route: str, *, conn: sqlite3.Connection | None = None) -> None:
+def record_codex_route_visit(player_id: int, route: str, *, conn: sqlite3.Connection | None = None) -> bool:
+    """Record a Codex route unlock and report whether this call actually wrote."""
     route = str(route or "").strip()
     if not route or not player_id:
-        return
+        return False
     own = conn is None
     c = conn or db()
     try:
         from .inventory_use import unlocks_schema_ready
 
         if not unlocks_schema_ready(c):
-            return
+            return False
         key = _visit_unlock_key(route)
         row = c.execute(
             "SELECT id FROM player_unlocks WHERE user_id = ? AND unlock_key = ? LIMIT 1",
             (int(player_id), key),
         ).fetchone()
         if row:
-            return
+            return False
         c.execute(
             "INSERT INTO player_unlocks (user_id, unlock_key, source_item_key, created_at) "
             "VALUES (?, ?, ?, ?)",
@@ -153,6 +154,7 @@ def record_codex_route_visit(player_id: int, route: str, *, conn: sqlite3.Connec
         )
         if own:
             c.commit()
+        return True
     finally:
         if own:
             c.close()

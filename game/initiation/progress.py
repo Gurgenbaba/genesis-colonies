@@ -56,16 +56,29 @@ def mark_page_seen(
     """
     Persist that the player opened a visit surface (even before that step is active).
 
-    Returns True when a new row was inserted.
+    Returns True when a new row was inserted. Repeat visits use a read probe
+    instead of issuing another idempotent INSERT on the PostgreSQL hot path.
     """
     pid = int(player_id)
     page = str(page_key or "").strip()
     if pid <= 0 or not page or not progress_schema_ready(conn):
         return False
+    event_id = page_seen_event_id(page, pid)
+    existing = conn.execute(
+        """
+        SELECT 1
+        FROM player_initiation_progress
+        WHERE player_id = ? AND source_event_id = ?
+        LIMIT 1;
+        """,
+        (pid, event_id),
+    ).fetchone()
+    if existing:
+        return False
     now_i = int(now if now is not None else time.time())
     return _record_progress_delta(
         pid,
-        source_event_id=page_seen_event_id(page, pid),
+        source_event_id=event_id,
         delta=1,
         conn=conn,
         now=now_i,
@@ -89,18 +102,18 @@ def record_page_visit(
     pid = int(player_id)
     page = str(page_key or "").strip()
     if pid <= 0 or not page:
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": False}
 
     if not initiation_schema_ready(conn) or not progress_schema_ready(conn):
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": False}
 
     ts = float(now if now is not None else time.time())
     ensure_player_initiation(pid, conn=conn, now=ts)
-    mark_page_seen(pid, page, conn=conn, now=ts)
+    page_recorded = mark_page_seen(pid, page, conn=conn, now=ts)
 
     row = load_row(pid, conn=conn)
     if not row or str(row.get("status") or "") != STATUS_ACTIVE:
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": page_recorded}
 
     from .engine import credit_existing_progress
 
@@ -110,20 +123,21 @@ def record_page_visit(
         return {
             "updated": int(cred.get("credited") or 0) + int(cred.get("advanced") or 0),
             "completed": 1 if cred.get("completed") or int(cred.get("advanced") or 0) > 0 else 0,
+            "recorded": page_recorded,
         }
 
     # Fallback: direct event when cursor already matches (seen row may already exist).
     step = step_at(int(row.get("step_index") or 0))
     if not step or str(step.get("objective_key") or "") != "visit_page":
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": page_recorded}
 
     filters = step.get("filters") if isinstance(step.get("filters"), dict) else {}
     allowed = {str(x) for x in (filters.get("pages") or [])}
     if page not in allowed:
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": page_recorded}
 
     eid = str(source_event_id or "").strip() or page_seen_event_id(page, pid)
-    return apply_gameplay_events(
+    result = apply_gameplay_events(
         pid,
         [
             {
@@ -136,6 +150,8 @@ def record_page_visit(
         conn=conn,
         now=ts,
     )
+    result["recorded"] = page_recorded
+    return result
 
 
 def maybe_record_page_visit_from_request(
@@ -148,7 +164,7 @@ def maybe_record_page_visit_from_request(
 ) -> Dict[str, Any]:
     """Hook for page live-context: map path/finish_source → visit event if relevant."""
     if not should_record_page_visit(finish_source):
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": False}
 
     req_path = path
     if req_path is None:
@@ -162,7 +178,7 @@ def maybe_record_page_visit_from_request(
 
     page = resolve_page_key(path=req_path, finish_source=finish_source)
     if not page:
-        return {"updated": 0, "completed": 0}
+        return {"updated": 0, "completed": 0, "recorded": False}
     return record_page_visit(player_id, page, conn=conn, now=now)
 
 
