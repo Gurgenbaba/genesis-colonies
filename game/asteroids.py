@@ -468,7 +468,6 @@ def build_asteroid_board_entries(
     from .galaxy import format_coordinates, galaxy_view_href
 
     ts = float(now if now is not None else _now())
-    expire_due_asteroids(conn=conn, now=ts)
     engaged_ids: Set[int] = set()
     fleet_map: Dict[int, Dict[str, Any]] = {}
     if viewer_player_id is not None and int(viewer_player_id) > 0:
@@ -830,7 +829,6 @@ def get_asteroids_for_system(
     if not asteroid_schema_ready(conn):
         return {}
     ts = float(now if now is not None else _now())
-    expire_due_asteroids(conn=conn, now=ts)
     rows = conn.execute(
         """
         SELECT * FROM asteroid_fields
