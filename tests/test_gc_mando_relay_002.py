@@ -400,7 +400,7 @@ def test_relay_api_idempotency_and_state_endpoint(logistics_db):
 
 def test_relay_ui_owns_collect_and_distribute_without_fleet_submit():
     template = (ROOT / "templates" / "partials" / "fleet_logistics_body.html").read_text(encoding="utf-8")
-    fleet = (ROOT / "templates" / "fleet.html").read_text(encoding="utf-8")
+    base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
     css = (ROOT / "static" / "css" / "empire_resource_relay.css").read_text(encoding="utf-8")
 
@@ -416,8 +416,8 @@ def test_relay_ui_owns_collect_and_distribute_without_fleet_submit():
     assert "fetch(" not in script
     assert "setInterval" in script
     assert "data-logistics-select-all" in script
-    assert "empire_resource_relay.js" in fleet
-    assert "empire_resource_relay.css" in fleet
+    assert "js/empire_resource_relay.js" in base
+    assert "css/empire_resource_relay.css" in base
     assert "logistics-relay-cooldown.is-cooldown" in css
 
 
