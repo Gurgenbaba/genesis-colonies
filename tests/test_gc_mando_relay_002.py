@@ -154,6 +154,7 @@ def test_collect_skips_one_source_on_cooldown_but_harvests_the_others(logistics_
     )
     assert _stock(conn, hub)["metal"] == 2_000
     assert _stock(conn, blocked)["metal"] == 1_000
+    assert str(blocked) not in payload["colony_resources"]
     conn.close()
 
 
@@ -263,6 +264,7 @@ def test_distribute_skips_cooldown_target_and_does_not_debit_its_share(logistics
         item["planet_id"] == blocked and item["reason"] == "relay_cooldown"
         for item in payload["skipped"]
     )
+    assert str(blocked) not in payload["colony_resources"]
     conn.close()
 
 
