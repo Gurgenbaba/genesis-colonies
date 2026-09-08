@@ -140,9 +140,17 @@
   });
 
   document.addEventListener("click", (event) => {
-    const btn = event.target.closest?.('[data-resource-relay-submit="collect"]');
     const root = page();
-    if (!btn || !root || !root.contains(btn)) return;
+    if (!root) return;
+
+    const selectAll = event.target.closest?.('[data-logistics-select-all="collect"]');
+    if (selectAll && root.contains(selectAll)) {
+      queueMicrotask(() => syncButton(root));
+      return;
+    }
+
+    const btn = event.target.closest?.('[data-resource-relay-submit="collect"]');
+    if (!btn || !root.contains(btn)) return;
     event.preventDefault();
     runRelay(root, btn);
   });
