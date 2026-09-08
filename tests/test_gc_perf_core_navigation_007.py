@@ -62,7 +62,9 @@ def test_codex_route_visit_uses_existing_page_live_connection():
     assert "codex_route_for_endpoint" in block
     assert "record_codex_route_visit(" in block
     assert "conn=conn" in block
-    assert "codex_visit_recorded" in block
+    assert "codex_visit_recorded = bool(" in block
+    assert "visit_result = maybe_record_page_visit_from_request(" in block
+    assert 'visit_result.get("recorded")' in block
     assert (
         "wrote_live or try_visit or codex_visit_recorded or "
         "consume_request_poll_safety_net_write()"
