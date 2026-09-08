@@ -254,6 +254,22 @@ Fix:
 
 Regression structurally requires exactly one route-owned `db()` checkout, `conn=conn` + `close_conn=False` on live context, and the same connection on each page builder.
 
+### GC-PERF-PG-NAV-030 — Real PostgreSQL navigation structural sentinel
+
+SQLite Browser Sentinel cannot expose PostgreSQL round-trip / pool regressions. A dedicated PG16 CI gate now exercises the authenticated core PJAX surfaces twice: first pass warms one-time Codex/Initiation/bootstrap state; second pass records the existing navigation perf headers.
+
+Measured per route:
+
+- `X-GC-Nav-Server-Ms`
+- `X-GC-Nav-Sql-Count`
+- `X-GC-Nav-Sql-Write-Count`
+- `X-GC-Nav-Db-Connections`
+- `X-GC-Nav-Db-Query-Ms`
+
+Hard structural budget on the repeated pass: `writes == 0` and `db_connections <= 1`. Wall-clock and SQL counts are printed as diagnostic evidence; route-specific SQL budgets are set only after the first real PG run instead of inventing thresholds.
+
+Core matrix: Overview, Buildings, Research, Shipyard, Defense, Fleet, Galaxy, Empire, Combat Simulator, Inventory, Vote Center and Galactic Politics.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:

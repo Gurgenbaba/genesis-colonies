@@ -1093,14 +1093,17 @@ def get_debris_at_field(
     conn,
     now: Optional[float] = None,
 ) -> Dict[str, int]:
-    """Return metal/crystal at galaxy coordinates (0 if no field or TTL expired)."""
+    """Return visible metal/crystal at coordinates without mutating on reads.
+
+    Expired rows are filtered by timestamp; the maintenance worker remains the
+    sole owner of physical TTL deletion.
+    """
     if not debris_schema_ready(conn):
         return {"metal": 0, "crystal": 0}
     from .galaxy import validate_coordinates
 
-    # Purge expired rows so harvest / fleet gates never see stale debris.
-    expire_due_debris_fields(conn=conn, now=now)
-
+    ts = float(now if now is not None else time.time())
+    cutoff = ts - float(DEBRIS_FIELD_TTL_SECONDS)
     g, s, p = int(galaxy), int(system), int(position)
     validate_coordinates(g, s, p)
     cur = conn.cursor()
@@ -1108,9 +1111,10 @@ def get_debris_at_field(
         """
         SELECT metal, crystal FROM debris_fields
         WHERE galaxy = ? AND system = ? AND position = ?
+          AND updated_at > ?
         LIMIT 1;
         """,
-        (g, s, p),
+        (g, s, p, cutoff),
     )
     row = cur.fetchone()
     if not row:

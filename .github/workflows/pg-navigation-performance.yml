@@ -1,0 +1,85 @@
+name: PostgreSQL Navigation Performance
+
+on:
+  pull_request:
+    paths:
+      - "app.py"
+      - "game/**"
+      - "templates/**"
+      - "tests/test_gc_perf_pg_navigation_030.py"
+      - ".github/workflows/pg-navigation-performance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "game/**"
+      - "templates/**"
+      - "tests/test_gc_perf_pg_navigation_030.py"
+      - ".github/workflows/pg-navigation-performance.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pg-navigation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pg-navigation:
+    name: pg-navigation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: genesis
+          POSTGRES_PASSWORD: genesis
+          POSTGRES_DB: genesis_nav
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U genesis -d genesis_nav"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-pg-navigation-secret-key-not-for-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: postgres
+      DATABASE_URL: postgresql://genesis:genesis@127.0.0.1:5432/genesis_nav
+      GC_TEST_POSTGRES_URL: postgresql://genesis:genesis@127.0.0.1:5432/genesis_nav
+      GC_PG_CONNECT_TIMEOUT: "10"
+      GC_PG_POOL_TIMEOUT: "3"
+      GC_PG_STATEMENT_TIMEOUT: "45s"
+      GC_PG_LOCK_TIMEOUT: "10s"
+      GC_PG_POOL_MAX: "10"
+      GC_NAV_PERF_DEBUG: "1"
+      GC_REQUEST_PERF_SAMPLE: "1.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+
+      - name: Compile sentinel
+        run: |
+          python -m py_compile tests/test_gc_perf_pg_navigation_030.py
+          git diff --check
+
+      - name: Apply PostgreSQL schema
+        run: python migrate.py
+
+      - name: Measure core PJAX routes
+        run: python -m pytest -q -s --tb=line tests/test_gc_perf_pg_navigation_030.py
