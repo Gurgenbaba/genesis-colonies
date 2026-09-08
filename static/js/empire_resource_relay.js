@@ -160,8 +160,20 @@
     return Object.values(values).some((value) => big(value) > 0n);
   }
 
+  function syncSelectionPresentation(page) {
+    if (!page) return;
+    page.querySelectorAll("[data-logistics-colony-cb]").forEach((input) => {
+      const card = input.closest?.("[data-colony-planet-id]");
+      if (card) card.classList.toggle("is-selected", Boolean(input.checked));
+    });
+    page.querySelectorAll(".logistics-colony-card.is-slots-skipped").forEach((card) => {
+      card.classList.remove("is-slots-skipped");
+    });
+  }
+
   function syncButtons(page) {
     if (!page) return;
+    syncSelectionPresentation(page);
     const hub = hubId(page);
     const collect = page.querySelector('[data-resource-relay-submit="collect"]');
     const distribute = page.querySelector('[data-resource-relay-submit="distribute"]');
