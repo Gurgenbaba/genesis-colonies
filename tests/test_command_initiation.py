@@ -280,6 +280,33 @@ def test_visit_page_logged_early_and_credited_when_active(initiation_db):
         conn.close()
 
 
+def test_repeat_page_visit_skips_duplicate_progress_insert(initiation_db, monkeypatch):
+    import game.initiation.progress as initiation_progress
+
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn, credit=False)
+        first = initiation_progress.record_page_visit(pid, "galaxy", conn=conn)
+        assert first["recorded"] is True
+        commit(conn)
+
+        def duplicate_insert_forbidden(*_args, **_kwargs):
+            raise AssertionError("repeat visit must not issue another progress INSERT")
+
+        monkeypatch.setattr(
+            initiation_progress,
+            "_record_progress_delta",
+            duplicate_insert_forbidden,
+        )
+        second = initiation_progress.record_page_visit(pid, "galaxy", conn=conn)
+        assert second["recorded"] is False
+        assert second["updated"] == 0
+        assert second["completed"] == 0
+    finally:
+        conn.close()
+
+
 def test_visit_page_completes_when_active(initiation_db):
     conn = db()
     try:
