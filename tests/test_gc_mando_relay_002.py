@@ -375,3 +375,18 @@ def test_relay_ui_owns_collect_and_distribute_without_fleet_submit():
     assert "empire_resource_relay.js" in fleet
     assert "empire_resource_relay.css" in fleet
     assert "logistics-relay-cooldown.is-cooldown" in css
+
+
+def test_standalone_logistics_page_loads_relay_assets():
+    standalone = (ROOT / "templates" / "logistics.html").read_text(encoding="utf-8")
+    assert "css/empire_resource_relay.css" in standalone
+    assert "js/empire_resource_relay.js" in standalone
+    assert "[data-resource-relay-submit]" in standalone
+
+
+def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
+    script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
+    assert 'event.stopImmediatePropagation()' in script
+    assert '"change",' in script
+    assert '"input",' in script
+    assert "true\n  );" in script
