@@ -1509,12 +1509,16 @@ def _load_page_live_context(
                             wrote_live = False
                             use_sp = False
                     if try_visit:
-                        maybe_record_page_visit_from_request(
+                        visit_result = maybe_record_page_visit_from_request(
                             user_id,
                             conn=conn,
                             finish_source=src,
                         )
-                        visit_recorded = True
+                        visit_recorded = bool(
+                            visit_result.get("recorded")
+                            or int(visit_result.get("updated") or 0) > 0
+                            or int(visit_result.get("completed") or 0) > 0
+                        )
                         if use_sp:
                             try:
                                 conn.execute("RELEASE SAVEPOINT gc_initiation_visit")
@@ -1570,12 +1574,13 @@ def _load_page_live_context(
                 if _has_request_context():
                     _codex_route = codex_route_for_endpoint(str(_request.endpoint or ""))
                     if _codex_route:
-                        record_codex_route_visit(
-                            user_id,
-                            _codex_route,
-                            conn=conn,
+                        codex_visit_recorded = bool(
+                            record_codex_route_visit(
+                                user_id,
+                                _codex_route,
+                                conn=conn,
+                            )
                         )
-                        codex_visit_recorded = True
             except Exception:
                 logger.exception(
                     "codex route visit failed user_id=%s source=%s",
