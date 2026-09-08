@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import json
 import time
-import uuid
 
 import pytest
 
@@ -39,9 +38,25 @@ def fleet_idle_db(tmp_path, monkeypatch):
     return db_file
 
 
+_username_seq = 0
+
+
+def _policy_safe_username() -> str:
+    """Avoid random suffixes accidentally normalizing to a forbidden token."""
+    from game.name_policy import validate_player_name
+
+    global _username_seq
+    for _ in range(128):
+        _username_seq += 1
+        candidate = f"FleetIdle{_username_seq:06d}"
+        ok, _reason = validate_player_name(candidate)
+        if ok:
+            return candidate
+    raise AssertionError("could not allocate policy-safe fleet idle test username")
+
+
 def _create_player_with_homeworld(conn) -> tuple[int, dict]:
-    username = f"fleet_idle_{uuid.uuid4().hex[:10]}"
-    ok, err, user = create_user(username, "test-pass-123")
+    ok, err, user = create_user(_policy_safe_username(), "test-pass-123")
     assert ok and user, err
     uid = int(user["id"])
     ensure_player_and_homeworld(uid, player_name="FleetIdleGuard", conn=conn)
