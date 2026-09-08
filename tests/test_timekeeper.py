@@ -325,6 +325,8 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     # unrelated HUD domains, including Fleet HUD, remain cached client-side.
     assert isinstance(state.get("resources"), dict)
     assert isinstance(state.get("research"), dict)
+    assert int(state.get("active_planet_id") or 0) == pid
+    assert state.get("active_planet_name")
     for omitted in (
         "nav_badges",
         "imperial_directives",
@@ -343,6 +345,7 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
         "active_fleets",
         "fleet_slots",
         "fleet_alerts",
+        "active_planet",
         "planets",
         "planet_limit",
         "planet_relocation",

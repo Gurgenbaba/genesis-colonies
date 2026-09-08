@@ -11014,124 +11014,125 @@ def _payload_from_live_context(
     active_planet_id = int(planet.get("id") or 0)
     payload["active_planet_id"] = active_planet_id
     payload["active_planet_name"] = str(planet.get("name") or "")
-    with perf_span("payload.active_planet"):
-        try:
-            from game.galaxy import get_planet_coordinates
-            from game.planet_evolution.dna import effective_planet_class
-            from game.planet_evolution.ux_copy import planet_class_label_key
+    if not timekeeper_partial:
+        with perf_span("payload.active_planet"):
+            try:
+                from game.galaxy import get_planet_coordinates
+                from game.planet_evolution.dna import effective_planet_class
+                from game.planet_evolution.ux_copy import planet_class_label_key
 
-            from game.planet_visuals import (
-                get_planet_identity_for_position,
-                herocard_webp_srcset_for_position,
-                landscape_static_relpath,
-                OVERVIEW_HEROCARD_SIZES,
-                raster_webp_relpath,
-            )
+                from game.planet_visuals import (
+                    get_planet_identity_for_position,
+                    herocard_webp_srcset_for_position,
+                    landscape_static_relpath,
+                    OVERVIEW_HEROCARD_SIZES,
+                    raster_webp_relpath,
+                )
 
-            coords = get_planet_coordinates(planet)
-            position = int(coords.get("position") or 0)
-            landscape_rel = landscape_static_relpath(position)
-            herocard_rel = landscape_rel
-            planet_class = effective_planet_class(planet)
-            theme = get_planet_identity_for_position(position)
-            from game.planet_visuals import climate_economy_display_for_position, temperature_range_for_position
+                coords = get_planet_coordinates(planet)
+                position = int(coords.get("position") or 0)
+                landscape_rel = landscape_static_relpath(position)
+                herocard_rel = landscape_rel
+                planet_class = effective_planet_class(planet)
+                theme = get_planet_identity_for_position(position)
+                from game.planet_visuals import climate_economy_display_for_position, temperature_range_for_position
 
-            temp = temperature_range_for_position(position)
-            climate = climate_economy_display_for_position(position)
-            from game.planet_evolution.empire_identity import empire_identity_for_planet
-            from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
+                temp = temperature_range_for_position(position)
+                climate = climate_economy_display_for_position(position)
+                from game.planet_evolution.empire_identity import empire_identity_for_planet
+                from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
 
-            identity = empire_identity_for_planet(planet, conn=conn)
-            payload["active_planet"] = {
-                "planet_id": int(active_planet_id),
-                "name": str(planet.get("name") or ""),
-                "coordinates_formatted": coords.get("formatted") or "",
-                "planet_class": planet_class,
-                "planet_class_label_key": planet_class_label_key(planet_class),
-                "is_homeworld": bool(planet.get("is_homeworld")),
-                "position": position,
-                "landscape_url": versioned_static_url("static", filename=landscape_rel),
-                "landscape_webp_url": versioned_static_url(
-                    "static", filename=raster_webp_relpath(landscape_rel)
-                ),
-                "herocard_url": versioned_static_url("static", filename=herocard_rel),
-                "herocard_webp_url": versioned_static_url(
-                    "static", filename=raster_webp_relpath(herocard_rel)
-                ),
-                "herocard_webp_srcset": herocard_webp_srcset_for_position(
-                    position, versioned_static_url
-                ),
-                "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
-                "accent_color": theme["accent_color"],
-                "secondary_color": theme["secondary_color"],
-                "glow_color": theme["accent_color"],
-                "planet_effect": theme["effect"],
-                "theme_key": theme["theme_key"],
-                "theme_group": theme["theme_group"],
-                "slot_label_key": theme["label_key"],
-                "temperature_display": temp["display"],
-                "climate": climate,
-                **identity,
-                "sidebar_nav": resolve_sidebar_nav(
-                    empire_role_key=identity["empire_role_key"],
-                    is_homeworld=bool(planet.get("is_homeworld")),
-                ),
-            }
-        except Exception:
-            from game.planet_visuals import (
-                DEFAULT_HEROCARD,
-                climate_economy_display_for_position,
-                get_planet_identity_for_position,
-                herocard_webp_srcset_for_position,
-                OVERVIEW_HEROCARD_SIZES,
-                raster_webp_relpath,
-                temperature_range_for_position,
-            )
+                identity = empire_identity_for_planet(planet, conn=conn)
+                payload["active_planet"] = {
+                    "planet_id": int(active_planet_id),
+                    "name": str(planet.get("name") or ""),
+                    "coordinates_formatted": coords.get("formatted") or "",
+                    "planet_class": planet_class,
+                    "planet_class_label_key": planet_class_label_key(planet_class),
+                    "is_homeworld": bool(planet.get("is_homeworld")),
+                    "position": position,
+                    "landscape_url": versioned_static_url("static", filename=landscape_rel),
+                    "landscape_webp_url": versioned_static_url(
+                        "static", filename=raster_webp_relpath(landscape_rel)
+                    ),
+                    "herocard_url": versioned_static_url("static", filename=herocard_rel),
+                    "herocard_webp_url": versioned_static_url(
+                        "static", filename=raster_webp_relpath(herocard_rel)
+                    ),
+                    "herocard_webp_srcset": herocard_webp_srcset_for_position(
+                        position, versioned_static_url
+                    ),
+                    "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
+                    "accent_color": theme["accent_color"],
+                    "secondary_color": theme["secondary_color"],
+                    "glow_color": theme["accent_color"],
+                    "planet_effect": theme["effect"],
+                    "theme_key": theme["theme_key"],
+                    "theme_group": theme["theme_group"],
+                    "slot_label_key": theme["label_key"],
+                    "temperature_display": temp["display"],
+                    "climate": climate,
+                    **identity,
+                    "sidebar_nav": resolve_sidebar_nav(
+                        empire_role_key=identity["empire_role_key"],
+                        is_homeworld=bool(planet.get("is_homeworld")),
+                    ),
+                }
+            except Exception:
+                from game.planet_visuals import (
+                    DEFAULT_HEROCARD,
+                    climate_economy_display_for_position,
+                    get_planet_identity_for_position,
+                    herocard_webp_srcset_for_position,
+                    OVERVIEW_HEROCARD_SIZES,
+                    raster_webp_relpath,
+                    temperature_range_for_position,
+                )
 
-            fallback_rel = f"img/herocards/{DEFAULT_HEROCARD}"
-            fallback_herocard_rel = fallback_rel
-            fallback_theme = get_planet_identity_for_position(0)
-            fallback_temp = temperature_range_for_position(0)
-            fallback_climate = climate_economy_display_for_position(0)
-            from game.planet_evolution.empire_identity import empire_identity_for_planet
-            from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
+                fallback_rel = f"img/herocards/{DEFAULT_HEROCARD}"
+                fallback_herocard_rel = fallback_rel
+                fallback_theme = get_planet_identity_for_position(0)
+                fallback_temp = temperature_range_for_position(0)
+                fallback_climate = climate_economy_display_for_position(0)
+                from game.planet_evolution.empire_identity import empire_identity_for_planet
+                from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
 
-            identity = empire_identity_for_planet(planet, conn=conn)
-            payload["active_planet"] = {
-                "planet_id": int(active_planet_id),
-                "name": str(planet.get("name") or ""),
-                "coordinates_formatted": "",
-                "planet_class": str(planet.get("planet_class") or "terrestrial"),
-                "planet_class_label_key": "planet_class_terrestrial",
-                "is_homeworld": bool(planet.get("is_homeworld")),
-                "position": None,
-                "landscape_url": versioned_static_url("static", filename=fallback_rel),
-                "landscape_webp_url": versioned_static_url(
-                    "static", filename=raster_webp_relpath(fallback_rel)
-                ),
-                "herocard_url": versioned_static_url("static", filename=fallback_herocard_rel),
-                "herocard_webp_url": versioned_static_url(
-                    "static", filename=raster_webp_relpath(fallback_herocard_rel)
-                ),
-                "herocard_webp_srcset": herocard_webp_srcset_for_position(
-                    0, versioned_static_url
-                ),
-                "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
-                "accent_color": fallback_theme["accent_color"],
-                "secondary_color": fallback_theme["secondary_color"],
-                "glow_color": fallback_theme["accent_color"],
-                "planet_effect": fallback_theme["effect"],
-                "theme_key": fallback_theme["theme_key"],
-                "theme_group": fallback_theme["theme_group"],
-                "slot_label_key": fallback_theme["label_key"],
-                "temperature_display": fallback_temp["display"],
-                "climate": fallback_climate,
-                **identity,
-                "sidebar_nav": resolve_sidebar_nav(
-                    empire_role_key=identity["empire_role_key"],
-                    is_homeworld=bool(planet.get("is_homeworld")),
-                ),
-            }
+                identity = empire_identity_for_planet(planet, conn=conn)
+                payload["active_planet"] = {
+                    "planet_id": int(active_planet_id),
+                    "name": str(planet.get("name") or ""),
+                    "coordinates_formatted": "",
+                    "planet_class": str(planet.get("planet_class") or "terrestrial"),
+                    "planet_class_label_key": "planet_class_terrestrial",
+                    "is_homeworld": bool(planet.get("is_homeworld")),
+                    "position": None,
+                    "landscape_url": versioned_static_url("static", filename=fallback_rel),
+                    "landscape_webp_url": versioned_static_url(
+                        "static", filename=raster_webp_relpath(fallback_rel)
+                    ),
+                    "herocard_url": versioned_static_url("static", filename=fallback_herocard_rel),
+                    "herocard_webp_url": versioned_static_url(
+                        "static", filename=raster_webp_relpath(fallback_herocard_rel)
+                    ),
+                    "herocard_webp_srcset": herocard_webp_srcset_for_position(
+                        0, versioned_static_url
+                    ),
+                    "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
+                    "accent_color": fallback_theme["accent_color"],
+                    "secondary_color": fallback_theme["secondary_color"],
+                    "glow_color": fallback_theme["accent_color"],
+                    "planet_effect": fallback_theme["effect"],
+                    "theme_key": fallback_theme["theme_key"],
+                    "theme_group": fallback_theme["theme_group"],
+                    "slot_label_key": fallback_theme["label_key"],
+                    "temperature_display": fallback_temp["display"],
+                    "climate": fallback_climate,
+                    **identity,
+                    "sidebar_nav": resolve_sidebar_nav(
+                        empire_role_key=identity["empire_role_key"],
+                        is_homeworld=bool(planet.get("is_homeworld")),
+                    ),
+                }
 
     if not timekeeper_partial:
         with perf_span("payload.score"):

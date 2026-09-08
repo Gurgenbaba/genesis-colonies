@@ -212,3 +212,18 @@ def test_timekeeper_partial_projection_skips_unrelated_notification_and_safety_r
     fleet_prefix = payload[max(0, fleet_pos - 80):fleet_pos]
     assert "if not timekeeper_partial:" in fleet_prefix
 
+def test_timekeeper_partial_projection_skips_active_planet_identity_but_keeps_scope():
+    src = _read("app.py")
+    payload = _block(
+        src,
+        "def _payload_from_live_context(",
+        "\ndef _build_game_state_payload(",
+    )
+
+    assert 'payload["active_planet_id"] = active_planet_id' in payload
+    assert 'payload["active_planet_name"] = str(planet.get("name") or "")' in payload
+
+    active_pos = payload.index('with perf_span("payload.active_planet")')
+    active_prefix = payload[max(0, active_pos - 80):active_pos]
+    assert "if not timekeeper_partial:" in active_prefix
+
