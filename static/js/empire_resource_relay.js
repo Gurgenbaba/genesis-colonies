@@ -453,6 +453,22 @@
     true
   );
 
+  document.addEventListener(
+    "submit",
+    (event) => {
+      const page = root();
+      if (!page || !page.contains(event.target)) return;
+      if (
+        event.target.matches?.("#logistics-collect-form") ||
+        event.target.matches?.("#logistics-distribute-form")
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    true
+  );
+
   const shell = document.getElementById("main-content") || document.body;
   const observer = new MutationObserver(() => {
     const page = root();
