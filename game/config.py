@@ -198,12 +198,19 @@ def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
 
 def get_gunicorn_workers() -> int:
     """
-    Gunicorn worker count. SQLite allows one writer — default 1 for sqlite deployments.
-    Override with GUNICORN_WORKERS when using a future Postgres backend.
+    Canonical Gunicorn worker policy.
+
+    SQLite remains single-worker by default. PostgreSQL defaults to two workers
+    so one slow request cannot head-of-line block every game interaction.
+    In production PostgreSQL, legacy GUNICORN_WORKERS=1 is floored to 2; higher
+    explicit overrides remain supported.
     """
     backend = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
     default = 1 if backend == "sqlite" else 2
-    return _env_int("GUNICORN_WORKERS", default, minimum=1)
+    workers = _env_int("GUNICORN_WORKERS", default, minimum=1)
+    if backend in ("postgres", "postgresql") and is_production():
+        return max(2, workers)
+    return workers
 
 
 def is_command_map_dev_mode() -> bool:
