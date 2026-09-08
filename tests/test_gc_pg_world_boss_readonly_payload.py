@@ -93,9 +93,9 @@ def test_production_world_boss_get_callers_are_read_only():
 
 def test_fleet_worker_remains_server_owned_auto_attack_mutation_owner():
     src = (ROOT / "game" / "fleet_worker.py").read_text(encoding="utf-8")
-    assert "from .world_boss import tick_world_boss_auto_attacks" in src
-    assert "tick_world_boss_auto_attacks(conn=conn)" in src
-    assert "commit(conn)" in src
+    assert "tick_world_boss_auto_attacks_short_tx" in src
+    assert "include_auto_attack=False" in src
+    assert '_run_stage("world_boss", _world_boss, manage_tx=False)' in src
 
 
 def test_world_boss_payload_source_documents_read_vs_mutation_boundary():
