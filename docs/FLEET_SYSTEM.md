@@ -273,9 +273,9 @@ des neuen Empire-Relay-Transfers.
 
 ---
 
-## Fleet Logistics (GC-526–533)
+## Legacy Fleet Logistics (GC-526–533)
 
-Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` / `distribute_resources` in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
+Der historische Frachter-Pfad bleibt für API-/Fleet-Kompatibilität bestehen, ist aber **nicht mehr Owner der sichtbaren Collect-/Distribute-Tabs**. `collect_resources` / `distribute_resources` leben weiterhin in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
 
 | Flow | Batch-Typ | Mission pro Leg | Origin | Ziel |
 |------|-----------|-----------------|--------|------|
