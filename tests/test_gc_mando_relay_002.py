@@ -266,6 +266,48 @@ def test_distribute_skips_cooldown_target_and_does_not_debit_its_share(logistics
     conn.close()
 
 
+def test_collect_cooldown_does_not_block_same_planet_as_distribute_target(logistics_db):
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = sources[0]
+    now = 1_800_000_000
+    _set_stock(conn, hub, metal=10_000, crystal=0, fuel_cells=0, now=now)
+    _set_stock(conn, source, metal=1_000, crystal=0, fuel_cells=0, now=now)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = collect_empire_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=[source],
+        conn=conn,
+        now=now,
+    )
+    assert ok, reason
+    commit(conn)
+
+    assert _cooldown(conn, uid, source, "collect") == now + RELAY_COOLDOWN_SECONDS
+    assert _cooldown(conn, uid, source, "distribute") == 0
+
+    begin_write_transaction(conn)
+    ok2, reason2, payload2 = distribute_empire_resources(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_planet_ids=[source],
+        resources={"metal": 500},
+        conn=conn,
+        now=now + 1,
+    )
+    assert ok2, reason2
+    commit(conn)
+
+    assert payload2["processed_planet_ids"] == [source]
+    assert _stock(conn, source)["metal"] == 500
+    assert _cooldown(conn, uid, source, "distribute") == now + 1 + RELAY_COOLDOWN_SECONDS
+    conn.close()
+
+
 def test_collect_rejects_foreign_planet_before_any_transfer(logistics_db):
     conn = db()
     uid = _player(conn=conn)
