@@ -1,0 +1,70 @@
+/* GC-MANDO-RELAY-002 — per-colony shipless relay states. */
+.logistics-preview-hud--legacy {
+  display: none !important;
+}
+
+.logistics-relay-banner {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: center;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(92, 214, 255, 0.32);
+  background: rgba(5, 18, 28, 0.72);
+}
+
+.logistics-relay-banner .hint {
+  grid-column: 2;
+  margin: 0;
+}
+
+.logistics-relay-cooldown {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: 92px;
+  padding: 3px 7px;
+  border: 1px solid rgba(164, 180, 194, 0.28);
+  background: rgba(8, 14, 20, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.logistics-relay-cooldown.is-ready {
+  border-color: rgba(92, 255, 176, 0.5);
+}
+
+.logistics-relay-cooldown.is-cooldown {
+  border-color: rgba(255, 183, 77, 0.55);
+}
+
+.logistics-relay-cooldown.is-hub {
+  opacity: 0.62;
+}
+
+.logistics-source-cb:disabled + .logistics-source-check {
+  opacity: 0.35;
+}
+
+.logistics-relay-result {
+  margin: 8px 0 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.logistics-relay-result[data-kind="error"] {
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .logistics-relay-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .logistics-relay-banner .hint {
+    grid-column: 1;
+  }
+}

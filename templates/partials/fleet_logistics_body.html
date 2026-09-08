@@ -33,7 +33,7 @@
             aria-label="{{ T('logistics_help_btn', 'Logistik-Hilfe') }}">?</button>
   </div>
 
-  <div class="fleet-preview-hud logistics-preview-hud logistics-preview-hud--compact" data-logistics-preview aria-live="polite">
+<div class="fleet-preview-hud logistics-preview-hud logistics-preview-hud--compact logistics-preview-hud--legacy" data-logistics-preview aria-live="polite" hidden>
     <div class="fleet-preview-hud-head">
       <span class="gc-panel-tag logistics-plan-badge">{{ T("logistics_plan_badge") }}</span>
       <span class="fleet-preview-mission-status" data-logistics-preview-status>–</span>
@@ -60,6 +60,12 @@
       <span class="fleet-preview-stat-label" data-logistics-preview-targets-label>{{ T("logistics_preview_sources") }}</span>
       <ul class="logistics-preview-targets-list" data-logistics-preview-targets-list></ul>
     </div>
+  </div>
+
+  <div class="logistics-relay-banner" data-resource-relay-banner>
+    <span class="gc-panel-tag logistics-relay-badge">{{ T("logistics_relay_badge") }}</span>
+    <strong>{{ T("logistics_relay_rule") }}</strong>
+    <span class="hint">{{ T("logistics_relay_rule_hint") }}</span>
   </div>
 
   <div class="gc-page-tabs gc-page-tabs--cols-2 logistics-tabs" role="tablist" aria-label="{{ T('fleet_logistics_title') }}">
@@ -122,8 +128,10 @@
                     {% if col.is_active %}
                     <span class="gc-panel-tag logistics-source-active-tag">{{ T("logistics_active_colony") }}</span>
                     {% endif %}
-                    <span class="logistics-source-ships gc-mono" title="{{ T('logistics_source_ships_label') }}">
-                      {{ T("logistics_source_ships_short") }}: {{ col.cargo_ship_count|default(0)|fmt_int }}
+                    <span class="logistics-relay-cooldown gc-mono"
+                          data-resource-relay-cooldown="collect"
+                          data-relay-planet-id="{{ col.planet_id }}">
+                      {{ T("logistics_relay_loading") }}
                     </span>
                     <span class="logistics-source-resources">
                       <span class="gc-resource-inline">{{ render_resource_icon('metal') }}<span class="gc-mono" data-logistics-colony-res="metal">{{ (res.metal or 0)|fmt_int }}</span></span>
@@ -143,9 +151,10 @@
           <p class="hint logistics-hint logistics-auto-cargo-hint">{{ T("logistics_auto_cargo_hint") }}</p>
           <p class="logistics-error fleet-form-error" data-logistics-error="collect" hidden role="alert"></p>
           <div class="fleet-logistics-actions logistics-actions">
-            <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm" data-logistics-submit="collect" disabled>
+            <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-resource-relay-submit="collect" disabled>
               {{ T("logistics_collect_submit") }}
             </button>
+            <p class="logistics-relay-result gc-mono" data-resource-relay-result="collect" hidden role="status" aria-live="polite"></p>
           </div>
         </div>
       </div>
@@ -191,6 +200,11 @@
                     {% if col.is_active %}
                     <span class="gc-panel-tag logistics-source-active-tag">{{ T("logistics_active_colony") }}</span>
                     {% endif %}
+                    <span class="logistics-relay-cooldown gc-mono"
+                          data-resource-relay-cooldown="distribute"
+                          data-relay-planet-id="{{ col.planet_id }}">
+                      {{ T("logistics_relay_loading") }}
+                    </span>
                     <span class="logistics-source-resources">
                       <span class="gc-resource-inline">{{ render_resource_icon('metal') }}<span class="gc-mono" data-logistics-colony-res="metal">{{ (res.metal or 0)|fmt_int }}</span></span>
                       <span class="gc-resource-inline">{{ render_resource_icon('crystal') }}<span class="gc-mono" data-logistics-colony-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span></span>
@@ -242,9 +256,10 @@
           <p class="hint logistics-hint logistics-auto-cargo-hint">{{ T("logistics_auto_cargo_hint_distribute") }}</p>
           <p class="logistics-error fleet-form-error" data-logistics-error="distribute" hidden role="alert"></p>
           <div class="fleet-logistics-actions logistics-actions">
-            <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm" data-logistics-submit="distribute" disabled>
+            <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-resource-relay-submit="distribute" disabled>
               {{ T("logistics_distribute_submit") }}
             </button>
+            <p class="logistics-relay-result gc-mono" data-resource-relay-result="distribute" hidden role="status" aria-live="polite"></p>
           </div>
         </div>
       </div>

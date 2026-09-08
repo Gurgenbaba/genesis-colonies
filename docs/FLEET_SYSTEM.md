@@ -215,9 +215,67 @@ Weitere Expo-Schiffe (z. B. `eclipse_runner`) werden automatisch über `role: ex
 
 ---
 
-## Fleet Logistics (GC-526–533)
+## Empire Resource Relay (GC-MANDO-RELAY-002)
 
-Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` / `distribute_resources` in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
+Die sichtbaren **Zusammenziehen-/Verteilen-Tabs** der Kolonie-Logistik verwenden für
+Ressourcen zwischen **eigenen Planeten** das serverseitige `game/empire_relay.py`.
+Das Relay ist ausdrücklich **keine Fleet-Mission**:
+
+- keine Schiffe oder Frachter,
+- keine Fleet-Slots,
+- keine `fleet_movements`,
+- keine Flug-/Rückkehrzeit,
+- ausschließlich eigene Planeten desselben Accounts,
+- Urlaubsmodus bleibt gesperrt,
+- Debit, Credit und Cooldown werden in **einer** DB-Transaktion committed.
+
+### Cooldown-Regel
+
+Der Default ist **30 Minuten pro Planet und Richtung** (`RELAY_COOLDOWN_SECONDS = 1800`).
+
+| Aktion | Cooldown-Owner | Batch-Verhalten |
+|---|---|---|
+| **Ernten / Collect** | jede erfolgreich geleerte **Quellkolonie** | alle bereiten markierten Quellen laufen im selben Klick; gesperrte Quellen werden übersprungen |
+| **Verteilen / Distribute** | jede erfolgreich belieferte **Zielkolonie** | alle bereiten markierten Ziele laufen im selben Klick; gesperrte Ziele werden übersprungen |
+
+Damit blockiert eine bereits benutzte Kolonie niemals die übrigen Kolonien des Accounts.
+
+### Ernten
+
+`POST /api/logistics/relay/collect` überträgt den vollständigen aktuellen
+Ferronit-/Crytite-/Brennzellen-Bestand jeder bereiten markierten Quelle zum Hub.
+Vor dem Transfer werden beteiligte Planet-Rows deterministisch gelockt und der
+kanonische Resource-Tick persistiert. Leere Quellen bekommen keinen Cooldown.
+
+### Verteilen
+
+`POST /api/logistics/relay/distribute` interpretiert die eingegebenen Ressourcen
+als **Gesamtmenge** für alle ausgewählten Ziele und teilt jede Ressource integer-exakt
+gleichmäßig auf. Die Aufteilung wird über **alle ausgewählten Ziele** berechnet.
+Ist ein Ziel im Cooldown, wird dessen Anteil nicht umverteilt und **bleibt auf dem Hub**.
+So erhöht ein gesperrtes Ziel nicht unbemerkt die Lieferung an andere Kolonien.
+
+### Concurrency / Exactness
+
+PostgreSQL sperrt alle beteiligten `planets`-Rows in aufsteigender Planet-ID, bevor
+Cooldowns erneut gelesen werden. Zwei parallele Requests auf dieselbe Quelle/dasselbe
+Ziel können daher nicht beide am Cooldown vorbeilaufen. Ressourcen bleiben an allen
+Persistenzgrenzen PostgreSQL-`NUMERIC`/Python-`int` exakt; Equal-Split verwendet
+`divmod` und ist auch für arbitrary-precision Werte definiert.
+
+Player-UI: `templates/partials/fleet_logistics_body.html` +
+`static/js/empire_resource_relay.js`. Der Client zeigt den Countdown pro Kolonie,
+deaktiviert gesperrte Checkboxen und lässt „Alle“ nur bereite Planeten markieren.
+
+Die bisherigen `/api/fleet/logistics/*`-Routen und Fleet-Transportmechaniken bleiben
+für bestehende Fleet-Semantik/Kompatibilität erhalten; sie sind **nicht** der Owner
+des neuen Empire-Relay-Transfers.
+
+---
+
+## Legacy Fleet Logistics (GC-526–533)
+
+Der historische Frachter-Pfad bleibt für API-/Fleet-Kompatibilität bestehen, ist aber **nicht mehr Owner der sichtbaren Collect-/Distribute-Tabs**. `collect_resources` / `distribute_resources` leben weiterhin in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
 
 | Flow | Batch-Typ | Mission pro Leg | Origin | Ziel |
 |------|-----------|-----------------|--------|------|
@@ -320,6 +378,9 @@ Aufgerufen von:
 | `/api/fleet/mass-expedition/preview` | POST | Split preview (`usable_slots`, `reserved_slots`) |
 
 **GC-PERF-MASS-EXPO-002:** Mass-Expedition-Preview ist strikt read-only. Ressourcen werden nur in-memory projiziert (`persist_resources=False`), damit parallele Previews keinen Planet-Row-Lock halten. Der Mass-Expedition-Mutations-Response nutzt denselben schlanken Poll-/Action-State-Pfad wie normales Fleet-Send.\n\n**GC-PERF-MASS-EXPO-003:** Ein Flight-Preview löst Fleet-Speed/Fuel/Cargo als gemeinsames Effect-Snapshot auf. Mass-Expedition teilt ein unveränderliches Snapshot über alle Wellen derselben atomaren Batch-Transaktion; Batch-Wellen verlangen nur ein kompaktes Send-Ergebnis statt kompletter Live-State-Slices. Die eigentliche Send-Validierung und Gameplay-Hooks bleiben pro Welle aktiv.
+| `/api/logistics/relay/state` | GET | Per-Planet Relay-Cooldowns |
+| `/api/logistics/relay/collect` | POST | Shipless own-empire harvest; 30m per source |
+| `/api/logistics/relay/distribute` | POST | Shipless own-empire equal distribution; 30m per target |
 | `/api/fleet/logistics/preview` | POST | Collect/Distribute plan preview |
 | `/api/fleet/logistics/collect` | POST | Multi-colony collect batch |
 | `/api/fleet/logistics/distribute` | POST | Multi-colony distribute batch |

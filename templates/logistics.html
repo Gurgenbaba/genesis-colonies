@@ -142,7 +142,8 @@
   min-width: 0;
 }
 .logistics-page--compact .logistics-actions { margin-top: 8px; }
-.logistics-page--compact [data-logistics-submit] {
+.logistics-page--compact [data-logistics-submit],
+.logistics-page--compact [data-resource-relay-submit] {
   min-height: 28px;
   padding: 4px 12px;
   font-size: 0.82rem;
@@ -173,4 +174,8 @@
 
 {% block content %}
 {% include "fleet_logistics.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
 {% endblock %}
