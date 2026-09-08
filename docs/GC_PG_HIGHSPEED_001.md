@@ -90,6 +90,20 @@ Deploy + measure after **each** slice. No big-bang.
 | Fleet send/preview `lock_busy` | Asteroid recycle / preview 500 on `LockNotAvailable` | Preview: `persist=False` (no `FOR UPDATE`); send: soft 409 + client retry |
 | Auth pool checkout | Polls 500 at `_get_active_ban` → `PoolTimeout` as fake "postgres not configured" | Ban uses loaded player row + 15s negative cache; fail-open; `DbPoolTimeout` → 503; default `GC_PG_POOL_TIMEOUT=3` |
 
+### GC-PERF-WB-TX-028 — World Boss auto-fire short transactions
+
+PostgreSQL maintenance evidence showed the World Boss stage holding one write transaction across schedule work and every enabled auto attacker. With multiple players, one slow strike therefore extended the lock window for all following players and competing HTTP writes.
+
+Fix:
+
+- Fleet-worker schedule/expire/spawn + companion readiness remains one bounded atomic transaction.
+- Worker auto-fire is deferred out of that transaction and processed with one short transaction per `(event_id, player_id)` candidate.
+- A failed candidate rolls back only its own strike and the worker continues with the next player.
+- Idle-skip auto-fire uses the same short-transaction owner.
+- Request/read payloads remain mutation-free; compatibility `tick_world_boss_auto_attacks()` keeps caller-owned transaction semantics for existing direct callers/tests.
+
+Gate: worker must commit schedule state before short auto-fire begins; no outer worker transaction may wrap the full auto-attacker list.
+
 ### Deferred (separate tickets)
 
 | Ticket | Scope |

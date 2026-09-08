@@ -3987,16 +3987,7 @@ def set_world_boss_auto_attack(
     return out
 
 
-def tick_world_boss_auto_attacks(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
-    """
-    Server-owned auto-attack fire: one instant strike per ready flagged player.
-
-    Stops (clears flag) on defeat/expire, invalid hangar, wave limit, or inactive event.
-    """
-    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
-        return {"ok": True, "fired": 0, "stopped": 0}
-
-    ts = float(now if now is not None else _now())
+def _world_boss_auto_attack_candidates(*, conn) -> List[Dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT c.event_id, c.player_id
@@ -4005,6 +3996,21 @@ def tick_world_boss_auto_attacks(*, conn, now: Optional[float] = None) -> Dict[s
         WHERE c.auto_attack_enabled = 1;
         """
     ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def tick_world_boss_auto_attacks(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Server-owned auto-attack fire: one instant strike per ready flagged player.
+
+    Caller owns the transaction. This remains the compatibility path for
+    request/tests that already provide an atomic transaction.
+    """
+    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
+        return {"ok": True, "fired": 0, "stopped": 0}
+
+    ts = float(now if now is not None else _now())
+    rows = _world_boss_auto_attack_candidates(conn=conn)
 
     fired = 0
     stopped = 0
@@ -4024,8 +4030,84 @@ def tick_world_boss_auto_attacks(*, conn, now: Optional[float] = None) -> Dict[s
     return {"ok": True, "fired": int(fired), "stopped": int(stopped), "candidates": len(rows)}
 
 
-def tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
-    """Expire due events and optionally spawn the next boss (cron piggyback)."""
+def tick_world_boss_auto_attacks_short_tx(
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Fleet-worker auto fire with one short transaction per candidate.
+
+    A busy/slow player must not hold the World Boss write transaction across
+    every other auto attacker. Candidate discovery stays read-only; each strike
+    commits independently so HTTP writers can interleave between players.
+    """
+    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
+        return {"ok": True, "fired": 0, "stopped": 0, "candidates": 0, "write_commits": 0}
+
+    from .db import begin_write_transaction, commit, rollback
+    from .tx_context import tx_context
+
+    ts = float(now if now is not None else _now())
+    rows = _world_boss_auto_attack_candidates(conn=conn)
+    fired = 0
+    stopped = 0
+    write_commits = 0
+    errors: List[str] = []
+
+    for row in rows:
+        pid = int(row["player_id"])
+        eid = int(row["event_id"])
+        try:
+            with tx_context(
+                sub_owner="world_boss_auto_player",
+                player_id=pid,
+                event_id=eid,
+            ):
+                begin_write_transaction(conn)
+                try:
+                    res = maybe_fire_ready_auto_attack(
+                        pid,
+                        eid,
+                        conn=conn,
+                        now=ts,
+                        lean_response=True,
+                    )
+                    commit(conn)
+                    write_commits += 1
+                except Exception:
+                    rollback(conn)
+                    raise
+        except Exception as exc:
+            errors.append(f"{eid}:{pid}:{type(exc).__name__}")
+            logger.exception(
+                "world_boss auto short-tx failed event=%s player=%s",
+                eid,
+                pid,
+            )
+            continue
+
+        if res.get("fired"):
+            fired += 1
+        if res.get("stopped"):
+            stopped += 1
+
+    return {
+        "ok": not bool(errors),
+        "fired": int(fired),
+        "stopped": int(stopped),
+        "candidates": len(rows),
+        "write_commits": int(write_commits),
+        "errors": errors,
+    }
+
+
+def tick_world_boss_schedule(
+    *,
+    conn,
+    now: Optional[float] = None,
+    include_auto_attack: bool = True,
+) -> Dict[str, Any]:
+    """Expire/spawn schedule; auto-fire may be deferred to short worker TXs."""
     if not world_boss_schema_ready(conn):
         return {"ok": False, "error": "schema_not_ready"}
 
@@ -4056,7 +4138,11 @@ def tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, 
                 if result.get("ok"):
                     spawned = result.get("event")
 
-    auto_tick = tick_world_boss_auto_attacks(conn=conn, now=ts)
+    auto_tick = (
+        tick_world_boss_auto_attacks(conn=conn, now=ts)
+        if include_auto_attack
+        else {"ok": True, "fired": 0, "stopped": 0, "deferred": True}
+    )
 
     return {
         "ok": True,
@@ -4068,10 +4154,19 @@ def tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, 
     }
 
 
-def maybe_tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
-    """Throttled schedule tick for fleet_worker maintenance (spawn/expire + auto-attack)."""
+def maybe_tick_world_boss_schedule(
+    *,
+    conn,
+    now: Optional[float] = None,
+    include_auto_attack: bool = True,
+) -> Dict[str, Any]:
+    """Best-effort schedule tick; worker may defer auto-fire to short TXs."""
     try:
-        return tick_world_boss_schedule(conn=conn, now=now)
+        return tick_world_boss_schedule(
+            conn=conn,
+            now=now,
+            include_auto_attack=include_auto_attack,
+        )
     except Exception:
         logger.exception("world_boss schedule tick failed")
         return {"ok": False, "error": "tick_failed"}
