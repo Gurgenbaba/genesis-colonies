@@ -396,6 +396,48 @@ def test_codex_route_visit_recorded_on_buildings(gc950_db, monkeypatch):
         conn.close()
 
 
+def test_repeat_codex_route_visit_reports_no_write(gc950_db):
+    from game.codex import record_codex_route_visit
+
+    uid, _ = _create_player()
+    conn = dbmod.db()
+    try:
+        assert record_codex_route_visit(uid, "buildings_view", conn=conn) is True
+        conn.commit()
+        assert record_codex_route_visit(uid, "buildings_view", conn=conn) is False
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM player_unlocks WHERE user_id = ? AND unlock_key = ?",
+            (uid, "codex_visit:buildings_view"),
+        ).fetchone()
+        assert int(row["c"] or 0) == 1
+    finally:
+        conn.close()
+
+
+def test_repeat_pjax_route_visit_does_not_force_page_live_commit(gc950_db, monkeypatch):
+    client = _app_client(monkeypatch)
+    uid, _ = _create_player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    first = client.get("/buildings", headers={"X-PJAX": "1"})
+    assert first.status_code == 200
+
+    import app as app_mod
+
+    real_commit = app_mod.commit
+    commits = []
+
+    def tracked_commit(conn):
+        commits.append(conn)
+        return real_commit(conn)
+
+    monkeypatch.setattr(app_mod, "commit", tracked_commit)
+    second = client.get("/buildings", headers={"X-PJAX": "1"})
+    assert second.status_code == 200
+    assert commits == []
+
+
 def test_sidebar_right_excludes_commander_tip():
     sidebar = (ROOT / "templates/partials/sidebar_right.html").read_text(encoding="utf-8")
     assert "codex_commander_tip" not in sidebar
