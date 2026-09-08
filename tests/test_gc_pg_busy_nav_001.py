@@ -46,6 +46,25 @@ def test_safe_html_navigation_reuses_fresh_guard_cache():
     _clear_guard_player(pid)
 
 
+def test_safe_html_navigation_reuses_guard_cache_across_human_click_gap():
+    pid = 910005
+    _clear_guard_player(pid)
+    _cache_guard_player(pid, _player(pid))
+    import game.auth as auth
+    with auth._player_guard_lock:
+        cached_at, player = auth._player_guard_cache[pid]
+        auth._player_guard_cache[pid] = (cached_at - 5.0, player)
+
+    app = _app()
+    with app.test_client() as client:
+        _login(client, pid)
+        with patch("game.auth.get_player_by_user_id") as load, patch("game.auth.touch_player_online"):
+            response = client.get("/overview")
+    assert response.status_code == 200
+    load.assert_not_called()
+    _clear_guard_player(pid)
+
+
 def test_safe_html_navigation_uses_stale_cache_on_pool_timeout():
     pid = 910002
     _clear_guard_player(pid)
@@ -53,7 +72,7 @@ def test_safe_html_navigation_uses_stale_cache_on_pool_timeout():
     import game.auth as auth
     with auth._player_guard_lock:
         cached_at, player = auth._player_guard_cache[pid]
-        auth._player_guard_cache[pid] = (cached_at - 5.0, player)
+        auth._player_guard_cache[pid] = (cached_at - 20.0, player)
 
     app = _app()
     with app.test_client() as client:
