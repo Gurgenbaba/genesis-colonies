@@ -469,30 +469,49 @@
     true
   );
 
-  const shell = document.getElementById("main-content") || document.body;
-  const observer = new MutationObserver(() => {
+  function stopTicker() {
+    if (!state.timer) return;
+    window.clearInterval(state.timer);
+    state.timer = null;
+  }
+
+  function ensureTicker() {
+    if (state.timer) return;
+    state.timer = window.setInterval(() => {
+      const page = root();
+      if (!page) {
+        stopTicker();
+        state.root = null;
+        state.loaded = false;
+        return;
+      }
+      activate(page);
+    }, 1000);
+  }
+
+  function syncMountedPage() {
     const page = root();
     if (!page) {
       state.root = null;
       state.loaded = false;
+      stopTicker();
       return;
     }
     activate(page);
-  });
+    ensureTicker();
+  }
+
+  const shell = document.getElementById("main-content") || document.body;
+  const observer = new MutationObserver(syncMountedPage);
   observer.observe(shell, { childList: true, subtree: true });
 
-  state.timer = window.setInterval(() => {
-    const page = root();
-    if (page) activate(page);
-  }, 1000);
-
-  activate(root());
+  syncMountedPage();
 
   window.addEventListener(
     "pagehide",
     () => {
       observer.disconnect();
-      if (state.timer) window.clearInterval(state.timer);
+      stopTicker();
     },
     { once: true }
   );
