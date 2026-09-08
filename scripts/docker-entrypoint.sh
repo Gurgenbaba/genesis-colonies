@@ -66,7 +66,9 @@ if not ok:
     print('[GC] WARNING: edge-tts missing — Story Ops will not have Killian neural voice.')
 "
 
-WORKERS="${GUNICORN_WORKERS:-1}"
+# Canonical worker policy: SQLite => 1; PostgreSQL => >=2 in production.
+# Resolve after init_config() so mounted .env values are visible in this process.
+WORKERS="$(python -c 'from game.config import init_config, get_gunicorn_workers; init_config(); print(get_gunicorn_workers())')"
 # GC-PROD-SQLITE-STALL-001: HTTP availability must not depend on a single gevent
 # event loop. Default to gthread so sync sqlite3 work cannot freeze /healthz.
 # Galaxy live WS push is gevent/eventlet-only (see app.ws_long_lived_safe);
