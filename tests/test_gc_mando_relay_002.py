@@ -429,6 +429,9 @@ def test_standalone_logistics_page_loads_relay_assets():
 def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
     script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
     assert 'event.stopImmediatePropagation()' in script
+    assert '"submit",' in script
+    assert "#logistics-collect-form" in script
+    assert "#logistics-distribute-form" in script
     assert '"change",' in script
     assert '"input",' in script
     assert "true\n  );" in script
