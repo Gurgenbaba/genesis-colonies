@@ -195,6 +195,22 @@ Fix:
 
 Regression: `tests/test_gc_perf_core_navigation_007.py` + normal Smoke + Sentinel.
 
+### GC-PERF-PJAX-SHELL-023 — Drop redundant shell DB checkouts on soft navigation
+
+Code audit after the Timekeeper chain found two unconditional context-processor reads that still ran on every PJAX page response even though the browser keeps the existing shell:
+
+- `get_current_user()` opened a fresh connection after `require_login` had already resolved the same player into `g.player`.
+- `get_game_settings()` opened another connection although PJAX only consumes `#main-content`; the persistent shell already owns the settings-dependent shell UI.
+
+Fix:
+
+- PJAX template context reuses the authenticated guard snapshot from `g.player`.
+- PJAX skips the global `GAME_SETTINGS` reload; domain page builders continue to read settings through their request-owned connection when needed.
+- Full-page/auth/landing rendering keeps the historical context behavior.
+- Regression makes both global helpers fatal during a PJAX `/buildings` render, proving the soft-navigation context processor cannot regress to those extra pool checkouts.
+
+This is deliberately a connection-pressure cut, not a gameplay cache: no server authority, queue/resource timing, or page-domain state changes.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
