@@ -802,7 +802,12 @@ def test_app_gc745_pjax_server_fastpath():
     # Codex stays available for #main-content on PJAX.
     assert "build_codex_template_context" in inject
     galaxy_view = app_py.split("def galaxy_view()")[1].split("@app.route", 1)[0]
-    assert "_load_player_view_with_resources()" in galaxy_view
+    assert "_load_player_view_with_resources" not in galaxy_view
+    assert galaxy_view.count("conn = db()") == 1
+    assert '_load_page_live_context(' in galaxy_view
+    assert 'finish_source="galaxy"' in galaxy_view
+    assert "conn=conn" in galaxy_view.split("_load_page_live_context(", 1)[1].split(")", 1)[0]
+    assert "context_planet = ctx.get(\"planet\")" in galaxy_view
     assert "build_minimap_range" not in galaxy_view
     assert "minimap=" not in galaxy_view
     assert "list_system(" in galaxy_view
