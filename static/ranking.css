@@ -103,3 +103,61 @@ html.gc-ranking-focus .gc-planet-registry {
     font-size: 0.92rem;
   }
 }
+
+/* GC-RANKING-SCORE-WIDTH-001 — Mando: use the free header width for huge exact scores. */
+.ranking-page .gc-ranking-panel-head {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(520px, 1.6fr);
+  align-items: end;
+  gap: 20px;
+}
+
+.ranking-page .gc-ranking-panel-head-text {
+  min-width: 0;
+}
+
+.ranking-page .gc-ranking-my-strip {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+  display: grid;
+  grid-template-columns: minmax(130px, max-content) minmax(360px, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.ranking-page .gc-ranking-my-strip > * {
+  min-width: 0;
+}
+
+.ranking-page .gc-ranking-my-strip > :last-child {
+  min-width: 360px;
+}
+
+.ranking-page .gc-ranking-my-strip .gc-ranking-num-full {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .ranking-page .gc-ranking-panel-head {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .ranking-page .gc-ranking-my-strip {
+    grid-template-columns: minmax(120px, max-content) minmax(260px, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .ranking-page .gc-ranking-my-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .ranking-page .gc-ranking-my-strip > :last-child {
+    min-width: 0;
+  }
+}
