@@ -229,6 +229,19 @@ Fix:
 
 Regression includes a duplicate-visit INSERT guard and a real repeated PJAX request that must complete without a page-live commit.
 
+### GC-PERF-AUTH-NAV-026 — Reuse auth guard across safe navigation bursts
+
+After the PJAX shell and page connection cuts, protected HTML navigation could still open a separate PostgreSQL connection in `require_login`: the validated player guard row expired after only 2 seconds, shorter than a normal human click interval.
+
+Fix:
+
+- Safe non-API GET/HEAD navigation reuses the validated player guard row for up to 15 seconds.
+- API and mutation-facing guard freshness remains 2 seconds.
+- Pool-timeout stale fallback remains capped at 30 seconds and safe-navigation only.
+- The 15-second navigation window matches the already existing negative ban cache, so this does not extend the effective no-ban cache horizon beyond the current security model.
+
+Regression ages a cached player by five seconds and requires HTML navigation to perform zero player reload checkout; API stale-cache behavior remains strict.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
