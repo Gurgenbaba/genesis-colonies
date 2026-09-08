@@ -3065,23 +3065,28 @@ def defense_view():
 @app.route("/combat-simulator")
 @require_login
 def combat_simulator_view():
-    ctx = _load_page_live_context(finish_source="combat_simulator")
-    if ctx is None:
-        return redirect(url_for("login"))
-
     from game.combat_simulator import build_combat_simulator_page_context
 
-    user_id = int(ctx["player_view"]["id"])
-    is_admin = bool(int(ctx["player_view"].get("is_admin") or 0))
-    spy_report_id = None
-    try:
-        raw_spy = request.args.get("spy_report_id")
-        if raw_spy is not None and str(raw_spy).strip():
-            spy_report_id = int(raw_spy)
-    except (TypeError, ValueError):
-        spy_report_id = None
     conn = db()
     try:
+        ctx = _load_page_live_context(
+            finish_source="combat_simulator",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
+
+        user_id = int(ctx["player_view"]["id"])
+        is_admin = bool(int(ctx["player_view"].get("is_admin") or 0))
+        spy_report_id = None
+        try:
+            raw_spy = request.args.get("spy_report_id")
+            if raw_spy is not None and str(raw_spy).strip():
+                spy_report_id = int(raw_spy)
+        except (TypeError, ValueError):
+            spy_report_id = None
+
         sim_ctx = build_combat_simulator_page_context(
             user_id,
             conn=conn,
@@ -3928,20 +3933,21 @@ def inventory_view():
 
     from game.case_battles import build_case_battles_state
     from game.inventory import build_inventory_state, inventory_schema_ready
-    from game.planet_evolution.repository import get_context_planet
-
-    ctx = _load_page_live_context(finish_source="inventory")
-    if ctx is None:
-        return redirect(url_for("login"))
-
     inventory = {"ready": False, "containers": [], "other_items": []}
     case_battles = {"ready": False, "lobby": [], "mine": [], "active": None}
     conn = db()
     try:
+        ctx = _load_page_live_context(
+            finish_source="inventory",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
         if inventory_schema_ready(conn):
             inventory = build_inventory_state(int(user_id), conn=conn)
-            planet = get_context_planet(int(user_id), conn=conn)
-            inventory["planet_id"] = int(planet["id"])
+            planet = ctx.get("planet") or {}
+            inventory["planet_id"] = int(planet.get("id") or 0)
             inventory["planet_name"] = str(planet.get("name") or "").strip()
         case_battles = build_case_battles_state(int(user_id), conn=conn)
     finally:
@@ -5216,15 +5222,18 @@ def api_auction_house_bid():
 @app.route("/vote-center")
 @require_login
 def vote_center_view():
-    ctx = _load_page_live_context(finish_source="vote_center")
-    if ctx is None:
-        return redirect(url_for("login"))
-
     from game.vote_rewards import get_vote_center_state
 
     vote_center = {"ready": False, "pending_rewards": []}
     conn = db()
     try:
+        ctx = _load_page_live_context(
+            finish_source="vote_center",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
         vote_center = get_vote_center_state(int(session["user_id"]), conn=conn)
     finally:
         conn.close()
@@ -5689,15 +5698,18 @@ def api_vote_rewards_claim_all():
 @app.route("/galactic-politics")
 @require_login
 def galactic_politics_view():
-    ctx = _load_page_live_context(finish_source="galactic_politics")
-    if ctx is None:
-        return redirect(url_for("login"))
-
     from game.galactic_directives import get_galactic_politics_state
 
     politics_state = {"ready": False, "galaxies": []}
     conn = db()
     try:
+        ctx = _load_page_live_context(
+            finish_source="galactic_politics",
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return redirect(url_for("login"))
         politics_state = get_galactic_politics_state(int(session["user_id"]), conn=conn)
     finally:
         conn.close()
