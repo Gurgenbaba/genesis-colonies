@@ -1,0 +1,26 @@
+/* GC-MANDO-RELAY-001 — shipless own-empire collect mode. */
+.logistics-page[data-logistics-mode="collect"] [data-logistics-preview] {
+  display: none;
+}
+
+.logistics-panel--collect .logistics-actions {
+  align-items: stretch;
+}
+
+.logistics-panel--collect [data-resource-relay-submit] {
+  min-height: 42px;
+}
+
+.logistics-relay-result {
+  margin: 8px 0 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.logistics-relay-result[data-kind="success"] {
+  opacity: 0.92;
+}
+
+.logistics-relay-result[data-kind="error"] {
+  font-weight: 700;
+}
