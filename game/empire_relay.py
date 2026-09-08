@@ -331,7 +331,9 @@ def collect_empire_resources(
         ),
     )
 
-    colony_resources = _colony_resource_payload(uid, participant_ids, conn=conn)
+    colony_resources = _colony_resource_payload(
+        uid, [target_id, *ready_sources], conn=conn
+    )
     return True, "empire_relay_collect_ok", {
         "target_planet_id": target_id,
         "source_planet_ids": sources,
@@ -505,7 +507,9 @@ def distribute_empire_resources(
             uid, target_id, "distribute", now=ts, conn=conn
         )
 
-    colony_resources = _colony_resource_payload(uid, participant_ids, conn=conn)
+    colony_resources = _colony_resource_payload(
+        uid, [origin_id, *ready_targets], conn=conn
+    )
     return True, "empire_relay_distribute_ok", {
         "origin_planet_id": origin_id,
         "target_planet_ids": targets,
