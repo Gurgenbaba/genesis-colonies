@@ -113,7 +113,7 @@ Historical cutover procedure: [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POS
 
 **Web concurrency:** leave `GUNICORN_WORKERS` unset whenever possible. PostgreSQL Production resolves to at least **2** workers; a persisted legacy `GUNICORN_WORKERS=1` is automatically floored to `2` so an old Railway variable cannot reintroduce global HTTP head-of-line blocking.
 
-**Database networking:** the web service must reference the Postgres service's private `DATABASE_URL`, not `DATABASE_PUBLIC_URL`. The public TCP proxy is for external clients and adds avoidable network latency/egress.
+**Database networking:** the web service must reference the Postgres service's private `DATABASE_URL`, not `DATABASE_PUBLIC_URL`. The public TCP proxy is for external clients and adds avoidable network latency/egress. `GET /health` reports the credential-free `checks.database.network_path`: Production should show `railway_private`; `railway_public_proxy` is an actionable performance warning.
 
 **GC-PERF-PROD-002:** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and sets `GC_EMBEDDED_CRON=0` on gunicorn so Soft-On ticks do not share the web GIL. Opt out: `GC_MAINTENANCE_WORKER=0` (legacy in-process `[embedded-cron]`).
 
