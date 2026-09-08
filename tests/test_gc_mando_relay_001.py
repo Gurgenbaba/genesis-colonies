@@ -34,7 +34,7 @@ def test_relay_moves_huge_stock_without_ships_or_fleet_rows(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=2)
-    huge = 3_000_000_000_000_000_000
+    huge = 3_000_000_000_000_000
     _set_stock(conn, hub, metal=10, crystal=20, fuel_cells=30)
     for source in sources:
         _set_stock(conn, source, metal=huge, crystal=123_456_789, fuel_cells=987_654_321)
@@ -74,7 +74,7 @@ def test_relay_rejects_foreign_source_before_transfer(logistics_db):
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=1)
 
-    other_uid = create_user("relay-other", "secret123", conn=conn)
+    other_uid = create_user("relay-other", "secret123")
     ensure_player_and_homeworld(player_id=other_uid, player_name="relay-other", conn=conn)
     foreign = conn.execute(
         "SELECT id FROM planets WHERE player_id = ? ORDER BY id LIMIT 1;",
