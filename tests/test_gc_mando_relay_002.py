@@ -440,9 +440,11 @@ def test_shell_loaded_relay_sleeps_when_logistics_is_unmounted():
     assert "stopTicker();" in script
     assert "syncMountedPage();" in script
     assert "state.timer = window.setInterval" in script
+    ensure = script.split("function ensureTicker()", 1)[1].split("function syncMountedPage()", 1)[0]
+    assert "state.timer = window.setInterval" in ensure
     tail = script.split("const shell = document.getElementById", 1)[1]
     assert "syncMountedPage();" in tail
-    assert "state.timer = window.setInterval" not in tail.split("function ensureTicker()", 1)[0] if "function ensureTicker()" in tail else True
+    assert "state.timer = window.setInterval" not in tail
 
 
 def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
@@ -453,4 +455,7 @@ def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
     assert "#logistics-distribute-form" in script
     assert '"change",' in script
     assert '"input",' in script
+    assert "function syncSelectionPresentation(page)" in script
+    assert 'classList.toggle("is-selected"' in script
+    assert 'classList.remove("is-slots-skipped")' in script
     assert "true\n  );" in script
