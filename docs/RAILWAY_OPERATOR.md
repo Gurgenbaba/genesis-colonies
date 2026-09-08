@@ -67,9 +67,9 @@ Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `
 | `APP_ENV` / `FLASK_ENV` | `production` |
 | `FLASK_DEBUG` | `0` |
 | `SECRET_KEY` | Strong random |
-| `GC_DB_BACKEND` | `sqlite` until cutover |
+| `GC_DB_BACKEND` | `postgres` |
 | `GC_DB_PATH` | `/data/game.db` |
-| `GUNICORN_WORKERS` | `1` |
+| `GUNICORN_WORKERS` | **am besten unset** → SQLite `1`, PostgreSQL Production `2`; ein alter PG-Wert `1` wird automatisch auf `2` gefloort |
 | `GUNICORN_WORKER_CLASS` | `gthread` (default; `gevent` only if live WS push required) |
 | `GUNICORN_THREADS` | `4` (gthread) |
 | `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` |
@@ -78,7 +78,7 @@ Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `
 | `GC_EMBEDDED_BACKUP` | unset or `1` |
 | `GC_EMBEDDED_BACKUP_KEEP` | unset → `7` |
 | `GC_INTERNAL_CRON_TOKEN` | Optional but recommended for manual force HTTP cron |
-| `GC_ALLOW_POSTGRES_PROD` | unset / `0` |
+| `GC_ALLOW_POSTGRES_PROD` | `1` |
 | Shop / Discord / SMTP / Vote | Live keys if features on |
 
 Volume: mount **`/data`** on the **web** service only.
@@ -107,11 +107,13 @@ Disable embedded cron only if you intentionally use an external HTTP scheduler: 
 
 ## Postgres / scaling
 
-**Current production:** still **SQLite** (`GC_DB_BACKEND=sqlite`, volume `/data`).  
-Technical readiness (hardening on `main`): [GC-DB-POSTGRES-001-PHASE1.md](database/GC-DB-POSTGRES-001-PHASE1.md).  
-**Cutover runbook (preparation only — do not execute without ★ approvals):** [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
+**Current production:** **PostgreSQL** (`GC_DB_BACKEND=postgres`, `GC_ALLOW_POSTGRES_PROD=1`). The old SQLite file/volume is retained only as historical rollback evidence and is not the live authority.  
+Technical readiness history: [GC-DB-POSTGRES-001-PHASE1.md](database/GC-DB-POSTGRES-001-PHASE1.md).  
+Historical cutover procedure: [GC-DB-POSTGRES-002-CUTOVER.md](database/GC-DB-POSTGRES-002-CUTOVER.md).
 
-Until cutover is explicitly approved and executed: Replicas = 1, workers = 1, `GC_ALLOW_POSTGRES_PROD` unset.
+**Web concurrency:** leave `GUNICORN_WORKERS` unset whenever possible. PostgreSQL Production resolves to at least **2** workers; a persisted legacy `GUNICORN_WORKERS=1` is automatically floored to `2` so an old Railway variable cannot reintroduce global HTTP head-of-line blocking.
+
+**Database networking:** the web service must reference the Postgres service's private `DATABASE_URL`, not `DATABASE_PUBLIC_URL`. The public TCP proxy is for external clients and adds avoidable network latency/egress.
 
 **GC-PERF-PROD-002:** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and sets `GC_EMBEDDED_CRON=0` on gunicorn so Soft-On ticks do not share the web GIL. Opt out: `GC_MAINTENANCE_WORKER=0` (legacy in-process `[embedded-cron]`).
 
