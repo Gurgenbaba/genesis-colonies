@@ -14,13 +14,19 @@ def _function_block(path: str, name: str) -> str:
     return src[start:end]
 
 
-def test_galaxy_bootstrap_does_not_physically_expire_asteroids():
+def test_galaxy_read_helpers_do_not_physically_expire_asteroids():
     ensure = _function_block("game/asteroids.py", "ensure_asteroids_present")
+    system = _function_block("game/asteroids.py", "get_asteroids_for_system")
+    board = _function_block("game/asteroids.py", "build_asteroid_board_entries")
     active = _function_block("game/asteroids.py", "list_active_asteroids")
     worker = _function_block("game/asteroids.py", "tick_asteroid_schedule")
 
     assert "expire_due_asteroids(" not in ensure
+    assert "expire_due_asteroids(" not in system
+    assert "expire_due_asteroids(" not in board
+    assert "expires_at > ?" in system
     assert "expires_at > ?" in active
+    assert "list_active_asteroids(" in board
     assert "expire_due_asteroids(conn=conn" in worker
 
 
