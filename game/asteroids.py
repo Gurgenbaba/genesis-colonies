@@ -1253,11 +1253,15 @@ def tick_asteroid_schedule(*, conn, now: Optional[float] = None) -> Dict[str, An
 
 
 def ensure_asteroids_present(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
-    """Galaxy/deploy bootstrap — spawn a belt wave if none are active yet."""
+    """Galaxy/deploy bootstrap — spawn a belt wave if none are visibly active.
+
+    Physical expiry is worker-owned. The read path filters by expires_at already,
+    so a Galaxy GET must not mutate old asteroid rows merely to decide whether a
+    bootstrap wave is needed.
+    """
     if not asteroid_schema_ready(conn):
         return {"ok": False, "error": "schema_not_ready", "spawned": []}
     ts = float(now if now is not None else _now())
-    expire_due_asteroids(conn=conn, now=ts)
     active = list_active_asteroids(conn=conn, now=ts)
     if active:
         return {"ok": True, "spawned": [], "skipped": True, "active_count": len(active)}
