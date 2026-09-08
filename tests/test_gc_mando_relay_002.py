@@ -419,11 +419,30 @@ def test_relay_ui_owns_collect_and_distribute_without_fleet_submit():
     assert "logistics-relay-cooldown.is-cooldown" in css
 
 
-def test_standalone_logistics_page_loads_relay_assets():
+def test_shell_loads_relay_assets_for_full_load_and_pjax():
+    base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     standalone = (ROOT / "templates" / "logistics.html").read_text(encoding="utf-8")
-    assert "css/empire_resource_relay.css" in standalone
-    assert "js/empire_resource_relay.js" in standalone
+    fleet = (ROOT / "templates" / "fleet.html").read_text(encoding="utf-8")
+    assert "css/empire_resource_relay.css" in base
+    assert "js/empire_resource_relay.js" in base
+    assert "css/empire_resource_relay.css" not in standalone
+    assert "js/empire_resource_relay.js" not in standalone
+    assert "css/empire_resource_relay.css" not in fleet
+    assert "js/empire_resource_relay.js" not in fleet
     assert "[data-resource-relay-submit]" in standalone
+
+
+def test_shell_loaded_relay_sleeps_when_logistics_is_unmounted():
+    script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
+    assert "function stopTicker()" in script
+    assert "function ensureTicker()" in script
+    assert "function syncMountedPage()" in script
+    assert "stopTicker();" in script
+    assert "syncMountedPage();" in script
+    assert "state.timer = window.setInterval" in script
+    tail = script.split("const shell = document.getElementById", 1)[1]
+    assert "syncMountedPage();" in tail
+    assert "state.timer = window.setInterval" not in tail.split("function ensureTicker()", 1)[0] if "function ensureTicker()" in tail else True
 
 
 def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
