@@ -2,6 +2,7 @@
 {% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/empire_resource_relay.css') }}?v={{ GC_ASSET_VERSION }}">
 <style>
 .logistics-page--compact .logistics-headline { margin-bottom: 8px; }
 .logistics-page--compact .section-title { font-size: 1.05rem; margin-bottom: 2px; }
@@ -142,7 +143,8 @@
   min-width: 0;
 }
 .logistics-page--compact .logistics-actions { margin-top: 8px; }
-.logistics-page--compact [data-logistics-submit] {
+.logistics-page--compact [data-logistics-submit],
+.logistics-page--compact [data-resource-relay-submit] {
   min-height: 28px;
   padding: 4px 12px;
   font-size: 0.82rem;
@@ -173,4 +175,9 @@
 
 {% block content %}
 {% include "fleet_logistics.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/empire_resource_relay.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
