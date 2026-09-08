@@ -403,7 +403,12 @@ def _load_latest_ban_row(player_id: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
-def _get_active_ban(player_id: int, player: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+def _get_active_ban(
+    player_id: int,
+    player: Optional[Dict[str, Any]] = None,
+    *,
+    cache_negative_from_player: bool = True,
+) -> Optional[Dict[str, Any]]:
     """
     Prüft, ob der Player aktuell gebannt ist (players.banned_until > now).
     Zusätzlich wird versucht, den letzten bans-Eintrag zu laden.
@@ -422,7 +427,13 @@ def _get_active_ban(player_id: int, player: Optional[Dict[str, Any]] = None) -> 
     if player is not None:
         banned_until = _banned_until_from_player(player, now)
         if banned_until is None:
-            _mark_not_banned(pid)
+            # A cached guard snapshot may prove "not banned" only for this request.
+            # It must never renew the 15s negative-ban cache; otherwise a safe
+            # navigation cache hit could extend ban enforcement beyond the
+            # configured negative-cache horizon. Only a freshly loaded player
+            # snapshot may arm the process-wide negative cache.
+            if cache_negative_from_player:
+                _mark_not_banned(pid)
             return None
         try:
             extra = _load_latest_ban_row(pid)
@@ -505,7 +516,12 @@ def _get_active_ban(player_id: int, player: Optional[Dict[str, Any]] = None) -> 
         conn.close()
 
 
-def _handle_if_banned(player_id: int, player: Optional[Dict[str, Any]] = None):
+def _handle_if_banned(
+    player_id: int,
+    player: Optional[Dict[str, Any]] = None,
+    *,
+    cache_negative_from_player: bool = True,
+):
     """
     Wenn gebannt:
       - Session leeren
@@ -513,7 +529,11 @@ def _handle_if_banned(player_id: int, player: Optional[Dict[str, Any]] = None):
       - redirect -> /login
     """
     try:
-        ban = _get_active_ban(int(player_id), player=player)
+        ban = _get_active_ban(
+            int(player_id),
+            player=player,
+            cache_negative_from_player=cache_negative_from_player,
+        )
     except DbPoolTimeout:
         logger.warning("ban check skipped pool_timeout player=%s", int(player_id))
         return None
@@ -560,12 +580,14 @@ def require_login(func: ViewFunc) -> ViewFunc:
 
         safe_navigation = _safe_html_navigation_request()
         player = _cached_guard_player(pid, safe_navigation=safe_navigation)
+        player_from_guard_cache = player is not None
         if player is None:
             try:
                 player = get_player_by_user_id(pid)
             except DbPoolTimeout:
                 if safe_navigation:
                     player = _cached_guard_player(pid, allow_stale=True)
+                    player_from_guard_cache = player is not None
                     if player is not None:
                         logger.warning(
                             "login guard pool_timeout using cached player for safe navigation player=%s path=%s",
@@ -586,7 +608,11 @@ def require_login(func: ViewFunc) -> ViewFunc:
             session.clear()
             return redirect(url_for("login"))
 
-        ban_response = _handle_if_banned(pid, player=player)
+        ban_response = _handle_if_banned(
+            pid,
+            player=player,
+            cache_negative_from_player=not player_from_guard_cache,
+        )
         if ban_response is not None:
             return ban_response
 
@@ -673,6 +699,7 @@ def require_login_api(func: ViewFunc) -> ViewFunc:
             return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
 
         player = _cached_guard_player(pid)
+        player_from_guard_cache = player is not None
         if player is None:
             try:
                 player = get_player_by_user_id(pid)
@@ -687,7 +714,11 @@ def require_login_api(func: ViewFunc) -> ViewFunc:
             session.clear()
             return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
 
-        ban_response = _handle_if_banned(pid, player=player)
+        ban_response = _handle_if_banned(
+            pid,
+            player=player,
+            cache_negative_from_player=not player_from_guard_cache,
+        )
         if ban_response is not None:
             return jsonify({"ok": False, "error": "banned", "data": None}), 403
 
