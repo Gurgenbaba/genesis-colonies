@@ -94,6 +94,30 @@ def is_debug_enabled() -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def classify_postgres_network_path(database_url: str | None = None) -> str:
+    """Classify PostgreSQL transport without exposing credentials or hostnames."""
+    raw = str(database_url if database_url is not None else os.environ.get("DATABASE_URL", "")).strip()
+    if not raw:
+        return "unset"
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(raw)
+        scheme = str(parsed.scheme or "").lower()
+        host = str(parsed.hostname or "").strip().lower()
+    except Exception:
+        return "unknown"
+    if scheme not in ("postgres", "postgresql"):
+        return "not_postgres"
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return "local"
+    if host.endswith(".railway.internal") or host == "railway.internal":
+        return "railway_private"
+    if host.endswith(".proxy.rlwy.net") or host == "proxy.rlwy.net":
+        return "railway_public_proxy"
+    return "external"
+
+
 def get_secret_key() -> str:
     return os.environ.get("SECRET_KEY", "").strip()
 
@@ -566,6 +590,14 @@ def validate_config(*, strict: bool | None = None) -> list[str]:
                 "Postgres URL is ignored. Set GC_DB_BACKEND=postgres to use it, "
                 "or unset DATABASE_URL for SQLite-only deploys."
             )
+        if backend == "postgres":
+            network_path = classify_postgres_network_path(db_url)
+            if network_path == "railway_public_proxy":
+                warnings.append(
+                    "DATABASE_URL uses Railway's public PostgreSQL proxy. "
+                    "Use the Postgres service private DATABASE_URL for production "
+                    "to avoid per-query network latency on SQL-heavy game pages."
+                )
         if not get_internal_cron_token():
             warnings.append(
                 "GC_INTERNAL_CRON_TOKEN is not set — ranking HTTP cron "
