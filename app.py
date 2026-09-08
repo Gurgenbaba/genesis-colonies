@@ -1101,6 +1101,9 @@ bootstrap_application(skip_migration_check=_skip_mig)
 from game.player_changelog import register_player_changelog_routes
 register_player_changelog_routes(app)
 
+from game.empire_relay import register_empire_relay_routes
+register_empire_relay_routes(app)
+
 try:
     from game.internal_cron import start_embedded_cron_if_enabled
 
