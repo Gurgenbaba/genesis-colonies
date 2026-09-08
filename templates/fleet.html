@@ -30,6 +30,7 @@
 
 {% block extra_head %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/empire_resource_relay.css') }}?v={{ GC_ASSET_VERSION }}">
 {% if _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
@@ -611,4 +612,5 @@
 {% block extra_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/fleet-bulk-launch.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/empire_resource_relay.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
