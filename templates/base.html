@@ -16,6 +16,7 @@
   {# GC-PE-UX-02: shell-owned so Planet Evolution stays styled across PJAX navigation. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planet_evolution_clarity.css') }}?v={{ GC_ASSET_VERSION }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mando_exact_numbers.css') }}?v={{ GC_ASSET_VERSION }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/empire_resource_relay.css') }}?v={{ GC_ASSET_VERSION }}">
 
   {# GC-INSTANT-LANDSCAPE-001: start planet surface fetch before first paint (shell + stage). #}
   {% if current_planet_landscape_webp_url is defined and current_planet_landscape_webp_url %}
@@ -785,6 +786,7 @@
   <script src="{{ url_for('static', filename='js/core/gc.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/state.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/lifecycle.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+  <script src="{{ url_for('static', filename='js/empire_resource_relay.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
   {# GC-PERF-JS-002: shipyard/defense/galaxy-QA/battle-lab via page extra_scripts #}
   <script src="{{ url_for('static', filename='js/combat_theater.js') }}?v={{ GC_ASSET_VERSION }}"></script>
