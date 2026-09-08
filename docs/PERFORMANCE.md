@@ -211,6 +211,24 @@ Fix:
 
 This is deliberately a connection-pressure cut, not a gameplay cache: no server authority, queue/resource timing, or page-domain state changes.
 
+### GC-PERF-PJAX-VISIT-025 — Repeat route visits stay read-only
+
+The common page live-context still treated every qualifying navigation as a write even after both durable visit records already existed:
+
+- Command Initiation repeated an idempotent `INSERT OR IGNORE` into `player_initiation_progress` for the same `ini_page_seen:*` event.
+- The orchestrator marked Initiation as commit-worthy whenever the hook returned without an exception, even when no row/progress changed.
+- Codex already performed a read-before-insert, but the orchestrator still marked every route visit as commit-worthy.
+
+Fix:
+
+- `mark_page_seen()` probes the durable event first and only inserts on the first visit.
+- Initiation page-visit results expose `recorded` alongside real progress changes.
+- Codex route visits return whether an unlock row was actually inserted.
+- `_load_page_live_context()` commits visit work only when Initiation/Codex actually changed durable state.
+- First-visit unlock/progression semantics remain unchanged; repeated PJAX visits become read-only unless genuine Initiation progress advances.
+
+Regression includes a duplicate-visit INSERT guard and a real repeated PJAX request that must complete without a page-live commit.
+
 ### GC-PERF-EXPO-RACE-006 — Holding race + mass-launch refresh storm
 
 Post-deploy Railway evidence after GC-PERF-FLEET-DEADLINE-005 exposed two follow-ups:
