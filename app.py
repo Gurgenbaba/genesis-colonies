@@ -2634,8 +2634,9 @@ def galaxy_view():
             # Deploy bootstrap: first Galaxy open seeds belts if the universe is empty.
             # Best-effort: lock contention must not 500 PJAX/prefetch (aborted TX).
             try:
-                ensure_asteroids_present(conn=conn)
-                db_commit(conn)
+                asteroid_bootstrap = ensure_asteroids_present(conn=conn)
+                if asteroid_bootstrap.get("spawned"):
+                    db_commit(conn)
             except Exception as asteroid_exc:
                 if is_db_lock_error(asteroid_exc) or isinstance(
                     asteroid_exc, sqlite3.OperationalError

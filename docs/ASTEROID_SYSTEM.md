@@ -52,7 +52,7 @@ Viewer hunt UX:
 - Hover/focus on an available Harvest action loads the canonical fleet preview (fuel, HR count, flight time); click reuses that preview and blocks locally-visible fuel shortages before send.
 - Cap line shows global active vs visible board count; next-wave countdown in header + empty state.
 
-Expire-on-view: `expire_due_asteroids` runs from board build / system attach (debris parity). Countdown zero → Galaxy PJAX reload (`data-refresh-on-zero="galaxy"`).
+Expiry ownership: Galaxy reads filter `expires_at > now` and never physically expire rows. `fleet_worker` / `tick_asteroid_schedule` owns physical expiry; countdown zero still triggers the Galaxy PJAX refresh (`data-refresh-on-zero="galaxy"`) so expired fields disappear immediately from the UI. `ensure_asteroids_present` is bootstrap-only and writes only when no visible active field exists.
 
 ---
 
