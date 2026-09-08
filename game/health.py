@@ -15,6 +15,8 @@ from typing import Any, Dict, List
 from game.config import (
     classify_postgres_network_path,
     get_app_version,
+    get_deploy_revision,
+    get_gunicorn_workers,
     is_debug_enabled,
     is_production,
     validate_config,
@@ -29,6 +31,7 @@ def build_liveness_report() -> Dict[str, Any]:
         "ok": True,
         "status": "alive",
         "version": get_app_version(),
+        "revision": get_deploy_revision() or None,
     }
 
 
@@ -108,6 +111,21 @@ def check_config() -> Dict[str, Any]:
     }
 
 
+def check_runtime() -> Dict[str, Any]:
+    """Safe deploy/concurrency fingerprint for production verification."""
+    backend = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
+    worker_class = str(os.environ.get("GUNICORN_WORKER_CLASS", "gthread") or "gthread").strip()
+    workers = int(get_gunicorn_workers())
+    return {
+        "ok": True,
+        "revision": get_deploy_revision() or None,
+        "database_backend": backend,
+        "web_workers_policy": workers,
+        "worker_class": worker_class or "gthread",
+        "postgres_multiworker_ready": backend not in ("postgres", "postgresql") or workers >= 2,
+    }
+
+
 def _timed_check(fn) -> Dict[str, Any]:
     t0 = time.perf_counter()
     result = fn()
@@ -128,6 +146,7 @@ def build_health_report() -> Dict[str, Any]:
     mig_check = _timed_check(check_migrations)
     write_check = _timed_check(check_writable)
     cfg_check = _timed_check(check_config)
+    runtime_check = _timed_check(check_runtime)
 
     critical_ok = db_check["ok"] and mig_check["ok"] and write_check["ok"]
     if is_production() and cfg_check.get("errors"):
@@ -142,11 +161,13 @@ def build_health_report() -> Dict[str, Any]:
     return {
         "status": status,
         "version": get_app_version(),
+        "revision": get_deploy_revision() or None,
         "total_ms": round((time.perf_counter() - t0) * 1000.0, 1),
         "checks": {
             "database": db_check,
             "migrations": mig_check,
             "writable": write_check,
             "config": cfg_check,
+            "runtime": runtime_check,
         },
     }

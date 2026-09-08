@@ -136,8 +136,16 @@ curl -sS https://www.genesis-colonies.de/healthz
 curl -sS https://www.genesis-colonies.de/health
 ```
 
-Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK).  
-Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate).  
+Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK). It also exposes the safe source `revision` when Railway provides `RAILWAY_GIT_COMMIT_SHA`.  
+Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate). Verify after every performance deploy:
+
+- top-level `revision` equals the intended GitHub commit;
+- `checks.database.network_path == "railway_private"` for Railway-internal PostgreSQL;
+- `checks.runtime.database_backend == "postgres"`;
+- `checks.runtime.web_workers_policy >= 2` in PostgreSQL Production;
+- `checks.runtime.postgres_multiworker_ready == true`.
+
+The runtime block is intentionally credential-free: no DSN, password or database hostname is returned. `web_workers_policy` is the canonical count resolved by the same `get_gunicorn_workers()` policy used by the Docker entrypoint; it is not presented as an OS process census.  
 Check Railway logs for `[maintenance-worker] started` (GC-PERF-PROD-002) or legacy `[embedded-cron] started`. Latency notes: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
 
 ---

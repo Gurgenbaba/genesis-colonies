@@ -164,6 +164,46 @@ def test_health_endpoint(deploy_env, monkeypatch):
     assert data["checks"]["database"]["ok"] is True
 
 
+def test_health_exposes_safe_deploy_fingerprint(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.setenv("GUNICORN_WORKERS", "1")
+    monkeypatch.setenv("GUNICORN_WORKER_CLASS", "gthread")
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "abc123deploy")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://user:super-secret@postgres.railway.internal:5432/railway",
+    )
+
+    from game.health import build_liveness_report, check_runtime
+
+    live = build_liveness_report()
+    runtime = check_runtime()
+
+    assert live["revision"] == "abc123deploy"
+    assert runtime == {
+        "ok": True,
+        "revision": "abc123deploy",
+        "database_backend": "postgres",
+        "web_workers_policy": 2,
+        "worker_class": "gthread",
+        "postgres_multiworker_ready": True,
+    }
+    serialized = str(runtime)
+    assert "super-secret" not in serialized
+    assert "postgres.railway.internal" not in serialized
+
+
+def test_deploy_revision_prefers_railway_metadata(monkeypatch):
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "1e703825787253bf2c46a38182b9b3b8158d5126")
+    monkeypatch.setenv("GC_GIT_SHA", "fallback-sha")
+
+    from game.config import get_deploy_revision
+
+    assert get_deploy_revision() == "1e703825787253bf2c46a38182b9b3b8158d5126"
+
+
 def test_migration_pending_detected(deploy_env):
     from game.bootstrap import bootstrap_application
     from game.migrations_util import get_pending_migration_names

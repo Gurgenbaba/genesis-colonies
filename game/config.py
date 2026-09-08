@@ -80,6 +80,15 @@ def get_app_version() -> str:
     return "0.0.0-dev"
 
 
+def get_deploy_revision() -> str:
+    """Return the current source revision from platform metadata, never from git."""
+    for key in ("RAILWAY_GIT_COMMIT_SHA", "GC_GIT_SHA", "SOURCE_COMMIT", "GIT_COMMIT"):
+        value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value[:128]
+    return ""
+
+
 def is_production() -> bool:
     env = (
         os.environ.get("APP_ENV")
