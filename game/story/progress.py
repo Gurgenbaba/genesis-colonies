@@ -22,6 +22,52 @@ def story_schema_ready(conn) -> bool:
     return table_exists(conn, ARCS_TABLE) and table_exists(conn, PROGRESS_TABLE)
 
 
+def _pg_story_progress_ensure_cache(conn) -> Optional[Dict[int, int]]:
+    """Connection-local memo for the expensive Story ensure pass on PostgreSQL.
+
+    Resource/empire refreshes can fan out many directive event batches through the
+    same transaction. Story eligibility only needs another full ensure when story
+    flags change; objective progress itself is handled synchronously below.
+    SQLite intentionally keeps the historical behavior.
+    """
+    if not (
+        type(conn).__module__ == "game.db_pg"
+        and type(conn).__name__ == "PgConnection"
+    ):
+        return None
+    cache = getattr(conn, "_gc_story_progress_ensure_cache", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        setattr(conn, "_gc_story_progress_ensure_cache", cache)
+    return cache
+
+
+def _pg_story_flag_generation(conn, player_id: int) -> int:
+    versions = getattr(conn, "_gc_story_flag_versions", None)
+    if not isinstance(versions, dict):
+        versions = {}
+        setattr(conn, "_gc_story_flag_versions", versions)
+    return int(versions.get(int(player_id), 0) or 0)
+
+
+def _ensure_player_story_for_progress(player_id: int, *, conn, now: float) -> None:
+    from .engine import ensure_player_story
+
+    pid = int(player_id)
+    cache = _pg_story_progress_ensure_cache(conn)
+    if cache is None:
+        ensure_player_story(pid, conn=conn, now=now)
+        return
+
+    generation = _pg_story_flag_generation(conn, pid)
+    if cache.get(pid) == generation:
+        return
+
+    ensure_player_story(pid, conn=conn, now=now)
+    # ensure_player_story may grant flags while auto-advancing reward/gate beats.
+    cache[pid] = _pg_story_flag_generation(conn, pid)
+
+
 def apply_gameplay_events(
     player_id: int,
     events: Sequence[Mapping[str, Any]],
@@ -37,10 +83,10 @@ def apply_gameplay_events(
     if not story_schema_ready(conn):
         return {"updated": 0, "completed": 0}
 
-    from .engine import ensure_player_story, try_auto_advance_arc
+    from .engine import try_auto_advance_arc
 
     ts = float(now if now is not None else time.time())
-    ensure_player_story(pid, conn=conn, now=ts)
+    _ensure_player_story_for_progress(pid, conn=conn, now=ts)
 
     active = _load_active_arcs(pid, conn=conn)
     if not active:
