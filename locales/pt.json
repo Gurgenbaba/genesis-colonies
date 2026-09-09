@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "Não existem recursos transferíveis.",
   "logistics_relay_error_not_enough": "O hub não tem recursos suficientes para esta distribuição.",
   "logistics_relay_error_foreign": "O relé funciona apenas entre as tuas próprias colónias.",
-  "logistics_relay_error_vacation": "O Relé Imperial está desativado no modo de férias."
+  "logistics_relay_error_vacation": "O Relé Imperial está desativado no modo de férias.",
+  "fleet_mass_expedition_complete_subject": "Expedição em massa concluída",
+  "fleet_mass_expedition_complete_body": "Todas as %(count)s ondas de expedição foram resolvidas. Os relatórios individuais estão na caixa de entrada; as frotas de regresso já estão a caminho.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s relatórios de expedição estão na caixa de entrada; %(failed)s ondas falharam. As frotas de regresso já estão a caminho."
 }
