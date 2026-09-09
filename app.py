@@ -1806,6 +1806,8 @@ _POST_MUTATION_READ_ONLY_LIVE_SOURCES = frozenset(
     {
         "api_buildings_upgrade",
         "api_buildings_cancel",
+        "api_research_start",
+        "api_research_cancel",
         "api_timekeeper_apply",
     }
 )
