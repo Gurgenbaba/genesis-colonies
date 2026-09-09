@@ -5,7 +5,6 @@
   const BUSY_CLASS = "galaxy-quick-action--busy";
   const SUBMIT_COOLDOWN_MS = 600;
   const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;
-  const ASTEROID_PREVIEW_CONCURRENCY = 3;
 
   function deps() {
     const GC = window.GC || {};
@@ -244,34 +243,9 @@
       void this.loadAsteroidFlightPreview(wrap, root);
     },
 
-    async preloadAsteroidFlightPreviews(root, scope = null) {
-    const previewRoot = scope || root;
-    const wraps = Array.from(
-      previewRoot?.querySelectorAll?.("[data-galaxy-ring-asteroid-wrap]") || []
-    ).filter((wrap) => root.contains(wrap) && wrap.dataset.harvestLocked !== "1");
-    if (!wraps.length) return;
-
-    // Resolve the available fleet once, then reuse it for every board row.
-    // Requests are deliberately capped so opening the board cannot burst the server.
-    const available = await this.resolveAvailableReclaimersAsync(root);
-    if (available === null || available < 1) return;
-
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < wraps.length) {
-        const wrap = wraps[cursor++];
-        const needed = Math.max(0, parseInt(wrap.dataset.recyclerSlots || "0", 10) || 0);
-        const sendCount = Math.min(available, needed);
-        if (sendCount < 1) continue;
-        await this.loadAsteroidFlightPreview(wrap, root, { sendCount });
-      }
-    };
-    const workers = Array.from(
-      { length: Math.min(ASTEROID_PREVIEW_CONCURRENCY, wraps.length) },
-      () => worker()
-    );
-    await Promise.allSettled(workers);
-  },
+    // Fuel/flight previews are demand-driven. Opening the global asteroid board
+    // must not enqueue one server validation request per field; pointer/focus
+    // intent and the harvest click still use the canonical server preview.
 
     resetAsteroidPreviewCache() {
       this._asteroidPreviewCache.clear();
@@ -1097,7 +1071,6 @@
         preferOpen = localStorage.getItem("gc_galaxy_asteroid_board_open") === "1";
       } catch (_) {}
       this.setAsteroidBoardExpanded(board, preferOpen);
-      if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);
     },
 
     handleAsteroidBoardToggle(ev, root) {
@@ -1108,7 +1081,6 @@
       if (!board) return;
       const open = board.classList.contains("is-collapsed");
       this.setAsteroidBoardExpanded(board, open);
-      if (open) void this.preloadAsteroidFlightPreviews(root, board);
     },
 
     async handleRelocationClick(ev, root) {
