@@ -48,8 +48,34 @@ def get_evolution_rank(
 ) -> int:
     if not is_evolvable_mine(building_type):
         return 0
-    ranks = get_evolution_ranks_for_planet(int(planet_id), conn=conn)
-    return max(0, int(ranks.get(str(building_type), 0) or 0))
+
+    # Only collapse point reads into the bulk snapshot on the production PG
+    # request path. SQLite/tests/workers retain the existing single-rank query.
+    if _request_pg_rank_cache() is not None:
+        ranks = get_evolution_ranks_for_planet(int(planet_id), conn=conn)
+        return max(0, int(ranks.get(str(building_type), 0) or 0))
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not schema_ready(conn):
+            return 0
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT evolution_rank FROM planet_mine_evolution
+            WHERE planet_id = ? AND building_type = ? LIMIT 1;
+            """,
+            (int(planet_id), str(building_type)),
+        )
+        row = cur.fetchone()
+        if not row:
+            return 0
+        return max(0, int(row["evolution_rank"] if isinstance(row, sqlite3.Row) else row[0]) or 0)
+    finally:
+        if own:
+            conn.close()
 
 
 def get_evolution_ranks_for_planet(
