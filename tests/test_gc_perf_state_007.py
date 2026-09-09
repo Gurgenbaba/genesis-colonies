@@ -246,3 +246,79 @@ def test_game_state_shares_active_server_event_rows_across_liveops_serializers()
     assert block.count("server_event_rows = list_server_events(conn=conn)") == 1
     assert "server_events=server_event_rows" in block
     assert "active_events=server_event_rows" in block
+
+
+def test_battle_pass_nav_count_matches_full_serializer(state_007_db):
+    from game.battle_pass import (
+        apply_op_progress,
+        claim_battle_pass_reward,
+        claimable_count_for_nav,
+        credit_xp,
+        get_active_season,
+        serialize_for_client,
+        unlock_premium,
+    )
+
+    conn = db()
+    try:
+        uid = _player(conn)
+        season = get_active_season(conn)
+        assert season is not None
+
+        # Reach several levels, unlock premium, claim one track reward, and
+        # complete a daily Op so all claimable sources participate.
+        credited = credit_xp(uid, int(season["xp_per_level"]) * 3, conn=conn)
+        assert credited["granted"] is True
+        ok, reason, _ = unlock_premium(uid, conn=conn, source="state007")
+        assert ok, reason
+        ok, reason, _ = claim_battle_pass_reward(uid, 1, "free", conn=conn)
+        assert ok, reason
+        for _ in range(3):
+            apply_op_progress(uid, "building_finish", conn=conn)
+
+        full = serialize_for_client(uid, conn=conn, include_tracks=False)
+        fast = claimable_count_for_nav(uid, conn=conn)
+        assert fast == int(full["claimable_count"])
+        assert fast > 0
+
+        badges = nav_badges_for_game_state(uid, conn=conn, live_events=[])
+        assert badges["premium"]["count"] == fast
+    finally:
+        conn.close()
+
+
+def test_battle_pass_nav_probe_is_read_only_for_new_player(state_007_db):
+    from game.battle_pass import claimable_count_for_nav, ensure_default_season
+
+    conn = db()
+    try:
+        uid = _player(conn)
+        # Seed the canonical season once outside the probe. The probe itself must
+        # not create player_battle_pass progress rows.
+        sid = ensure_default_season(conn)
+        assert sid is not None
+        conn.commit()
+        before = conn.execute(
+            "SELECT 1 FROM player_battle_pass WHERE player_id = ? LIMIT 1;",
+            (uid,),
+        ).fetchone()
+        assert before is None
+
+        assert claimable_count_for_nav(uid, conn=conn) == 0
+
+        after = conn.execute(
+            "SELECT 1 FROM player_battle_pass WHERE player_id = ? LIMIT 1;",
+            (uid,),
+        ).fetchone()
+        assert after is None
+    finally:
+        conn.close()
+
+
+def test_nav_probe_does_not_serialize_full_battle_pass():
+    import inspect
+    import game.live_state as live_state
+
+    source = inspect.getsource(live_state.nav_badges_for_game_state)
+    assert "claimable_count_for_nav" in source
+    assert "serialize_for_client as bp_serialize" not in source
