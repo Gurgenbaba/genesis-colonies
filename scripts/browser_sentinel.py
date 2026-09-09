@@ -446,16 +446,42 @@ def _probe_safe_controls(page) -> list[dict]:
 
 
 def _probe_fleet_mode_tabs(page) -> list[dict]:
-    """Exercise the real Fleet top-tab path, including PJAX and local Logistics switching."""
+    """Exercise the real Fleet top-tab path, including PJAX and local Logistics switching.
+
+    Fleet mode buttons are re-bound during PJAX hydration. Chromium can occasionally
+    keep the locator stable/visible while that tiny lifecycle window replaces the
+    node, causing a Playwright click timeout even though the real journey is healthy.
+    Retry only ordinary user-style clicks on a freshly resolved locator; never force
+    or DOM-dispatch the event, so overlays and genuine responsiveness failures still
+    fail the Sentinel.
+    """
     results: list[dict] = []
     for mode in ("collect", "distribute", "send"):
-        tab = page.locator(f'[data-fleet-mode-tab="{mode}"]')
-        if not tab.count():
+        selector = f'[data-fleet-mode-tab="{mode}"]'
+        if not page.locator(selector).count():
             results.append({"mode": mode, "ok": False, "error": "tab missing"})
             continue
         started = time.perf_counter()
+        click_errors: list[str] = []
         try:
-            tab.first.click(timeout=5_000, no_wait_after=True)
+            clicked = False
+            for attempt in range(1, 4):
+                tab = page.locator(selector).first
+                try:
+                    tab.scroll_into_view_if_needed(timeout=2_000)
+                    tab.click(timeout=2_500, no_wait_after=True)
+                    clicked = True
+                    break
+                except Exception as click_exc:
+                    click_errors.append(str(click_exc)[:300])
+                    if attempt < 3:
+                        page.wait_for_timeout(250)
+            if not clicked:
+                raise RuntimeError(
+                    "fleet tab click failed after 3 fresh-locator attempts: "
+                    + " | ".join(click_errors[-2:])
+                )
+
             page.wait_for_function(
                 """
                 (mode) => {
@@ -471,6 +497,7 @@ def _probe_fleet_mode_tabs(page) -> list[dict]:
                 {
                     "mode": mode,
                     "ok": True,
+                    "click_attempts": len(click_errors) + 1,
                     "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
                     "url": page.url,
                 }
@@ -480,6 +507,7 @@ def _probe_fleet_mode_tabs(page) -> list[dict]:
                 {
                     "mode": mode,
                     "ok": False,
+                    "click_attempts": min(3, len(click_errors) + 1),
                     "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
                     "error": str(exc)[:500],
                     "url": page.url,
