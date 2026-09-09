@@ -53,7 +53,7 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 4. HP damage from prestige score ratio vs current phase stacks (`compute_instant_hp_damage`) with same band as before: even fight ≈ **2%** `max_hp`, soft overkill, hard cap **8%**. Optional crit (`INSTANT_CRIT_CHANCE`).
 5. Boss HP reduced atomically (`MAX(0, current_hp - damage)`); never below 0; further attacks blocked when defeated.
 6. Contribution + `last_attack_at` updated; `cooldown_until = now + 300`.
-7. Response: `{ ok, attack, boss, player, state }` — client animates only; no client damage math.
+7. Response: `{ ok, attack, boss, player, state }` — `state` is the slim post-mutation HUD/queue state (no full page panel); client animates only; no client damage math.
 8. Ally XP = `min(40, damage // 40_000)` via `grant_alliance_xp` when applicable.
 9. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
 
