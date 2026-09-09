@@ -1281,6 +1281,13 @@ def test_mass_expedition_batch_notification_contract_is_server_owned():
         "def _notify_mass_expedition_batch_resolved(", 1
     )[1].split("\ndef _build_logistics_report_metadata", 1)[0]
     assert 'sql += " FOR UPDATE"' in batch_block
-    assert "status IN ('outbound', 'holding')" in batch_block
+    assert "LIMIT 2;" in batch_block
+    assert "if len(pending_rows) >= 2:" in batch_block
+    assert batch_block.index("if len(pending_rows) >= 2:") < batch_block.index(
+        'sql += " FOR UPDATE"'
+    )
+    assert batch_block.count("status IN ('outbound', 'holding')") == 2
+    assert "pending_count" not in batch_block
+    assert "SET status = 'completed'" in batch_block
     assert '"report_phase": "mass_expedition_complete"' in batch_block
     assert "if bool(meta.get(\"toast_suppressed\")):" in messages
