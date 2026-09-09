@@ -34,6 +34,16 @@ def test_sentinel_safe_controls_never_click_navigation_links():
     assert "force=True" in block
 
 
+def test_sentinel_exercises_real_fleet_mode_tabs():
+    src = _read("scripts/browser_sentinel.py")
+    assert "def _probe_fleet_mode_tabs(page)" in src
+    assert 'for mode in ("collect", "distribute", "send")' in src
+    assert 'data-fleet-mode-tab="{mode}"' in src
+    assert 'fleet.dataset.fleetPageMode === mode' in src
+    assert 'kind="fleet_mode_tab_failed"' in src
+    assert 'action="Fleet Send → Collect → Distribute → Send"' in src
+
+
 def test_sentinel_marks_primary_pjax_failures_explicitly():
     src = _read("scripts/browser_sentinel.py")
     assert "primaryError" in src
