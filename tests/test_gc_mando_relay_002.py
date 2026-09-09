@@ -516,10 +516,12 @@ def test_relay_submit_only_sends_ready_subset_and_keeps_pending_selection_armed(
     )[0]
 
     assert "const selected = selectedIds(page, direction);" in run_block
-    assert 'const ids = selectedIds(page, direction, { readyOnly: true });' in run_block
+    assert 'const readyIds = selectedIds(page, direction, { readyOnly: true });' in run_block
+    assert 'direction === "distribute" && readyIds.length !== selected.length' in run_block
+    assert 'const ids = direction === "collect" ? readyIds : selected;' in run_block
     assert 'errorText("relay_cooldown")' in run_block
-    # Only the ready IDs actually sent are cleared after success; cooldown
-    # selections were never in ids and remain armed until their timer expires.
+    # Collect clears only the ready IDs actually sent. Cooling selections were
+    # never in ids and stay armed until their timer expires.
     assert "ids.forEach((pid) => {" in run_block
 
     buttons = script.split("function syncButtons(page)", 1)[1].split(
@@ -527,5 +529,6 @@ def test_relay_submit_only_sends_ready_subset_and_keeps_pending_selection_armed(
     )[0]
     assert 'selectedIds(page, "collect", { readyOnly: true })' in buttons
     assert 'selectedIds(page, "distribute", { readyOnly: true })' in buttons
+    assert "ready !== selected" in buttons
     assert "collect.dataset.selectedCount" in buttons
     assert "distribute.dataset.readyCount" in buttons
