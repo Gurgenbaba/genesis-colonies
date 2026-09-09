@@ -1646,6 +1646,51 @@ def _notification_revision_for_probe(user_id: int, *, conn) -> tuple[str, int]:
 
 
 
+def _build_queue_probe_slice(planet_id: int, *, conn) -> List[Dict[str, Any]]:
+    """Minimal Build queue shape required by the diet poll fingerprint."""
+    rows = conn.execute(
+        """
+        SELECT id, building_type, finish_time
+        FROM build_queue
+        WHERE planet_id = ?
+        ORDER BY finish_time ASC;
+        """,
+        (int(planet_id),),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "building_type": str(row["building_type"] or ""),
+            "finish_time": float(row["finish_time"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def _research_queue_probe_slice(player_id: int, *, conn) -> List[Dict[str, Any]]:
+    """Minimal account Research queue shape required by the diet poll fingerprint."""
+    rows = conn.execute(
+        """
+        SELECT id, tech_key, finish_at
+        FROM research_queue
+        WHERE user_id = ?
+        ORDER BY finish_at ASC;
+        """,
+        (int(player_id),),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            # Preserve the canonical Research queue fingerprint shape: full
+            # research status exposes both key=<tech> and tech_key=<tech>.
+            "key": str(row["tech_key"] or ""),
+            "tech_key": str(row["tech_key"] or ""),
+            "finish_at": float(row["finish_at"] or 0),
+        }
+        for row in rows
+    ]
+
+
 def _fleet_probe_slice(player_id: int, *, conn) -> Dict[str, Any]:
     """Cheap active-Fleet structure for the diet poll fingerprint.
 
@@ -1693,13 +1738,11 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
     """
     try:
         uid = int(player_id)
-        from game.buildings import get_build_queue_status_for_planet
         from game.fleet import fleet_schema_ready
         from game.logic import _read_player_live_state_no_writes
         from game.models import get_player_rank, load_player
         from game.planet_evolution.repository import get_context_planet
         from game.ranking import get_player_score_cached
-        from game.research import get_research_status
 
         planet = get_context_planet(uid, conn=conn)
         if not planet:
@@ -1711,16 +1754,11 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
         _player_view, buildings, _ratio, energy_total, energy_used, _storage = (
             _read_player_live_state_no_writes(uid, conn, player, planet)
         )
-        build_queue = get_build_queue_status_for_planet(
-            int(planet["id"]), conn=conn, skip_finish=True
-        )
-        research = get_research_status(
-            user_id=uid,
-            buildings=buildings,
-            skip_finish=True,
-            include_techs=False,
-            conn=conn,
-        )
+        # The due-work guard already ran before this probe. The fingerprint only
+        # needs stable queue identity/key/deadline fields, not labels, levels,
+        # queue-card presentation, requirements or EffectResolver research timing.
+        build_queue = _build_queue_probe_slice(int(planet["id"]), conn=conn)
+        research_queue = _research_queue_probe_slice(uid, conn=conn)
         fleets: Dict[str, Any] = {}
         if fleet_schema_ready(conn):
             fleets = _fleet_probe_slice(uid, conn=conn)
@@ -1744,7 +1782,7 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
             "notification_revision": revision,
             "unread_messages_count": unread,
             "build_queue": build_queue,
-            "research": research_poll_slice(research),
+            "research": {"queue": research_queue},
             "active_fleets": fleets,
             "energy": {"used": int(energy_used), "total": int(energy_total)},
             "active_planet": {
