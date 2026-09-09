@@ -147,6 +147,8 @@ def _invalidate_request_hot_read_caches_for_sql(sql: str) -> None:
             g.gc_game_settings_cache = None
         if "PLANET_BUILDINGS" in text:
             g.gc_planet_buildings_cache = {}
+        if "RESEARCH_LEVELS" in text:
+            g.gc_research_levels_cache = {}
         if "PLANETS" in text:
             g.gc_planet_row_cache = {}
             g.gc_context_planet_cache = {}

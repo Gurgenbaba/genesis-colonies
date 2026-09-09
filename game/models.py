@@ -2142,7 +2142,34 @@ def save_game_settings(
 # RESEARCH
 # ======================================================================
 
+def _request_pg_research_levels_cache() -> Optional[Dict[int, Dict[str, int]]]:
+    """Request-local PG memo for account-wide research levels.
+
+    The same immutable-within-a-read-slice account research snapshot is consumed by
+    live-state, EffectResolver, Fleet HUD and panel builders. PostgreSQL writes to
+    research_levels invalidate this cache centrally in db_pg before a later read.
+    """
+    try:
+        from flask import g, has_request_context
+        from .db import get_db_backend
+
+        if get_db_backend() != "postgres" or not has_request_context():
+            return None
+        cache = getattr(g, "gc_research_levels_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            g.gc_research_levels_cache = cache
+        return cache
+    except Exception:
+        return None
+
+
 def get_research_levels(user_id: int, conn: sqlite3.Connection | None = None) -> Dict[str, int]:
+    uid = int(user_id)
+    cache = _request_pg_research_levels_cache()
+    if cache is not None and uid in cache:
+        return dict(cache[uid])
+
     own_conn = False
     if conn is None:
         conn = db()
@@ -2151,14 +2178,19 @@ def get_research_levels(user_id: int, conn: sqlite3.Connection | None = None) ->
     cur = conn.cursor()
     cur.execute(
         "SELECT tech_key, level FROM research_levels WHERE user_id = ?;",
-        (int(user_id),),
+        (uid,),
     )
     rows = cur.fetchall()
+    result = {r["tech_key"]: int(r["level"]) for r in rows}
+
+    cache_after = _request_pg_research_levels_cache()
+    if cache_after is not None:
+        cache_after[uid] = dict(result)
 
     if own_conn:
         conn.close()
 
-    return {r["tech_key"]: int(r["level"]) for r in rows}
+    return result
 
 
 def save_research_level(tech_key: str, level: int, user_id: int) -> None:
