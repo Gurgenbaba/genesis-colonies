@@ -1813,7 +1813,6 @@ def try_diet_poll_early_unchanged(
     ``probe_poll_version`` (EffectResolver + nav badges). TTL keeps Inventar / LiveOps /
     Vote / Directives / World Boss badges from going stale while idle.
     """
-    from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
     from game.models import db as _db
     from game.queue_poll import player_poll_guard_snapshot
