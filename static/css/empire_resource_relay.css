@@ -49,6 +49,24 @@
   opacity: 0.35;
 }
 
+.logistics-colony-card.is-relay-cooldown:not(.is-hub) {
+  cursor: pointer;
+}
+
+.logistics-colony-card.is-relay-cooldown:not(.is-hub) .logistics-source-check {
+  opacity: 0.78;
+}
+
+.logistics-colony-card.is-relay-cooldown.is-selected:not(.is-hub) {
+  outline: 1px solid rgba(255, 183, 77, 0.72);
+  outline-offset: -1px;
+}
+
+.logistics-colony-card.is-relay-ready.is-selected:not(.is-hub) {
+  outline: 1px solid rgba(92, 255, 176, 0.72);
+  outline-offset: -1px;
+}
+
 .logistics-relay-result {
   margin: 8px 0 0;
   max-width: 100%;
