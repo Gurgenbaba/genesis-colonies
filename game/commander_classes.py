@@ -34,6 +34,23 @@ from .db import table_exists
 logger = logging.getLogger(__name__)
 
 
+def _request_pg_cache(name: str) -> Optional[Dict[int, Any]]:
+    try:
+        from flask import g, has_request_context
+        from .db import get_db_backend
+
+        if get_db_backend() != "postgres" or not has_request_context():
+            return None
+        attr = f"gc_commander_{name}_cache"
+        cache = getattr(g, attr, None)
+        if not isinstance(cache, dict):
+            cache = {}
+            setattr(g, attr, cache)
+        return cache
+    except Exception:
+        return None
+
+
 def schema_ready(conn) -> bool:
     return bool(
         table_exists(conn, "player_commander")
@@ -85,6 +102,11 @@ def _record_event(player_id: int, event_type: str, detail: Dict[str, Any], *, co
 
 def _read_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
     """Pure read for EffectResolver paths; missing row means neutral commander."""
+    uid = int(player_id)
+    cache = _request_pg_cache("row")
+    if cache is not None and uid in cache:
+        return dict(cache[uid])
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -92,11 +114,11 @@ def _read_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
                skill_points_unspent, skill_points_earned, updated_at
         FROM player_commander WHERE player_id = ? LIMIT 1;
         """,
-        (int(player_id),),
+        (uid,),
     )
     row = cur.fetchone()
-    return dict(row) if row else {
-        "player_id": int(player_id),
+    result = dict(row) if row else {
+        "player_id": uid,
         "class_key": None,
         "chosen_at": None,
         "swap_count": 0,
@@ -104,24 +126,37 @@ def _read_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
         "skill_points_earned": 0,
         "updated_at": 0,
     }
+    if cache is not None:
+        cache[uid] = dict(result)
+    return result
 
 
 def get_commander_row(player_id: int, *, conn) -> Dict[str, Any]:
-    _ensure_row(int(player_id), conn=conn)
-    return _read_commander_row(int(player_id), conn=conn)
+    uid = int(player_id)
+    cache = _request_pg_cache("row")
+    if cache is not None and uid in cache:
+        return dict(cache[uid])
+    _ensure_row(uid, conn=conn)
+    return _read_commander_row(uid, conn=conn)
 
 
 def get_skill_ranks(player_id: int, *, conn) -> Dict[str, int]:
+    uid = int(player_id)
+    cache = _request_pg_cache("skills")
+    if cache is not None and uid in cache:
+        return dict(cache[uid])
     if not schema_ready(conn):
         return {}
     cur = conn.cursor()
     cur.execute(
         "SELECT skill_key, rank FROM player_commander_skills WHERE player_id = ?;",
-        (int(player_id),),
+        (uid,),
     )
     out: Dict[str, int] = {}
     for row in cur.fetchall() or []:
         out[str(row["skill_key"])] = max(0, int(row["rank"] or 0))
+    if cache is not None:
+        cache[uid] = dict(out)
     return out
 
 
