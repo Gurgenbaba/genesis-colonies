@@ -15684,6 +15684,14 @@
     if (exclusive) {
       invalidateCanonicalGameStateRefresh(reasonStr);
     }
+
+    // GC-PERF-REQUEST-STALL-003: a canonical panel reconcile supersedes the
+    // ordinary HUD/diet poll. Do not occupy two workers with the same player's
+    // state at once (live Research showed 230KB panel requests racing 30KB polls).
+    if (GC.refreshInFlight || GC.polling?.abort) {
+      abortInFlightGameStateFetches();
+    }
+
     const myToken = _queuePanelRefreshToken;
     const flight = (async () => {
       try {
@@ -15837,6 +15845,13 @@
       reasonStr === "tab_visible"
       || reasonStr === "pageshow_bfcache"
       || reasonStr.startsWith("wake_");
+
+    // A full panel reconcile is authoritative and already includes the HUD.
+    // Coalesce ordinary/wake polls onto it instead of issuing a parallel state
+    // request. Planet switching remains exclusive because it changes scope.
+    if (_queuePanelRefreshInFlight && reasonStr !== "planet_switch") {
+      return _queuePanelRefreshInFlight;
+    }
 
     if (GC.refreshInFlight) {
       if (exclusiveWake) {

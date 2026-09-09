@@ -1806,6 +1806,8 @@ _POST_MUTATION_READ_ONLY_LIVE_SOURCES = frozenset(
     {
         "api_buildings_upgrade",
         "api_buildings_cancel",
+        "api_research_start",
+        "api_research_cancel",
         "api_timekeeper_apply",
     }
 )
@@ -11812,6 +11814,8 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_buildings_upgrade",
         "api_buildings_cancel",
         "api_buildings_mine_evolve",
+        "api_research_start",
+        "api_research_cancel",
         "game_state_buildings_finish",
         "api_planets_active",
         "api_fleet_send",
@@ -14847,6 +14851,7 @@ def api_research_start():
         payload=extra if not ok else None,
         job=extra if ok else None,
         finish_source="api_research_start",
+        include_panel=False,
     )
     response_obj = resp.get_json()
 
@@ -14881,6 +14886,7 @@ def api_research_cancel():
         payload=extra if not ok else None,
         job=extra if ok else None,
         finish_source="api_research_cancel",
+        include_panel=False,
     )
 
 
