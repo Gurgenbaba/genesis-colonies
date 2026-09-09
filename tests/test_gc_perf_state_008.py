@@ -39,6 +39,8 @@ def test_tables_exist_returns_false_when_one_table_is_missing() -> None:
 
 
 def test_bulk_schema_helper_uses_information_schema_on_postgres(monkeypatch) -> None:
+    from game import db_pg
+
     class FakeCursor:
         def __init__(self, rows):
             self._rows = rows
@@ -56,11 +58,16 @@ def test_bulk_schema_helper_uses_information_schema_on_postgres(monkeypatch) -> 
 
     conn = FakeConn()
     monkeypatch.setattr(db_module, "get_db_backend", lambda: "postgres")
-
-    assert db_module.tables_exist(conn, ("alpha", "beta")) is True
-    assert len(conn.calls) == 1
-    assert "information_schema.tables" in conn.calls[0][0]
-    assert conn.calls[0][1] == ("alpha", "beta")
+    db_pg.clear_postgres_schema_metadata_cache()
+    try:
+        assert db_module.tables_exist(conn, ("alpha", "beta")) is True
+        assert db_module.tables_exist(conn, ("alpha", "missing")) is False
+        assert len(conn.calls) == 1
+        assert "information_schema.tables" in conn.calls[0][0]
+        assert "table_name = ?" not in conn.calls[0][0]
+        assert conn.calls[0][1] == ()
+    finally:
+        db_pg.clear_postgres_schema_metadata_cache()
 
 
 def test_hot_nav_domain_schema_guards_are_one_query_each() -> None:
