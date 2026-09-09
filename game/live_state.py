@@ -1681,6 +1681,9 @@ def _research_queue_probe_slice(player_id: int, *, conn) -> List[Dict[str, Any]]
     return [
         {
             "id": int(row["id"]),
+            # Preserve the canonical Research queue fingerprint shape: full
+            # research status exposes both key=<tech> and tech_key=<tech>.
+            "key": str(row["tech_key"] or ""),
             "tech_key": str(row["tech_key"] or ""),
             "finish_at": float(row["finish_at"] or 0),
         }
