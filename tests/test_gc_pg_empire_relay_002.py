@@ -125,3 +125,81 @@ def test_postgres_relay_preserves_huge_numeric_and_direction_cooldowns(pg_parity
 
     conn.close()
     close_pg_pool()
+
+
+@requires_postgres
+def test_postgres_relay_survives_optional_evolution_sql_failure(pg_parity_db, monkeypatch):
+    """A best-effort evolution failure must not poison the relay write transaction."""
+    from game.db import begin_write_transaction, commit, db
+    from game.empire_relay import collect_empire_resources
+    from game.planet_evolution import bootstrap as evolution_bootstrap
+    from game.planet_evolution import repository as evolution_repository
+    from game.planet_evolution import tick as evolution_tick
+    from tests.test_fleet_logistics import _hub_and_sources, _player
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = sources[0]
+    now = int(time.time())
+
+    conn.execute(
+        """
+        UPDATE planets
+        SET metal = CAST(? AS NUMERIC),
+            crystal = CAST(? AS NUMERIC),
+            fuel_cells = CAST(? AS NUMERIC),
+            last_update = ?
+        WHERE id = ?;
+        """,
+        ("100", "0", "0", float(now + 3600), int(hub)),
+    )
+    conn.execute(
+        """
+        UPDATE planets
+        SET metal = CAST(? AS NUMERIC),
+            crystal = CAST(? AS NUMERIC),
+            fuel_cells = CAST(? AS NUMERIC),
+            last_update = ?
+        WHERE id = ?;
+        """,
+        ("900", "0", "0", float(now + 3600), int(source)),
+    )
+    commit(conn)
+
+    monkeypatch.setattr(evolution_repository, "evolution_schema_ready", lambda _conn: True)
+    monkeypatch.setattr(
+        evolution_bootstrap,
+        "ensure_planet_evolution",
+        lambda _planet_id, _conn: None,
+    )
+
+    def _abort_optional_hook(hook_conn, *_args, **_kwargs):
+        # PostgreSQL division by zero puts the current TX in INERROR until a
+        # SAVEPOINT/full rollback. Resource ticking must isolate this optional hook.
+        hook_conn.execute("SELECT 1 / 0 AS gc_optional_hook_abort;")
+
+    monkeypatch.setattr(evolution_tick, "evolution_tick_planet", _abort_optional_hook)
+
+    begin_write_transaction(conn)
+    ok, reason, payload = collect_empire_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=[source],
+        conn=conn,
+        now=now,
+    )
+    assert ok, reason
+    commit(conn)
+
+    assert payload["processed_planet_ids"] == [source]
+    assert int(
+        conn.execute("SELECT metal FROM planets WHERE id = ?;", (hub,)).fetchone()["metal"]
+    ) == 1_000
+    assert int(
+        conn.execute("SELECT metal FROM planets WHERE id = ?;", (source,)).fetchone()["metal"]
+    ) == 0
+    assert conn.execute("SELECT 1 AS tx_ok;").fetchone()["tx_ok"] == 1
+
+    conn.close()
+    close_pg_pool()
