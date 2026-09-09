@@ -859,17 +859,69 @@ def timekeeper_partial_action_state_for_client(
 
     mark_request_live_refreshed()
     now = time.time()
+    uid = int(user_id)
+    planet = get_request_context_planet(uid, conn=conn)
+    active_planet_id = int(planet.get("id") or 0) if planet else 0
+    active_planet_name = str(planet.get("name") or "") if planet else ""
+    energy_total = int(planet.get("energy_total") or 0) if planet else 0
+    energy_used = int(planet.get("energy_used") or 0) if planet else 0
+    energy_ratio = (
+        min(1.0, float(energy_total) / float(energy_used))
+        if energy_total > 0 and energy_used > 0
+        else (1.0 if energy_used <= 0 else 0.0)
+    )
+
+    # Keep the established TK action contract without invoking live projection:
+    # balances/energy are already persisted on the planet row. Storage/production
+    # remain cached client-side until the normal canonical reconcile when a job ends.
+    resources = {
+        "metal": planet.get("metal", 0) if planet else 0,
+        "crystal": planet.get("crystal", 0) if planet else 0,
+        "fuel_cells": planet.get("fuel_cells", 0) if planet else 0,
+        "energy_used": energy_used,
+        "energy_total": energy_total,
+        "energy_ratio": energy_ratio,
+        "energy_efficiency_pct": int(round(energy_ratio * 100)),
+    }
+
+    research: Dict[str, Any] = {"active": None, "queue": [], "summary": {"count": 0, "limit": 3}}
+    try:
+        from game.models import get_planet_buildings
+        from game.research import get_research_status
+
+        buildings = (
+            get_planet_buildings(active_planet_id, conn=conn)
+            if active_planet_id > 0
+            else {}
+        )
+        research = research_poll_slice(
+            get_research_status(
+                user_id=uid,
+                buildings=buildings or {},
+                skip_finish=True,
+                include_techs=False,
+                conn=conn,
+            )
+        )
+    except Exception:
+        pass
+
     payload: Dict[str, Any] = {
         "ok": True,
         "server_now": int(now),
         "server_time": float(now),
         "state_version": float(now),
-        "player_id": int(user_id),
+        "player_id": uid,
+        "active_planet_id": active_planet_id,
+        "active_planet_name": active_planet_name,
+        "resources": resources,
+        "research": research,
+        "research_queue": list(research.get("queue") or []),
         "timekeeper": dict(timekeeper_snapshot or {}),
     }
     return attach_timekeeper_domain_queue_slices(
         payload,
-        int(user_id),
+        uid,
         domain,
         conn=conn,
     )
@@ -915,24 +967,26 @@ def attach_timekeeper_domain_queue_slices(
             payload["build_queue"] = queue
             payload["building_queue"] = queue
     elif dom == "research":
-        try:
-            from game.models import get_planet_buildings
-            from game.research import get_research_status
+        research = payload.get("research") if isinstance(payload.get("research"), dict) else None
+        if research is None:
+            try:
+                from game.models import get_planet_buildings
+                from game.research import get_research_status
 
-            planet = get_request_context_planet(int(user_id), conn=conn)
-            buildings = (
-                get_planet_buildings(int(planet["id"]), conn=conn) if planet else {}
-            )
-            status = get_research_status(
-                user_id=int(user_id),
-                buildings=buildings or {},
-                skip_finish=True,
-                include_techs=False,
-                conn=conn,
-            )
-            research = research_poll_slice(status)
-        except Exception:
-            research = None
+                planet = get_request_context_planet(int(user_id), conn=conn)
+                buildings = (
+                    get_planet_buildings(int(planet["id"]), conn=conn) if planet else {}
+                )
+                status = get_research_status(
+                    user_id=int(user_id),
+                    buildings=buildings or {},
+                    skip_finish=True,
+                    include_techs=False,
+                    conn=conn,
+                )
+                research = research_poll_slice(status)
+            except Exception:
+                research = None
         if isinstance(research, dict):
             payload["research"] = research
             payload["research_queue"] = list(research.get("queue") or [])
