@@ -479,3 +479,53 @@ def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
     assert 'classList.toggle("is-selected"' in script
     assert 'classList.remove("is-slots-skipped")' in script
     assert "true\n  );" in script
+
+
+def test_relay_cooldown_blocks_execution_but_never_planet_selection():
+    script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "empire_resource_relay.css").read_text(encoding="utf-8")
+
+    cooldown_block = script.split("function syncCooldownUi(page)", 1)[1].split(
+        "function selectedIds(page, direction", 1
+    )[0]
+    assert 'input.disabled = isHub || !state.loaded;' in cooldown_block
+    assert 'input.dataset.relayReady = ready ? "1" : "0";' in cooldown_block
+    assert "if (!ready) input.checked = false;" not in cooldown_block
+    assert 'classList.toggle("is-relay-cooldown"' in cooldown_block
+
+    selected_block = script.split("function selectedIds(page, direction", 1)[1].split(
+        "function resourceInputs(page)", 1
+    )[0]
+    assert "const readyOnly = Boolean(options.readyOnly);" in selected_block
+    assert 'input.dataset.relayReady === "1"' in selected_block
+
+    select_all_block = script.split("function selectAll(page, direction, checked)", 1)[1].split(
+        "function setMax(page, key)", 1
+    )[0]
+    assert "input.checked = Boolean(checked && !input.disabled);" in select_all_block
+    assert "input.dataset.relayReady" not in select_all_block
+
+    assert "is-relay-cooldown.is-selected" in css
+    assert "is-relay-ready.is-selected" in css
+
+
+def test_relay_submit_only_sends_ready_subset_and_keeps_pending_selection_armed():
+    script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
+    run_block = script.split("async function run(page, direction, button)", 1)[1].split(
+        "function selectAll(page, direction, checked)", 1
+    )[0]
+
+    assert "const selected = selectedIds(page, direction);" in run_block
+    assert 'const ids = selectedIds(page, direction, { readyOnly: true });' in run_block
+    assert 'errorText("relay_cooldown")' in run_block
+    # Only the ready IDs actually sent are cleared after success; cooldown
+    # selections were never in ids and remain armed until their timer expires.
+    assert "ids.forEach((pid) => {" in run_block
+
+    buttons = script.split("function syncButtons(page)", 1)[1].split(
+        "function setBusy(button, busy)", 1
+    )[0]
+    assert 'selectedIds(page, "collect", { readyOnly: true })' in buttons
+    assert 'selectedIds(page, "distribute", { readyOnly: true })' in buttons
+    assert "collect.dataset.selectedCount" in buttons
+    assert "distribute.dataset.readyCount" in buttons
