@@ -1192,7 +1192,6 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
     Must not run queue finish or full live refresh (client polls ~12s).
     GC-PERF-RADAR-001: Threat Net contributes fingerprint/counts, not contact rows.
     """
-    from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
 
     uid = int(user_id)
@@ -1814,10 +1813,9 @@ def try_diet_poll_early_unchanged(
     ``probe_poll_version`` (EffectResolver + nav badges). TTL keeps Inventar / LiveOps /
     Vote / Directives / World Boss badges from going stale while idle.
     """
-    from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
     from game.models import db as _db
-    from game.queue_poll import player_fleet_is_dirty, player_has_due_queue_work
+    from game.queue_poll import player_poll_guard_snapshot
 
     owns_conn = conn is None
     if owns_conn:
@@ -1825,22 +1823,21 @@ def try_diet_poll_early_unchanged(
     try:
         now = time.time()
         uid = int(player_id)
-        if player_has_due_queue_work(uid, conn=conn, now=now) or player_fleet_is_dirty(
-            uid, conn=conn, now=now
-        ):
+        guard = player_poll_guard_snapshot(uid, conn=conn, now=now)
+        if bool(guard.get("due_queue")) or bool(guard.get("due_fleet")):
             clear_diet_poll_fingerprint(uid)
             set_request_perf_meta("diet_early_exit", 0)
             return None
+        guard_unread = int(guard.get("unread", -1) or 0)
 
         cached = _DIET_POLL_FP_CACHE.get(uid)
         if cached is not None and int(cached[0]) == int(since):
             cached_ts = float(cached[2]) if len(cached) > 2 else 0.0
             fresh = (now - cached_ts) <= float(_DIET_PROBE_SKIP_TTL_SEC)
             if fresh:
-                try:
-                    unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
-                except Exception:
-                    unread = -1
+                # GC-PERF-STATE-006: unread is already part of the same one-roundtrip
+                # deadline guard snapshot; do not pay another PostgreSQL round trip.
+                unread = guard_unread
                 if unread == int(cached[1]):
                     set_request_perf_meta("diet_early_exit", 1)
                     set_request_perf_meta("diet_probe_skip", 1)
@@ -1859,10 +1856,7 @@ def try_diet_poll_early_unchanged(
         if ver is None or int(ver) != int(since):
             set_request_perf_meta("diet_early_exit", 0)
             return None
-        try:
-            unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
-        except Exception:
-            unread = 0
+        unread = max(0, guard_unread)
         remember_diet_poll_fingerprint(uid, version=int(ver), unread=unread)
         set_request_perf_meta("diet_early_exit", 1)
         set_request_perf_meta("diet_probe_skip", 0)

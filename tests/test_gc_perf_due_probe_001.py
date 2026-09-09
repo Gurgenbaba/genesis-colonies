@@ -121,3 +121,53 @@ def test_worker_primary_due_with_fresh_heartbeat_never_runs_pending_probe(monkey
     allowed, reason = qp.should_poll_attempt_queue_finish(11, conn=object(), now=1000.0)
     assert allowed is False
     assert reason == "queue_tick_fresh_defer"
+
+
+def test_game_state_poll_guard_collapses_queue_fleet_and_unread(monkeypatch):
+    from game import queue_poll as qp
+
+    monkeypatch.setattr(
+        qp,
+        "_optional_due_queue_readiness",
+        lambda _conn: (True, True, True, True),
+    )
+    monkeypatch.setattr("game.fleet.fleet_schema_ready", lambda _conn: True)
+    monkeypatch.setattr("game.messages._table_ready", lambda _conn: True)
+    conn = _Conn(row={"due_queue": 0, "due_fleet": 0, "unread": 7})
+
+    snapshot = qp.player_poll_guard_snapshot(12, conn=conn, now=1000.0)
+
+    assert snapshot == {"due_queue": False, "due_fleet": False, "unread": 7}
+    assert len(conn.calls) == 1
+    sql, params = conn.calls[0]
+    for table in (
+        "build_queue",
+        "research_queue",
+        "planet_research_queue",
+        "planet_ascension_queue",
+        "shipyard_queue",
+        "defense_queue",
+        "troop_queue",
+        "fleet_movements",
+        "player_messages",
+    ):
+        assert table in sql
+    assert 12 in params
+
+
+def test_game_state_poll_guard_due_flags_force_full_refresh(monkeypatch):
+    from game import queue_poll as qp
+
+    monkeypatch.setattr(
+        qp,
+        "_optional_due_queue_readiness",
+        lambda _conn: (False, False, False, False),
+    )
+    monkeypatch.setattr("game.fleet.fleet_schema_ready", lambda _conn: True)
+    monkeypatch.setattr("game.messages._table_ready", lambda _conn: True)
+    conn = _Conn(row={"due_queue": 1, "due_fleet": 1, "unread": 0})
+
+    snapshot = qp.player_poll_guard_snapshot(13, conn=conn, now=1000.0)
+    assert snapshot["due_queue"] is True
+    assert snapshot["due_fleet"] is True
+    assert len(conn.calls) == 1
