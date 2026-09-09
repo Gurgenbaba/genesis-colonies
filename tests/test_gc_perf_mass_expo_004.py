@@ -101,21 +101,18 @@ def test_mass_expo_deducts_hangar_once_for_whole_batch(fleet_db, monkeypatch):
     conn.close()
 
 
-def test_expedition_shared_context_reuses_empire_aggregate(fleet_db, monkeypatch):
+def test_expedition_shared_context_never_builds_empire_aggregate(fleet_db, monkeypatch):
     conn = db()
     uid, pid, _usable = _seed_mass_expo_player(conn)
-    real_empire = __import__(
-        "game.empire_page", fromlist=["get_empire_production_aggregate"]
-    ).get_empire_production_aggregate
-    calls = {"n": 0}
 
-    def counted_empire(player_id, *, conn=None):
-        calls["n"] += 1
-        return real_empire(player_id, conn=conn)
+    def forbidden_empire(*_args, **_kwargs):
+        raise AssertionError(
+            "expedition holding must not build the empire production aggregate"
+        )
 
     import game.empire_page as empire_page
 
-    monkeypatch.setattr(empire_page, "get_empire_production_aggregate", counted_empire)
+    monkeypatch.setattr(empire_page, "get_empire_production_aggregate", forbidden_empire)
     movement = {
         "player_id": uid,
         "origin_planet_id": pid,
@@ -135,8 +132,18 @@ def test_expedition_shared_context_reuses_empire_aggregate(fleet_db, monkeypatch
         cache=cache,
     )
     assert first == second
-    assert calls["n"] == 1
+    assert int(first[1]) == 0
     conn.close()
+
+
+def test_expedition_empire_daily_total_is_not_gameplay_input():
+    src = Path("game/expedition_events.py").read_text(encoding="utf-8")
+    block = src.split("def resolve_expedition_outcome(", 1)[1].split("\ndef ", 1)[0]
+    # The parameter is preserved for report/debug compatibility only. Its sole
+    # use must remain the emitted metadata field, never event/loot calculations.
+    assert block.count("empire_daily_total") == 3
+    tail = block.split('"empire_daily_total": int(empire_daily_total)', 1)
+    assert len(tail) == 2
 
 
 def test_mass_expo_source_has_bulk_and_fast_return_contracts():

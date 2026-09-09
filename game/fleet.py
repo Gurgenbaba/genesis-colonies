@@ -6645,12 +6645,14 @@ def _expedition_tick_shared_context(
         except Exception:
             pass
 
-        from .empire_page import get_empire_production_aggregate
-
-        empire_prod = get_empire_production_aggregate(player_id, conn=conn)
+        # GC-PERF-EXPO-HOLD-007: empire_daily_total is report-only metadata.
+        # It never participates in event selection, loot, cargo, hazards or return
+        # timing. Building the exact empire aggregate here walks every colony through
+        # production/EffectResolver and dominated PostgreSQL holding resolution for
+        # large accounts. Preserve the outcome field as 0 without doing that work.
         pctx = {
             "sender_locale": get_player_locale(player_id, conn=conn),
-            "empire_daily_total": int(empire_prod.get("total_per_day") or 0),
+            "empire_daily_total": 0,
             "booster_flags": booster_flags,
             "alliance_mult": alliance_mult,
             "alliance_event_bonus": alliance_event_bonus,
