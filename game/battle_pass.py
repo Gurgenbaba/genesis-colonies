@@ -897,6 +897,103 @@ def serialize_ops(
         "weekly_period_key": weekly_key,
     }
 
+def claimable_count_for_nav(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> int:
+    """Read-only Battle Pass attention count for nav/fingerprint hot paths.
+
+    The full serializer also builds season presentation plus 3 daily + 1 weekly
+    Op objects. Nav only hashes the aggregate claimable count, so read the same
+    facts in three compact queries and never ensure/seed rows from a poll.
+    """
+    if not schema_ready(conn):
+        return 0
+
+    ts = float(now if now is not None else time.time())
+    pid = int(player_id)
+    progress = conn.execute(
+        """
+        SELECT
+            s.id AS season_id,
+            COALESCE(p.level, 0) AS level,
+            COALESCE(p.premium_unlocked, 0) AS premium_unlocked
+        FROM battle_pass_seasons s
+        LEFT JOIN player_battle_pass p
+          ON p.player_id = ?
+         AND p.season_id = s.id
+        WHERE s.active = 1
+        ORDER BY s.id DESC
+        LIMIT 1;
+        """,
+        (pid,),
+    ).fetchone()
+    if not progress:
+        return 0
+
+    sid = int(progress["season_id"])
+    level = max(0, int(progress["level"] or 0))
+    premium = bool(progress["premium_unlocked"])
+    claimable = 0
+
+    if level > 0:
+        claimed = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN track = ? THEN 1 ELSE 0 END) AS free_claimed,
+                SUM(CASE WHEN track = ? THEN 1 ELSE 0 END) AS premium_claimed
+            FROM battle_pass_claims
+            WHERE player_id = ?
+              AND season_id = ?
+              AND level BETWEEN 1 AND ?;
+            """,
+            (TRACK_FREE, TRACK_PREMIUM, pid, sid, level),
+        ).fetchone()
+        free_claimed = int((claimed["free_claimed"] if claimed else 0) or 0)
+        premium_claimed = int((claimed["premium_claimed"] if claimed else 0) or 0)
+        claimable += max(0, level - free_claimed)
+        if premium:
+            claimable += max(0, level - premium_claimed)
+
+    if ops_schema_ready(conn):
+        daily_key = daily_period_key(ts)
+        weekly_key = weekly_period_key(ts)
+        daily_placeholders = ",".join("?" for _ in DAILY_OP_KEYS)
+        weekly_placeholders = ",".join("?" for _ in WEEKLY_OP_KEYS)
+        rows = conn.execute(
+            f"""
+            SELECT period_key, op_key, progress, claimed_at
+            FROM battle_pass_ops_progress
+            WHERE player_id = ?
+              AND season_id = ?
+              AND (
+                    (period_key = ? AND op_key IN ({daily_placeholders}))
+                 OR (period_key = ? AND op_key IN ({weekly_placeholders}))
+              );
+            """,
+            (
+                pid,
+                sid,
+                daily_key,
+                *DAILY_OP_KEYS,
+                weekly_key,
+                *WEEKLY_OP_KEYS,
+            ),
+        ).fetchall()
+        for row in rows:
+            if row["claimed_at"] is not None:
+                continue
+            meta = OPS_CATALOG.get(str(row["op_key"] or ""))
+            if not meta:
+                continue
+            if int(row["progress"] or 0) >= int(meta["target"]):
+                claimable += 1
+
+    return max(0, int(claimable))
+
+
 def credit_xp(
     player_id: int,
     amount: int,
