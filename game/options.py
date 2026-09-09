@@ -750,11 +750,27 @@ def is_account_deleted(player_id: int, *, conn=None) -> bool:
 
 
 def is_vacation_mode_active(player_id: int, *, conn=None) -> bool:
+    """Fast canonical vacation gate for gameplay hotpaths.
+
+    Migration 074 + application bootstrap own schema readiness. A fleet preview,
+    send, arrival or resource gate must never run schema DDL/introspection just
+    to read one authoritative boolean.
+    """
     own = conn is None
     c = conn or db()
     try:
-        row = _player_safety_row(int(player_id), c)
-        return bool(int(row.get("vacation_mode_active") or 0))
+        row = c.execute(
+            """
+            SELECT vacation_mode_active
+            FROM players
+            WHERE id = ?
+            LIMIT 1;
+            """,
+            (int(player_id),),
+        ).fetchone()
+        if not row:
+            return False
+        return bool(int(row["vacation_mode_active"] or 0))
     finally:
         if own:
             c.close()
