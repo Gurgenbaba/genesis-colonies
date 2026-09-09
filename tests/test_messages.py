@@ -1291,3 +1291,41 @@ def test_mass_expedition_batch_notification_contract_is_server_owned():
     assert "SET status = 'completed'" in batch_block
     assert '"report_phase": "mass_expedition_complete"' in batch_block
     assert "if bool(meta.get(\"toast_suppressed\")):" in messages
+
+
+def test_mass_expedition_nonfinal_summary_gate_avoids_batch_lock():
+    """GC-PERF-MASS-EXPO-008: obvious non-final waves pay one tiny read only."""
+    import game.fleet as fleet_mod
+
+    class _Rows:
+        def fetchall(self):
+            return [{"id": 201}, {"id": 202}]
+
+    class _Conn:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, sql, params=()):
+            self.calls.append((str(sql), tuple(params)))
+            return _Rows()
+
+    conn = _Conn()
+    ok = fleet_mod._notify_mass_expedition_batch_resolved(
+        {
+            "id": 200,
+            "player_id": 7,
+            "parent_batch_id": 99,
+            "mission_type": "expedition",
+        },
+        conn=conn,
+        now=1_800_000_000.0,
+        locale="de",
+    )
+
+    assert ok is False
+    assert len(conn.calls) == 1
+    sql, params = conn.calls[0]
+    assert "FROM fleet_movements" in sql
+    assert "LIMIT 2" in sql
+    assert "fleet_batches" not in sql
+    assert params == (7, 99)
