@@ -5310,45 +5310,82 @@ def _notify_mass_expedition_batch_resolved(
 ) -> bool:
     """Emit exactly one toast-capable summary after the last batch outcome resolves.
 
-    Individual expedition reports remain canonical inbox rows. PostgreSQL locks
-    the batch row before checking pending waves so two workers resolving the last
-    two holding movements cannot both emit the summary.
+    The common path exits after a tiny pending-wave probe. Only the final two
+    candidates serialize on the batch row, then recheck pending work under that
+    lock so concurrent workers cannot both miss or double-emit the summary.
     """
     batch_id = _safe_int(movement.get("parent_batch_id"))
-    if batch_id <= 0:
+    player_id = _safe_int(movement.get("player_id"))
+    if batch_id <= 0 or player_id <= 0:
+        return False
+
+    # GC-PERF-MASS-EXPO-008: every resolved wave used to lock fleet_batches and
+    # aggregate-scan the whole batch. Most waves are obviously non-final. Read at
+    # most two still-pending siblings using the existing player/status hot index;
+    # if two remain, no batch lock or aggregate is needed.
+    pending_rows = conn.execute(
+        """
+        SELECT id
+        FROM fleet_movements
+        WHERE player_id = ?
+          AND parent_batch_id = ?
+          AND mission_type = 'expedition'
+          AND status IN ('outbound', 'holding')
+        LIMIT 2;
+        """,
+        (int(player_id), int(batch_id)),
+    ).fetchall()
+    if len(pending_rows) >= 2:
         return False
 
     sql = (
-        "SELECT id, player_id, batch_type, total_fleets "
-        "FROM fleet_batches WHERE id = ?"
+        "SELECT id, player_id, batch_type, status, total_fleets "
+        "FROM fleet_batches WHERE id = ? AND player_id = ?"
     )
     if get_db_backend() == "postgres":
         sql += " FOR UPDATE"
     sql += ";"
-    batch = conn.execute(sql, (int(batch_id),)).fetchone()
+    batch = conn.execute(sql, (int(batch_id), int(player_id))).fetchone()
     if not batch or str(batch["batch_type"] or "") != "mass_expedition":
         return False
+    # Batch status 'completed' means dispatch finished for mass expeditions; it is
+    # not a summary-delivery marker. Cancelled/failed batches remain terminal.
+    if str(batch["status"] or "") in ("cancelled", "failed"):
+        return False
 
+    # A concurrent last-sibling transaction may have been the one row observed by
+    # the cheap probe. Recheck after acquiring the batch lock: PostgreSQL READ
+    # COMMITTED now sees any sibling transaction that committed while we waited.
+    pending = conn.execute(
+        """
+        SELECT 1
+        FROM fleet_movements
+        WHERE player_id = ?
+          AND parent_batch_id = ?
+          AND mission_type = 'expedition'
+          AND status IN ('outbound', 'holding')
+        LIMIT 1;
+        """,
+        (int(player_id), int(batch_id)),
+    ).fetchone()
+    if pending:
+        return False
+
+    # Full counts are presentation metadata only, so pay for them once: on the
+    # transaction that actually owns the final summary.
     counts = conn.execute(
         """
         SELECT
             COUNT(*) AS total_count,
-            SUM(CASE WHEN status IN ('outbound', 'holding') THEN 1 ELSE 0 END) AS pending_count,
             SUM(CASE WHEN status IN ('returning', 'completed') THEN 1 ELSE 0 END) AS resolved_count,
             SUM(CASE WHEN status IN ('failed', 'cancelled') THEN 1 ELSE 0 END) AS failed_count
         FROM fleet_movements
-        WHERE parent_batch_id = ?
+        WHERE player_id = ?
+          AND parent_batch_id = ?
           AND mission_type = 'expedition';
         """,
-        (int(batch_id),),
+        (int(player_id), int(batch_id)),
     ).fetchone()
-    pending = int((counts["pending_count"] if counts else 0) or 0)
-    if pending > 0:
-        return False
-
-    player_id = int(movement.get("player_id") or batch["player_id"] or 0)
-    if player_id <= 0:
-        return False
     resolved = int((counts["resolved_count"] if counts else 0) or 0)
     failed = int((counts["failed_count"] if counts else 0) or 0)
     total = int((counts["total_count"] if counts else 0) or batch["total_fleets"] or 0)
@@ -5394,6 +5431,9 @@ def _notify_mass_expedition_batch_resolved(
         locale=locale,
         conn=conn,
     )
+    # No second batch write here: launch already marks dispatch completion. The
+    # holding->returning movement claim and the batch row lock make the final
+    # summary part of the same atomic settlement transaction.
     return bool(result.get("ok"))
 
 

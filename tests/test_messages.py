@@ -1281,6 +1281,120 @@ def test_mass_expedition_batch_notification_contract_is_server_owned():
         "def _notify_mass_expedition_batch_resolved(", 1
     )[1].split("\ndef _build_logistics_report_metadata", 1)[0]
     assert 'sql += " FOR UPDATE"' in batch_block
-    assert "status IN ('outbound', 'holding')" in batch_block
+    assert "LIMIT 2;" in batch_block
+    assert "if len(pending_rows) >= 2:" in batch_block
+    assert batch_block.index("if len(pending_rows) >= 2:") < batch_block.index(
+        'sql += " FOR UPDATE"'
+    )
+    assert batch_block.count("status IN ('outbound', 'holding')") == 2
+    assert "pending_count" not in batch_block
+    assert 'in ("cancelled", "failed")' in batch_block
+    assert '("completed", "cancelled", "failed")' not in batch_block
+    assert "SET status = 'completed'" not in batch_block
     assert '"report_phase": "mass_expedition_complete"' in batch_block
     assert "if bool(meta.get(\"toast_suppressed\")):" in messages
+
+
+def test_mass_expedition_launch_completed_batch_can_emit_final_summary(monkeypatch):
+    """GC-PERF-MASS-EXPO-008: launch-completed is not summary-completed."""
+    import game.fleet as fleet_mod
+
+    class _Result:
+        def __init__(self, *, rows=None, row=None):
+            self._rows = rows or []
+            self._row = row
+
+        def fetchall(self):
+            return list(self._rows)
+
+        def fetchone(self):
+            return self._row
+
+    class _Conn:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, sql, params=()):
+            sql_text = str(sql)
+            self.calls.append((sql_text, tuple(params)))
+            if "FROM fleet_movements" in sql_text and "LIMIT 2" in sql_text:
+                return _Result(rows=[])
+            if "FROM fleet_batches" in sql_text:
+                return _Result(row={
+                    "id": 99,
+                    "player_id": 7,
+                    "batch_type": "mass_expedition",
+                    "status": "completed",
+                    "total_fleets": 3,
+                })
+            if "FROM fleet_movements" in sql_text and "LIMIT 1" in sql_text:
+                return _Result(row=None)
+            if "COUNT(*) AS total_count" in sql_text:
+                return _Result(row={
+                    "total_count": 3,
+                    "resolved_count": 3,
+                    "failed_count": 0,
+                })
+            raise AssertionError(sql_text)
+
+    notified = []
+
+    def _notify(*args, **kwargs):
+        notified.append((args, kwargs))
+        return {"ok": True, "data": {"message_id": 1}}
+
+    monkeypatch.setattr(fleet_mod, "notify_expedition", _notify)
+    conn = _Conn()
+    ok = fleet_mod._notify_mass_expedition_batch_resolved(
+        {
+            "id": 203,
+            "player_id": 7,
+            "parent_batch_id": 99,
+            "mission_type": "expedition",
+        },
+        conn=conn,
+        now=1_800_000_000.0,
+        locale="de",
+    )
+
+    assert ok is True
+    assert len(notified) == 1
+    assert not any("UPDATE fleet_batches" in sql for sql, _ in conn.calls)
+
+
+def test_mass_expedition_nonfinal_summary_gate_avoids_batch_lock():
+    """GC-PERF-MASS-EXPO-008: obvious non-final waves pay one tiny read only."""
+    import game.fleet as fleet_mod
+
+    class _Rows:
+        def fetchall(self):
+            return [{"id": 201}, {"id": 202}]
+
+    class _Conn:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, sql, params=()):
+            self.calls.append((str(sql), tuple(params)))
+            return _Rows()
+
+    conn = _Conn()
+    ok = fleet_mod._notify_mass_expedition_batch_resolved(
+        {
+            "id": 200,
+            "player_id": 7,
+            "parent_batch_id": 99,
+            "mission_type": "expedition",
+        },
+        conn=conn,
+        now=1_800_000_000.0,
+        locale="de",
+    )
+
+    assert ok is False
+    assert len(conn.calls) == 1
+    sql, params = conn.calls[0]
+    assert "FROM fleet_movements" in sql
+    assert "LIMIT 2" in sql
+    assert "fleet_batches" not in sql
+    assert params == (7, 99)
