@@ -25,6 +25,22 @@ def schema_ready(conn: sqlite3.Connection) -> bool:
         return False
 
 
+def _request_pg_rank_cache() -> Optional[Dict[int, Dict[str, int]]]:
+    try:
+        from flask import g, has_request_context
+        from ..db import get_db_backend
+
+        if get_db_backend() != "postgres" or not has_request_context():
+            return None
+        cache = getattr(g, "gc_mine_evolution_ranks_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            g.gc_mine_evolution_ranks_cache = cache
+        return cache
+    except Exception:
+        return None
+
+
 def get_evolution_rank(
     planet_id: int,
     building_type: str,
@@ -32,27 +48,8 @@ def get_evolution_rank(
 ) -> int:
     if not is_evolvable_mine(building_type):
         return 0
-    own = conn is None
-    if own:
-        conn = db()
-    try:
-        if not schema_ready(conn):
-            return 0
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT evolution_rank FROM planet_mine_evolution
-            WHERE planet_id = ? AND building_type = ? LIMIT 1;
-            """,
-            (int(planet_id), str(building_type)),
-        )
-        row = cur.fetchone()
-        if not row:
-            return 0
-        return max(0, int(row["evolution_rank"] if isinstance(row, sqlite3.Row) else row[0]) or 0)
-    finally:
-        if own:
-            conn.close()
+    ranks = get_evolution_ranks_for_planet(int(planet_id), conn=conn)
+    return max(0, int(ranks.get(str(building_type), 0) or 0))
 
 
 def get_evolution_ranks_for_planet(
@@ -60,6 +57,11 @@ def get_evolution_ranks_for_planet(
     conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, int]:
     """Return ranks for all evolvable mines (missing → 0)."""
+    pid = int(planet_id)
+    cache = _request_pg_rank_cache()
+    if cache is not None and pid in cache:
+        return dict(cache[pid])
+
     out = {k: 0 for k in EVOLVABLE_MINES}
     own = conn is None
     if own:
@@ -73,13 +75,15 @@ def get_evolution_ranks_for_planet(
             SELECT building_type, evolution_rank FROM planet_mine_evolution
             WHERE planet_id = ?;
             """,
-            (int(planet_id),),
+            (pid,),
         )
         for row in cur.fetchall():
             bt = str(row["building_type"] if isinstance(row, sqlite3.Row) else row[0])
             if bt in out:
                 rank = int(row["evolution_rank"] if isinstance(row, sqlite3.Row) else row[1]) or 0
                 out[bt] = max(0, rank)
+        if cache is not None:
+            cache[pid] = dict(out)
         return out
     finally:
         if own:
