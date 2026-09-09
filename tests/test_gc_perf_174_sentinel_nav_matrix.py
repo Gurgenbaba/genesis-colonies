@@ -16,6 +16,18 @@ def test_sentinel_sandbox_enables_navigation_perf():
     assert '"GC_NAV_PERF_DEBUG": "1"' in src
 
 
+def test_sentinel_login_settles_intentional_shell_overlays_without_force_clicks():
+    src = _read("scripts/browser_test_support.py")
+    block = src.split("def _settle_known_sentinel_overlays(page)", 1)[1].split(
+        "def login_with_ui", 1
+    )[0]
+    assert "data-cookie-notice-accept" in block
+    assert "data-whats-new-dismiss" in block
+    assert "data-bld-ui-chooser-confirm" in block
+    assert "force=True" not in block
+    assert "dispatch_event" not in block
+
+
 def test_sentinel_drives_real_pjax_and_persists_route_samples():
     src = _read("scripts/browser_sentinel.py")
     assert "window.GC.navigateTo" in src
