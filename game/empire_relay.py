@@ -210,9 +210,15 @@ def _cooldown_state(player_id: int, *, conn, now: int | None = None) -> Dict[str
     }
 
 
-def _colony_resource_payload(player_id: int, planet_ids: Sequence[int], *, conn) -> Dict[str, Dict[str, int]]:
+def _wire_resource_stock(raw: Mapping[str, Any] | None) -> Dict[str, str]:
+    """Serialize arbitrary-precision resources as decimal strings for browser JSON."""
+    stock = normalize_resource_stock(raw)
+    return {key: str(int(stock[key])) for key in LOOT_RESOURCE_KEYS}
+
+
+def _colony_resource_payload(player_id: int, planet_ids: Sequence[int], *, conn) -> Dict[str, Dict[str, str]]:
     rows = _owned_planets(player_id, planet_ids, conn=conn)
-    return {str(pid): normalize_resource_stock(row) for pid, row in rows.items()}
+    return {str(pid): _wire_resource_stock(row) for pid, row in rows.items()}
 
 
 def collect_empire_resources(
@@ -343,7 +349,7 @@ def collect_empire_resources(
         "moved": moved,
         "moved_total": sum(int(v) for v in moved.values()),
         "moved_by_source": moved_by_source,
-        "hub_resources": colony_resources.get(str(target_id), normalize_resource_stock({})),
+        "hub_resources": colony_resources.get(str(target_id), _wire_resource_stock({})),
         "colony_resources": colony_resources,
         "cooldowns": _cooldown_state(uid, conn=conn, now=ts),
         "uses_ships": False,
@@ -520,7 +526,7 @@ def distribute_empire_resources(
         "debited": debit,
         "delivered_by_target": {str(pid): deliver[pid] for pid in sorted(deliver)},
         "ready_at_by_target": ready_at_by_target,
-        "hub_resources": colony_resources.get(str(origin_id), normalize_resource_stock({})),
+        "hub_resources": colony_resources.get(str(origin_id), _wire_resource_stock({})),
         "colony_resources": colony_resources,
         "cooldowns": _cooldown_state(uid, conn=conn, now=ts),
         "uses_ships": False,

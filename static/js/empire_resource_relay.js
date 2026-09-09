@@ -376,8 +376,28 @@
     syncButtons(page);
   }
 
+  function setRelayMode(page, direction) {
+    if (!page || (direction !== "collect" && direction !== "distribute")) return;
+    page.dataset.logisticsMode = direction;
+    page.querySelectorAll("[data-logistics-tab]").forEach((tab) => {
+      const active = tab.getAttribute("data-logistics-tab") === direction;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    page.querySelectorAll("[data-logistics-panel]").forEach((panel) => {
+      panel.hidden = panel.getAttribute("data-logistics-panel") !== direction;
+    });
+    syncButtons(page);
+  }
+
   function activate(page) {
     if (!page) return;
+
+    // The visible Collect/Distribute UI is Empire Relay-owned. Keep the legacy
+    // Fleet logistics live-state poller asleep; otherwise it periodically
+    // re-arms the obsolete freighter preview path behind this Relay screen.
+    page._logisticsLivePending = true;
+
     if (state.root !== page) {
       state.root = page;
       state.loaded = false;
@@ -396,6 +416,17 @@
     (event) => {
       const page = root();
       if (!page) return;
+
+      const relayTab = event.target.closest?.("[data-logistics-tab]");
+      if (relayTab && page.contains(relayTab)) {
+        const direction = relayTab.getAttribute("data-logistics-tab");
+        if (direction === "collect" || direction === "distribute") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          setRelayMode(page, direction);
+          return;
+        }
+      }
 
       const select = event.target.closest?.("[data-logistics-select-all]");
       if (select && page.contains(select)) {

@@ -8479,13 +8479,14 @@ def _load_planet_rows_for_collect(
     planet_ids: Sequence[int],
     *,
     conn,
+    persist_resources: bool = False,
 ) -> Dict[int, Dict[str, Any]]:
     """
-    Load planets by id and tick production (shared owner for Preview + Collect/Distribute).
+    Load planets by id and project/tick production for logistics planning.
 
-    Returns ticked planet dicts so route planning matches accrued stock, not stale
-    ``last_update`` balances. Caller should hold a write transaction when send/debit
-    follows on the same connection.
+    Preview callers are read-only by default. Mutating Collect/Distribute paths
+    must pass persist_resources=True while holding their write transaction so
+    debit/send sees the same accrued stock that was planned.
     """
     from .resources import update_planet_resources
 
@@ -8504,6 +8505,7 @@ def _load_planet_rows_for_collect(
             dict(row),
             conn=conn,
             skip_queue_finish=True,
+            persist=bool(persist_resources),
         )
         out[int(planet_live["id"])] = dict(planet_live)
     return out
@@ -8574,7 +8576,7 @@ def collect_resources(
         if own:
             begin_write_transaction(conn)
 
-        planet_rows = _load_planet_rows_for_collect([hub_id, *source_ids], conn=conn)
+        planet_rows = _load_planet_rows_for_collect([hub_id, *source_ids], conn=conn, persist_resources=True)
         hub_row = planet_rows.get(hub_id)
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
             if own:
@@ -8692,7 +8694,7 @@ def collect_resources(
 
         from .fleet_calc import planet_resource_stock
 
-        fresh_rows = _load_planet_rows_for_collect([hub_id, *source_ids], conn=conn)
+        fresh_rows = _load_planet_rows_for_collect([hub_id, *source_ids], conn=conn, persist_resources=True)
         colony_resources = {
             int(pid): planet_resource_stock(row) for pid, row in fresh_rows.items()
         }
@@ -8791,7 +8793,7 @@ def distribute_resources(
         if own:
             begin_write_transaction(conn)
 
-        planet_rows = _load_planet_rows_for_collect([hub_id, *target_ids], conn=conn)
+        planet_rows = _load_planet_rows_for_collect([hub_id, *target_ids], conn=conn, persist_resources=True)
         hub_row = planet_rows.get(hub_id)
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
             if own:
@@ -8951,7 +8953,7 @@ def distribute_resources(
 
         from .fleet_calc import planet_resource_stock
 
-        fresh_rows = _load_planet_rows_for_collect([hub_id, *target_ids], conn=conn)
+        fresh_rows = _load_planet_rows_for_collect([hub_id, *target_ids], conn=conn, persist_resources=True)
         colony_resources = {
             int(pid): planet_resource_stock(row) for pid, row in fresh_rows.items()
         }

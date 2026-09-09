@@ -455,7 +455,7 @@ def _probe_fleet_mode_tabs(page) -> list[dict]:
             continue
         started = time.perf_counter()
         try:
-            tab.first.click(timeout=5_000)
+            tab.first.click(timeout=5_000, no_wait_after=True)
             page.wait_for_function(
                 """
                 (mode) => {

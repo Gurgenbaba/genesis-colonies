@@ -47,3 +47,19 @@ def test_mutating_logistics_paths_keep_persisting_behavior():
     # persistence off for Collect/Distribute previews/actions/settlement.
     assert rest.count("update_planet_resources(") >= 1
     assert "persist=bool(persist_resources)" in rest
+
+
+def test_logistics_preview_loader_defaults_to_read_only_but_mutations_opt_in():
+    src = _read("game/fleet.py")
+    block = src.split("def _load_planet_rows_for_collect(", 1)[1].split(
+        "def validate_logistics_manual_ships(", 1
+    )[0]
+    assert "persist_resources: bool = False" in block
+    assert "persist=bool(persist_resources)" in block
+    # Collect + post-collect refresh + distribute + post-distribute refresh.
+    assert src.count(
+        "_load_planet_rows_for_collect([hub_id, *source_ids], conn=conn, persist_resources=True)"
+    ) == 2
+    assert src.count(
+        "_load_planet_rows_for_collect([hub_id, *target_ids], conn=conn, persist_resources=True)"
+    ) == 2
