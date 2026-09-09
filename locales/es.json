@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "No hay recursos transferibles.",
   "logistics_relay_error_not_enough": "El centro no tiene suficientes recursos para esta distribución.",
   "logistics_relay_error_foreign": "El relé solo funciona entre tus propias colonias.",
-  "logistics_relay_error_vacation": "El Relé Imperial está desactivado durante vacaciones."
+  "logistics_relay_error_vacation": "El Relé Imperial está desactivado durante vacaciones.",
+  "fleet_mass_expedition_complete_subject": "Expedición masiva completada",
+  "fleet_mass_expedition_complete_body": "Se han resuelto las %(count)s oleadas de expedición. Los informes individuales están en tu buzón; las flotas de regreso ya están en camino.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s informes de expedición están en tu buzón; %(failed)s oleadas han fallado. Las flotas de regreso ya están en camino."
 }
