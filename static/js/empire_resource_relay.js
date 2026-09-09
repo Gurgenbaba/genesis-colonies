@@ -395,7 +395,7 @@
 
     // The visible Collect/Distribute UI is Empire Relay-owned. Keep the legacy
     // Fleet logistics live-state poller asleep; otherwise it periodically
-    // re-arms the old /api/fleet/logistics/preview path behind this screen.
+    // re-arms the obsolete freighter preview path behind this Relay screen.
     page._logisticsLivePending = true;
 
     if (state.root !== page) {
