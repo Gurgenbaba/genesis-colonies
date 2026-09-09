@@ -5348,7 +5348,9 @@ def _notify_mass_expedition_batch_resolved(
     batch = conn.execute(sql, (int(batch_id), int(player_id))).fetchone()
     if not batch or str(batch["batch_type"] or "") != "mass_expedition":
         return False
-    if str(batch["status"] or "") in ("completed", "cancelled", "failed"):
+    # Batch status 'completed' means dispatch finished for mass expeditions; it is
+    # not a summary-delivery marker. Cancelled/failed batches remain terminal.
+    if str(batch["status"] or "") in ("cancelled", "failed"):
         return False
 
     # A concurrent last-sibling transaction may have been the one row observed by
@@ -5429,15 +5431,9 @@ def _notify_mass_expedition_batch_resolved(
         locale=locale,
         conn=conn,
     )
-    if result.get("ok"):
-        conn.execute(
-            """
-            UPDATE fleet_batches
-            SET status = 'completed', updated_at = ?
-            WHERE id = ? AND player_id = ? AND batch_type = 'mass_expedition';
-            """,
-            (float(now), int(batch_id), int(player_id)),
-        )
+    # No second batch write here: launch already marks dispatch completion. The
+    # holding->returning movement claim and the batch row lock make the final
+    # summary part of the same atomic settlement transaction.
     return bool(result.get("ok"))
 
 
