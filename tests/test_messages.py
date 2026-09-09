@@ -28,6 +28,7 @@ from game.messages import (
     mark_all_messages_read,
     mark_message_read,
     normalize_combat_metadata,
+    notification_toast_items,
     notify_admin,
     notify_combat,
     notify_espionage,
@@ -1218,3 +1219,68 @@ def test_dispatch_combat_reports_persists_for_both_players(temp_db):
         assert recipients == {attacker_id, defender_id}
     finally:
         conn.close()
+
+
+def test_mass_expedition_members_stay_in_inbox_but_skip_toast(temp_db):
+    """GC-331: per-wave reports persist, only the batch summary is toast-capable."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("mass_expo_notify")
+    single = notify_expedition(
+        pid,
+        "Expedition report — [1:1:16]",
+        "Individual wave report",
+        metadata={
+            "fleet_id": 101,
+            "mission_type": "expedition",
+            "parent_batch_id": 77,
+            "batch_type": "mass_expedition",
+            "toast_suppressed": True,
+        },
+    )
+    summary = notify_expedition(
+        pid,
+        "Massen-Expedition abgeschlossen",
+        "Alle Wellen ausgewertet.",
+        metadata={
+            "fleet_id": 102,
+            "report_phase": "mass_expedition_complete",
+            "mission_type": "expedition",
+            "parent_batch_id": 77,
+            "batch_type": "mass_expedition",
+            "mass_expedition_summary": True,
+        },
+    )
+    assert single["ok"] and summary["ok"]
+    _close_db()
+
+    # Both rows remain canonical unread inbox messages.
+    assert unread_count(pid) == 2
+    inbox = list_messages(pid, category="expedition")
+    assert len(inbox["data"]["messages"]) == 2
+
+    # Toast/sound fanout includes only the one batch summary.
+    toast_items = notification_toast_items(pid)
+    assert [item["subject"] for item in toast_items] == [
+        "Massen-Expedition abgeschlossen"
+    ]
+    assert toast_items[0]["report_phase"] == "mass_expedition_complete"
+
+
+def test_mass_expedition_batch_notification_contract_is_server_owned():
+    """GC-331: no client-side counting; fleet state owns marker, lock and final summary."""
+    src = (ROOT / "game" / "fleet.py").read_text(encoding="utf-8")
+    messages = (ROOT / "game" / "messages.py").read_text(encoding="utf-8")
+
+    assert '"fleet_batch_type": "mass_expedition"' in src
+    assert 'meta["toast_suppressed"] = True' in src
+    assert "def _notify_mass_expedition_batch_resolved(" in src
+    batch_block = src.split(
+        "def _notify_mass_expedition_batch_resolved(", 1
+    )[1].split("\ndef _build_logistics_report_metadata", 1)[0]
+    assert 'sql += " FOR UPDATE"' in batch_block
+    assert "status IN ('outbound', 'holding')" in batch_block
+    assert '"report_phase": "mass_expedition_complete"' in batch_block
+    assert "if bool(meta.get(\"toast_suppressed\")):" in messages
