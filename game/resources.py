@@ -203,6 +203,39 @@ def apply_resource_delta_unbounded(
 #   RESOURCE UPDATE
 # ==========================================================================
 
+_RESOURCE_OPTIONAL_SAVEPOINT_SEQ = 0
+
+
+def _run_optional_resource_hook(conn, label: str, fn):
+    """Isolate best-effort resource side effects from the caller's PostgreSQL TX.
+
+    PostgreSQL marks the whole transaction aborted after any statement error.
+    Merely catching an optional hook exception is therefore not enough: later
+    resource writes/reads fail with 'current transaction is aborted'. A short
+    SAVEPOINT keeps directives/evolution failures local while the authoritative
+    resource tick remains usable.
+    """
+    from .db import get_db_backend
+
+    if get_db_backend() != "postgres":
+        return fn()
+
+    global _RESOURCE_OPTIONAL_SAVEPOINT_SEQ
+    _RESOURCE_OPTIONAL_SAVEPOINT_SEQ = (_RESOURCE_OPTIONAL_SAVEPOINT_SEQ + 1) % 1_000_000
+    safe_label = "".join(ch for ch in str(label or "hook").lower() if ch.isalnum() or ch == "_")[:24] or "hook"
+    savepoint = f"gc_res_{safe_label}_{_RESOURCE_OPTIONAL_SAVEPOINT_SEQ}"
+    conn.execute(f"SAVEPOINT {savepoint};")
+    try:
+        result = fn()
+    except Exception:
+        try:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint};")
+        finally:
+            conn.execute(f"RELEASE SAVEPOINT {savepoint};")
+        raise
+    conn.execute(f"RELEASE SAVEPOINT {savepoint};")
+    return result
+
 def _refresh_planet_resource_balances(
     planet: dict,
     *,
@@ -453,15 +486,19 @@ def update_planet_resources(
             try:
                 from .directives.progress import emit_resource_produced_events
 
-                emit_resource_produced_events(
-                    player_id,
-                    planet_id=planet_id,
-                    tick_start=tick_start,
-                    delta_metal=prod_delta_metal,
-                    delta_crystal=prod_delta_crystal,
-                    delta_fuel_cells=prod_delta_fuel,
-                    conn=conn,
-                    now=now,
+                _run_optional_resource_hook(
+                    conn,
+                    "directives",
+                    lambda: emit_resource_produced_events(
+                        player_id,
+                        planet_id=planet_id,
+                        tick_start=tick_start,
+                        delta_metal=prod_delta_metal,
+                        delta_crystal=prod_delta_crystal,
+                        delta_fuel_cells=prod_delta_fuel,
+                        conn=conn,
+                        now=now,
+                    ),
                 )
             except Exception:
                 import logging
@@ -482,19 +519,23 @@ def update_planet_resources(
         save_planet(planet, conn=conn)
 
         try:
-            from .planet_evolution.repository import evolution_schema_ready
+            def _run_evolution_hook():
+                from .planet_evolution.repository import evolution_schema_ready
 
-            if evolution_schema_ready(conn) and not vacation_frozen:
+                if not evolution_schema_ready(conn) or vacation_frozen:
+                    return None
                 from .planet_evolution.bootstrap import ensure_planet_evolution
                 from .planet_evolution.tick import evolution_tick_planet
 
                 ensure_planet_evolution(planet_id, conn)
-                evolution_tick_planet(
+                return evolution_tick_planet(
                     conn,
                     planet_id,
                     now,
                     skip_research_finish=bool(skip_queue_finish),
                 )
+
+            _run_optional_resource_hook(conn, "evolution", _run_evolution_hook)
         except Exception:
             import logging
 
