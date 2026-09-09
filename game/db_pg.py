@@ -526,7 +526,8 @@ def _warm_postgres_table_cache(conn: PgConnection) -> None:
             SELECT table_name AS name
             FROM information_schema.tables
             WHERE table_schema = 'public';
-            """
+            """,
+            (),
         ).fetchall()
         _PG_TABLE_EXISTS_CACHE.clear()
         _PG_TABLE_EXISTS_CACHE.update({str(row["name"]): True for row in rows})
@@ -543,7 +544,8 @@ def _warm_postgres_columns_cache(conn: PgConnection) -> None:
             SELECT table_name, column_name AS name
             FROM information_schema.columns
             WHERE table_schema = 'public';
-            """
+            """,
+            (),
         ).fetchall()
         by_table: dict[str, set[str]] = {}
         for row in rows:
