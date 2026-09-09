@@ -840,6 +840,93 @@ def _timekeeper_defense_queue_slice(user_id: int, *, conn) -> Optional[Dict[str,
     return queue
 
 
+def timekeeper_partial_action_state_for_client(
+    user_id: int,
+    domain: str,
+    timekeeper_snapshot: Dict[str, Any],
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """True partial response for a committed Timekeeper mutation.
+
+    The mutation already performed finish-before-mutate and committed. Rebuilding
+    resources/effects/liveops here duplicates hundreds of PostgreSQL reads while
+    changing none of those domains. Return only server clock, authoritative TK
+    balance and the queue slice whose timestamps changed; GC.lastState preserves
+    omitted domains and a real completion triggers canonical panel reconcile.
+    """
+    import time
+
+    mark_request_live_refreshed()
+    now = time.time()
+    uid = int(user_id)
+    planet = get_request_context_planet(uid, conn=conn)
+    active_planet_id = int(planet.get("id") or 0) if planet else 0
+    active_planet_name = str(planet.get("name") or "") if planet else ""
+    energy_total = int(planet.get("energy_total") or 0) if planet else 0
+    energy_used = int(planet.get("energy_used") or 0) if planet else 0
+    energy_ratio = (
+        min(1.0, float(energy_total) / float(energy_used))
+        if energy_total > 0 and energy_used > 0
+        else (1.0 if energy_used <= 0 else 0.0)
+    )
+
+    # Keep the established TK action contract without invoking live projection:
+    # balances/energy are already persisted on the planet row. Storage/production
+    # remain cached client-side until the normal canonical reconcile when a job ends.
+    resources = {
+        "metal": planet.get("metal", 0) if planet else 0,
+        "crystal": planet.get("crystal", 0) if planet else 0,
+        "fuel_cells": planet.get("fuel_cells", 0) if planet else 0,
+        "energy_used": energy_used,
+        "energy_total": energy_total,
+        "energy_ratio": energy_ratio,
+        "energy_efficiency_pct": int(round(energy_ratio * 100)),
+    }
+
+    research: Dict[str, Any] = {"active": None, "queue": [], "summary": {"count": 0, "limit": 3}}
+    try:
+        from game.models import get_planet_buildings
+        from game.research import get_research_status
+
+        buildings = (
+            get_planet_buildings(active_planet_id, conn=conn)
+            if active_planet_id > 0
+            else {}
+        )
+        research = research_poll_slice(
+            get_research_status(
+                user_id=uid,
+                buildings=buildings or {},
+                skip_finish=True,
+                include_techs=False,
+                conn=conn,
+            )
+        )
+    except Exception:
+        pass
+
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "server_now": int(now),
+        "server_time": float(now),
+        "state_version": float(now),
+        "player_id": uid,
+        "active_planet_id": active_planet_id,
+        "active_planet_name": active_planet_name,
+        "resources": resources,
+        "research": research,
+        "research_queue": list(research.get("queue") or []),
+        "timekeeper": dict(timekeeper_snapshot or {}),
+    }
+    return attach_timekeeper_domain_queue_slices(
+        payload,
+        uid,
+        domain,
+        conn=conn,
+    )
+
+
 def attach_timekeeper_domain_queue_slices(
     payload: Dict[str, Any],
     user_id: int,
@@ -850,17 +937,60 @@ def attach_timekeeper_domain_queue_slices(
     """
     GC-PERF-TK-004: slim TK apply must still return the boosted production queue.
 
-    ``build_queue`` / ``research`` already live on the base payload. Shipyard,
-    defense, and troops panels are include_panel-only and were diet-stripped —
-    without a queue slice the client cannot patch timers (looks like a no-op click).
-    Catalog (ships/defenses stock) stays omitted.
+    The fast Timekeeper action state is intentionally queue-only. Attach the
+    affected queue for every production domain so the client can patch its timer
+    immediately without rebuilding resources/effects/catalogs. Catalog/stock stays
+    omitted; completion reconciliation owns those domains.
     """
     if not isinstance(payload, dict):
         return payload
     dom = str(domain or "").strip().lower()
     if dom in ("building", "build", "buildings"):
         dom = "build"
-    if dom == "shipyard":
+    if dom == "build":
+        try:
+            from game.buildings import get_build_queue_status_for_planet
+
+            planet = get_request_context_planet(int(user_id), conn=conn)
+            queue = (
+                get_build_queue_status_for_planet(
+                    int(planet["id"]),
+                    conn=conn,
+                    skip_finish=True,
+                )
+                if planet
+                else None
+            )
+        except Exception:
+            queue = None
+        if isinstance(queue, dict):
+            payload["build_queue"] = queue
+            payload["building_queue"] = queue
+    elif dom == "research":
+        research = payload.get("research") if isinstance(payload.get("research"), dict) else None
+        if research is None:
+            try:
+                from game.models import get_planet_buildings
+                from game.research import get_research_status
+
+                planet = get_request_context_planet(int(user_id), conn=conn)
+                buildings = (
+                    get_planet_buildings(int(planet["id"]), conn=conn) if planet else {}
+                )
+                status = get_research_status(
+                    user_id=int(user_id),
+                    buildings=buildings or {},
+                    skip_finish=True,
+                    include_techs=False,
+                    conn=conn,
+                )
+                research = research_poll_slice(status)
+            except Exception:
+                research = None
+        if isinstance(research, dict):
+            payload["research"] = research
+            payload["research_queue"] = list(research.get("queue") or [])
+    elif dom == "shipyard":
         try:
             queue = _timekeeper_shipyard_queue_slice(int(user_id), conn=conn)
         except Exception:

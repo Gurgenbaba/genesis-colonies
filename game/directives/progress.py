@@ -8,7 +8,7 @@ import time
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
 from ..db import table_exists
-from .definitions import OBJECTIVE_ACCUMULATE, OBJECTIVE_COUNT, directives_schema_ready, get_definition
+from .definitions import OBJECTIVE_ACCUMULATE, OBJECTIVE_COUNT, directives_schema_ready, get_definitions
 from .generator import (
     STATUS_ACTIVE,
     STATUS_COMPLETED,
@@ -45,6 +45,10 @@ def apply_directive_events(
     if directives_schema_ready(conn):
         ensure_player_directives(pid, conn=conn, now=ts)
         active_rows = _load_active_directives(pid, conn=conn, now=ts)
+        definitions = get_definitions(
+            [str(row.get("definition_key") or "") for row in active_rows],
+            conn=conn,
+        )
         now_i = int(ts)
 
         for event in events:
@@ -53,7 +57,7 @@ def apply_directive_events(
             for row in active_rows:
                 if str(row.get("status") or "") not in (STATUS_ACTIVE,):
                     continue
-                definition = get_definition(str(row["definition_key"]), conn=conn)
+                definition = definitions.get(str(row["definition_key"]))
                 if not definition:
                     continue
                 delta = _event_delta(definition, event)

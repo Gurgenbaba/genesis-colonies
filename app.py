@@ -11873,6 +11873,31 @@ def _timekeeper_apply_game_state(
     timekeeper_snapshot: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
+    dom = str(domain or "").strip().lower()
+    fast_dom = "build" if dom in ("building", "buildings") else dom
+    if (
+        post_mutation_committed
+        and isinstance(timekeeper_snapshot, dict)
+        and user_id is not None
+        and fast_dom in ("build", "research", "shipyard", "defense", "troops")
+    ):
+        from game.live_state import timekeeper_partial_action_state_for_client
+
+        attach_conn = conn
+        own_attach_conn = attach_conn is None
+        if own_attach_conn:
+            attach_conn = db()
+        try:
+            return timekeeper_partial_action_state_for_client(
+                int(user_id),
+                fast_dom,
+                timekeeper_snapshot,
+                conn=attach_conn,
+            )
+        finally:
+            if own_attach_conn:
+                attach_conn.close()
+
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source="api_timekeeper_apply",
@@ -11882,7 +11907,6 @@ def _timekeeper_apply_game_state(
         authenticated_user_id=int(user_id) if user_id is not None else None,
         timekeeper_snapshot=timekeeper_snapshot,
     )
-    dom = str(domain or "").strip().lower()
     if dom in ("shipyard", "defense", "troops"):
         try:
             from game.live_state import attach_timekeeper_domain_queue_slices

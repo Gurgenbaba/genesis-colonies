@@ -53,6 +53,50 @@ RARITY_TARGET_MULTIPLIER: Dict[str, float] = {
 _JSON_COLS = ("filters_json",)
 
 
+def _request_definition_cache() -> Optional[Dict[str, Any]]:
+    """Request-local immutable definition snapshot for PostgreSQL hot paths.
+
+    Directive definitions are seeded/config data. Resource ticks, queue finishes and
+    story/directive fan-out may ask for the same catalog dozens of times inside one
+    HTTP request; keep one parsed snapshot for that request only. No cross-request
+    cache means admin/migration changes are visible on the next request automatically.
+    """
+    try:
+        from flask import g, has_request_context
+        from ..db import get_db_backend
+
+        if get_db_backend() != "postgres" or not has_request_context():
+            return None
+        cache = getattr(g, "gc_directive_definitions_cache", None)
+        if not isinstance(cache, dict):
+            cache = {"all": None, "by_key": {}}
+            g.gc_directive_definitions_cache = cache
+        return cache
+    except Exception:
+        return None
+
+
+def _all_definitions(conn) -> List[Dict[str, Any]]:
+    cache = _request_definition_cache()
+    if cache is not None and isinstance(cache.get("all"), list):
+        return [dict(row) for row in cache["all"]]
+
+    rows = conn.execute(
+        """
+        SELECT key, category, cadence, objective_kind, base_target, scale_profile,
+               weight, min_rarity, max_rarity, filters_json, title_key, description_key, sort_order
+        FROM directive_definitions
+        ORDER BY sort_order ASC, key ASC;
+        """
+    ).fetchall()
+    parsed = [_parse_row(row) for row in rows]
+    if cache is not None:
+        cache["all"] = [dict(row) for row in parsed]
+        by_key = cache.setdefault("by_key", {})
+        by_key.update({str(row["key"]): dict(row) for row in parsed})
+    return parsed
+
+
 def directives_schema_ready(conn) -> bool:
     return table_exists(conn, "directive_definitions") and table_exists(conn, "player_directives")
 
@@ -106,18 +150,11 @@ def list_definitions(conn, *, cadence: str) -> List[Dict[str, Any]]:
         return []
 
     want = str(cadence or CADENCE_DAILY).strip().lower()
-    rows = conn.execute(
-        """
-        SELECT key, category, cadence, objective_kind, base_target, scale_profile,
-               weight, min_rarity, max_rarity, filters_json, title_key, description_key, sort_order
-        FROM directive_definitions
-        ORDER BY sort_order ASC, key ASC;
-        """
-    ).fetchall()
+    rows = _all_definitions(conn)
 
     out: List[Dict[str, Any]] = []
     for row in rows:
-        parsed = _parse_row(row)
+        parsed = dict(row)
         raw_cadence = parsed["cadence"]
         if raw_cadence != want and raw_cadence != CADENCE_BOTH:
             continue
@@ -159,38 +196,48 @@ def get_definitions(
     )
     if not wanted or not directives_schema_ready(conn):
         return {}
-    placeholders = ",".join("?" for _ in wanted)
-    rows = conn.execute(
-        f"""
-        SELECT key, category, cadence, objective_kind, base_target, scale_profile,
-               weight, min_rarity, max_rarity, filters_json, title_key, description_key, sort_order
-        FROM directive_definitions
-        WHERE key IN ({placeholders});
-        """,
-        tuple(wanted),
-    ).fetchall()
+
+    cache = _request_definition_cache()
+    cached_by_key = cache.setdefault("by_key", {}) if cache is not None else {}
+    if cache is not None and isinstance(cache.get("all"), list):
+        return {
+            key: dict(cached_by_key[key])
+            for key in wanted
+            if key in cached_by_key
+        }
+
+    missing = [key for key in wanted if key not in cached_by_key]
+    if missing:
+        placeholders = ",".join("?" for _ in missing)
+        rows = conn.execute(
+            f"""
+            SELECT key, category, cadence, objective_kind, base_target, scale_profile,
+                   weight, min_rarity, max_rarity, filters_json, title_key, description_key, sort_order
+            FROM directive_definitions
+            WHERE key IN ({placeholders});
+            """,
+            tuple(missing),
+        ).fetchall()
+        parsed_rows = {str(row["key"]): _parse_row(row) for row in rows}
+        if cache is not None:
+            cached_by_key.update({key: dict(value) for key, value in parsed_rows.items()})
+        else:
+            cached_by_key = parsed_rows
+
     return {
-        str(row["key"]): _parse_row(row)
-        for row in rows
+        key: dict(cached_by_key[key])
+        for key in wanted
+        if key in cached_by_key
     }
 
 
 def get_definition(key: str, *, conn) -> Optional[Dict[str, Any]]:
-    if not directives_schema_ready(conn):
+    normalized = str(key or "").strip()
+    if not normalized:
         return None
-    row = conn.execute(
-        """
-        SELECT key, category, cadence, objective_kind, base_target, scale_profile,
-               weight, min_rarity, max_rarity, filters_json, title_key, description_key, sort_order
-        FROM directive_definitions
-        WHERE key = ?
-        LIMIT 1;
-        """,
-        (str(key or "").strip(),),
-    ).fetchone()
-    if not row:
-        return None
-    return _parse_row(row)
+    rows = get_definitions([normalized], conn=conn)
+    row = rows.get(normalized)
+    return dict(row) if row is not None else None
 
 
 def rarity_for_roll(
