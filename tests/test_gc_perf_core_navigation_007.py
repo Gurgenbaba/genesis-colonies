@@ -218,3 +218,16 @@ def test_story_has_flag_batches_player_flags_once_per_request(monkeypatch):
         assert flags.has_flag(77, "missing", conn=_Conn()) is False
 
     assert calls["n"] == 1
+
+
+def test_direct_postgres_game_settings_write_invalidates_request_memo():
+    from flask import Flask, g
+    from game.db_pg import _invalidate_request_hot_read_caches_for_sql
+
+    app = Flask(__name__)
+    with app.test_request_context("/api/admin/settings"):
+        g.gc_game_settings_cache = {"queue_limit": "5"}
+        _invalidate_request_hot_read_caches_for_sql(
+            "UPDATE game_settings SET value = ? WHERE key = ?"
+        )
+        assert g.gc_game_settings_cache is None
