@@ -10,29 +10,54 @@ from ..db import table_exists
 FLAGS_TABLE = "player_story_flags"
 
 
+def _request_flags_cache() -> Optional[Dict[int, Dict[str, str]]]:
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return None
+        cache = getattr(g, "gc_story_flags_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            g.gc_story_flags_cache = cache
+        return cache
+    except Exception:
+        return None
+
+
+def _invalidate_request_player_flags(player_id: int) -> None:
+    cache = _request_flags_cache()
+    if cache is not None:
+        cache.pop(int(player_id), None)
+
+
 def flags_schema_ready(conn) -> bool:
     return table_exists(conn, FLAGS_TABLE)
 
 
 def get_player_flags(player_id: int, *, conn) -> Dict[str, str]:
+    pid = int(player_id)
+    cache = _request_flags_cache()
+    if cache is not None and pid in cache:
+        return dict(cache[pid])
+
     if not flags_schema_ready(conn):
         return {}
     rows = conn.execute(
         "SELECT flag_key, flag_value FROM player_story_flags WHERE player_id = ?;",
-        (int(player_id),),
+        (pid,),
     ).fetchall()
-    return {str(r["flag_key"]): str(r["flag_value"] or "1") for r in rows}
+    result = {str(r["flag_key"]): str(r["flag_value"] or "1") for r in rows}
+    if cache is not None:
+        cache[pid] = dict(result)
+    return result
 
 
 def has_flag(player_id: int, flag_key: str, *, conn) -> bool:
     key = str(flag_key or "").strip()
-    if not key or not flags_schema_ready(conn):
+    if not key:
         return False
-    row = conn.execute(
-        "SELECT 1 FROM player_story_flags WHERE player_id = ? AND flag_key = ? LIMIT 1;",
-        (int(player_id), key),
-    ).fetchone()
-    return row is not None
+    return key in get_player_flags(int(player_id), conn=conn)
 
 
 def set_flag(
@@ -55,6 +80,7 @@ def set_flag(
         """,
         (int(player_id), key, str(value or "1"), ts),
     )
+    _invalidate_request_player_flags(int(player_id))
     return True
 
 

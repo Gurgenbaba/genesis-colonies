@@ -133,6 +133,22 @@ class PgRow(dict):
         return self._keys
 
 
+def _invalidate_request_hot_read_caches_for_sql(sql: str) -> None:
+    """Invalidate request memos when legacy code writes their backing tables."""
+    text = " ".join(str(sql or "").strip().upper().split())
+    if not text.startswith(("INSERT ", "UPDATE ", "DELETE ", "REPLACE ")):
+        return
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return
+        if "GAME_SETTINGS" in text:
+            g.gc_game_settings_cache = None
+    except Exception:
+        pass
+
+
 class PgCursor:
     def __init__(self, raw_cursor: Any, connection: Any = None) -> None:
         self._cur = raw_cursor
@@ -212,6 +228,7 @@ class PgCursor:
                     pass
         self.description = self._cur.description
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        _invalidate_request_hot_read_caches_for_sql(text)
         # GC-PERF-PG-SCHEMA-CACHE-001: tests/migrations may execute DDL through
         # this wrapper. Runtime schema is immutable after migrate, but clearing
         # on real DDL keeps metadata caches correct for migration/tests too.
@@ -251,6 +268,7 @@ class PgCursor:
                 except Exception:
                     pass
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        _invalidate_request_hot_read_caches_for_sql(text)
         if rewritten.lstrip().upper().startswith(("CREATE ", "ALTER ", "DROP ")):
             clear_postgres_schema_metadata_cache()
         if rewritten.lstrip().upper().startswith("INSERT"):
@@ -489,45 +507,80 @@ def close_pool() -> None:
     clear_postgres_schema_metadata_cache()
 
 
-# Schema is immutable mid-process after migrate; cache cuts PG information_schema chatter.
-# table_exists had a cache already; column_exists/table_columns was still issuing a fresh
-# information_schema.columns query on every call. Hot routes call column_exists many times.
+# Schema is immutable mid-process after migrate. Per-table metadata caching still
+# costs one Railway/Postgres round-trip for every distinct table touched by a cold
+# worker (50-100+ on game-state). Warm the complete public schema in one query.
 _PG_SCHEMA_CACHE_LOCK = threading.RLock()
 _PG_TABLE_EXISTS_CACHE: dict[str, bool] = {}
 _PG_TABLE_COLUMNS_CACHE: dict[str, frozenset[str]] = {}
+_PG_TABLES_WARM = False
+_PG_COLUMNS_WARM = False
 
 
 def clear_postgres_schema_metadata_cache(table_name: str | None = None) -> None:
     """Invalidate process-local PG schema metadata after DDL or between test databases."""
+    global _PG_TABLES_WARM, _PG_COLUMNS_WARM
     with _PG_SCHEMA_CACHE_LOCK:
         if table_name is None:
             _PG_TABLE_EXISTS_CACHE.clear()
             _PG_TABLE_COLUMNS_CACHE.clear()
+        else:
+            key = str(table_name)
+            _PG_TABLE_EXISTS_CACHE.pop(key, None)
+            _PG_TABLE_COLUMNS_CACHE.pop(key, None)
+        # Any DDL can alter dependent metadata. The next read bulk-refreshes the
+        # schema instead of paying one query per table.
+        _PG_TABLES_WARM = False
+        _PG_COLUMNS_WARM = False
+
+
+def _warm_postgres_table_cache(conn: PgConnection) -> None:
+    global _PG_TABLES_WARM
+    with _PG_SCHEMA_CACHE_LOCK:
+        if _PG_TABLES_WARM:
             return
-        key = str(table_name)
-        _PG_TABLE_EXISTS_CACHE.pop(key, None)
-        _PG_TABLE_COLUMNS_CACHE.pop(key, None)
+        rows = conn.execute(
+            """
+            SELECT table_name AS name
+            FROM information_schema.tables
+            WHERE table_schema = 'public';
+            """,
+            (),
+        ).fetchall()
+        _PG_TABLE_EXISTS_CACHE.clear()
+        _PG_TABLE_EXISTS_CACHE.update({str(row["name"]): True for row in rows})
+        _PG_TABLES_WARM = True
+
+
+def _warm_postgres_columns_cache(conn: PgConnection) -> None:
+    global _PG_COLUMNS_WARM
+    with _PG_SCHEMA_CACHE_LOCK:
+        if _PG_COLUMNS_WARM:
+            return
+        rows = conn.execute(
+            """
+            SELECT table_name, column_name AS name
+            FROM information_schema.columns
+            WHERE table_schema = 'public';
+            """,
+            (),
+        ).fetchall()
+        by_table: dict[str, set[str]] = {}
+        for row in rows:
+            table = str(row["table_name"])
+            by_table.setdefault(table, set()).add(str(row["name"]))
+        _PG_TABLE_COLUMNS_CACHE.clear()
+        _PG_TABLE_COLUMNS_CACHE.update(
+            {table: frozenset(columns) for table, columns in by_table.items()}
+        )
+        _PG_COLUMNS_WARM = True
 
 
 def postgres_table_exists(conn: PgConnection, table_name: str) -> bool:
     key = str(table_name)
+    _warm_postgres_table_cache(conn)
     with _PG_SCHEMA_CACHE_LOCK:
-        cached = _PG_TABLE_EXISTS_CACHE.get(key)
-    if cached is not None:
-        return cached
-    cur = conn.execute(
-        """
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = ?
-        LIMIT 1;
-        """,
-        (key,),
-    )
-    found = cur.fetchone() is not None
-    with _PG_SCHEMA_CACHE_LOCK:
-        _PG_TABLE_EXISTS_CACHE[key] = found
-    return found
+        return bool(_PG_TABLE_EXISTS_CACHE.get(key, False))
 
 
 def postgres_index_exists(conn: PgConnection, index_name: str) -> bool:
@@ -545,20 +598,8 @@ def postgres_index_exists(conn: PgConnection, index_name: str) -> bool:
 
 def postgres_table_columns(conn: PgConnection, table_name: str) -> set[str]:
     key = str(table_name)
+    _warm_postgres_columns_cache(conn)
     with _PG_SCHEMA_CACHE_LOCK:
-        cached = _PG_TABLE_COLUMNS_CACHE.get(key)
-    if cached is not None:
+        cached = _PG_TABLE_COLUMNS_CACHE.get(key, frozenset())
         # Callers historically receive a mutable set. Never expose cache storage.
         return set(cached)
-    cur = conn.execute(
-        """
-        SELECT column_name AS name
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = ?;
-        """,
-        (key,),
-    )
-    columns = frozenset(str(row["name"]) for row in cur.fetchall())
-    with _PG_SCHEMA_CACHE_LOCK:
-        _PG_TABLE_COLUMNS_CACHE[key] = columns
-    return set(columns)

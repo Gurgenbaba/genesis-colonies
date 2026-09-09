@@ -532,22 +532,20 @@ def tables_exist(conn: DbConn, table_names) -> bool:
     if not names:
         return True
 
-    placeholders = ",".join("?" for _ in names)
     if get_db_backend() == "postgres":
-        sql = f"""
-            SELECT table_name AS name
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-              AND table_name IN ({placeholders});
-        """
-    else:
-        sql = f"""
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name IN ({placeholders});
-        """
+        from game.db_pg import postgres_table_exists
 
+        # First lookup bulk-warms the process-local public schema. All names in
+        # this batch then resolve in-memory instead of issuing another metadata RTT.
+        return all(postgres_table_exists(conn, name) for name in names)
+
+    placeholders = ",".join("?" for _ in names)
+    sql = f"""
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN ({placeholders});
+    """
     rows = conn.execute(sql, names).fetchall()
     found = {str(row["name"]) for row in rows}
     return set(names).issubset(found)

@@ -154,3 +154,80 @@ def test_player_stats_accepts_caller_owned_connection():
     assert "c = conn or db()" in block
     assert "get_registered_player_count(conn=c)" in block
     assert "get_online_player_count(conn=c" in block
+
+
+def test_game_settings_are_loaded_once_per_flask_request(monkeypatch):
+    from flask import Flask
+    from game import models
+
+    app = Flask(__name__)
+    calls = {"n": 0}
+
+    class _Conn:
+        def cursor(self):
+            return object()
+
+    def fake_ensure(_cur):
+        calls["n"] += 1
+        return {"queue_limit": "5", "speed": "1", "build_speed": "1"}
+
+    monkeypatch.setattr(models, "_ensure_game_settings", fake_ensure)
+    with app.test_request_context("/api/game-state"):
+        first = models.get_game_settings(conn=_Conn())
+        first["queue_limit"] = "999"
+        second = models.get_game_settings(conn=_Conn())
+
+    assert calls["n"] == 1
+    assert second["queue_limit"] == "5"
+
+
+def test_game_settings_write_invalidates_request_cache_contract():
+    src = _read("game/models.py")
+    block = src.split("def save_game_settings(", 1)[1].split(
+        "# ======================================================================\n# RESEARCH",
+        1,
+    )[0]
+    assert "_request_game_settings_cache_clear()" in block
+
+
+def test_story_has_flag_batches_player_flags_once_per_request(monkeypatch):
+    from flask import Flask
+    from game.story import flags
+
+    app = Flask(__name__)
+    calls = {"n": 0}
+
+    class _Rows:
+        def fetchall(self):
+            return [
+                {"flag_key": "ark_awake", "flag_value": "1"},
+                {"flag_key": "first_fleet", "flag_value": "1"},
+            ]
+
+    class _Conn:
+        def execute(self, sql, params=None):
+            assert "SELECT flag_key, flag_value FROM player_story_flags" in str(sql)
+            assert tuple(params or ()) == (77,)
+            calls["n"] += 1
+            return _Rows()
+
+    monkeypatch.setattr(flags, "flags_schema_ready", lambda _conn: True)
+    with app.test_request_context("/api/fleet/state"):
+        assert flags.has_flag(77, "ark_awake", conn=_Conn()) is True
+        assert flags.has_flag(77, "first_fleet", conn=_Conn()) is True
+        assert flags.has_flag(77, "missing", conn=_Conn()) is False
+
+    assert calls["n"] == 1
+
+
+def test_direct_postgres_game_settings_write_invalidates_request_memo():
+    from flask import Flask, g
+    from game.db_pg import _invalidate_request_hot_read_caches_for_sql
+
+    app = Flask(__name__)
+    with app.test_request_context("/api/admin/settings"):
+        g.gc_game_settings_cache = {"queue_limit": "5"}
+        _invalidate_request_hot_read_caches_for_sql(
+            "UPDATE game_settings SET value = ? WHERE key = ?"
+        )
+        assert g.gc_game_settings_cache is None

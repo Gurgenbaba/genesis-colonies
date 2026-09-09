@@ -23,9 +23,22 @@ class _MetadataConn:
     def execute(self, sql, params=None):
         self.calls.append((str(sql), tuple(params or ())))
         if "information_schema.columns" in str(sql):
-            return _RowsCursor([{"name": "id"}, {"name": "status"}])
+            return _RowsCursor(
+                [
+                    {"table_name": "demo", "name": "id"},
+                    {"table_name": "demo", "name": "status"},
+                    {"table_name": "world_boss_contributions", "name": "id"},
+                    {"table_name": "world_boss_contributions", "name": "status"},
+                ]
+            )
         if "information_schema.tables" in str(sql):
-            return _RowsCursor([{"ok": 1}])
+            return _RowsCursor(
+                [
+                    {"name": "demo"},
+                    {"name": "world_boss_contributions"},
+                    {"name": "player_story_flags"},
+                ]
+            )
         raise AssertionError(f"unexpected SQL: {sql}")
 
 
@@ -97,3 +110,21 @@ def test_pg_cursor_successful_ddl_invalidates_metadata_cache():
 
     assert db_pg.postgres_table_columns(conn, "demo") == {"id", "status"}
     assert len([sql for sql, _ in conn.calls if "information_schema.columns" in sql]) == 2
+
+
+def test_postgres_schema_bulk_warm_serves_many_tables_with_two_total_queries():
+    conn = _MetadataConn()
+
+    assert db_pg.postgres_table_exists(conn, "demo") is True
+    assert db_pg.postgres_table_exists(conn, "player_story_flags") is True
+    assert db_pg.postgres_table_exists(conn, "missing_table") is False
+    assert db_pg.postgres_table_columns(conn, "demo") == {"id", "status"}
+    assert db_pg.postgres_table_columns(conn, "world_boss_contributions") == {"id", "status"}
+    assert db_pg.postgres_table_columns(conn, "missing_table") == set()
+
+    table_queries = [sql for sql, _ in conn.calls if "information_schema.tables" in sql]
+    column_queries = [sql for sql, _ in conn.calls if "information_schema.columns" in sql]
+    assert len(table_queries) == 1
+    assert len(column_queries) == 1
+    assert "table_name = ?" not in table_queries[0]
+    assert "table_name = ?" not in column_queries[0]

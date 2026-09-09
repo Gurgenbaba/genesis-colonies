@@ -1953,6 +1953,41 @@ def delete_build_job(job_id: int, conn: sqlite3.Connection | None = None) -> Non
 # SETTINGS
 # ======================================================================
 
+def _request_game_settings_cache_get() -> Optional[Dict[str, Any]]:
+    """Return a copy of the request-local settings snapshot when available."""
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return None
+        cached = getattr(g, "gc_game_settings_cache", None)
+        if not isinstance(cached, dict):
+            return None
+        return dict(cached)
+    except Exception:
+        return None
+
+
+def _request_game_settings_cache_set(settings: Dict[str, Any]) -> None:
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            g.gc_game_settings_cache = dict(settings or {})
+    except Exception:
+        pass
+
+
+def _request_game_settings_cache_clear() -> None:
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            g.gc_game_settings_cache = None
+    except Exception:
+        pass
+
+
 def _ensure_game_settings(cur: sqlite3.Cursor) -> Dict[str, str]:
     cur.execute("SELECT key, value FROM game_settings;")
     rows = cur.fetchall()
@@ -1993,6 +2028,10 @@ def _ensure_game_settings(cur: sqlite3.Cursor) -> Dict[str, str]:
 
 
 def get_game_settings(conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    cached = _request_game_settings_cache_get()
+    if cached is not None:
+        return cached
+
     own_conn = False
     if conn is None:
         conn = db()
@@ -2001,7 +2040,8 @@ def get_game_settings(conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
     try:
         cur = conn.cursor()
         settings = _ensure_game_settings(cur)
-        return settings
+        _request_game_settings_cache_set(settings)
+        return dict(settings)
     finally:
         if own_conn:
             conn.close()
@@ -2063,8 +2103,10 @@ def save_game_settings(
                 (key, value_str),
             )
         commit(conn)
+        _request_game_settings_cache_clear()
     except Exception:
         rollback(conn)
+        _request_game_settings_cache_clear()
         raise
     finally:
         conn.close()
