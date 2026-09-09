@@ -948,15 +948,18 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
 
     from .options import vacation_blocks_outbound
 
-    ok_vacation, vac_reason = vacation_blocks_outbound(uid, conn=db())
-    if not ok_vacation:
-        return False, vac_reason, None
-
     want_max = str(queue_mode or "single").strip().lower() == "max"
 
     conn = db()
     finished_any = False
     try:
+        # One checkout owns the full research mutation. The previous inline
+        # conn=db() vacation probe leaked an extra PG checkout because callers
+        # that pass a connection are responsible for closing it.
+        ok_vacation, vac_reason = vacation_blocks_outbound(uid, conn=conn)
+        if not ok_vacation:
+            return False, vac_reason, None
+
         begin_write_transaction(conn)
         lock_player_for_update(conn, uid)
         now = time.time()
