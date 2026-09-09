@@ -40,6 +40,15 @@ def test_sentinel_exercises_real_fleet_mode_tabs():
     assert 'for mode in ("collect", "distribute", "send")' in src
     assert 'data-fleet-mode-tab="{mode}"' in src
     assert 'fleet.dataset.fleetPageMode === mode' in src
+    assert "for attempt in range(1, 4)" in src
+    assert "scroll_into_view_if_needed" in src
+    assert '"click_attempts"' in src
+    assert 'force=True' not in src.split("def _probe_fleet_mode_tabs(page)", 1)[1].split(
+        "def _navigate_with_pjax_perf", 1
+    )[0]
+    assert "dispatch_event" not in src.split("def _probe_fleet_mode_tabs(page)", 1)[1].split(
+        "def _navigate_with_pjax_perf", 1
+    )[0]
     assert 'kind="fleet_mode_tab_failed"' in src
     assert 'action="Fleet Send → Collect → Distribute → Send"' in src
 
