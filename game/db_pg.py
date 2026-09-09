@@ -145,6 +145,19 @@ def _invalidate_request_hot_read_caches_for_sql(sql: str) -> None:
             return
         if "GAME_SETTINGS" in text:
             g.gc_game_settings_cache = None
+        if "PLANET_BUILDINGS" in text:
+            g.gc_planet_buildings_cache = {}
+        if "PLANETS" in text:
+            g.gc_planet_row_cache = {}
+            g.gc_context_planet_cache = {}
+            g.gc_active_planet_id_cache = {}
+        if "PLAYER_CONTEXT" in text or " PLAYERS " in f" {text} ":
+            g.gc_context_planet_cache = {}
+            g.gc_active_planet_id_cache = {}
+        if "PLAYER_COMMANDER" in text:
+            g.gc_commander_row_cache = {}
+        if "PLAYER_COMMANDER_SKILLS" in text:
+            g.gc_commander_skills_cache = {}
     except Exception:
         pass
 
