@@ -4287,3 +4287,91 @@ def test_attack_limit_send_blocks_without_ship_deduction(fleet_db):
     after = int(get_planet_ships(att_pid, conn=conn).get('falcon_interceptor') or 0)
     assert after == before
     conn.close()
+
+
+def test_mass_expedition_late_tick_preserves_wave_spacing(monkeypatch):
+    """Coarse worker ticks must not collapse one-second mass-expo arrivals."""
+    from game import fleet as fleet_mod
+
+    captured = []
+
+    monkeypatch.setattr(fleet_mod, "expedition_stay_seconds", lambda *_args, **_kwargs: 60)
+
+    def fake_claim(
+        _conn,
+        movement_id,
+        _from_statuses,
+        new_status,
+        now,
+        *,
+        extra_sql="",
+        extra_params=(),
+    ):
+        captured.append(
+            {
+                "movement_id": int(movement_id),
+                "new_status": str(new_status),
+                "now": int(now),
+                "extra_sql": str(extra_sql),
+                "extra_params": tuple(extra_params),
+            }
+        )
+        return True
+
+    monkeypatch.setattr(fleet_mod, "_claim_movement_status", fake_claim)
+
+    common = {
+        "player_id": 1,
+        "mission_type": "expedition",
+        "resources": {"expedition_hours": 1},
+    }
+    first = {**common, "id": 101, "arrival_at": 1000}
+    second = {**common, "id": 102, "arrival_at": 1001}
+
+    assert fleet_mod._handle_arrival(first, conn=object(), now=1010) is True
+    assert fleet_mod._handle_arrival(second, conn=object(), now=1010) is True
+
+    assert captured[0]["new_status"] == "holding"
+    assert captured[1]["new_status"] == "holding"
+    assert captured[0]["extra_params"][0] == 1060
+    assert captured[1]["extra_params"][0] == 1061
+
+
+def test_mass_expedition_return_timing_preserves_holding_stagger():
+    """Resolving several holds together must keep their return deadlines staggered."""
+    from game import fleet as fleet_mod
+
+    first = {"holding_until": 2000, "flight_seconds": 120}
+    second = {"holding_until": 2001, "flight_seconds": 120}
+
+    first_timing = fleet_mod._expedition_return_timing_from_due_hold(
+        first,
+        now=2010,
+    )
+    second_timing = fleet_mod._expedition_return_timing_from_due_hold(
+        second,
+        now=2010,
+    )
+
+    assert int(second_timing["return_at"]) - int(first_timing["return_at"]) == 1
+    assert int(first_timing["return_at"]) > 2010
+
+
+def test_mass_expedition_due_anchor_rejects_future_or_invalid_deadlines():
+    from game import fleet as fleet_mod
+
+    assert fleet_mod._expedition_due_anchor(
+        {"arrival_at": 999},
+        "arrival_at",
+        now=1000,
+    ) == 999
+    assert fleet_mod._expedition_due_anchor(
+        {"arrival_at": 1001},
+        "arrival_at",
+        now=1000,
+    ) == 1000
+    assert fleet_mod._expedition_due_anchor(
+        {"arrival_at": "bad"},
+        "arrival_at",
+        now=1000,
+    ) == 1000
