@@ -108,11 +108,13 @@ def reload_definitions(conn: Optional[sqlite3.Connection] = None) -> None:
 
 
 def _ensure_loaded(conn: Optional[sqlite3.Connection] = None) -> None:
-    if conn is not None:
+    # Definitions are static runtime catalog data. Passing a request connection
+    # must not force a full catalog reload on every lookup; explicit
+    # reload_definitions() remains the invalidation/reload owner.
+    with _CACHE_LOCK:
+        loaded = bool(_CACHE.get("loaded"))
+    if not loaded:
         reload_definitions(conn=conn)
-        return
-    if not _CACHE.get("loaded"):
-        reload_definitions()
 
 
 def list_directive_definitions(conn: Optional[sqlite3.Connection] = None) -> List[Dict[str, Any]]:
