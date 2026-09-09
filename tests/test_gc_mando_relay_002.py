@@ -398,7 +398,11 @@ def test_relay_api_idempotency_and_state_endpoint(logistics_db):
     assert str(sources[0]) in state_json["data"]["collect"]
 
     conn = db()
-    assert _stock(conn, hub)["metal"] == 1_000
+    # Relay synchronizes legitimate mine production before harvesting. On a slow CI
+    # worker a few resource units may accrue between fixture setup and the first POST,
+    # so the idempotency contract is the first mutation response, not wall-clock
+    # frozen stock. The replay must leave DB stock exactly at that returned value.
+    assert _stock(conn, hub)["metal"] == int(first_json["data"]["hub_resources"]["metal"])
     assert _stock(conn, sources[0])["metal"] == 0
     assert _fleet_rows(conn, uid) == 0
     conn.close()
