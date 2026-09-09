@@ -31,6 +31,25 @@ def _invalidate_request_player_flags(player_id: int) -> None:
         cache.pop(int(player_id), None)
 
 
+def _invalidate_pg_story_progress_ensure(player_id: int, conn) -> None:
+    """Bump Story eligibility generation for connection-local progress fan-out memo."""
+    if not (
+        type(conn).__module__ == "game.db_pg"
+        and type(conn).__name__ == "PgConnection"
+    ):
+        return
+    pid = int(player_id)
+    versions = getattr(conn, "_gc_story_flag_versions", None)
+    if not isinstance(versions, dict):
+        versions = {}
+        setattr(conn, "_gc_story_flag_versions", versions)
+    versions[pid] = int(versions.get(pid, 0) or 0) + 1
+
+    cache = getattr(conn, "_gc_story_progress_ensure_cache", None)
+    if isinstance(cache, dict):
+        cache.pop(pid, None)
+
+
 def flags_schema_ready(conn) -> bool:
     return table_exists(conn, FLAGS_TABLE)
 
@@ -81,6 +100,7 @@ def set_flag(
         (int(player_id), key, str(value or "1"), ts),
     )
     _invalidate_request_player_flags(int(player_id))
+    _invalidate_pg_story_progress_ensure(int(player_id), conn)
     return True
 
 
