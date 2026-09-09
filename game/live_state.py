@@ -528,10 +528,11 @@ def nav_badges_for_game_state(
         )
     else:
         try:
-            from game.battle_pass import serialize_for_client as bp_serialize
+            from game.battle_pass import claimable_count_for_nav
 
-            bp = bp_serialize(uid, conn=conn)
-            bp_claimable = int(bp.get("claimable_count") or 0) if bp.get("ready") else 0
+            # Fingerprint/nav probes need only the aggregate attention count.
+            # Do not serialize the season/ops payload or ensure Battle Pass rows.
+            bp_claimable = int(claimable_count_for_nav(uid, conn=conn) or 0)
         except Exception:
             bp_claimable = 0
     try:
