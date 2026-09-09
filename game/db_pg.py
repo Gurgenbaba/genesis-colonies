@@ -158,6 +158,8 @@ def _invalidate_request_hot_read_caches_for_sql(sql: str) -> None:
             g.gc_commander_row_cache = {}
         if "PLAYER_COMMANDER_SKILLS" in text:
             g.gc_commander_skills_cache = {}
+        if "PLANET_MINE_EVOLUTION" in text:
+            g.gc_mine_evolution_ranks_cache = {}
     except Exception:
         pass
 
