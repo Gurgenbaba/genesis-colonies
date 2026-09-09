@@ -128,20 +128,34 @@
       }
 
       if (input) {
-        input.disabled = !ready;
+        // Cooldown blocks execution, not selection. Players can preselect a
+        // colony while it cools down; the selection stays armed and becomes
+        // executable automatically when the countdown reaches zero.
+        input.disabled = isHub || !state.loaded;
         input.dataset.relayReady = ready ? "1" : "0";
-        if (!ready) input.checked = false;
+        const card = input.closest?.("[data-colony-planet-id]");
+        if (card) {
+          card.classList.toggle("is-relay-ready", ready);
+          card.classList.toggle(
+            "is-relay-cooldown",
+            state.loaded && remaining > 0 && !isHub
+          );
+        }
       }
     });
 
     syncButtons(page);
   }
 
-  function selectedIds(page, direction) {
+  function selectedIds(page, direction, options = {}) {
+    const readyOnly = Boolean(options.readyOnly);
     return Array.from(
       page?.querySelectorAll(`[data-logistics-colony-cb="${direction}"]:checked`) || []
     )
-      .filter((input) => !input.disabled && input.dataset.relayReady === "1")
+      .filter((input) => {
+        if (input.disabled) return false;
+        return !readyOnly || input.dataset.relayReady === "1";
+      })
       .map((input) => parseInt(input.value || "0", 10))
       .filter((pid) => pid > 0);
   }
@@ -178,13 +192,21 @@
     const collect = page.querySelector('[data-resource-relay-submit="collect"]');
     const distribute = page.querySelector('[data-resource-relay-submit="distribute"]');
     if (collect && collect.getAttribute("aria-busy") !== "true") {
-      collect.disabled = !state.loaded || !hub || selectedIds(page, "collect").length === 0;
+      const selected = selectedIds(page, "collect").length;
+      const ready = selectedIds(page, "collect", { readyOnly: true }).length;
+      collect.dataset.selectedCount = String(selected);
+      collect.dataset.readyCount = String(ready);
+      collect.disabled = !state.loaded || !hub || ready === 0;
     }
     if (distribute && distribute.getAttribute("aria-busy") !== "true") {
+      const selected = selectedIds(page, "distribute").length;
+      const ready = selectedIds(page, "distribute", { readyOnly: true }).length;
+      distribute.dataset.selectedCount = String(selected);
+      distribute.dataset.readyCount = String(ready);
       distribute.disabled =
         !state.loaded ||
         !hub ||
-        selectedIds(page, "distribute").length === 0 ||
+        ready === 0 ||
         !hasDistributionResources(page);
     }
   }
@@ -281,9 +303,19 @@
   async function run(page, direction, button) {
     if (!page || typeof GC.fetchGameAction !== "function") return;
     const hub = hubId(page);
-    const ids = selectedIds(page, direction);
-    if (!hub || !ids.length) {
+    const selected = selectedIds(page, direction);
+    const ids = selectedIds(page, direction, { readyOnly: true });
+    if (!hub || !selected.length) {
       showResult(page, direction, t("logistics_collect_incomplete"), "error");
+      return;
+    }
+    if (!ids.length) {
+      showResult(
+        page,
+        direction,
+        errorText("relay_cooldown"),
+        "error"
+      );
       return;
     }
 
@@ -363,7 +395,9 @@
 
   function selectAll(page, direction, checked) {
     page.querySelectorAll(`[data-logistics-colony-cb="${direction}"]`).forEach((input) => {
-      input.checked = Boolean(checked && !input.disabled && input.dataset.relayReady === "1");
+      // "Alle markieren" really means all non-hub colonies. Cooldown entries
+      // stay selected as pending and become actionable automatically on expiry.
+      input.checked = Boolean(checked && !input.disabled);
     });
     syncButtons(page);
   }
