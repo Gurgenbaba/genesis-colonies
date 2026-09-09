@@ -8292,8 +8292,10 @@ def api_world_boss_attack():
         conn.close()
 
     state, _ = _build_game_state_payload(
-        include_panel=True,
+        include_panel=False,
         finish_source="api_world_boss_attack",
+        action_slim=True,
+        post_mutation_committed=bool(result.get("ok")),
     )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
