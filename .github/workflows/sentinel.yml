@@ -44,8 +44,15 @@ jobs:
           # and Packages mirrors are briefly out of sync. Playwright does not
           # need that third-party source for Chromium dependencies, so remove it
           # before apt-based --with-deps to keep the Sentinel deterministic.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo rm -f /etc/apt/sources.list.d/google.list
+          for source_file in /etc/apt/sources.list.d/*; do
+            if [ -f "$source_file" ] && grep -q "dl.google.com/linux/chrome" "$source_file"; then
+              sudo rm -f "$source_file"
+            fi
+          done
+          if [ -f /etc/apt/sources.list ]; then
+            sudo sed -i '\|dl.google.com/linux/chrome|d' /etc/apt/sources.list
+          fi
+          sudo rm -rf /var/lib/apt/lists/*
           sudo apt-get clean
           python -m playwright install --with-deps chromium
 
