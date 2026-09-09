@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "Aktarılabilir kaynak yok.",
   "logistics_relay_error_not_enough": "Merkezde bu dağıtım için yeterli kaynak yok.",
   "logistics_relay_error_foreign": "Röle yalnızca kendi kolonilerin arasında çalışır.",
-  "logistics_relay_error_vacation": "İmparatorluk Rölesi tatil modunda devre dışıdır."
+  "logistics_relay_error_vacation": "İmparatorluk Rölesi tatil modunda devre dışıdır.",
+  "fleet_mass_expedition_complete_subject": "Toplu keşif tamamlandı",
+  "fleet_mass_expedition_complete_body": "%(count)s keşif dalgasının tamamı sonuçlandırıldı. Tekil raporlar gelen kutunda; dönüş filoları zaten yolda.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s keşif raporu gelen kutunda; %(failed)s dalga başarısız oldu. Dönüş filoları zaten yolda."
 }
