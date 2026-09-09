@@ -445,6 +445,50 @@ def _probe_safe_controls(page) -> list[dict]:
 
 
 
+def _probe_fleet_mode_tabs(page) -> list[dict]:
+    """Exercise the real Fleet top-tab path, including PJAX and local Logistics switching."""
+    results: list[dict] = []
+    for mode in ("collect", "distribute", "send"):
+        tab = page.locator(f'[data-fleet-mode-tab="{mode}"]')
+        if not tab.count():
+            results.append({"mode": mode, "ok": False, "error": "tab missing"})
+            continue
+        started = time.perf_counter()
+        try:
+            tab.first.click(timeout=5_000)
+            page.wait_for_function(
+                """
+                (mode) => {
+                  const fleet = document.getElementById("fleet-page");
+                  return !!fleet && fleet.dataset.fleetPageMode === mode;
+                }
+                """,
+                arg=mode,
+                timeout=10_000,
+            )
+            page.wait_for_timeout(120)
+            results.append(
+                {
+                    "mode": mode,
+                    "ok": True,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "url": page.url,
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "mode": mode,
+                    "ok": False,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "error": str(exc)[:500],
+                    "url": page.url,
+                }
+            )
+            break
+    return results
+
+
 def _navigate_with_pjax_perf(page, target: str) -> dict:
     """Drive the production PJAX navigator and return the newly emitted perf sample."""
     return page.evaluate(
@@ -619,6 +663,7 @@ def _run_viewport(
                 "navigation_perf": None,
                 "navigation_error": None,
                 "safe_controls": [],
+                "fleet_mode_tabs": [],
                 "screenshot": shot_rel,
                 "dom": dom_rel,
             }
@@ -719,6 +764,24 @@ def _run_viewport(
                             screenshot=shot_rel,
                             dom=dom_rel,
                         )
+
+                if spec.name == "fleet":
+                    result["fleet_mode_tabs"] = _probe_fleet_mode_tabs(page)
+                    for probe in result["fleet_mode_tabs"]:
+                        if not probe.get("ok"):
+                            _new_finding(
+                                findings,
+                                severity="CRITICAL",
+                                kind="fleet_mode_tab_failed",
+                                page_name=spec.name,
+                                route=spec.path,
+                                viewport=viewport_name,
+                                action="Fleet Send → Collect → Distribute → Send",
+                                problem=probe.get("error", "Fleet mode tab did not become responsive"),
+                                screenshot=shot_rel,
+                                dom=dom_rel,
+                                details=probe,
+                            )
 
             except Exception as exc:
                 _new_finding(

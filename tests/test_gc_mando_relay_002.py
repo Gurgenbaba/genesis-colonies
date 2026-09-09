@@ -449,6 +449,14 @@ def test_shell_loaded_relay_sleeps_when_logistics_is_unmounted():
     assert "state.timer = window.setInterval" not in tail
 
 
+def test_relay_mount_observer_ignores_internal_dom_mutations():
+    script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
+    assert "const observer = new MutationObserver(syncMountedPage);" in script
+    assert "observer.observe(shell, { childList: true });" in script
+    assert "observer.observe(shell, { childList: true, subtree: true });" not in script
+    assert "state.timer = window.setInterval" in script
+
+
 def test_relay_client_blocks_legacy_preview_handlers_for_owned_controls():
     script = (ROOT / "static" / "js" / "empire_resource_relay.js").read_text(encoding="utf-8")
     assert 'event.stopImmediatePropagation()' in script
