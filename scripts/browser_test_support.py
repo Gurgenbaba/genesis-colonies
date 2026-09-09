@@ -185,6 +185,42 @@ def start_sandbox(artifact_root: Path) -> SandboxRuntime:
     )
 
 
+
+def _settle_known_sentinel_overlays(page) -> None:
+    """Complete intentional one-time shell overlays before route probing.
+
+    The Sentinel measures page/navigation behavior, not onboarding. Use only
+    ordinary user clicks; never force or DOM-dispatch around a real blocker.
+    """
+    quiet_rounds = 0
+    for _ in range(20):
+        acted = False
+
+        cookie = page.locator("button[data-cookie-notice-accept]").first
+        if cookie.count() and cookie.is_visible():
+            cookie.click(timeout=3_000)
+            acted = True
+
+        whats_new = page.locator("button[data-whats-new-dismiss]").first
+        if whats_new.count() and whats_new.is_visible():
+            whats_new.click(timeout=3_000)
+            acted = True
+
+        chooser = page.locator("#gc-bld-ui-chooser")
+        confirm = page.locator("button[data-bld-ui-chooser-confirm]").first
+        if chooser.count() and chooser.is_visible() and confirm.count() and confirm.is_visible():
+            confirm.click(timeout=3_000)
+            acted = True
+
+        if acted:
+            quiet_rounds = 0
+        else:
+            quiet_rounds += 1
+            if quiet_rounds >= 4:
+                return
+        page.wait_for_timeout(200)
+
+
 def login_with_ui(page, base_url: str, username: str, password: str) -> None:
     page.goto(f"{base_url.rstrip('/')}/login", wait_until="domcontentloaded")
     page.locator("#username").fill(username)
@@ -201,6 +237,7 @@ def login_with_ui(page, base_url: str, username: str, password: str) -> None:
             except Exception:
                 error = ""
         raise RuntimeError(f"Sentinel UI login failed: {error or page.url}") from exc
+    _settle_known_sentinel_overlays(page)
 
 
 def safe_name(value: str) -> str:
