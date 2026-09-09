@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "Нет ресурсов для передачи.",
   "logistics_relay_error_not_enough": "На хабе недостаточно ресурсов для этого распределения.",
   "logistics_relay_error_foreign": "Ретранслятор работает только между вашими собственными колониями.",
-  "logistics_relay_error_vacation": "Имперский ретранслятор отключён в режиме отпуска."
+  "logistics_relay_error_vacation": "Имперский ретранслятор отключён в режиме отпуска.",
+  "fleet_mass_expedition_complete_subject": "Массовая экспедиция завершена",
+  "fleet_mass_expedition_complete_body": "Все %(count)s волн экспедиции обработаны. Отдельные отчёты находятся во входящих; обратные флоты уже в пути.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s отчётов экспедиции находятся во входящих; %(failed)s волн завершились неудачей. Обратные флоты уже в пути."
 }
