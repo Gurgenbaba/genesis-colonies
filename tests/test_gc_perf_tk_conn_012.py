@@ -227,3 +227,41 @@ def test_timekeeper_partial_projection_skips_active_planet_identity_but_keeps_sc
     active_prefix = payload[max(0, active_pos - 80):active_pos]
     assert "if not timekeeper_partial:" in active_prefix
 
+def test_timekeeper_committed_hotpath_uses_true_partial_state_before_full_builder():
+    src = _read("app.py")
+    helper = _block(
+        src,
+        "def _timekeeper_apply_game_state(",
+        "\ndef _is_buildings_queue_action_source(",
+    )
+    partial_at = helper.index("timekeeper_partial_action_state_for_client")
+    full_at = helper.index("_build_game_state_payload(")
+    assert partial_at < full_at
+    assert 'fast_dom in ("build", "research", "shipyard", "defense", "troops")' in helper
+
+    live = _read("game/live_state.py")
+    partial = _block(
+        live,
+        "def timekeeper_partial_action_state_for_client(",
+        "\ndef attach_timekeeper_domain_queue_slices(",
+    )
+    assert "mark_request_live_refreshed()" in partial
+    assert '"server_time": float(now)' in partial
+    assert '"timekeeper": dict(timekeeper_snapshot or {})' in partial
+    assert "_build_game_state_payload" not in partial
+
+
+def test_timekeeper_partial_queue_attachment_covers_build_and_research():
+    live = _read("game/live_state.py")
+    attach = _block(
+        live,
+        "def attach_timekeeper_domain_queue_slices(",
+        "\ndef _head_card_jobs(",
+    )
+    assert 'if dom == "build":' in attach
+    assert "get_build_queue_status_for_planet(" in attach
+    assert 'payload["build_queue"] = queue' in attach
+    assert 'elif dom == "research":' in attach
+    assert "include_techs=False" in attach
+    assert 'payload["research"] = research' in attach
+
