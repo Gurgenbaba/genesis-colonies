@@ -515,7 +515,10 @@
 
   const shell = document.getElementById("main-content") || document.body;
   const observer = new MutationObserver(syncMountedPage);
-  observer.observe(shell, { childList: true, subtree: true });
+  // Watch only direct #main-content replacements. Internal relay UI updates
+  // (countdown text/classes/disabled state) must never re-trigger mount sync,
+  // otherwise the observer can feed its own DOM writes into an endless loop.
+  observer.observe(shell, { childList: true });
 
   syncMountedPage();
 
