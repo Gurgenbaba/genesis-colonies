@@ -206,7 +206,8 @@
       distribute.disabled =
         !state.loaded ||
         !hub ||
-        ready === 0 ||
+        selected === 0 ||
+        ready !== selected ||
         !hasDistributionResources(page);
     }
   }
@@ -304,12 +305,12 @@
     if (!page || typeof GC.fetchGameAction !== "function") return;
     const hub = hubId(page);
     const selected = selectedIds(page, direction);
-    const ids = selectedIds(page, direction, { readyOnly: true });
+    const readyIds = selectedIds(page, direction, { readyOnly: true });
     if (!hub || !selected.length) {
       showResult(page, direction, t("logistics_collect_incomplete"), "error");
       return;
     }
-    if (!ids.length) {
+    if (!readyIds.length || (direction === "distribute" && readyIds.length !== selected.length)) {
       showResult(
         page,
         direction,
@@ -319,6 +320,10 @@
       return;
     }
 
+    // Collect may execute the ready subset and retain cooling selections for
+    // later. Distribute waits for the whole selected set so the entered total
+    // is never silently re-split across fewer planets.
+    const ids = direction === "collect" ? readyIds : selected;
     const body =
       direction === "collect"
         ? {
