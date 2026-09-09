@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "No transferable resources are available.",
   "logistics_relay_error_not_enough": "The hub does not have enough resources for this distribution.",
   "logistics_relay_error_foreign": "Relay only works between your own colonies.",
-  "logistics_relay_error_vacation": "Empire Relay is disabled during vacation mode."
+  "logistics_relay_error_vacation": "Empire Relay is disabled during vacation mode.",
+  "fleet_mass_expedition_complete_subject": "Mass expedition complete",
+  "fleet_mass_expedition_complete_body": "All %(count)s expedition waves have been resolved. Individual reports are in your inbox; return flights are already underway.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s expedition reports are in your inbox; %(failed)s waves failed. Return flights are already underway."
 }
