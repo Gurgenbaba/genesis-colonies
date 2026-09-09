@@ -1822,8 +1822,9 @@ def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None)
     data = dict(row)
     data.pop("planet_id", None)
     result = {k: int(v) for k, v in data.items()}
-    if cache is not None:
-        cache[pid] = dict(result)
+    cache_after = _request_pg_planet_buildings_cache()
+    if cache_after is not None:
+        cache_after[pid] = dict(result)
 
     if own_conn:
         conn.close()
