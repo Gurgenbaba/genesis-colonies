@@ -33,7 +33,16 @@ jobs:
           pip install -r requirements-prod.txt -r requirements-dev.txt
 
       - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
+        shell: bash
+        run: |
+          # ubuntu-latest can carry Google's Chrome apt source while its Release
+          # and Packages mirrors are briefly out of sync. Playwright does not
+          # need that third-party source for Chromium dependencies, so remove it
+          # before apt-based --with-deps to keep the Sentinel deterministic.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -f /etc/apt/sources.list.d/google.list
+          sudo apt-get clean
+          python -m playwright install --with-deps chromium
 
       - name: Validate live Sentinel wiring
         shell: bash
