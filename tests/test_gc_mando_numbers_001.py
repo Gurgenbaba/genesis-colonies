@@ -35,3 +35,15 @@ def test_huge_number_layout_does_not_ellipsis_record_or_hof_values():
     assert "text-overflow: ellipsis" not in record_block
     assert "white-space: nowrap" in record_block
     assert "white-space: nowrap" in hof_block
+
+
+def test_hud_huge_values_expand_cards_and_never_ellipsis():
+    css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
+    bar_block = css.split(".resource-bar-cmd {", 1)[1].split("}", 1)[0]
+    value_block = css.split(".resource-bar-cmd .res-value {", 1)[1].split("}", 1)[0]
+    assert "overflow-x: auto" in bar_block
+    assert "scrollbar-gutter: stable" in bar_block
+    assert "min-inline-size: 18rem" in css
+    assert "overflow-x: auto" in value_block
+    assert "text-overflow: ellipsis" not in value_block
+    assert "text-align: right" in value_block
