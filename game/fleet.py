@@ -4298,6 +4298,44 @@ def _return_timing_from_now(
     return build_return_timing(return_started_at=started, duration_seconds=duration)
 
 
+def _expedition_due_anchor(
+    movement: Mapping[str, Any],
+    deadline_key: str,
+    *,
+    now: float,
+) -> int:
+    """Keep mass-expedition wave spacing tied to the canonical due timestamp.
+
+    Worker/poll ticks can wake several one-second-staggered waves in the same pass.
+    Using processing time for the next leg would collapse those waves onto one
+    deadline and recreate the return storm. Due handlers therefore advance classic
+    expeditions from their stored arrival/holding deadline; malformed or future
+    values defensively fall back to the processing clock.
+    """
+    current = int(now)
+    try:
+        scheduled = int(float(movement.get(deadline_key) or 0))
+    except (TypeError, ValueError):
+        return current
+    if scheduled <= 0 or scheduled > current:
+        return current
+    return scheduled
+
+
+def _expedition_return_timing_from_due_hold(
+    movement: Mapping[str, Any],
+    *,
+    now: float,
+    delay_seconds: int = 0,
+) -> Dict[str, int]:
+    """Build expedition return timing without destroying the batch stagger."""
+    return _return_timing_from_now(
+        movement,
+        now=_expedition_due_anchor(movement, "holding_until", now=now),
+        delay_seconds=delay_seconds,
+    )
+
+
 def _bounce_inbound_vacation_protected(
     movement: Dict[str, Any],
     *,
@@ -5480,7 +5518,12 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         stay_seconds = expedition_stay_seconds(
             _expedition_hours_from_movement(movement)
         )
-        holding_until = int(now) + stay_seconds
+        # Mass waves are launched one second apart. A coarse worker/poll tick may
+        # process several arrivals together; anchor the stay to each stored
+        # arrival_at so that spacing survives instead of collapsing onto now.
+        holding_until = (
+            _expedition_due_anchor(movement, "arrival_at", now=now) + stay_seconds
+        )
         return bool(
             _claim_movement_status(
                 conn,
@@ -6698,7 +6741,13 @@ def _handle_expedition_holding_end(
         conn=conn,
     )
     delay_extra = int(outcome.get("delay_extra") or 0)
-    timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_extra)
+    # Preserve the original mass-wave spacing into the return leg even when
+    # several holding expiries are resolved in the same worker/poll pass.
+    timing = _expedition_return_timing_from_due_hold(
+        movement,
+        now=now,
+        delay_seconds=delay_extra,
+    )
     return_at = timing["return_at"]
     remaining_ships = dict(outcome.get("remaining_ships") or {})
     if remaining_ships:
