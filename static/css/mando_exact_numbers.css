@@ -1,10 +1,32 @@
 /* GC-MANDO-NUMBERS-001 — exact huge-number layout for HUD, Records and Hall of Fame.
    Values stay exact; constrained surfaces gain width/scroll instead of scientific notation. */
 
-.resource-bar-cmd .hud-res-panel,
+/* HUD: Mando-scale balances must remain readable and reachable.
+   Give numeric resource cards enough real width first; only fall back to local horizontal
+   scrolling for values that outgrow even that. This keeps exact integers intact. */
+.resource-bar-cmd {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.resource-bar-cmd .hud-res-metal,
+.resource-bar-cmd .hud-res-crystal,
+.resource-bar-cmd .hud-res-fuel-cells,
+.resource-bar-cmd .hud-res-energy {
+  min-inline-size: 18rem;
+}
+
 .resource-bar-cmd .hud-res-body,
 .resource-bar-cmd .hud-res-amount {
   min-width: 0;
+}
+
+.resource-bar-cmd .hud-res-amount {
+  inline-size: 100%;
 }
 
 .resource-bar-cmd .res-value,
@@ -15,14 +37,35 @@
   letter-spacing: -0.035em;
 }
 
-.resource-bar-cmd .res-value,
-.resource-bar-cmd .res-cap {
-  font-size: clamp(0.68rem, 0.72vw, 0.9rem);
+.resource-bar-cmd .res-value {
+  display: block;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  text-align: right;
+  font-size: clamp(0.64rem, 0.70vw, 0.88rem);
+}
+
+.resource-bar-cmd .hud-res-cap-line,
+.resource-bar-cmd .res-rate {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .resource-bar-cmd .hud-res-cap-line {
   min-width: 0;
-  max-width: 100%;
+  text-align: right;
+}
+
+.resource-bar-cmd .res-cap {
+  font-size: clamp(0.56rem, 0.62vw, 0.76rem);
+}
+
+.resource-bar-cmd .res-rate {
+  font-size: clamp(0.54rem, 0.60vw, 0.74rem);
 }
 
 .gc-records-workspace-body,
@@ -79,9 +122,20 @@
 }
 
 @media (max-width: 760px) {
-  .resource-bar-cmd .res-value,
-  .resource-bar-cmd .res-cap {
-    font-size: 0.7rem;
+  .resource-bar-cmd .hud-res-metal,
+  .resource-bar-cmd .hud-res-crystal,
+  .resource-bar-cmd .hud-res-fuel-cells,
+  .resource-bar-cmd .hud-res-energy {
+    min-inline-size: min(17rem, calc(100vw - 2rem));
+  }
+
+  .resource-bar-cmd .res-value {
+    font-size: 0.64rem;
+  }
+
+  .resource-bar-cmd .res-cap,
+  .resource-bar-cmd .res-rate {
+    font-size: 0.56rem;
   }
 
   .gc-records-row {
