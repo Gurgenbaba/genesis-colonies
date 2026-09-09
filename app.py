@@ -6353,16 +6353,19 @@ def api_battle_pass_claim_op():
     finally:
         conn.close()
 
-    state = _hud_only_game_state("api_battle_pass_claim_op")
-    conn2 = db()
-    try:
-        battle_pass = (
-            (claim_result or {}).get("battle_pass")
-            if ok
-            else serialize_for_client(user_id, conn=conn2, include_tracks=True)
-        )
-    finally:
-        conn2.close()
+    if ok:
+        # Season-Op claim mutates only battle-pass XP/op state. claim_op already
+        # returns the authoritative Battle Pass payload, so do not run a full
+        # HUD/live-state refresh (queue finish + resource tick) after commit.
+        state = {}
+        battle_pass = (claim_result or {}).get("battle_pass")
+    else:
+        state = _hud_only_game_state("api_battle_pass_claim_op")
+        conn2 = db()
+        try:
+            battle_pass = serialize_for_client(user_id, conn=conn2, include_tracks=True)
+        finally:
+            conn2.close()
 
     resp = {
         "ok": bool(ok),

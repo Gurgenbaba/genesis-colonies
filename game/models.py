@@ -1773,37 +1773,63 @@ BUILDING_KEYS = [
 ]
 
 
+def _request_pg_planet_buildings_cache() -> Optional[Dict[int, Dict[str, int]]]:
+    """Request-local PG memo for the hottest planet_buildings point read."""
+    try:
+        from flask import g, has_request_context
+        from .db import get_db_backend
+
+        if get_db_backend() != "postgres" or not has_request_context():
+            return None
+        cache = getattr(g, "gc_planet_buildings_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            g.gc_planet_buildings_cache = cache
+        return cache
+    except Exception:
+        return None
+
+
 def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None) -> Dict[str, int]:
+    pid = int(planet_id)
+    cache = _request_pg_planet_buildings_cache()
+    if cache is not None and pid in cache:
+        return dict(cache[pid])
+
     own_conn = False
     if conn is None:
         conn = db()
         own_conn = True
 
     cur = conn.cursor()
-    cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (int(planet_id),))
+    cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (pid,))
     row = cur.fetchone()
 
     if not row:
         try:
             if own_conn:
                 begin_write_transaction(conn)
-            cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(planet_id),))
+            cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (pid,))
             if own_conn:
                 commit(conn)
         except Exception:
             if own_conn:
                 rollback(conn)
             raise
-        cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (int(planet_id),))
+        cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (pid,))
         row = cur.fetchone()
 
     data = dict(row)
     data.pop("planet_id", None)
+    result = {k: int(v) for k, v in data.items()}
+    cache_after = _request_pg_planet_buildings_cache()
+    if cache_after is not None:
+        cache_after[pid] = dict(result)
 
     if own_conn:
         conn.close()
 
-    return {k: int(v) for k, v in data.items()}
+    return result
 
 
 def save_planet_buildings(

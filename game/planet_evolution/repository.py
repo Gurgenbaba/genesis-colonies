@@ -11,6 +11,23 @@ from ..db import column_exists, get_db_backend, table_exists
 from ..models import db
 
 
+def _request_pg_cache(name: str) -> Optional[Dict[int, Any]]:
+    """Small request-local memo bags for canonical planet/context point reads."""
+    try:
+        from flask import g, has_request_context
+
+        if get_db_backend() != "postgres" or not has_request_context():
+            return None
+        attr = f"gc_{name}_cache"
+        cache = getattr(g, attr, None)
+        if not isinstance(cache, dict):
+            cache = {}
+            setattr(g, attr, cache)
+        return cache
+    except Exception:
+        return None
+
+
 def _json_loads(raw: Any, default: Any) -> Any:
     if raw is None or raw == "":
         return default
@@ -29,14 +46,23 @@ def evolution_schema_ready(conn: sqlite3.Connection) -> bool:
 
 
 def get_planet_row(planet_id: int, conn: Optional[sqlite3.Connection] = None) -> Optional[Dict[str, Any]]:
+    pid = int(planet_id)
+    cache = _request_pg_cache("planet_row")
+    if cache is not None and pid in cache:
+        cached = cache[pid]
+        return dict(cached) if isinstance(cached, dict) else None
+
     own = conn is None
     if own:
         conn = db()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (pid,))
         row = cur.fetchone()
-        return dict(row) if row else None
+        result = dict(row) if row else None
+        if cache is not None:
+            cache[pid] = dict(result) if isinstance(result, dict) else None
+        return result
     finally:
         if own:
             conn.close()
@@ -51,16 +77,28 @@ def get_context_planet(
   """
     from ..models import get_homeworld
 
+    uid = int(player_id)
+    cache = _request_pg_cache("context_planet")
+    if cache is not None and uid in cache:
+        return dict(cache[uid])
+
     own = conn is None
     if own:
         conn = db()
     try:
+        result: Dict[str, Any]
         if evolution_schema_ready(conn):
-            active_id = get_active_planet_id(int(player_id), conn=conn)
+            active_id = get_active_planet_id(uid, conn=conn)
             row = get_planet_row(active_id, conn=conn)
             if row:
-                return row
-        return get_homeworld(player_id=int(player_id), conn=conn)
+                result = row
+            else:
+                result = get_homeworld(player_id=uid, conn=conn)
+        else:
+            result = get_homeworld(player_id=uid, conn=conn)
+        if cache is not None:
+            cache[uid] = dict(result)
+        return result
     finally:
         if own:
             conn.close()
@@ -69,12 +107,16 @@ def get_context_planet(
 def get_active_planet_id(player_id: int, conn: Optional[sqlite3.Connection] = None) -> int:
     from ..models import get_homeworld
 
+    pid = int(player_id)
+    cache = _request_pg_cache("active_planet_id")
+    if cache is not None and pid in cache:
+        return int(cache[pid])
+
     own = conn is None
     if own:
         conn = db()
     try:
         cur = conn.cursor()
-        pid = int(player_id)
         # PostgreSQL canonical owner: keep context writes off the hot players row.
         # A missing context row falls through to the legacy column for rolling deploys
         # and newly-created accounts; the first explicit switch creates the canonical row.
@@ -91,7 +133,10 @@ def get_active_planet_id(player_id: int, conn: Optional[sqlite3.Connection] = No
                     (int(ap), pid),
                 )
                 if cur.fetchone():
-                    return int(ap)
+                    resolved = int(ap)
+                    if cache is not None:
+                        cache[pid] = resolved
+                    return resolved
 
         if column_exists(conn, "players", "active_planet_id"):
             cur.execute(
@@ -106,9 +151,15 @@ def get_active_planet_id(player_id: int, conn: Optional[sqlite3.Connection] = No
                     (int(ap), pid),
                 )
                 if cur.fetchone():
-                    return int(ap)
+                    resolved = int(ap)
+                    if cache is not None:
+                        cache[pid] = resolved
+                    return resolved
         planet = get_homeworld(player_id=pid, conn=conn)
-        return int(planet["id"])
+        resolved = int(planet["id"])
+        if cache is not None:
+            cache[pid] = resolved
+        return resolved
     finally:
         if own:
             conn.close()
