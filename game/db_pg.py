@@ -133,6 +133,22 @@ class PgRow(dict):
         return self._keys
 
 
+def _invalidate_request_hot_read_caches_for_sql(sql: str) -> None:
+    """Invalidate request memos when legacy code writes their backing tables."""
+    text = " ".join(str(sql or "").strip().upper().split())
+    if not text.startswith(("INSERT ", "UPDATE ", "DELETE ", "REPLACE ")):
+        return
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return
+        if "GAME_SETTINGS" in text:
+            g.gc_game_settings_cache = None
+    except Exception:
+        pass
+
+
 class PgCursor:
     def __init__(self, raw_cursor: Any, connection: Any = None) -> None:
         self._cur = raw_cursor
@@ -212,6 +228,7 @@ class PgCursor:
                     pass
         self.description = self._cur.description
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        _invalidate_request_hot_read_caches_for_sql(text)
         # GC-PERF-PG-SCHEMA-CACHE-001: tests/migrations may execute DDL through
         # this wrapper. Runtime schema is immutable after migrate, but clearing
         # on real DDL keeps metadata caches correct for migration/tests too.
@@ -251,6 +268,7 @@ class PgCursor:
                 except Exception:
                     pass
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        _invalidate_request_hot_read_caches_for_sql(text)
         if rewritten.lstrip().upper().startswith(("CREATE ", "ALTER ", "DROP ")):
             clear_postgres_schema_metadata_cache()
         if rewritten.lstrip().upper().startswith("INSERT"):
