@@ -491,7 +491,8 @@ def test_relay_cooldown_blocks_execution_but_never_planet_selection():
     assert 'input.disabled = isHub || !state.loaded;' in cooldown_block
     assert 'input.dataset.relayReady = ready ? "1" : "0";' in cooldown_block
     assert "if (!ready) input.checked = false;" not in cooldown_block
-    assert 'classList.toggle("is-relay-cooldown"' in cooldown_block
+    assert 'card.classList.toggle(' in cooldown_block
+    assert '"is-relay-cooldown"' in cooldown_block
 
     selected_block = script.split("function selectedIds(page, direction", 1)[1].split(
         "function resourceInputs(page)", 1
