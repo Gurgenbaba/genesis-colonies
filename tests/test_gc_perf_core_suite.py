@@ -218,9 +218,9 @@ def test_diet_early_exit_skips_full_payload_build(game_client, monkeypatch):
     monkeypatch.delenv("GC_STATE_DELTA", raising=False)
     monkeypatch.setattr(ls, "probe_poll_version", lambda *_a, **_k: 777001)
     monkeypatch.setattr(
-        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: False
+        "game.queue_poll.player_poll_guard_snapshot",
+        lambda *_a, **_k: {"due_queue": False, "due_fleet": False, "unread": 0},
     )
-    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
 
     calls = {"n": 0}
     real_build = app_module._build_game_state_payload
@@ -250,9 +250,9 @@ def test_diet_early_exit_blocked_when_queue_due(game_client, monkeypatch):
     monkeypatch.setattr(ls, "probe_poll_version", lambda *_a, **_k: 777002)
     monkeypatch.setattr(ls, "compute_poll_version", lambda _payload: 777002)
     monkeypatch.setattr(
-        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: True
+        "game.queue_poll.player_poll_guard_snapshot",
+        lambda *_a, **_k: {"due_queue": True, "due_fleet": False, "unread": 0},
     )
-    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
 
     calls = {"n": 0}
     real_build = app_module._build_game_state_payload
@@ -276,9 +276,9 @@ def test_diet_probe_skip_uses_process_local_fingerprint(game_client, monkeypatch
 
     monkeypatch.delenv("GC_STATE_DELTA", raising=False)
     monkeypatch.setattr(
-        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: False
+        "game.queue_poll.player_poll_guard_snapshot",
+        lambda *_a, **_k: {"due_queue": False, "due_fleet": False, "unread": 0},
     )
-    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
     ls.clear_diet_poll_fingerprint()
 
     probe_calls = {"n": 0}
@@ -288,7 +288,6 @@ def test_diet_probe_skip_uses_process_local_fingerprint(game_client, monkeypatch
         return 888001
 
     monkeypatch.setattr(ls, "probe_poll_version", counting_probe)
-    monkeypatch.setattr("game.messages.unread_count", lambda *_a, **_k: 0)
 
     client, pid = game_client
     ls.remember_diet_poll_fingerprint(int(pid), version=888001, unread=0)
@@ -308,9 +307,9 @@ def test_diet_probe_skip_expires_so_nav_badges_reprobe(game_client, monkeypatch)
 
     monkeypatch.delenv("GC_STATE_DELTA", raising=False)
     monkeypatch.setattr(
-        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: False
+        "game.queue_poll.player_poll_guard_snapshot",
+        lambda *_a, **_k: {"due_queue": False, "due_fleet": False, "unread": 0},
     )
-    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
     ls.clear_diet_poll_fingerprint()
 
     probe_calls = {"n": 0}
@@ -320,7 +319,6 @@ def test_diet_probe_skip_expires_so_nav_badges_reprobe(game_client, monkeypatch)
         return 888002
 
     monkeypatch.setattr(ls, "probe_poll_version", counting_probe)
-    monkeypatch.setattr("game.messages.unread_count", lambda *_a, **_k: 0)
 
     client, pid = game_client
     ls.remember_diet_poll_fingerprint(int(pid), version=888002, unread=0)
