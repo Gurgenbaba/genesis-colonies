@@ -109,6 +109,12 @@ def test_collect_all_ready_sources_in_one_click_and_cooldown_each(logistics_db):
     assert payload["processed_planet_ids"] == sources
     assert payload["uses_ships"] is False
     assert payload["uses_fleet_slots"] is False
+    assert payload["hub_resources"]["metal"] == str(100 + 6_000)
+    assert all(
+        isinstance(value, str)
+        for stock in payload["colony_resources"].values()
+        for value in stock.values()
+    )
     assert _stock(conn, hub) == {
         "metal": 100 + 6_000,
         "crystal": 200 + 12_000,
@@ -416,6 +422,10 @@ def test_relay_ui_owns_collect_and_distribute_without_fleet_submit():
     assert "fetch(" not in script
     assert "setInterval" in script
     assert "data-logistics-select-all" in script
+    assert "page._logisticsLivePending = true;" in script
+    assert "function setRelayMode(page, direction)" in script
+    assert 'closest?.("[data-logistics-tab]")' in script
+    assert "/api/fleet/logistics/preview" not in script
     assert "js/empire_resource_relay.js" in base
     assert "css/empire_resource_relay.css" in base
     assert "logistics-relay-cooldown.is-cooldown" in css
