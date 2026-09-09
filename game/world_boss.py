@@ -1576,6 +1576,8 @@ def execute_instant_attack(
     auto_select: bool = False,
     hit_mult: int = 1,
     lean_response: bool = False,
+    _event_snapshot: Optional[Mapping[str, Any]] = None,
+    _contribution_snapshot: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     GC-WB-RAID-002 — resolve a server-owned World Boss raid strike in-request.
@@ -1602,7 +1604,14 @@ def execute_instant_attack(
         return {"ok": False, "error": "invalid_hit_mult", "attack": None, "boss": None, "player": None}
 
     ok_atk, reason, meta = can_player_attack_boss(
-        pid, eid, conn=conn, now=ts, enforce_cooldown=True, check_inflight=False
+        pid,
+        eid,
+        conn=conn,
+        now=ts,
+        enforce_cooldown=True,
+        check_inflight=False,
+        _event_snapshot=_event_snapshot,
+        _contribution_snapshot=_contribution_snapshot,
     )
     if not ok_atk:
         return {
@@ -2535,9 +2544,15 @@ def can_player_attack_boss(
     enforce_cooldown: bool = True,
     check_inflight: bool = True,
     exclude_movement_id: Optional[int] = None,
+    _event_snapshot: Optional[Mapping[str, Any]] = None,
+    _contribution_snapshot: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     ts = float(now if now is not None else _now())
-    event = get_event_by_id(int(event_id), conn=conn)
+    event = (
+        dict(_event_snapshot)
+        if _event_snapshot is not None
+        else get_event_by_id(int(event_id), conn=conn)
+    )
     if not event or event["status"] != STATUS_ACTIVE:
         return False, "world_boss_inactive", {}
     if ts >= float(event["ends_at"]):
@@ -2545,14 +2560,16 @@ def can_player_attack_boss(
     if int(event["current_hp"]) <= 0:
         return False, "world_boss_defeated", {"event": event}
 
-    row = conn.execute(
-        """
-        SELECT waves, last_attack_at FROM world_boss_contributions
-        WHERE event_id = ? AND player_id = ?
-        LIMIT 1;
-        """,
-        (int(event_id), int(player_id)),
-    ).fetchone()
+    row = _contribution_snapshot
+    if row is None:
+        row = conn.execute(
+            """
+            SELECT waves, last_attack_at FROM world_boss_contributions
+            WHERE event_id = ? AND player_id = ?
+            LIMIT 1;
+            """,
+            (int(event_id), int(player_id)),
+        ).fetchone()
     waves = int(row["waves"] or 0) if row else 0
     last_at = float(row["last_attack_at"] or 0) if row and row["last_attack_at"] is not None else 0.0
     base_meta: Dict[str, Any] = {
@@ -3714,11 +3731,10 @@ def maybe_fire_ready_auto_attack(
 
     row = conn.execute(
         """
-        SELECT c.auto_attack_enabled, c.auto_attack_ships_json, c.auto_attack_planet_id,
-               c.waves, e.status, e.ends_at, e.current_hp
-        FROM world_boss_contributions c
-        JOIN world_boss_events e ON e.id = c.event_id
-        WHERE c.event_id = ? AND c.player_id = ?
+        SELECT auto_attack_enabled, auto_attack_ships_json, auto_attack_planet_id,
+               waves, last_attack_at
+        FROM world_boss_contributions
+        WHERE event_id = ? AND player_id = ?
         LIMIT 1;
         """,
         (eid, pid),
@@ -3726,9 +3742,13 @@ def maybe_fire_ready_auto_attack(
     if not row or not int(row["auto_attack_enabled"] or 0):
         return {"ok": True, "fired": False, "error": "auto_disabled"}
 
-    status = str(row["status"] or "")
-    ends_at = float(row["ends_at"] or 0)
-    hp = int(row["current_hp"] or 0)
+    event = get_event_by_id(eid, conn=conn)
+    if not event:
+        return {"ok": True, "fired": False, "error": "auto_disabled"}
+
+    status = str(event["status"] or "")
+    ends_at = float(event["ends_at"] or 0)
+    hp = int(event["current_hp"] or 0)
     waves = int(row["waves"] or 0)
     if (
         status != STATUS_ACTIVE
@@ -3746,6 +3766,8 @@ def maybe_fire_ready_auto_attack(
         now=ts,
         enforce_cooldown=True,
         check_inflight=False,
+        _event_snapshot=event,
+        _contribution_snapshot=row,
     )
     if not ok_atk:
         out: Dict[str, Any] = {"ok": True, "fired": False, "error": atk_reason or "blocked"}
@@ -3776,6 +3798,8 @@ def maybe_fire_ready_auto_attack(
         now=ts,
         auto_select=False,
         lean_response=bool(lean_response),
+        _event_snapshot=event,
+        _contribution_snapshot=row,
     )
     if result.get("ok"):
         if result.get("defeated"):
