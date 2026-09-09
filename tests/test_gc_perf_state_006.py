@@ -117,7 +117,12 @@ def test_diet_queue_probe_reads_only_fingerprint_columns():
         {"id": 12, "building_type": "solar_plant", "finish_time": 350.0},
     ]
     assert research == [
-        {"id": 21, "tech_key": "energy_tech", "finish_at": 500.25},
+        {
+            "id": 21,
+            "key": "energy_tech",
+            "tech_key": "energy_tech",
+            "finish_at": 500.25,
+        },
     ]
 
     build_sql = conn.calls[0][0]
@@ -157,7 +162,12 @@ def test_minimal_queue_probe_shapes_hash_like_full_queue_shapes():
         "summary": {"count": 1, "limit": 5},
     }
     minimal_research = [
-        {"id": 21, "tech_key": "energy_tech", "finish_at": 500.25},
+        {
+            "id": 21,
+            "key": "energy_tech",
+            "tech_key": "energy_tech",
+            "finish_at": 500.25,
+        },
     ]
     full_research = [
         {
