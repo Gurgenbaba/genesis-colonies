@@ -5285,6 +5285,118 @@ def _movement_batch_type(movement: Mapping[str, Any], *, conn) -> str | None:
     return str(row["batch_type"]) if row else None
 
 
+def _is_mass_expedition_movement(
+    movement: Mapping[str, Any],
+    *,
+    conn,
+) -> bool:
+    """Recognize mass-expo waves without adding a read for newly launched batches."""
+    if str(movement.get("mission_type") or "") != "expedition":
+        return False
+    resources = movement.get("resources") or {}
+    if isinstance(resources, Mapping) and str(resources.get("fleet_batch_type") or "") == "mass_expedition":
+        return True
+    if not movement.get("parent_batch_id"):
+        return False
+    return _movement_batch_type(movement, conn=conn) == "mass_expedition"
+
+
+def _notify_mass_expedition_batch_resolved(
+    movement: Mapping[str, Any],
+    *,
+    conn,
+    now: float,
+    locale: str | None,
+) -> bool:
+    """Emit exactly one toast-capable summary after the last batch outcome resolves.
+
+    Individual expedition reports remain canonical inbox rows. PostgreSQL locks
+    the batch row before checking pending waves so two workers resolving the last
+    two holding movements cannot both emit the summary.
+    """
+    batch_id = _safe_int(movement.get("parent_batch_id"))
+    if batch_id <= 0:
+        return False
+
+    sql = (
+        "SELECT id, player_id, batch_type, total_fleets "
+        "FROM fleet_batches WHERE id = ?"
+    )
+    if get_db_backend() == "postgres":
+        sql += " FOR UPDATE"
+    sql += ";"
+    batch = conn.execute(sql, (int(batch_id),)).fetchone()
+    if not batch or str(batch["batch_type"] or "") != "mass_expedition":
+        return False
+
+    counts = conn.execute(
+        """
+        SELECT
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN status IN ('outbound', 'holding') THEN 1 ELSE 0 END) AS pending_count,
+            SUM(CASE WHEN status IN ('returning', 'completed') THEN 1 ELSE 0 END) AS resolved_count,
+            SUM(CASE WHEN status IN ('failed', 'cancelled') THEN 1 ELSE 0 END) AS failed_count
+        FROM fleet_movements
+        WHERE parent_batch_id = ?
+          AND mission_type = 'expedition';
+        """,
+        (int(batch_id),),
+    ).fetchone()
+    pending = int((counts["pending_count"] if counts else 0) or 0)
+    if pending > 0:
+        return False
+
+    player_id = int(movement.get("player_id") or batch["player_id"] or 0)
+    if player_id <= 0:
+        return False
+    resolved = int((counts["resolved_count"] if counts else 0) or 0)
+    failed = int((counts["failed_count"] if counts else 0) or 0)
+    total = int((counts["total_count"] if counts else 0) or batch["total_fleets"] or 0)
+
+    from .i18n import tr
+
+    subject = tr(
+        "fleet_mass_expedition_complete_subject",
+        "Massen-Expedition abgeschlossen",
+        locale=locale,
+    )
+    if failed > 0:
+        body = tr(
+            "fleet_mass_expedition_complete_body_with_failures",
+            "%(resolved)s Expeditionsberichte liegen im Postfach; %(failed)s Wellen sind fehlgeschlagen. Die Rückflüge laufen bereits.",
+            locale=locale,
+            resolved=resolved,
+            failed=failed,
+        )
+    else:
+        body = tr(
+            "fleet_mass_expedition_complete_body",
+            "Alle %(count)s Expeditionswellen sind ausgewertet. Die Einzelberichte liegen im Postfach; die Rückflüge laufen bereits.",
+            locale=locale,
+            count=total,
+        )
+    result = notify_expedition(
+        player_id,
+        subject,
+        body,
+        metadata={
+            "fleet_id": int(movement.get("id") or 0),
+            "report_phase": "mass_expedition_complete",
+            "mission_type": "expedition",
+            "parent_batch_id": int(batch_id),
+            "batch_type": "mass_expedition",
+            "mass_expedition_summary": True,
+            "resolved_count": resolved,
+            "failed_count": failed,
+            "total_count": total,
+            "timestamp": int(now),
+        },
+        locale=locale,
+        conn=conn,
+    )
+    return bool(result.get("ok"))
+
+
 def _build_logistics_report_metadata(
     *,
     movement_id: int,
@@ -6688,6 +6800,8 @@ def _handle_expedition_holding_end(
     if world_key:
         rewards["world_key"] = world_key
     rewards["expedition_hours"] = _expedition_hours_from_movement(movement)
+    if isinstance(raw_res, Mapping) and raw_res.get("fleet_batch_type"):
+        rewards["fleet_batch_type"] = str(raw_res["fleet_batch_type"])
     try:
         from .stellar_forge import grant_forge_cores, record_operational_progress
 
@@ -6786,6 +6900,12 @@ def _handle_expedition_holding_end(
     meta["fleet_id"] = movement_id
     if world_key:
         meta["world_key"] = world_key
+    is_mass_expedition = _is_mass_expedition_movement(movement, conn=conn)
+    if is_mass_expedition:
+        meta["toast_suppressed"] = True
+        meta["batch_type"] = "mass_expedition"
+        if movement.get("parent_batch_id"):
+            meta["parent_batch_id"] = int(movement["parent_batch_id"])
 
     try:
         from .world_boss import try_discover_world_boss_from_expedition
@@ -6890,6 +7010,13 @@ def _handle_expedition_holding_end(
         )
     except Exception:
         logger.exception("activity_xp expedition grant failed movement_id=%s", movement_id)
+    if is_mass_expedition:
+        _notify_mass_expedition_batch_resolved(
+            movement,
+            conn=conn,
+            now=now,
+            locale=sender_locale,
+        )
     return True
 
 
@@ -7972,6 +8099,7 @@ def mass_expedition_from_ships(
         distance = int(flight_preview["distance"])
         resources_store = {
             "expedition_hours": normalize_expedition_hours(None),
+            "fleet_batch_type": "mass_expedition",
         }
         target_planet_id = target_info.get("target_planet_id")
         has_troops_col = fleet_troops_column_ready(conn)
