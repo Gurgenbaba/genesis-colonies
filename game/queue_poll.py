@@ -282,6 +282,172 @@ def player_has_due_queue_work(
             conn.close()
 
 
+
+def player_poll_guard_snapshot(
+    player_id: int,
+    conn=None,
+    *,
+    now: Optional[float] = None,
+) -> Dict[str, int | bool]:
+    """One-roundtrip guard for the high-frequency game-state since path.
+
+    The early unchanged path only needs three facts before it can return:
+    whether any queue work is due, whether any Fleet phase is due, and the exact
+    unread inbox count. PostgreSQL used to pay one remote round trip for each fact.
+    Fold them into one SELECT while preserving the queue and Fleet deadline rules.
+    """
+    owns_conn = conn is None
+    if owns_conn:
+        conn = db()
+
+    uid = int(player_id)
+    queue_ts = due_cutoff_ts(now)
+    base_now = float(now if now is not None else time.time())
+    fleet_ts = base_now + DUE_TIME_EPSILON_SEC
+    try:
+        evolution_ready, shipyard_ready, defense_ready, troop_ready = (
+            _optional_due_queue_readiness(conn)
+        )
+        try:
+            from .fleet import fleet_schema_ready
+
+            fleet_ready = bool(fleet_schema_ready(conn))
+        except Exception:
+            fleet_ready = False
+        try:
+            from .messages import _table_ready as messages_table_ready
+
+            messages_ready = bool(messages_table_ready(conn))
+        except Exception:
+            messages_ready = False
+
+        queue_clauses: list[str] = []
+        queue_params: list[object] = []
+
+        def add_queue(clause: str, *values: object) -> None:
+            queue_clauses.append(f"EXISTS ({clause})")
+            queue_params.extend(values)
+
+        add_queue(
+            "SELECT 1 FROM build_queue bq INNER JOIN planets p ON p.id = bq.planet_id "
+            "WHERE p.player_id = ? AND bq.finish_time <= ? LIMIT 1",
+            uid,
+            queue_ts,
+        )
+        add_queue(
+            "SELECT 1 FROM research_queue WHERE user_id = ? AND finish_at <= ? LIMIT 1",
+            uid,
+            queue_ts,
+        )
+        if evolution_ready:
+            add_queue(
+                "SELECT 1 FROM planet_research_queue prq "
+                "INNER JOIN planets p ON p.id = prq.planet_id "
+                "WHERE p.player_id = ? AND prq.finish_at <= ? LIMIT 1",
+                uid,
+                queue_ts,
+            )
+            add_queue(
+                "SELECT 1 FROM planet_ascension_queue paq "
+                "INNER JOIN planets p ON p.id = paq.planet_id "
+                "WHERE p.player_id = ? AND paq.state = 'active' AND paq.finish_at <= ? LIMIT 1",
+                uid,
+                queue_ts,
+            )
+        if shipyard_ready:
+            add_queue(
+                "SELECT 1 FROM shipyard_queue sq "
+                "INNER JOIN planets p ON p.id = sq.planet_id "
+                "WHERE p.player_id = ? AND sq.status = 'queued' AND sq.finish_at <= ? LIMIT 1",
+                uid,
+                queue_ts,
+            )
+        if defense_ready:
+            add_queue(
+                "SELECT 1 FROM defense_queue dq "
+                "INNER JOIN planets p ON p.id = dq.planet_id "
+                "WHERE p.player_id = ? AND dq.status = 'queued' AND dq.finish_at <= ? LIMIT 1",
+                uid,
+                queue_ts,
+            )
+        if troop_ready:
+            add_queue(
+                "SELECT 1 FROM troop_queue tq "
+                "WHERE tq.player_id = ? AND tq.status = 'queued' AND tq.finish_at <= ? LIMIT 1",
+                uid,
+                queue_ts,
+            )
+
+        select_parts = [
+            "CASE WHEN "
+            + " OR ".join(queue_clauses)
+            + " THEN 1 ELSE 0 END AS due_queue"
+        ]
+        params: list[object] = list(queue_params)
+
+        if fleet_ready:
+            select_parts.append(
+                """
+                CASE WHEN
+                    EXISTS (
+                        SELECT 1 FROM fleet_movements
+                        WHERE player_id = ? AND status = 'outbound' AND arrival_at <= ?
+                        LIMIT 1
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM fleet_movements
+                        WHERE player_id = ? AND status = 'holding' AND holding_until <= ?
+                        LIMIT 1
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM fleet_movements
+                        WHERE player_id = ? AND status = 'returning' AND return_at <= ?
+                        LIMIT 1
+                    )
+                THEN 1 ELSE 0 END AS due_fleet
+                """
+            )
+            params.extend((uid, fleet_ts, uid, fleet_ts, uid, fleet_ts))
+        else:
+            select_parts.append("0 AS due_fleet")
+
+        if messages_ready:
+            select_parts.append(
+                """
+                (
+                    SELECT COUNT(*)
+                    FROM player_messages
+                    WHERE recipient_player_id = ?
+                      AND (deleted_at IS NULL OR deleted_at = 0)
+                      AND COALESCE(is_archived, 0) = 0
+                      AND COALESCE(is_read, 0) = 0
+                ) AS unread
+                """
+            )
+            params.append(uid)
+        else:
+            select_parts.append("0 AS unread")
+
+        row = conn.execute(
+            "SELECT " + ", ".join(select_parts) + ";",
+            tuple(params),
+        ).fetchone()
+        if not row:
+            return {"due_queue": False, "due_fleet": False, "unread": 0}
+        return {
+            "due_queue": bool(int(row["due_queue"] or 0)),
+            "due_fleet": bool(int(row["due_fleet"] or 0)),
+            "unread": max(0, int(row["unread"] or 0)),
+        }
+    except Exception:
+        # Conservative failure mode: never return an unchanged envelope when the
+        # deadline guard itself could not be evaluated.
+        return {"due_queue": True, "due_fleet": True, "unread": -1}
+    finally:
+        if owns_conn and conn is not None:
+            conn.close()
+
+
 def _lease_key(player_id: int) -> str:
     return f"queue_finish_poll:{int(player_id)}"
 
