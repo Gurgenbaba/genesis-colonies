@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "Keine übertragbaren Ressourcen vorhanden.",
   "logistics_relay_error_not_enough": "Auf dem Hub sind für diese Verteilung nicht genug Ressourcen.",
   "logistics_relay_error_foreign": "Relay funktioniert ausschließlich zwischen deinen eigenen Kolonien.",
-  "logistics_relay_error_vacation": "Empire-Relay ist im Urlaubsmodus gesperrt."
+  "logistics_relay_error_vacation": "Empire-Relay ist im Urlaubsmodus gesperrt.",
+  "fleet_mass_expedition_complete_subject": "Massen-Expedition abgeschlossen",
+  "fleet_mass_expedition_complete_body": "Alle %(count)s Expeditionswellen sind ausgewertet. Die Einzelberichte liegen im Postfach; die Rückflüge laufen bereits.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s Expeditionsberichte liegen im Postfach; %(failed)s Wellen sind fehlgeschlagen. Die Rückflüge laufen bereits."
 }

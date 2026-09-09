@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "Brak zasobów do przeniesienia.",
   "logistics_relay_error_not_enough": "Hub nie ma wystarczających zasobów do tej dystrybucji.",
   "logistics_relay_error_foreign": "Przekaźnik działa tylko między twoimi własnymi koloniami.",
-  "logistics_relay_error_vacation": "Przekaźnik Imperium jest wyłączony w trybie urlopowym."
+  "logistics_relay_error_vacation": "Przekaźnik Imperium jest wyłączony w trybie urlopowym.",
+  "fleet_mass_expedition_complete_subject": "Masowa ekspedycja zakończona",
+  "fleet_mass_expedition_complete_body": "Wszystkie %(count)s fale ekspedycji zostały rozliczone. Pojedyncze raporty są w skrzynce odbiorczej; floty powrotne są już w drodze.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s raportów ekspedycji jest w skrzynce odbiorczej; %(failed)s fal zakończyło się niepowodzeniem. Floty powrotne są już w drodze."
 }

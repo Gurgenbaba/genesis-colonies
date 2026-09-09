@@ -1465,6 +1465,10 @@ def notification_toast_items(
             if mid <= 0:
                 continue
             meta = _parse_metadata(row["metadata_json"]) or {}
+            # Inbox rows remain unread/visible, but batch members can opt out of
+            # toast/sound fanout so one summary notification represents the wave.
+            if bool(meta.get("toast_suppressed")):
+                continue
             mission_type = str(meta.get("mission_type") or "").strip().lower()
             report_phase = str(meta.get("report_phase") or "").strip()
             category = str(row["category"] or "system").strip().lower() or "system"

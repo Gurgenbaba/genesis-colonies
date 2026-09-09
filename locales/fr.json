@@ -9065,5 +9065,8 @@
   "logistics_relay_error_no_resources": "Aucune ressource transférable disponible.",
   "logistics_relay_error_not_enough": "Le hub ne possède pas assez de ressources pour cette distribution.",
   "logistics_relay_error_foreign": "Le relais fonctionne uniquement entre vos propres colonies.",
-  "logistics_relay_error_vacation": "Le Relais impérial est désactivé en mode vacances."
+  "logistics_relay_error_vacation": "Le Relais impérial est désactivé en mode vacances.",
+  "fleet_mass_expedition_complete_subject": "Expédition de masse terminée",
+  "fleet_mass_expedition_complete_body": "Les %(count)s vagues d’expédition ont toutes été résolues. Les rapports individuels sont dans votre boîte de réception ; les vols de retour sont déjà en cours.",
+  "fleet_mass_expedition_complete_body_with_failures": "%(resolved)s rapports d’expédition sont dans votre boîte de réception ; %(failed)s vagues ont échoué. Les vols de retour sont déjà en cours."
 }
