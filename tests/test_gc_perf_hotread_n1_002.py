@@ -244,3 +244,54 @@ def test_battle_pass_op_success_skips_expensive_hud_live_state():
     assert "_hud_only_game_state" not in success
     assert "conn2 = db()" not in success
     assert '(claim_result or {}).get("battle_pass")' in success
+
+
+def test_mine_evolution_pg_request_cache_batches_rank_reads(monkeypatch):
+    from game import db as db_module
+    from game.mine_evolution import service
+
+    app = Flask(__name__)
+    monkeypatch.setattr(db_module, "get_db_backend", lambda: "postgres")
+    monkeypatch.setattr(service, "schema_ready", lambda _conn: True)
+
+    class Cursor:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, sql, params=()):
+            assert "SELECT building_type, evolution_rank FROM planet_mine_evolution" in str(sql)
+            self.calls += 1
+            return self
+
+        def fetchall(self):
+            return [
+                {"building_type": "metal_mine", "evolution_rank": 2},
+                {"building_type": "crystal_mine", "evolution_rank": 1},
+            ]
+
+    class Conn:
+        def __init__(self):
+            self.cur = Cursor()
+
+        def cursor(self):
+            return self.cur
+
+    conn = Conn()
+    with app.test_request_context("/overview"):
+        assert service.get_evolution_rank(7, "metal_mine", conn=conn) == 2
+        assert service.get_evolution_rank(7, "crystal_mine", conn=conn) == 1
+        assert service.get_evolution_rank(7, "fuel_cell_plant", conn=conn) == 0
+
+    assert conn.cur.calls == 1
+
+
+def test_pg_write_invalidator_clears_mine_rank_memo():
+    from game.db_pg import _invalidate_request_hot_read_caches_for_sql
+
+    app = Flask(__name__)
+    with app.test_request_context("/api/buildings/mine-evolve"):
+        g.gc_mine_evolution_ranks_cache = {7: {"metal_mine": 2}}
+        _invalidate_request_hot_read_caches_for_sql(
+            "UPDATE planet_mine_evolution SET evolution_rank = ? WHERE planet_id = ?"
+        )
+        assert g.gc_mine_evolution_ranks_cache == {}
