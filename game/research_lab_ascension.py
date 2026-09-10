@@ -299,8 +299,14 @@ def panel_fields(
     next_rank = rank + 1
     gate = required_level_for_rank(next_rank)
     tribute_m, tribute_c = tribute_cost_for_rank(next_rank)
+    local_prestige_capacity = min(
+        PRESTIGE_SLOT_CAP,
+        base_slots_for_lab_level(int(level or 0)) + int(rank),
+    )
     return {
         "research_lab_ascension": True,
+        "research_queue_capacity": int(local_prestige_capacity),
+        "research_queue_prestige_capacity": int(local_prestige_capacity),
         "research_lab_ascension_rank": int(rank),
         "research_lab_ascension_roman": roman_rank(rank) if rank else "",
         "research_lab_next_rank": int(next_rank) if next_rank <= MAX_ASCENSION_RANK else 0,

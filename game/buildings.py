@@ -1761,8 +1761,9 @@ def _make_panel_row(
     row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
     if pid is not None and building_type == "research_lab":
         from .research_lab_ascension import panel_fields as research_lab_ascension_panel_fields
-        from .research_lab_ascension import research_queue_capacity
 
+        # The card is planet-local. panel_fields provides this lab's prestige
+        # capacity without re-resolving account-wide Directive bonuses.
         row.update(
             research_lab_ascension_panel_fields(
                 int(planet.get("player_id") or 0),
@@ -1771,12 +1772,6 @@ def _make_panel_row(
                 conn=evo_conn,
             )
         )
-        capacity = research_queue_capacity(
-            int(planet.get("player_id") or 0),
-            conn=evo_conn,
-        )
-        row["research_queue_capacity"] = int(capacity.get("limit") or 0)
-        row["research_queue_prestige_capacity"] = int(capacity.get("prestige_limit") or 0)
     if pid is not None and building_type == "orbital_shipyard":
         try:
             from .stellar_forge import panel_forge_fields
