@@ -67,3 +67,19 @@ def test_timekeeper_is_presented_in_header_and_mirrors_live_resource_balance():
     assert "MutationObserver(sync)" in partial
     assert ".gc-header-timekeeper" in css
     assert ".gc-hslot-lang" in css
+
+
+def test_desktop_command_header_is_one_outer_surface_not_detached_cards():
+    css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
+    assert "GC-HUD-SHELL-002" in css
+    hardened = css.split("GC-HUD-SHELL-002", 1)[1]
+    row_block = hardened.split(".gc-header-row-top {", 1)[1].split("}", 1)[0]
+    assert "overflow: hidden !important" in row_block
+    assert "background:" in row_block
+    assert "border:" in row_block
+    assert "border-radius: 0 !important" in row_block
+    assert "background: transparent !important" in hardened
+    assert "background-image: none !important" in hardened
+    assert "border-inline-start: 0 !important" in hardened
+    assert ".gc-score-pill > #hud-score-total" in css
+    assert "display: none !important" in css

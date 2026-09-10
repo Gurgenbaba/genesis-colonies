@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from .effects.effect_resolver import EffectResolver
@@ -193,6 +194,71 @@ def _storage_fuel_matrix_value(fuel_cap: int) -> int:
     return cap
 
 
+def _project_colony_resource_balances(
+    planet: Dict[str, Any],
+    *,
+    buildings: Dict[str, int],
+    research: Dict[str, int],
+    resolver: EffectResolver,
+    ratio: float,
+    now: float,
+    vacation_frozen: bool,
+) -> Dict[str, int]:
+    """Project elapsed production for read-only Empire SSR without touching the DB.
+
+    The relay intentionally leaves a collected colony at zero and advances ``last_update``.
+    A write-free Empire GET therefore has to render the production accrued since that
+    timestamp instead of waiting for a planet switch to persist a normal resource tick.
+    Reuse the already-loaded buildings/research/resolver so this adds no per-colony reads.
+    """
+    projected = dict(planet)
+    if vacation_frozen:
+        return {
+            "metal": _safe_int(projected.get("metal")),
+            "crystal": _safe_int(projected.get("crystal")),
+            "fuel_cells": _safe_int(projected.get("fuel_cells")),
+        }
+
+    last_raw = projected.get("last_update")
+    try:
+        delta = max(0, int(float(now) - float(last_raw))) if last_raw is not None else 0
+    except (TypeError, ValueError):
+        delta = 0
+    if delta <= 0:
+        return {
+            "metal": _safe_int(projected.get("metal")),
+            "crystal": _safe_int(projected.get("crystal")),
+            "fuel_cells": _safe_int(projected.get("fuel_cells")),
+        }
+
+    from .exact_math import decimal_mul_div_floor
+    from .resources import apply_fuel_production_delta, apply_production_delta
+
+    mods = resolver.get_modifiers()
+    metal_ph, crystal_ph = resolver.production_per_hour_exact(ratio)
+    fuel_ph = resolver.fuel_cells_production_per_hour_exact(ratio)
+    apply_production_delta(
+        projected,
+        buildings,
+        delta_metal=decimal_mul_div_floor(metal_ph, delta, 3600),
+        delta_crystal=decimal_mul_div_floor(crystal_ph, delta, 3600),
+        research=research,
+        mods=mods,
+    )
+    apply_fuel_production_delta(
+        projected,
+        buildings,
+        delta_fuel_cells=decimal_mul_div_floor(fuel_ph, delta, 3600),
+        research=research,
+        mods=mods,
+    )
+    return {
+        "metal": _safe_int(projected.get("metal")),
+        "crystal": _safe_int(projected.get("crystal")),
+        "fuel_cells": _safe_int(projected.get("fuel_cells")),
+    }
+
+
 def _build_colony_matrix_data(
     colony: Dict[str, Any],
     *,
@@ -326,6 +392,9 @@ def _build_colony_snapshot(
     research: Dict[str, int],
     settings: Dict[str, Any],
     conn,
+    project_resources: bool = False,
+    projection_now: Optional[float] = None,
+    vacation_frozen: bool = False,
 ) -> Dict[str, Any]:
     planet_id = _safe_int(planet.get("id"))
     buildings = get_planet_buildings(planet_id, conn=conn)
@@ -349,9 +418,21 @@ def _build_colony_snapshot(
     prod_by_building = resolver.get_building_production_per_hour(ratio)
     caps = resolver.get_storage_capacity()
 
-    metal = _safe_int(planet.get("metal"))
-    crystal = _safe_int(planet.get("crystal"))
-    fuel_cells = _safe_int(planet.get("fuel_cells"))
+    resource_values: Dict[str, Any] = planet
+    if project_resources:
+        resource_values = _project_colony_resource_balances(
+            planet,
+            buildings=buildings,
+            research=research,
+            resolver=resolver,
+            ratio=ratio,
+            now=float(projection_now if projection_now is not None else time.time()),
+            vacation_frozen=bool(vacation_frozen),
+        )
+
+    metal = _safe_int(resource_values.get("metal"))
+    crystal = _safe_int(resource_values.get("crystal"))
+    fuel_cells = _safe_int(resource_values.get("fuel_cells"))
     metal_cap = _safe_int(caps.get("metal"))
     crystal_cap = _safe_int(caps.get("crystal"))
     fuel_cap = _safe_int(caps.get("fuel_cells"))
@@ -536,8 +617,9 @@ def build_empire_context(
     Aggregate empire-wide colony data for the /empire page.
 
     All production and energy values are computed server-side via EffectResolver.
-    Resource balances are ticked for every owned planet only when ``sync_resources`` is true.
-    Read-only SSR callers should refresh their active live context separately and pass false.
+    Resource balances are persisted for every owned planet only when ``sync_resources``
+    is true. Read-only SSR projects elapsed production in memory, so freshly collected
+    colonies immediately show their resumed production without adding write pressure.
     """
     from .models import db as _db
     from .resources import sync_player_planet_resources
@@ -564,6 +646,13 @@ def build_empire_context(
         except TypeError:
             settings = get_game_settings()
 
+        projection_now = time.time()
+        vacation_frozen = False
+        if not sync_resources:
+            from .options import vacation_freezes_account_progress
+
+            vacation_frozen = bool(vacation_freezes_account_progress(uid, conn=conn))
+
         colonies: List[Dict[str, Any]] = []
         for planet in planets:
             if _safe_int(planet.get("player_id")) != uid:
@@ -575,6 +664,9 @@ def build_empire_context(
                     research=research,
                     settings=settings or {},
                     conn=conn,
+                    project_resources=not sync_resources,
+                    projection_now=projection_now,
+                    vacation_frozen=vacation_frozen,
                 )
             )
 
