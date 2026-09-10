@@ -66,8 +66,11 @@
       }
       closeModal();
       if (typeof GC.applyActionState === "function") GC.applyActionState(res, "research_lab_ascension");
-      if (typeof GC.reloadCurrentPage === "function") await GC.reloadCurrentPage({ force: true });
-      else window.location.reload();
+      if (typeof GC.reloadCurrentPage === "function") {
+        await GC.reloadCurrentPage({ force: true });
+      } else if (typeof GC.navigateTo === "function") {
+        await GC.navigateTo(window.location.pathname + window.location.search, { force: true });
+      }
     } catch (err) {
       if (typeof GC.toast === "function") GC.toast(messageFor(null), "error");
       else if (window.console && console.error) console.error(err);
