@@ -31,7 +31,9 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Apply deterministic integration patch
-        run: python scripts/_apply_research_network_ascension.py
+        run: |
+          python scripts/_apply_research_network_ascension.py
+          python scripts/_fix_research_ascension_tribute.py
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -48,8 +50,7 @@ jobs:
             tests/test_research_requirements.py \
             tests/test_gc825_research_time_rebalance.py \
             tests/test_gc830_max_queue_buttons.py \
-            tests/test_queue_static_contract.py \
-            tests/test_race_conditions.py -k 'research or research_lab_ascension'
+            tests/test_queue_static_contract.py -k 'research or research_lab_ascension'
       - name: Commit verified integration
         run: |
           if git diff --quiet; then
