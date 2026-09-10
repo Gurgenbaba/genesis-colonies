@@ -147,3 +147,6 @@ def test_static_integration_contracts_are_present():
     assert "GC.reloadCurrentPage" in building_script
     assert "GC.navigateTo" in building_script
     assert "location.reload" not in building_script
+    assert "GC.registerCleanup" in building_script
+    assert 'removeEventListener("click", onDocumentClick)' in building_script
+    assert 'removeEventListener("keydown", onKeydown)' in building_script
