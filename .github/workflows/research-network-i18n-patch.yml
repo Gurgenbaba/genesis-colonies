@@ -21,6 +21,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
+      - name: Install audit dependencies
+        run: pip install -r requirements-prod.txt
       - name: Apply locale parity patch
         run: python scripts/_patch_research_network_locales.py
       - name: Audit all locale keys
