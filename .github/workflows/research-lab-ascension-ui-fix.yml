@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Apply focused UI flow patch
-        run: python scripts/_patch_research_lab_ascension_building_flow.py
+        run: python scripts/_patch_research_lab_ascension_building_flow_v2.py
       - name: Static syntax gates
         run: |
           python -m py_compile tests/test_research_lab_ascension.py
@@ -39,7 +39,7 @@ jobs:
         run: |
           git status --short
           git diff --check
-          git diff --exit-code -- scripts/_patch_research_lab_ascension_building_flow.py .github/workflows/research-lab-ascension-ui-fix.yml
+          git diff --exit-code -- scripts/_patch_research_lab_ascension_building_flow.py scripts/_patch_research_lab_ascension_building_flow_v2.py .github/workflows/research-lab-ascension-ui-fix.yml
       - name: Commit verified product changes
         run: |
           git config user.name 'github-actions[bot]'
