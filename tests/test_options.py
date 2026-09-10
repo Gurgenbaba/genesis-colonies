@@ -80,6 +80,45 @@ def _login(client, username: str, password: str='test-pass-123') -> None:
     res = client.post('/login', data={'username': username, 'password': password}, follow_redirects=False)
     assert res.status_code in (302, 303)
 
+def test_vacation_gate_is_single_read_without_schema_ensure(monkeypatch):
+    from game import options as options_mod
+
+    class _Result:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _Conn:
+        def __init__(self, row):
+            self.row = row
+            self.calls = []
+
+        def execute(self, sql, params=()):
+            self.calls.append((str(sql), tuple(params)))
+            return _Result(self.row)
+
+    monkeypatch.setattr(
+        options_mod,
+        "_player_safety_row",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("hotpath must not call _player_safety_row/schema ensure")
+        ),
+    )
+    active = _Conn({"vacation_mode_active": 1})
+    inactive = _Conn({"vacation_mode_active": 0})
+
+    assert options_mod.is_vacation_mode_active(7, conn=active) is True
+    assert options_mod.is_vacation_mode_active(8, conn=inactive) is False
+    assert len(active.calls) == 1
+    assert len(inactive.calls) == 1
+    sql = active.calls[0][0]
+    assert "SELECT vacation_mode_active" in sql
+    assert "FROM players" in sql
+    assert active.calls[0][1] == (7,)
+
+
 def test_options_page_requires_login(app_client):
     res = app_client.get('/options')
     assert res.status_code in (302, 303)
