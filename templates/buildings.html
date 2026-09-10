@@ -174,20 +174,45 @@
           {{ render_building_effect_bundle(b) }}
 
           {% if building_type == 'research_lab' and b.research_lab_ascension is defined and b.research_lab_ascension %}
+          {% set _lab_asc_rank = (b.research_lab_ascension_rank|default(0)|int) %}
+          {% set _lab_asc_next = (b.research_lab_next_rank|default(0)|int) %}
+          {% set _lab_asc_req = (b.research_lab_ascension_required_level|default(0)|int) %}
+          {% set _lab_asc_progress = ([100, ((b.level|int) * 100 // _lab_asc_req)]|min) if _lab_asc_req > 0 else 100 %}
           <div class="gc-bld-evo-block" data-research-lab-ascension>
             <div class="gc-bld-evo-progress" role="status">
               <span class="gc-bld-evo-progress-label">{{ T('research_network_title') }}</span>
+              {% if _lab_asc_next > 0 %}
+              <span class="gc-mono gc-bld-evo-progress-vals">{{ b.level|fmt_int }} / {{ _lab_asc_req|fmt_int }}</span>
+              {% else %}
               <span class="gc-mono gc-bld-evo-progress-vals">{{ T('research_network_capacity', slots=b.research_queue_capacity) }}</span>
+              {% endif %}
             </div>
-            {% if (b.research_lab_ascension_rank|default(0)|int) > 0 %}
-            <div class="gc-bld-evo-bonus gc-mono">
-              {{ T('research_network_rank_speed', rank=b.research_lab_ascension_roman, pct=b.research_lab_ascension_speed_bonus_pct) }}
+            {% if _lab_asc_next > 0 %}
+            <div class="gc-bld-evo-bar" aria-hidden="true">
+              <span class="gc-bld-evo-bar-fill" style="width: {{ _lab_asc_progress }}%;"></span>
             </div>
             {% endif %}
+            <div class="gc-bld-evo-bonus gc-mono">
+              {% if _lab_asc_rank > 0 %}
+                {{ T('research_network_rank_speed', rank=b.research_lab_ascension_roman, pct=b.research_lab_ascension_speed_bonus_pct) }} ·
+              {% endif %}
+              {{ T('research_network_capacity', slots=b.research_queue_capacity) }}
+            </div>
             {% if b.research_lab_ascension_ready %}
             <div class="hint">{{ T('research_network_ready', rank=b.research_lab_next_roman) }}</div>
-            {% elif (b.research_lab_next_rank|default(0)|int) > 0 %}
-            <div class="hint">{{ T('research_network_requires', rank=b.research_lab_next_roman, level=b.research_lab_ascension_required_level) }}</div>
+            <button type="button"
+                    class="gc-btn gc-bld-evo-btn"
+                    data-research-lab-ascend
+                    data-asc-name="{{ T('building_' ~ building_type) }}"
+                    data-asc-rank="{{ b.research_lab_next_roman }}"
+                    data-asc-required="{{ _lab_asc_req }}"
+                    data-asc-tribute-metal="{{ b.research_lab_ascension_tribute_metal|fmt_int }}"
+                    data-asc-tribute-crystal="{{ b.research_lab_ascension_tribute_crystal|fmt_int }}"
+                    data-asc-benefit="{{ T('research_network_rank_speed', rank=b.research_lab_next_roman, pct=(b.research_lab_ascension_speed_bonus_pct|int + 2)) }} · {{ T('research_network_capacity', slots=(b.research_queue_capacity|int + 1)) }}">
+              {{ T('research_network_ascend', rank=b.research_lab_next_roman) }}
+            </button>
+            {% elif _lab_asc_next > 0 %}
+            <div class="hint">{{ T('research_network_requires', rank=b.research_lab_next_roman, level=_lab_asc_req) }}</div>
             {% endif %}
           </div>
           {% endif %}
@@ -495,6 +520,44 @@
   </div>
 </div>
 
+<div id="gc-research-lab-ascension-confirm-modal"
+     class="gc-player-card-modal gc-bld-evo-confirm-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-research-lab-ascension-cancel tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-research-lab-ascension-confirm-title">
+    <header class="gc-player-card-head">
+      <h2 id="gc-research-lab-ascension-confirm-title" class="gc-player-card-head-title">{{ T('research_network_title') }}</h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-research-lab-ascension-cancel
+              aria-label="{{ T('close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body gc-bld-evo-confirm-body">
+      <p class="gc-bld-evo-confirm-lead" id="gc-research-lab-ascension-confirm-lead"></p>
+      <div class="gc-bld-evo-confirm-rank-chip" id="gc-research-lab-ascension-confirm-rank"></div>
+      <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-research-lab-ascension-benefit-label">
+        <h3 class="gc-bld-evo-confirm-section-title" id="gc-research-lab-ascension-benefit-label">{{ T('buildings_mine_evo_modal_benefit_label', 'Permanenter Vorteil') }}</h3>
+        <p class="gc-bld-evo-confirm-benefit" id="gc-research-lab-ascension-benefit"></p>
+      </section>
+      <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-research-lab-ascension-tribute-label">
+        <h3 class="gc-bld-evo-confirm-section-title" id="gc-research-lab-ascension-tribute-label">{{ T('buildings_mine_evo_modal_tribute_label', 'Tribute') }}</h3>
+        <ul class="gc-bld-evo-confirm-tribute-list">
+          <li id="gc-research-lab-ascension-tribute-metal"></li>
+          <li id="gc-research-lab-ascension-tribute-crystal"></li>
+        </ul>
+      </section>
+      <div class="gc-bld-evo-confirm-actions">
+        <button type="button" class="gc-btn gc-btn-primary" id="gc-research-lab-ascension-confirm-submit">{{ T('research_network_ascend') }}</button>
+        <button type="button" class="gc-btn gc-btn-secondary" data-research-lab-ascension-cancel>{{ T('buildings_mine_evo_modal_cancel', 'Abbrechen') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="gc-stellar-forge-modal"
      class="gc-player-card-modal gc-sf-modal"
      hidden
@@ -616,4 +679,5 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/pages/buildings.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/pages/research_lab_ascension.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
