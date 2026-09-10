@@ -26,6 +26,7 @@ def test_sentinel_login_settles_intentional_shell_overlays_without_force_clicks(
     assert "data-bld-ui-chooser-confirm" in block
     assert block.index("data-bld-ui-chooser-confirm") < block.index("data-whats-new-dismiss")
     assert block.index("data-whats-new-dismiss") < block.index("data-cookie-notice-accept")
+    assert 'chooser.wait_for(state="hidden", timeout=10_000)' in block
     assert "if not acted:" in block
     assert "force=True" not in block
     assert "dispatch_event" not in block
