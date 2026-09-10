@@ -80,7 +80,7 @@
     }
   }
 
-  document.addEventListener("click", function (event) {
+  function onDocumentClick(event) {
     var trigger = event.target && event.target.closest ? event.target.closest("[data-research-lab-ascend]") : null;
     if (trigger) {
       event.preventDefault();
@@ -91,11 +91,23 @@
       event.preventDefault();
       closeModal();
     }
-  });
+  }
 
-  document.addEventListener("keydown", function (event) {
+  function onKeydown(event) {
     if (event.key === "Escape" && modal && !modal.hidden) closeModal();
-  });
+  }
 
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onKeydown);
   if (submit) submit.addEventListener("click", ascend);
+
+  if (typeof GC.registerCleanup === "function") {
+    GC.registerCleanup(function researchLabAscensionCleanup() {
+      document.removeEventListener("click", onDocumentClick);
+      document.removeEventListener("keydown", onKeydown);
+      if (submit) submit.removeEventListener("click", ascend);
+      document.body.classList.remove("gc-modal-open");
+      activeTrigger = null;
+    });
+  }
 }());
