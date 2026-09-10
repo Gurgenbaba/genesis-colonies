@@ -1,0 +1,50 @@
+name: Research Lab Ascension UI Fix
+
+on:
+  push:
+    branches:
+      - fix/research-lab-ascension-building-flow
+    paths:
+      - .github/workflows/research-lab-ascension-ui-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/research-lab-ascension-building-flow
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Apply focused UI flow patch
+        run: python scripts/_patch_research_lab_ascension_building_flow.py
+      - name: Static syntax gates
+        run: |
+          python -m py_compile tests/test_research_lab_ascension.py
+          node --check static/js/pages/research_lab_ascension.js
+          test ! -e static/js/pages/research_network.js
+      - name: Focused research and panel regressions
+        run: |
+          python -m pytest -q \
+            tests/test_research_lab_ascension.py \
+            tests/test_gc_perf_buildings_002.py
+      - name: Verify intended diff
+        run: |
+          git status --short
+          git diff --check
+          git diff --exit-code -- scripts/_patch_research_lab_ascension_building_flow.py .github/workflows/research-lab-ascension-ui-fix.yml
+      - name: Commit verified product changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A templates/research.html templates/buildings.html static/js/pages/research_lab_ascension.js static/js/pages/research_network.js tests/test_research_lab_ascension.py docs/RESEARCH_SYSTEM.md
+          git diff --cached --check
+          git commit -m 'fix: move research lab ascension into building flow'
+          git push origin HEAD:fix/research-lab-ascension-building-flow
