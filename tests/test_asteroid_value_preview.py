@@ -88,17 +88,20 @@ def test_galaxy_asteroid_fuel_preview_uses_resource_artwork_without_layout_shift
     assert "value.slice(legacyFuelGlyph.length + 1)" in resource_js
 
 
-def test_galaxy_asteroid_board_preloads_fuel_on_open_and_has_scoped_layout_css():
+def test_galaxy_asteroid_board_preview_is_intent_driven_and_has_scoped_layout_css():
     root = Path(__file__).resolve().parents[1]
     js = (root / "static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
     board = (root / "templates/partials/galaxy_asteroid_board.html").read_text(encoding="utf-8")
     css = (root / "static/css/galaxy-asteroid-board.css").read_text(encoding="utf-8")
 
-    assert "ASTEROID_PREVIEW_CONCURRENCY = 3" in js
-    assert "preloadAsteroidFlightPreviews" in js
-    assert "if (preferOpen) void this.preloadAsteroidFlightPreviews(root, board);" in js
-    assert "if (open) void this.preloadAsteroidFlightPreviews(root, board);" in js
-    assert "Promise.allSettled(workers)" in js
+    # Opening/restoring the board must not fan out one fleet preview per asteroid.
+    assert "ASTEROID_PREVIEW_CONCURRENCY" not in js
+    assert "preloadAsteroidFlightPreviews" not in js
+    assert "Promise.allSettled(workers)" not in js
+    # Server-owned preview remains available on pointer/focus and before harvest send.
+    assert 'root.addEventListener("pointerover", onAsteroidPreview);' in js
+    assert 'root.addEventListener("focusin", onAsteroidPreview);' in js
+    assert "const preview = await this.loadAsteroidFlightPreview(wrap, root, { sendCount });" in js
     assert "css/galaxy-asteroid-board.css" in board
     assert ".galaxy-asteroid-board-row-meta" in css
     assert ".galaxy-asteroid-board-harvest-wrap" in css
