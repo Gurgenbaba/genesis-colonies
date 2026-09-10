@@ -185,32 +185,35 @@ def start_sandbox(artifact_root: Path) -> SandboxRuntime:
     )
 
 
-
 def _settle_known_sentinel_overlays(page) -> None:
     """Complete intentional one-time shell overlays before route probing.
 
     The Sentinel measures page/navigation behavior, not onboarding. Use only
     ordinary user clicks; never force or DOM-dispatch around a real blocker.
+    Modal onboarding must be settled before lower shell notices because its
+    backdrop intentionally intercepts pointer events outside the dialog.
     """
     quiet_rounds = 0
     for _ in range(20):
         acted = False
-
-        cookie = page.locator("button[data-cookie-notice-accept]").first
-        if cookie.count() and cookie.is_visible():
-            cookie.click(timeout=3_000)
-            acted = True
-
-        whats_new = page.locator("button[data-whats-new-dismiss]").first
-        if whats_new.count() and whats_new.is_visible():
-            whats_new.click(timeout=3_000)
-            acted = True
 
         chooser = page.locator("#gc-bld-ui-chooser")
         confirm = page.locator("button[data-bld-ui-chooser-confirm]").first
         if chooser.count() and chooser.is_visible() and confirm.count() and confirm.is_visible():
             confirm.click(timeout=3_000)
             acted = True
+
+        if not acted:
+            whats_new = page.locator("button[data-whats-new-dismiss]").first
+            if whats_new.count() and whats_new.is_visible():
+                whats_new.click(timeout=3_000)
+                acted = True
+
+        if not acted:
+            cookie = page.locator("button[data-cookie-notice-accept]").first
+            if cookie.count() and cookie.is_visible():
+                cookie.click(timeout=3_000)
+                acted = True
 
         if acted:
             quiet_rounds = 0
