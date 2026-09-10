@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt pytest
       - name: Apply focused UI flow patch
         run: python scripts/_patch_research_lab_ascension_building_flow_v2.py
       - name: Static syntax gates
