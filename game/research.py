@@ -781,8 +781,8 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
 
 
 RESEARCH_QUEUE_LIMIT = 2
-RESEARCH_QUEUE_LIMIT_AT_LAB4 = 3
-RESEARCH_QUEUE_LAB_LEVEL_FOR_BONUS = 4
+# GC-RESEARCH-NET-ASC-001: lab/Ascension queue capacity is resolved centrally
+# in game.research_lab_ascension.  Keep the constant as settings fallback only.
 
 
 def _research_resource_planet(player_id: int, conn) -> Dict[str, Any]:
@@ -818,6 +818,17 @@ def _resolve_research_queue_limit(
     player_id: Optional[int] = None,
     conn=None,
 ) -> int:
+    if player_id is not None:
+        from .research_lab_ascension import research_queue_capacity
+
+        return int(
+            research_queue_capacity(
+                int(player_id),
+                conn=conn,
+                settings=settings,
+            )["limit"]
+        )
+
     if settings is None:
         try:
             settings = get_game_settings(conn=conn)
@@ -831,23 +842,7 @@ def _resolve_research_queue_limit(
             queue_limit = int(float(raw_limit))
         except (ValueError, TypeError):
             queue_limit = RESEARCH_QUEUE_LIMIT
-    base = max(queue_limit, 1)
-    if player_id is not None:
-        lab = get_player_research_lab_level(int(player_id), conn=conn)
-        if lab >= RESEARCH_QUEUE_LAB_LEVEL_FOR_BONUS:
-            base = max(base, RESEARCH_QUEUE_LIMIT_AT_LAB4)
-        # GC-720J: scientific directive may grant extra research queue slots.
-        try:
-            from .galactic_directives.mechanics import get_directive_queue_limit_bonus
-            from .models import get_homeworld
-
-            hw = get_homeworld(int(player_id), conn=conn) or {}
-            galaxy = int(hw.get("galaxy") or 0)
-            if galaxy > 0:
-                base += get_directive_queue_limit_bonus(galaxy, "research", conn=conn)
-        except Exception:
-            pass
-    return base
+    return max(queue_limit, 1)
 
 
 # ======================================================================
@@ -1433,7 +1428,10 @@ def get_research_status(
         k = str(item["tech_key"])
         queue_keys[k] = queue_keys.get(k, 0) + 1
 
-    research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
+    from .research_lab_ascension import research_queue_capacity
+
+    network = research_queue_capacity(uid, conn=conn)
+    research_queue_limit = int(network["limit"])
     queue_free_slots = max(0, research_queue_limit - len(queue_list))
 
     techs: List[Dict[str, Any]] = []
@@ -1541,7 +1539,8 @@ def get_research_status(
         "active": active,
         "queue": queue_list,
         "summary": summary,
-        "lab_level": lab_level,
+        "lab_level": int(network.get("lab_level") or lab_level),
+        "network": network,
         "card_jobs_by_owner": card_jobs_by_owner,
         "mini_queue_jobs": map_card_jobs_to_mini_queue_jobs(
             card_jobs, domain="research", now=now

@@ -94,10 +94,15 @@ def tribute_cost_for_rank(rank: int) -> Tuple[int, int]:
     if r not in ASCENSION_RESOURCE_WEIGHTS:
         return 0, 0
     gate = required_level_for_rank(r)
-    from .mine_evolution.formulas import evolution_tribute_cost
+    from .buildings import get_upgrade_cost
 
-    raw = evolution_tribute_cost("research_lab", gate)
-    total = max(0, int(raw.get("metal", 0) or 0)) + max(0, int(raw.get("crystal", 0) or 0))
+    # Same endgame Ascension anchor as the mine system: 25% of the canonical
+    # upgrade spend across the 40 levels ending at the rank milestone.
+    total_upgrade_spend = 0
+    for target_level in range(max(1, gate - 39), gate + 1):
+        metal_cost, crystal_cost = get_upgrade_cost("research_lab", target_level - 1)
+        total_upgrade_spend += int(metal_cost) + int(crystal_cost)
+    total = total_upgrade_spend // 4
     metal_pct, _crystal_pct = ASCENSION_RESOURCE_WEIGHTS[r]
     # Positive integer half-up rounding; crystal receives the exact remainder.
     metal = (total * int(metal_pct) + 50) // 100
@@ -254,6 +259,13 @@ def research_queue_capacity(
                 "ready": level >= gate,
             }
 
+        next_tribute_metal = 0
+        next_tribute_crystal = 0
+        if next_unlock and next_unlock.get("kind") == "ascension":
+            next_tribute_metal, next_tribute_crystal = tribute_cost_for_rank(
+                int(next_unlock.get("rank") or 0)
+            )
+
         return {
             "base": int(base),
             "lab_level": int(level),
@@ -266,6 +278,8 @@ def research_queue_capacity(
             "limit": int(limit),
             "best_planet_id": int(best["planet_id"]),
             "research_speed_bonus_pct": int(rank * 2),
+            "next_tribute_metal": int(next_tribute_metal),
+            "next_tribute_crystal": int(next_tribute_crystal),
             "next_unlock": next_unlock,
         }
     finally:

@@ -173,6 +173,25 @@
 
           {{ render_building_effect_bundle(b) }}
 
+          {% if building_type == 'research_lab' and b.research_lab_ascension is defined and b.research_lab_ascension %}
+          <div class="gc-bld-evo-block" data-research-lab-ascension>
+            <div class="gc-bld-evo-progress" role="status">
+              <span class="gc-bld-evo-progress-label">{{ T('research_network_title') }}</span>
+              <span class="gc-mono gc-bld-evo-progress-vals">{{ T('research_network_capacity', slots=b.research_queue_capacity) }}</span>
+            </div>
+            {% if (b.research_lab_ascension_rank|default(0)|int) > 0 %}
+            <div class="gc-bld-evo-bonus gc-mono">
+              {{ T('research_network_rank_speed', rank=b.research_lab_ascension_roman, pct=b.research_lab_ascension_speed_bonus_pct) }}
+            </div>
+            {% endif %}
+            {% if b.research_lab_ascension_ready %}
+            <div class="hint">{{ T('research_network_ready', rank=b.research_lab_next_roman) }}</div>
+            {% elif (b.research_lab_next_rank|default(0)|int) > 0 %}
+            <div class="hint">{{ T('research_network_requires', rank=b.research_lab_next_roman, level=b.research_lab_ascension_required_level) }}</div>
+            {% endif %}
+          </div>
+          {% endif %}
+
           {% if _evo %}
           <div class="gc-bld-evo-block" data-mine-evolution="{{ building_type }}">
             <div class="gc-bld-evo-progress" role="status">
