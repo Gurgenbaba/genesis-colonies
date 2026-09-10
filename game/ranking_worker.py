@@ -25,7 +25,13 @@ from .db import (
     gather_score_stats,
     rollback,
 )
-from .ranking import _RANKING_LOCK, recalculate_all_rankings, recalculate_ranks, refresh_player_score
+from .ranking import (
+    _RANKING_LOCK,
+    get_player_score_row,
+    recalculate_all_rankings,
+    recalculate_ranks,
+    refresh_player_score,
+)
 from .runtime_state import get_runtime_value, set_runtime_value
 
 logger = logging.getLogger(__name__)
@@ -224,12 +230,47 @@ def _release_worker_busy(*, conn) -> None:
     set_runtime_value(BUSY_KEY, "0", conn=conn)
 
 
+def _score_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _rank_inputs_from_row(row: Optional[Dict[str, Any]]) -> Optional[tuple[int, ...]]:
+    if not row:
+        return None
+    return (
+        _score_int(row.get("score_total")),
+        _score_int(row.get("score_buildings")),
+        _score_int(row.get("score_research")),
+        _score_int(row.get("score_fleet")),
+        _score_int(row.get("score_defense")),
+        _score_int(row.get("score_combat")),
+        _score_int(row.get("score_destroyed")),
+        _score_int(row.get("score_planet_evolution")),
+    )
+
+
+def _rank_inputs_from_scores(scores: Dict[str, Any]) -> tuple[int, ...]:
+    return (
+        _score_int(scores.get("total_score")),
+        _score_int(scores.get("building_score")),
+        _score_int(scores.get("research_score")),
+        _score_int(scores.get("fleet_score")),
+        _score_int(scores.get("defense_score")),
+        _score_int(scores.get("combat_score")),
+        _score_int(scores.get("destroyed_score")),
+        _score_int(scores.get("evolution_score")),
+    )
+
+
 def process_dirty_score_batch(
     *,
     conn,
     limit: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Refresh a bounded dirty batch; rank rewrite at most once after successes."""
+    """Refresh a bounded dirty batch; rank rewrite only when rank inputs changed."""
     from .score_events import (
         clear_player_score_dirty_if_version,
         list_dirty_score_players,
@@ -241,19 +282,29 @@ def process_dirty_score_batch(
     cleared = 0
     skipped_race = 0
     updated = 0
+    rank_inputs_changed = False
 
     for item in batch:
         pid = int(item["player_id"])
         version = int(item["dirty_version"])
         try:
+            # One persisted row read lets resource-only/no-op dirty refreshes avoid
+            # the global rank rewrite entirely. Rank columns still seed correctly
+            # for new/unranked players.
+            before_row = get_player_score_row(pid, conn=conn)
+            before_rank_inputs = _rank_inputs_from_row(before_row)
+            needs_rank_seed = before_row is None or before_row.get("rank_total") is None
+
             # Expensive formula outside the short clear/upsert write where possible:
             # refresh_player_score still needs the connection for reads + upsert.
             begin_write_transaction(conn)
             try:
-                refresh_player_score(pid, conn=conn)
+                refreshed = refresh_player_score(pid, conn=conn)
                 if clear_player_score_dirty_if_version(pid, version, conn=conn):
                     cleared += 1
                     updated += 1
+                    if needs_rank_seed or before_rank_inputs != _rank_inputs_from_scores(refreshed):
+                        rank_inputs_changed = True
                     commit(conn)
                 else:
                     # Concurrent mutation bumped version — keep dirty, keep new snapshot
@@ -273,7 +324,7 @@ def process_dirty_score_batch(
 
     rank_rewrites = 0
     ranks_assigned = 0
-    if updated > 0:
+    if updated > 0 and rank_inputs_changed:
         try:
             ranks_assigned = int(recalculate_ranks(conn=conn) or 0)
             rank_rewrites = 1
@@ -289,6 +340,7 @@ def process_dirty_score_batch(
         "dirty_seen": len(batch),
         "dirty_cleared": cleared,
         "dirty_race_kept": skipped_race,
+        "rank_inputs_changed": bool(rank_inputs_changed),
         "ranks_assigned": ranks_assigned,
         "rank_rewrites": rank_rewrites,
         "duration_ms": int((time.perf_counter() - started) * 1000),
