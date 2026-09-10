@@ -54,11 +54,15 @@
 }
 
 /* Resource row: the old fifth Timekeeper card remains as the canonical live-update
-   source for compatibility, but no longer occupies layout space. The four actual
-   planet resources therefore receive the entire row. */
+   source for compatibility, but no longer occupies layout space. Ferronit, Crytite and
+   Brennzellen are the long-number surfaces and get the lion's share of the row; derived
+   energy is deliberately compact. Force the row to consume the complete shell width so
+   no legacy fifth-column reservation can survive underneath this presentation layer. */
 .resource-bar.resource-bar-cmd {
   min-width: 0;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100% !important;
+  max-width: none !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(9.5rem, 0.52fr) !important;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
@@ -101,7 +105,7 @@
   overflow-y: hidden;
   scrollbar-width: thin;
   text-align: right;
-  font-size: clamp(0.72rem, 0.82vw, 0.94rem);
+  font-size: clamp(0.76rem, 0.88vw, 1rem);
 }
 
 .resource-bar-cmd .hud-res-cap-line,
@@ -123,6 +127,56 @@
 
 .resource-bar-cmd .res-rate {
   font-size: clamp(0.58rem, 0.64vw, 0.76rem);
+}
+
+/* Desktop/tablet HUD density pass. Keep the exact values large, reclaim vertical room
+   from chrome/icons instead. Auto height means warnings can still expand safely. */
+@media (min-width: 761px) {
+  .gc-header-row-resources .gc-resource-sticky {
+    width: 100%;
+    max-width: none;
+  }
+
+  .resource-bar-cmd .hud-res-panel {
+    height: auto;
+    min-height: 4.35rem;
+    padding-block: 0.32rem 0.24rem;
+  }
+
+  .resource-bar-cmd .hud-res-body {
+    gap: 0.5rem;
+  }
+
+  .resource-bar-cmd .res-icon--hud {
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+  .resource-bar-cmd .hud-res-capacity {
+    margin-top: 0.16rem;
+  }
+
+  .resource-bar-cmd .hud-res-footer {
+    min-height: 0.9rem;
+    margin-top: 0.12rem;
+  }
+
+  .resource-bar-cmd .hud-res-energy {
+    padding-inline: 0.45rem;
+  }
+
+  .resource-bar-cmd .hud-res-energy .res-icon--hud {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
+  .resource-bar-cmd .hud-res-energy .res-value {
+    font-size: clamp(0.68rem, 0.72vw, 0.82rem);
+  }
+
+  .resource-bar-cmd .hud-res-energy .res-cap {
+    font-size: clamp(0.56rem, 0.60vw, 0.68rem);
+  }
 }
 
 .gc-records-workspace-body,
@@ -214,14 +268,17 @@
   }
 
   .resource-bar.resource-bar-cmd {
-    grid-template-columns: repeat(4, minmax(16rem, 1fr));
+    grid-template-columns: repeat(3, minmax(16rem, 1fr)) minmax(10rem, 0.62fr) !important;
   }
 
   .resource-bar-cmd .hud-res-metal,
   .resource-bar-cmd .hud-res-crystal,
-  .resource-bar-cmd .hud-res-fuel-cells,
-  .resource-bar-cmd .hud-res-energy {
+  .resource-bar-cmd .hud-res-fuel-cells {
     min-inline-size: 16rem;
+  }
+
+  .resource-bar-cmd .hud-res-energy {
+    min-inline-size: 10rem;
   }
 
   .resource-bar-cmd .res-value {
