@@ -53,6 +53,128 @@
   letter-spacing: 0.015em;
 }
 
+/* GC-HUD-SHELL-001 — the ranking shortcut only needs the rank. The full score is
+   available on the ranking page, so keep the global header quiet and compact. */
+.gc-score-pill > .gc-hud-panel-tag,
+.gc-score-pill > #hud-score-total,
+.gc-score-pill > .gc-hud-panel-sep {
+  display: none !important;
+}
+
+/* Desktop command strip: one continuous shell instead of a row of detached pills.
+   Existing controls keep their semantics and hit targets; only their presentation is
+   flattened into the shared frame. Tablet/mobile retain the established responsive shell. */
+@media (min-width: 1181px) {
+  .gc-header-row-top {
+    display: flex !important;
+    align-items: stretch !important;
+    width: 100%;
+    gap: 0 !important;
+    padding: 0 !important;
+    border: 1px solid var(--gc-panel-border, rgba(70, 229, 255, 0.36));
+    background: linear-gradient(180deg, rgba(10, 18, 31, 0.94), rgba(5, 10, 20, 0.92));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 5px 18px rgba(0, 0, 0, 0.18);
+  }
+
+  .gc-header-row-top > .gc-hslot-brand,
+  .gc-header-row-top > .gc-header-meta,
+  .gc-header-row-top > .gc-hslot-lang,
+  .gc-header-row-top > .gc-hud-user {
+    min-width: 0;
+    margin: 0 !important;
+  }
+
+  .gc-header-row-top > .gc-hslot-brand {
+    flex: 0 0 auto;
+  }
+
+  .gc-header-row-top > .gc-header-meta {
+    display: flex !important;
+    flex: 1 1 auto;
+    align-items: stretch !important;
+    gap: 0 !important;
+  }
+
+  .gc-header-row-top > .gc-hslot-lang,
+  .gc-header-row-top > .gc-hud-user {
+    flex: 0 0 auto;
+    align-items: stretch !important;
+    gap: 0 !important;
+    border-inline-start: 1px solid rgba(130, 184, 205, 0.18);
+  }
+
+  .gc-header-row-top > .gc-hud-user {
+    display: flex !important;
+  }
+
+  .gc-header-row-top .gc-header-icon-rail {
+    display: flex !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+  }
+
+  .gc-header-row-top .gc-logo,
+  .gc-header-row-top .gc-hud-panel,
+  .gc-header-row-top .gc-header-fleets-toggle,
+  .gc-header-row-top .gc-header-planets-toggle,
+  .gc-header-row-top .gc-header-icon-btn,
+  .gc-header-row-top .gc-language-switcher,
+  .gc-header-row-top .gc-language-switcher select,
+  .gc-header-row-top .logout-btn {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .gc-header-row-top .gc-logo,
+  .gc-header-row-top .gc-hud-panel,
+  .gc-header-row-top .gc-header-fleets-toggle,
+  .gc-header-row-top .gc-header-planets-toggle,
+  .gc-header-row-top .gc-header-icon-btn,
+  .gc-header-row-top .gc-language-switcher,
+  .gc-header-row-top .gc-language-switcher select,
+  .gc-header-row-top .logout-btn {
+    background: transparent !important;
+  }
+
+  .gc-header-row-top .gc-header-meta > * + *,
+  .gc-header-row-top .gc-header-icon-rail > * + *,
+  .gc-header-row-top .gc-hslot-lang > * + *,
+  .gc-header-row-top .gc-hud-user > * + * {
+    border-inline-start: 1px solid rgba(130, 184, 205, 0.18) !important;
+  }
+
+  .gc-header-row-top .gc-header-meta > *,
+  .gc-header-row-top .gc-header-icon-rail > *,
+  .gc-header-row-top .gc-hslot-lang > *,
+  .gc-header-row-top .gc-hud-user > * {
+    margin: 0 !important;
+  }
+
+  .gc-header-row-top .gc-score-pill {
+    min-width: 4.9rem;
+    justify-content: center;
+    padding-inline: 0.72rem;
+  }
+
+  .gc-header-row-top .gc-hud-panel-online {
+    min-width: 6.3rem;
+  }
+
+  .gc-header-row-top .gc-header-timekeeper {
+    min-height: 100%;
+  }
+
+  .gc-header-row-top .gc-logo:hover,
+  .gc-header-row-top .gc-score-pill:hover,
+  .gc-header-row-top .gc-header-fleets-toggle:hover,
+  .gc-header-row-top .gc-header-planets-toggle:hover,
+  .gc-header-row-top .gc-header-icon-btn:hover,
+  .gc-header-row-top .logout-btn:hover {
+    background: rgba(104, 220, 255, 0.07) !important;
+  }
+}
+
 /* Resource row: the old fifth Timekeeper card remains as the canonical live-update
    source for compatibility, but no longer occupies layout space. Ferronit, Crytite and
    Brennzellen are the long-number surfaces and get the lion's share of the row; derived
@@ -63,6 +185,9 @@
   width: 100% !important;
   max-width: none !important;
   grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(9.5rem, 0.52fr) !important;
+  gap: 0 !important;
+  column-gap: 0 !important;
+  row-gap: 0 !important;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
@@ -79,6 +204,14 @@
 .resource-bar-cmd .hud-res-fuel-cells,
 .resource-bar-cmd .hud-res-energy {
   min-inline-size: 0;
+  margin-inline: 0 !important;
+}
+
+/* Adjacent cards share one seam instead of drawing a gap/double frame. */
+.resource-bar-cmd .hud-res-crystal,
+.resource-bar-cmd .hud-res-fuel-cells,
+.resource-bar-cmd .hud-res-energy {
+  border-inline-start-width: 0 !important;
 }
 
 .resource-bar-cmd .hud-res-body,
