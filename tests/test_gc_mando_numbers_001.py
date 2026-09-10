@@ -37,15 +37,20 @@ def test_huge_number_layout_does_not_ellipsis_record_or_hof_values():
     assert "white-space: nowrap" in hof_block
 
 
-def test_hud_uses_four_full_width_resource_cards_without_ellipsis():
+def test_hud_prioritizes_three_main_resources_and_compacts_energy_without_ellipsis():
     css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
     bar_block = css.split(".resource-bar.resource-bar-cmd {", 1)[1].split("}", 1)[0]
     value_block = css.split(".resource-bar-cmd .res-value {", 1)[1].split("}", 1)[0]
     tk_block = css.split(".resource-bar-cmd .hud-res-timekeeper {", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in bar_block
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(9.5rem, 0.52fr) !important" in bar_block
+    assert "width: 100% !important" in bar_block
+    assert "max-width: none !important" in bar_block
     assert "overflow-x: auto" in bar_block
     assert "scrollbar-gutter: stable" in bar_block
     assert "display: none !important" in tk_block
+    assert "min-height: 4.35rem" in css
+    assert ".resource-bar-cmd .hud-res-energy .res-icon--hud" in css
+    assert "min-inline-size: 10rem" in css
     assert "min-inline-size: 18rem" not in css
     assert "overflow-x: auto" in value_block
     assert "text-overflow: ellipsis" not in value_block
