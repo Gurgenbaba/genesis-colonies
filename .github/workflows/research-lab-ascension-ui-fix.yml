@@ -32,7 +32,9 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements-prod.txt pytest
       - name: Apply i18n hardening
-        run: python scripts/_fix_research_lab_ascension_i18n.py
+        run: |
+          python scripts/_fix_research_lab_ascension_i18n.py
+          python scripts/_mark_research_lab_i18n_structural_lines.py
       - name: Static and i18n gates
         run: |
           node --check static/js/pages/research_lab_ascension.js
