@@ -2,14 +2,16 @@ name: Research Network Ascension Patch
 
 on:
   push:
-    branches: [feature/research-network-ascension]
+    branches:
+      - feature/research-network-ascension
+    paths:
+      - scripts/.research_ascension_patch_trigger
 
 permissions:
   contents: write
 
 jobs:
   apply-and-verify:
-    if: github.event.head_commit.message == 'chore: run research ascension patch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
