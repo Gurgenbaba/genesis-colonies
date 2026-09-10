@@ -1225,7 +1225,30 @@ class EffectResolver:
 
     def research_lab_bonus(self) -> float:
         lab = _bld(self.buildings, "research_lab")
-        return 1.0 + max(0, lab - 1) * 0.10
+        base = 1.0 + max(0, lab - 1) * 0.10
+
+        # GC-RESEARCH-NET-ASC-001: small prestige speed bonus.  The rank lookup
+        # is cached on this resolver because one research catalog reuses it for
+        # many target-level time calculations.
+        rank = getattr(self, "_research_lab_ascension_rank_cache", None)
+        if rank is None:
+            rank = 0
+            if self.player_id is not None and self._conn is not None:
+                try:
+                    from ..research_lab_ascension import research_queue_capacity
+
+                    rank = int(
+                        research_queue_capacity(
+                            int(self.player_id),
+                            conn=self._conn,
+                            include_external_bonus=False,
+                        ).get("ascension_rank", 0)
+                        or 0
+                    )
+                except Exception:
+                    rank = 0
+            self._research_lab_ascension_rank_cache = int(rank)
+        return base * (1.0 + 0.02 * max(0, min(5, int(rank))))
 
     @staticmethod
     def solar_energy_base_at_level(level: int) -> int:

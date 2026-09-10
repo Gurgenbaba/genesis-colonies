@@ -1612,8 +1612,15 @@ def _effective_building_queue_cap(
     conn=None,
     evolution_rank: Optional[int] = None,
 ) -> int:
-    """Authoritative enqueue cap: normal hard cap or next Mine Ascension milestone."""
+    """Authoritative enqueue cap: normal hard cap or next Ascension milestone."""
     max_level = max(0, int(base_max_level))
+
+    if building_type == "research_lab" and planet_id is not None:
+        from .research_lab_ascension import get_planet_ascension_rank, max_lab_level_for_rank
+
+        lab_rank = get_planet_ascension_rank(int(planet_id), conn=conn)
+        return int(max_lab_level_for_rank(lab_rank))
+
     from .mine_evolution import get_evolution_rank, is_evolvable_mine, required_level_for_evolution
 
     if not is_evolvable_mine(building_type) or planet_id is None:
@@ -1752,6 +1759,19 @@ def _make_panel_row(
         "max_queue_preview": max_queue_preview,
     }
     row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
+    if pid is not None and building_type == "research_lab":
+        from .research_lab_ascension import panel_fields as research_lab_ascension_panel_fields
+
+        # The card is planet-local. panel_fields provides this lab's prestige
+        # capacity without re-resolving account-wide Directive bonuses.
+        row.update(
+            research_lab_ascension_panel_fields(
+                int(planet.get("player_id") or 0),
+                pid,
+                level,
+                conn=evo_conn,
+            )
+        )
     if pid is not None and building_type == "orbital_shipyard":
         try:
             from .stellar_forge import panel_forge_fields

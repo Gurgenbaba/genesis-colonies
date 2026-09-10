@@ -1327,6 +1327,7 @@ _FINISH_SOURCE_PANEL_PAGE: Dict[str, str] = {
     "api_buildings_cancel": "buildings",
     "api_buildings_mine_evolve": "buildings",
     "api_research_start": "research",
+    "api_research_ascend_lab": "research",
     "api_research_cancel": "research",
     "research": "research",
     "techtree": "techtree",
@@ -1807,6 +1808,7 @@ _POST_MUTATION_READ_ONLY_LIVE_SOURCES = frozenset(
         "api_buildings_upgrade",
         "api_buildings_cancel",
         "api_research_start",
+        "api_research_ascend_lab",
         "api_research_cancel",
         "api_timekeeper_apply",
     }
@@ -11817,6 +11819,7 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_buildings_cancel",
         "api_buildings_mine_evolve",
         "api_research_start",
+        "api_research_ascend_lab",
         "api_research_cancel",
         "game_state_buildings_finish",
         "api_planets_active",
@@ -14847,6 +14850,44 @@ def api_buildings_cancel():
         include_panel=False,
         panel_delta_keys=delta_keys,
     )
+
+
+@app.route("/api/research/ascend-lab", methods=["POST"])
+@require_login
+def api_research_ascend_lab():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.planet_evolution.repository import get_context_planet
+    from game.research_lab_ascension import ascend_research_lab
+
+    conn = db()
+    try:
+        planet = dict(get_context_planet(user_id, conn=conn))
+    finally:
+        conn.close()
+
+    ok, reason, payload = ascend_research_lab(user_id, planet)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=payload if not ok else None,
+        job=payload if ok else None,
+        finish_source="api_research_ascend_lab",
+        include_panel=True,
+    )
+    body = resp.get_json()
+    if request_id and isinstance(body, dict):
+        save_idempotent_action(user_id, request_id, body)
+    return resp
 
 
 @app.route("/api/research/start", methods=["POST"])

@@ -206,7 +206,8 @@
 
 {% set rq_summary = (rs.summary if rs and rs.summary is defined and rs.summary else {}) %}
 {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
-{% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
+{% set network = (rs.network if rs and rs.network is defined and rs.network else {}) %}
+{% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 2) %}
 {% set rq_jobs = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
 {% set rq_mini = (rs.mini_queue_jobs if rs and rs.mini_queue_jobs is defined else []) %}
 {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
@@ -231,6 +232,42 @@
   </header>
 
   <section class="gc-panel research-shell">
+
+    <div class="gc-bld-evo-block research-network-block" data-research-network>
+      <div class="gc-bld-evo-progress" role="status">
+        <strong>{{ T('research_network_title') }}</strong>
+        <span class="gc-mono">{{ T('research_network_jobs', count=(rq_summary.count if rq_summary.count is defined else 0), limit=rq_limit) }}</span>
+      </div>
+      <div class="gc-bld-evo-bonus gc-mono">
+        {% if (network.ascension_rank if network.ascension_rank is defined else 0)|int > 0 %}
+          {{ T('research_network_lab_ascension', level=(network.lab_level if network.lab_level is defined else lab_level), rank=(network.ascension_roman if network.ascension_roman is defined else '')) }}
+        {% else %}
+          {{ T('research_network_lab_plain', level=(network.lab_level if network.lab_level is defined else lab_level)) }}
+        {% endif %}
+        {% if (network.research_speed_bonus_pct if network.research_speed_bonus_pct is defined else 0)|int > 0 %}
+          · {{ T('research_network_speed', pct=network.research_speed_bonus_pct) }}
+        {% endif %}
+      </div>
+      {% set next_unlock = network.next_unlock if network.next_unlock is defined and network.next_unlock else none %}
+      {% if next_unlock %}
+        <div class="hint">
+          {% if next_unlock.kind == 'ascension' %}
+            {{ T('research_network_next_ascension', rank=next_unlock.roman, level=next_unlock.lab_level, slots=next_unlock.slots) }}
+          {% else %}
+            {{ T('research_network_next_lab', level=next_unlock.lab_level, slots=next_unlock.slots) }}
+          {% endif %}
+        </div>
+        {% if next_unlock.kind == 'ascension' and next_unlock.ready %}
+          {% set tribute_m = network.next_tribute_metal if network.next_tribute_metal is defined else 0 %}
+          {% set tribute_c = network.next_tribute_crystal if network.next_tribute_crystal is defined else 0 %}
+          <button type="button" class="gc-btn gc-bld-evo-btn" data-research-network-ascend>
+            {{ T('research_network_ascend', rank=next_unlock.roman) }}
+          </button>
+        {% endif %}
+      {% else %}
+        <div class="hint">{{ T('research_network_max') }}</div>
+      {% endif %}
+    </div>
 
     {{ render_page_mini_queue_strip(
       'research-mini-queue',
@@ -257,4 +294,10 @@
   </section>
 </div>
 
+{% endblock %}
+
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/pages/research_network.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
