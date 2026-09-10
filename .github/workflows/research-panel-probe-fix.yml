@@ -1,0 +1,54 @@
+name: Research Panel Probe Fix
+
+on:
+  push:
+    branches:
+      - feature/research-network-ascension
+    paths:
+      - scripts/.research_panel_probe_trigger
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-research-panel-probe-secret-not-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-prod.txt pytest
+      - name: Apply focused fix
+        run: python scripts/_fix_research_panel_capacity_probe.py
+      - name: Compile and diff gate
+        run: |
+          python -m py_compile game/buildings.py game/research_lab_ascension.py
+          git diff --check
+      - name: Verify probe and research contracts
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_gc_perf_buildings_002.py::test_buildings_panel_preview_clones_share_external_probe_cache \
+            tests/test_research_lab_ascension.py \
+            tests/test_gc825_research_time_rebalance.py
+      - name: Commit verified fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/buildings.py game/research_lab_ascension.py
+          git diff --cached --check
+          git commit -m "fix: keep research lab card on shared panel probe path"
+          git push origin HEAD:feature/research-network-ascension
