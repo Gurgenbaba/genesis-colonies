@@ -451,3 +451,133 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* GC-HUD-SHELL-002 — harden the command header into one actual visual surface.
+   Only the outer row owns chrome; every direct group/control inside is transparent.
+   This deliberately removes the detached-card look while preserving hit targets. */
+@media (min-width: 1181px) {
+  .gc-header-row-top {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden !important;
+    min-height: 2.7rem;
+    border: 1px solid rgba(108, 211, 234, 0.34) !important;
+    border-radius: 0 !important;
+    background: linear-gradient(180deg, rgba(13, 24, 39, 0.97), rgba(7, 13, 24, 0.97)) !important;
+    background-image: linear-gradient(180deg, rgba(13, 24, 39, 0.97), rgba(7, 13, 24, 0.97)) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.035), 0 4px 16px rgba(0,0,0,0.2) !important;
+  }
+
+  .gc-header-row-top > .gc-hslot-brand,
+  .gc-header-row-top > .gc-header-meta,
+  .gc-header-row-top > .gc-hslot-lang,
+  .gc-header-row-top > .gc-hud-user,
+  .gc-header-row-top .gc-header-icon-rail {
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  .gc-header-row-top > .gc-header-meta {
+    flex: 1 1 auto !important;
+  }
+
+  .gc-header-row-top > .gc-hslot-lang,
+  .gc-header-row-top > .gc-hud-user {
+    border-inline-start: 0 !important;
+  }
+
+  .gc-header-row-top .gc-logo,
+  .gc-header-row-top .gc-hud-panel,
+  .gc-header-row-top .gc-score-pill,
+  .gc-header-row-top .gc-hud-panel-online,
+  .gc-header-row-top .gc-header-fleets-toggle,
+  .gc-header-row-top .gc-header-planets-toggle,
+  .gc-header-row-top .gc-header-icon-btn,
+  .gc-header-row-top .gc-language-switcher,
+  .gc-header-row-top .gc-language-switcher select,
+  .gc-header-row-top .gc-header-timekeeper,
+  .gc-header-row-top .gc-hud-panel-user,
+  .gc-header-row-top .gc-admin-badge,
+  .gc-header-row-top .logout-btn {
+    border: 0 !important;
+    outline-offset: -2px;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  .gc-header-row-top .gc-logo::before,
+  .gc-header-row-top .gc-logo::after,
+  .gc-header-row-top .gc-hud-panel::before,
+  .gc-header-row-top .gc-hud-panel::after,
+  .gc-header-row-top .gc-score-pill::before,
+  .gc-header-row-top .gc-score-pill::after,
+  .gc-header-row-top .gc-header-fleets-toggle::before,
+  .gc-header-row-top .gc-header-fleets-toggle::after,
+  .gc-header-row-top .gc-header-planets-toggle::before,
+  .gc-header-row-top .gc-header-planets-toggle::after,
+  .gc-header-row-top .gc-header-icon-btn::before,
+  .gc-header-row-top .gc-header-icon-btn::after,
+  .gc-header-row-top .gc-language-switcher::before,
+  .gc-header-row-top .gc-language-switcher::after,
+  .gc-header-row-top .gc-header-timekeeper::before,
+  .gc-header-row-top .gc-header-timekeeper::after,
+  .gc-header-row-top .logout-btn::before,
+  .gc-header-row-top .logout-btn::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  /* No permanent internal box borders. Separation comes from spacing and hover only,
+     so the strip reads as one command surface rather than stitched cards. */
+  .gc-header-row-top .gc-header-meta > * + *,
+  .gc-header-row-top .gc-header-icon-rail > * + *,
+  .gc-header-row-top .gc-hslot-lang > * + *,
+  .gc-header-row-top .gc-hud-user > * + * {
+    border-inline-start: 0 !important;
+  }
+
+  .gc-header-row-top .gc-logo,
+  .gc-header-row-top .gc-score-pill,
+  .gc-header-row-top .gc-hud-panel-online,
+  .gc-header-row-top .gc-header-fleets-toggle,
+  .gc-header-row-top .gc-header-planets-toggle,
+  .gc-header-row-top .gc-header-icon-btn,
+  .gc-header-row-top .gc-language-switcher select,
+  .gc-header-row-top .gc-header-timekeeper,
+  .gc-header-row-top .gc-hud-panel-user,
+  .gc-header-row-top .logout-btn {
+    min-height: 2.7rem !important;
+  }
+
+  .gc-header-row-top .gc-logo,
+  .gc-header-row-top .gc-score-pill,
+  .gc-header-row-top .gc-hud-panel-online,
+  .gc-header-row-top .gc-header-fleets-toggle,
+  .gc-header-row-top .gc-header-planets-toggle,
+  .gc-header-row-top .gc-header-icon-btn,
+  .gc-header-row-top .gc-language-switcher select,
+  .gc-header-row-top .gc-header-timekeeper,
+  .gc-header-row-top .gc-hud-panel-user,
+  .gc-header-row-top .logout-btn {
+    transition: background-color 120ms ease, color 120ms ease !important;
+  }
+
+  .gc-header-row-top .gc-logo:hover,
+  .gc-header-row-top .gc-score-pill:hover,
+  .gc-header-row-top .gc-header-fleets-toggle:hover,
+  .gc-header-row-top .gc-header-planets-toggle:hover,
+  .gc-header-row-top .gc-header-icon-btn:hover,
+  .gc-header-row-top .gc-language-switcher select:hover,
+  .gc-header-row-top .gc-header-timekeeper:hover,
+  .gc-header-row-top .logout-btn:hover {
+    background-color: rgba(105, 222, 255, 0.065) !important;
+  }
+}
