@@ -19,21 +19,11 @@
 
 {% if AUTH_USER and AUTH_USER.id %}
   {% set _tk_header = TIMEKEEPER if TIMEKEEPER is defined else {'balance_sec': 0, 'label': '0min', 'ready': false} %}
-  <div class="gc-hud-panel gc-header-timekeeper"
-       role="status"
-       aria-live="polite"
-       aria-label="{{ T('timekeeper_name', 'Timekeeper') }}"
-       title="{{ T('timekeeper_name', 'Timekeeper') }}">
-    <img class="gc-header-timekeeper-icon"
-         src="{{ url_for('static', filename='img/res/timekeeper.webp') }}"
-         width="28"
-         height="28"
-         decoding="async"
-         alt="">
+  <div class="gc-hud-panel gc-header-timekeeper" aria-label="{{ T('timekeeper_name', 'Timekeeper') }}" title="{{ T('timekeeper_name', 'Timekeeper') }}">
+    <img class="gc-header-timekeeper-icon" src="{{ url_for('static', filename='img/res/timekeeper.webp') }}" alt="">
     <span class="gc-header-timekeeper-copy">
       <span class="gc-hud-panel-tag gc-header-timekeeper-tag">{{ T('timekeeper_name', 'Timekeeper') }}</span>
-      <strong class="gc-hud-panel-value gc-mono gc-header-timekeeper-value"
-              data-timekeeper-header-balance>{{ _tk_header.label }}</strong>
+      <strong class="gc-hud-panel-value gc-mono gc-header-timekeeper-value" data-timekeeper-header-balance>{{ _tk_header.label }}</strong>
     </span>
   </div>
 
