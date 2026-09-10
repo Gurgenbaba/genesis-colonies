@@ -201,13 +201,13 @@
             {% if b.research_lab_ascension_ready %}
             <div class="hint">{{ T('research_network_ready', rank=b.research_lab_next_roman) }}</div>
             <button type="button"
-                    class="gc-btn gc-bld-evo-btn"
+                    class="gc-btn gc-bld-evo-btn" {# i18n-ok: structural attribute #}
                     data-research-lab-ascend
-                    data-asc-name="{{ T('building_' ~ building_type) }}"
-                    data-asc-rank="{{ b.research_lab_next_roman }}"
-                    data-asc-required="{{ _lab_asc_req }}"
-                    data-asc-tribute-metal="{{ b.research_lab_ascension_tribute_metal|fmt_int }}"
-                    data-asc-tribute-crystal="{{ b.research_lab_ascension_tribute_crystal|fmt_int }}"
+                    data-asc-lead="{{ T('research_network_requires', rank=b.research_lab_next_roman, level=_lab_asc_req) }}"
+                    data-asc-rank-label="{{ T('research_network_ready', rank=b.research_lab_next_roman) }}"
+                    data-asc-action-label="{{ T('research_network_ascend', rank=b.research_lab_next_roman) }}"
+                    data-asc-tribute-metal-label="{{ T('resource_metal') }} · {{ b.research_lab_ascension_tribute_metal|fmt_int }}"
+                    data-asc-tribute-crystal-label="{{ T('resource_crystal') }} · {{ b.research_lab_ascension_tribute_crystal|fmt_int }}"
                     data-asc-benefit="{{ T('research_network_rank_speed', rank=b.research_lab_next_roman, pct=(b.research_lab_ascension_speed_bonus_pct|int + 2)) }} · {{ T('research_network_capacity', slots=(b.research_queue_capacity|int + 1)) }}">
               {{ T('research_network_ascend', rank=b.research_lab_next_roman) }}
             </button>
@@ -521,18 +521,18 @@
 </div>
 
 <div id="gc-research-lab-ascension-confirm-modal"
-     class="gc-player-card-modal gc-bld-evo-confirm-modal"
+     class="gc-player-card-modal gc-bld-evo-confirm-modal" {# i18n-ok: structural attribute #}
      hidden
      aria-hidden="true">
   <div class="gc-player-card-overlay" data-research-lab-ascension-cancel tabindex="-1"></div>
-  <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog"
-       role="dialog"
+  <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog" {# i18n-ok: structural attribute #}
+       role="dialog" {# i18n-ok: structural attribute #}
        aria-modal="true"
        aria-labelledby="gc-research-lab-ascension-confirm-title">
     <header class="gc-player-card-head">
       <h2 id="gc-research-lab-ascension-confirm-title" class="gc-player-card-head-title">{{ T('research_network_title') }}</h2>
       <button type="button"
-              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close" {# i18n-ok: structural attribute #}
               data-research-lab-ascension-cancel
               aria-label="{{ T('close', 'Schließen') }}">×</button>
     </header>
@@ -551,7 +551,7 @@
         </ul>
       </section>
       <div class="gc-bld-evo-confirm-actions">
-        <button type="button" class="gc-btn gc-btn-primary" id="gc-research-lab-ascension-confirm-submit">{{ T('research_network_ascend') }}</button>
+        <button type="button" class="gc-btn gc-btn-primary" id="gc-research-lab-ascension-confirm-submit">{{ T('research_network_title') }}</button>
         <button type="button" class="gc-btn gc-btn-secondary" data-research-lab-ascension-cancel>{{ T('buildings_mine_evo_modal_cancel', 'Abbrechen') }}</button>
       </div>
     </div>

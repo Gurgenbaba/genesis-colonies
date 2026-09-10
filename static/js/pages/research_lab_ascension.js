@@ -19,7 +19,7 @@
   function messageFor(res) {
     var reason = String((res && (res.reason || res.error)) || "research_ascension_failed");
     if (typeof GC.t === "function") {
-      return GC.t("research_network_error_" + reason, GC.t("research_network_error_generic", "Research ascension failed."));
+      return GC.t("research_network_error_" + reason, GC.t("research_network_error_generic", ""));
     }
     return reason;
   }
@@ -27,14 +27,12 @@
   function openModal(btn) {
     if (!modal || !btn) return;
     activeTrigger = btn;
-    var name = btn.dataset.ascName || "";
-    var roman = btn.dataset.ascRank || "";
-    var required = btn.dataset.ascRequired || "";
-    if (lead) lead.textContent = name + (required ? " · Level " + required : "");
-    if (rank) rank.textContent = "Ascension " + roman;
+    if (lead) lead.textContent = btn.dataset.ascLead || "";
+    if (rank) rank.textContent = btn.dataset.ascRankLabel || "";
     if (benefit) benefit.textContent = btn.dataset.ascBenefit || "";
-    if (metal) metal.textContent = "Ferronit · " + (btn.dataset.ascTributeMetal || "0");
-    if (crystal) crystal.textContent = "Crytite · " + (btn.dataset.ascTributeCrystal || "0");
+    if (metal) metal.textContent = btn.dataset.ascTributeMetalLabel || "";
+    if (crystal) crystal.textContent = btn.dataset.ascTributeCrystalLabel || "";
+    if (submit) submit.textContent = btn.dataset.ascActionLabel || "";
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
     document.body.classList.add("gc-modal-open");
@@ -91,8 +89,10 @@
       closeModal();
     }
   });
+
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape" && modal && !modal.hidden) closeModal();
   });
+
   if (submit) submit.addEventListener("click", ascend);
 }());
