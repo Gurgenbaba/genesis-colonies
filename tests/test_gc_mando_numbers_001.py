@@ -37,13 +37,28 @@ def test_huge_number_layout_does_not_ellipsis_record_or_hof_values():
     assert "white-space: nowrap" in hof_block
 
 
-def test_hud_huge_values_expand_cards_and_never_ellipsis():
+def test_hud_uses_four_full_width_resource_cards_without_ellipsis():
     css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
-    bar_block = css.split(".resource-bar-cmd {", 1)[1].split("}", 1)[0]
+    bar_block = css.split(".resource-bar.resource-bar-cmd {", 1)[1].split("}", 1)[0]
     value_block = css.split(".resource-bar-cmd .res-value {", 1)[1].split("}", 1)[0]
+    tk_block = css.split(".resource-bar-cmd .hud-res-timekeeper {", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in bar_block
     assert "overflow-x: auto" in bar_block
     assert "scrollbar-gutter: stable" in bar_block
-    assert "min-inline-size: 18rem" in css
+    assert "display: none !important" in tk_block
+    assert "min-inline-size: 18rem" not in css
     assert "overflow-x: auto" in value_block
     assert "text-overflow: ellipsis" not in value_block
     assert "text-align: right" in value_block
+
+
+def test_timekeeper_is_presented_in_header_and_mirrors_live_resource_balance():
+    partial = (ROOT / "templates" / "partials" / "header_language_switcher.html").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
+    assert partial.index('class="gc-language-switcher"') < partial.index('class="gc-hud-panel gc-header-timekeeper"')
+    assert "img/res/timekeeper.webp" in partial
+    assert "data-timekeeper-header-balance" in partial
+    assert 'document.querySelector("#resource-bar [data-timekeeper-balance]")' in partial
+    assert "MutationObserver(sync)" in partial
+    assert ".gc-header-timekeeper" in css
+    assert ".gc-hslot-lang" in css

@@ -185,40 +185,77 @@ def start_sandbox(artifact_root: Path) -> SandboxRuntime:
     )
 
 
+def _visible(locator) -> bool:
+    return bool(locator.count() and locator.is_visible())
+
+
+def _click_or_defer_for_known_blocker(button, *, blockers=()) -> bool:
+    """Use normal actionability; defer only when a known higher overlay appeared."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    if not _visible(button):
+        return False
+    try:
+        button.click(timeout=900, trial=True)
+        button.click(timeout=3_000)
+        return True
+    except PlaywrightTimeoutError:
+        if any(_visible(blocker) for blocker in blockers):
+            return False
+        raise
+
 
 def _settle_known_sentinel_overlays(page) -> None:
     """Complete intentional one-time shell overlays before route probing.
 
     The Sentinel measures page/navigation behavior, not onboarding. Use only
     ordinary user clicks; never force or DOM-dispatch around a real blocker.
+    Modal onboarding must be settled before lower shell notices because its
+    backdrop intentionally intercepts pointer events outside the dialog.
     """
     quiet_rounds = 0
-    for _ in range(20):
+    for _ in range(24):
         acted = False
-
-        cookie = page.locator("button[data-cookie-notice-accept]").first
-        if cookie.count() and cookie.is_visible():
-            cookie.click(timeout=3_000)
-            acted = True
-
-        whats_new = page.locator("button[data-whats-new-dismiss]").first
-        if whats_new.count() and whats_new.is_visible():
-            whats_new.click(timeout=3_000)
-            acted = True
 
         chooser = page.locator("#gc-bld-ui-chooser")
         confirm = page.locator("button[data-bld-ui-chooser-confirm]").first
-        if chooser.count() and chooser.is_visible() and confirm.count() and confirm.is_visible():
+        if _visible(chooser) and _visible(confirm):
             confirm.click(timeout=3_000)
+            chooser.wait_for(state="hidden", timeout=10_000)
             acted = True
+
+        whats_new = page.locator("button[data-whats-new-dismiss]").first
+        if not acted and _visible(whats_new):
+            acted = _click_or_defer_for_known_blocker(whats_new, blockers=(chooser,))
+
+        cookie = page.locator("button[data-cookie-notice-accept]").first
+        if not acted and _visible(cookie):
+            acted = _click_or_defer_for_known_blocker(
+                cookie,
+                blockers=(chooser, whats_new),
+            )
 
         if acted:
             quiet_rounds = 0
         else:
             quiet_rounds += 1
-            if quiet_rounds >= 4:
+            if quiet_rounds >= 4 and not any(
+                _visible(item) for item in (chooser, whats_new, cookie)
+            ):
                 return
         page.wait_for_timeout(200)
+
+    visible = [
+        name
+        for name, locator in (
+            ("building-ui-chooser", page.locator("#gc-bld-ui-chooser")),
+            ("whats-new", page.locator("button[data-whats-new-dismiss]").first),
+            ("cookie-notice", page.locator("button[data-cookie-notice-accept]").first),
+        )
+        if _visible(locator)
+    ]
+    if visible:
+        raise RuntimeError(f"Sentinel could not settle known shell overlays: {', '.join(visible)}")
 
 
 def login_with_ui(page, base_url: str, username: str, password: str) -> None:

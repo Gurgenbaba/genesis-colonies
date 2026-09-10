@@ -1,11 +1,64 @@
 /* GC-MANDO-NUMBERS-001 — exact huge-number layout for HUD, Records and Hall of Fame.
    Values stay exact; constrained surfaces gain width/scroll instead of scientific notation. */
 
-/* HUD: Mando-scale balances must remain readable and reachable.
-   Give numeric resource cards enough real width first; only fall back to local horizontal
-   scrolling for values that outgrow even that. This keeps exact integers intact. */
-.resource-bar-cmd {
+/* Header: Timekeeper is account meta, not a planet resource. Keep it beside the
+   language selector/commander and mirror the canonical live balance from the hidden
+   resource source node. Reuse the standard gc-hud-panel skin so it belongs to the shell. */
+.gc-hslot-lang {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
   min-width: 0;
+}
+
+.gc-header-timekeeper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 9.25rem;
+  min-height: 2.35rem;
+  padding: 0.32rem 0.58rem;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.gc-header-timekeeper-icon {
+  display: block;
+  width: 1.65rem;
+  height: 1.65rem;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.gc-header-timekeeper-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.05rem;
+  min-width: 0;
+  line-height: 1.05;
+}
+
+.gc-header-timekeeper-tag {
+  font-size: 0.56rem;
+  letter-spacing: 0.075em;
+  opacity: 0.78;
+}
+
+.gc-header-timekeeper-value {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+}
+
+/* Resource row: the old fifth Timekeeper card remains as the canonical live-update
+   source for compatibility, but no longer occupies layout space. The four actual
+   planet resources therefore receive the entire row. */
+.resource-bar.resource-bar-cmd {
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
@@ -13,11 +66,15 @@
   scrollbar-gutter: stable;
 }
 
+.resource-bar-cmd .hud-res-timekeeper {
+  display: none !important;
+}
+
 .resource-bar-cmd .hud-res-metal,
 .resource-bar-cmd .hud-res-crystal,
 .resource-bar-cmd .hud-res-fuel-cells,
 .resource-bar-cmd .hud-res-energy {
-  min-inline-size: 18rem;
+  min-inline-size: 0;
 }
 
 .resource-bar-cmd .hud-res-body,
@@ -34,7 +91,7 @@
 .resource-bar-cmd .res-rate {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.025em;
 }
 
 .resource-bar-cmd .res-value {
@@ -44,7 +101,7 @@
   overflow-y: hidden;
   scrollbar-width: thin;
   text-align: right;
-  font-size: clamp(0.64rem, 0.70vw, 0.88rem);
+  font-size: clamp(0.72rem, 0.82vw, 0.94rem);
 }
 
 .resource-bar-cmd .hud-res-cap-line,
@@ -61,11 +118,11 @@
 }
 
 .resource-bar-cmd .res-cap {
-  font-size: clamp(0.56rem, 0.62vw, 0.76rem);
+  font-size: clamp(0.60rem, 0.67vw, 0.78rem);
 }
 
 .resource-bar-cmd .res-rate {
-  font-size: clamp(0.54rem, 0.60vw, 0.74rem);
+  font-size: clamp(0.58rem, 0.64vw, 0.76rem);
 }
 
 .gc-records-workspace-body,
@@ -121,21 +178,59 @@
   min-width: 170px;
 }
 
+@media (max-width: 1180px) {
+  .gc-header-timekeeper {
+    min-width: auto;
+    padding-inline: 0.48rem;
+  }
+
+  .gc-header-timekeeper-tag {
+    display: none;
+  }
+
+  .gc-header-timekeeper-copy {
+    align-items: center;
+  }
+}
+
 @media (max-width: 760px) {
+  .gc-hslot-lang {
+    gap: 0.35rem;
+  }
+
+  .gc-header-timekeeper {
+    gap: 0.32rem;
+    min-height: 2rem;
+    padding: 0.2rem 0.36rem;
+  }
+
+  .gc-header-timekeeper-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  .gc-header-timekeeper-value {
+    font-size: 0.72rem;
+  }
+
+  .resource-bar.resource-bar-cmd {
+    grid-template-columns: repeat(4, minmax(16rem, 1fr));
+  }
+
   .resource-bar-cmd .hud-res-metal,
   .resource-bar-cmd .hud-res-crystal,
   .resource-bar-cmd .hud-res-fuel-cells,
   .resource-bar-cmd .hud-res-energy {
-    min-inline-size: min(17rem, calc(100vw - 2rem));
+    min-inline-size: 16rem;
   }
 
   .resource-bar-cmd .res-value {
-    font-size: 0.64rem;
+    font-size: 0.70rem;
   }
 
   .resource-bar-cmd .res-cap,
   .resource-bar-cmd .res-rate {
-    font-size: 0.56rem;
+    font-size: 0.60rem;
   }
 
   .gc-records-row {

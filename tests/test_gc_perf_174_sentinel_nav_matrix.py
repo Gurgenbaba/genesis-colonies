@@ -24,8 +24,30 @@ def test_sentinel_login_settles_intentional_shell_overlays_without_force_clicks(
     assert "data-cookie-notice-accept" in block
     assert "data-whats-new-dismiss" in block
     assert "data-bld-ui-chooser-confirm" in block
+    assert block.index("data-bld-ui-chooser-confirm") < block.index("data-whats-new-dismiss")
+    assert block.index("data-whats-new-dismiss") < block.index("data-cookie-notice-accept")
+    assert 'chooser.wait_for(state="hidden", timeout=10_000)' in block
+    assert "_click_or_defer_for_known_blocker" in block
     assert "force=True" not in block
     assert "dispatch_event" not in block
+
+
+def test_sentinel_overlay_defer_uses_actionability_and_only_known_blockers():
+    src = _read("scripts/browser_test_support.py")
+    block = src.split("def _click_or_defer_for_known_blocker", 1)[1].split(
+        "def _settle_known_sentinel_overlays", 1
+    )[0]
+    assert "trial=True" in block
+    assert "PlaywrightTimeoutError" in block
+    assert "blockers" in block
+    assert "force=True" not in block
+    assert "dispatch_event" not in block
+    settle = src.split("def _settle_known_sentinel_overlays(page)", 1)[1].split(
+        "def login_with_ui", 1
+    )[0]
+    assert 'blockers=(chooser,)' in settle
+    assert 'blockers=(chooser, whats_new)' in settle
+    assert "Sentinel could not settle known shell overlays" in settle
 
 
 def test_sentinel_drives_real_pjax_and_persists_route_samples():
