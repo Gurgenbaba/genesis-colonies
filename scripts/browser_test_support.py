@@ -201,6 +201,7 @@ def _settle_known_sentinel_overlays(page) -> None:
         confirm = page.locator("button[data-bld-ui-chooser-confirm]").first
         if chooser.count() and chooser.is_visible() and confirm.count() and confirm.is_visible():
             confirm.click(timeout=3_000)
+            chooser.wait_for(state="hidden", timeout=10_000)
             acted = True
 
         if not acted:
