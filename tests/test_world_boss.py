@@ -1566,6 +1566,19 @@ def test_resolve_world_boss_auto_attack_ships_empty(wb_db):
         conn.close()
 
 
+def test_world_boss_attack_response_uses_slim_post_mutation_state():
+    """GC-PERF-WB-ACTION-001: instant strike must not rebuild full panel state."""
+    src = Path("app.py").read_text(encoding="utf-8")
+    block = src.split('def api_world_boss_attack():', 1)[1].split(
+        '@app.route("/api/world-boss/auto-attack"', 1
+    )[0]
+    assert "include_panel=False" in block
+    assert "action_slim=True" in block
+    assert 'post_mutation_committed=bool(result.get("ok"))' in block
+    assert "include_panel=True" not in block
+    assert '"state": state' in block
+
+
 def test_api_world_boss_instant_attack(wb_db, monkeypatch):
     """GC-WB-ATTACK-002 — POST /api/world-boss/attack deals damage without hangar loss."""
     import importlib
