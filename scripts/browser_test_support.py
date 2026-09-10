@@ -18,8 +18,6 @@ from pathlib import Path
 from typing import IO
 from urllib.request import urlopen
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SECRET = "sentinel-test-secret-key-not-for-production-32chars"
 
@@ -193,6 +191,8 @@ def _visible(locator) -> bool:
 
 def _click_or_defer_for_known_blocker(button, *, blockers=()) -> bool:
     """Use normal actionability; defer only when a known higher overlay appeared."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
     if not _visible(button):
         return False
     try:
