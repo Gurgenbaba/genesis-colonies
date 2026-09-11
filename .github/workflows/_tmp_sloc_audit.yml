@@ -1,3 +1,4 @@
+# Temporary audit helper; branch-only, never merge.
 name: Temporary SLOC audit
 
 on:
@@ -38,7 +39,6 @@ jobs:
           from collections import Counter, defaultdict
           from pathlib import Path
 
-          repo = Path('.')
           all_data = json.load(open('/tmp/all.json', encoding='utf-8'))
 
           print('\n=== GC SLOC AUDIT ===')
