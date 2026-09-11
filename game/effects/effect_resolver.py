@@ -46,7 +46,7 @@ NANOFACTORY_SPEED_COEFF = 0.55
 NANOFACTORY_SPEED_EXPONENT = 0.8
 COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_level
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
-STORAGE_TECH_PER_LEVEL = 0.15
+STORAGE_TECH_PER_LEVEL = 0.50
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 # 0.985^1829 is already below _DIVISION_EPS. Beyond this point all canonical
 # build/research speed consumers clamp the duration factor to the same epsilon,
@@ -801,7 +801,7 @@ class EffectResolver:
             crystal_prod_factor *= drone_bonus
             sources.append(self._source_entry("prod_factor", "drone_tech", drone_bonus, ld))
 
-        # --- Research: storage_tech (+15% storage per level, additive) ---
+        # --- Research: storage_tech (+50% storage per level, additive) ---
         ls = _lvl(r, "storage_tech")
         if ls > 0:
             storage_factor *= 1.0 + STORAGE_TECH_PER_LEVEL * ls
