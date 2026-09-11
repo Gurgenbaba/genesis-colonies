@@ -174,20 +174,52 @@
           {{ render_building_effect_bundle(b) }}
 
           {% if building_type == 'research_lab' and b.research_lab_ascension is defined and b.research_lab_ascension %}
+          {% set _lab_rank = (b.research_lab_ascension_rank|default(0)|int) %}
+          {% set _lab_next_rank = (b.research_lab_next_rank|default(0)|int) %}
+          {% set _lab_gate = (b.research_lab_ascension_required_level|default(0)|int) %}
+          {% set _lab_ready = b.research_lab_ascension_ready if b.research_lab_ascension_ready is defined else false %}
+          {% set _lab_progress_pct = 100 if _lab_gate <= 0 or (b.level|int) >= _lab_gate else (((b.level|int) * 100 / _lab_gate)|round(0, 'floor')) %}
+          {% set _lab_current_rank = b.research_lab_ascension_roman if _lab_rank > 0 else '0' %}
+          {% set _lab_next_slots = 10 if (b.research_queue_capacity|int) >= 10 else ((b.research_queue_capacity|int) + 1) %}
           <div class="gc-bld-evo-block" data-research-lab-ascension>
             <div class="gc-bld-evo-progress" role="status">
               <span class="gc-bld-evo-progress-label">{{ T('research_network_title') }}</span>
-              <span class="gc-mono gc-bld-evo-progress-vals">{{ T('research_network_capacity', slots=b.research_queue_capacity) }}</span>
+              {% if _lab_next_rank > 0 %}
+              <span class="gc-mono gc-bld-evo-progress-vals">{{ b.level|fmt_int }} / {{ _lab_gate|fmt_int }}</span>
+              {% else %}
+              <span class="gc-mono gc-bld-evo-progress-vals">{{ T('research_network_max') }}</span>
+              {% endif %}
             </div>
-            {% if (b.research_lab_ascension_rank|default(0)|int) > 0 %}
+            <div class="gc-bld-evo-bar" aria-hidden="true">
+              <span class="gc-bld-evo-bar-fill" style="width: {{ _lab_progress_pct }}%;"></span>
+            </div>
+            <div class="gc-bld-evo-bonus gc-mono">
+              {{ T('research_network_capacity', slots=b.research_queue_capacity) }}
+            </div>
+            {% if _lab_next_rank > 0 %}
+            <div class="gc-bld-evo-bonus gc-mono">ASCENSION {{ _lab_current_rank }} → {{ b.research_lab_next_roman }}</div>
+            {% endif %}
+            {% if _lab_rank > 0 %}
             <div class="gc-bld-evo-bonus gc-mono">
               {{ T('research_network_rank_speed', rank=b.research_lab_ascension_roman, pct=b.research_lab_ascension_speed_bonus_pct) }}
             </div>
             {% endif %}
-            {% if b.research_lab_ascension_ready %}
+            {% if _lab_ready %}
             <div class="hint">{{ T('research_network_ready', rank=b.research_lab_next_roman) }}</div>
-            {% elif (b.research_lab_next_rank|default(0)|int) > 0 %}
-            <div class="hint">{{ T('research_network_requires', rank=b.research_lab_next_roman, level=b.research_lab_ascension_required_level) }}</div>
+            <button type="button"
+                    class="gc-btn gc-bld-evo-btn"
+                    data-research-network-ascend
+                    data-research-ascend-rank="{{ b.research_lab_next_roman }}"
+                    data-research-ascend-ready="{{ T('research_network_ready', rank=b.research_lab_next_roman) }}"
+                    data-research-ascend-benefit="{{ T('research_network_next_ascension', rank=b.research_lab_next_roman, level=_lab_gate, slots=_lab_next_slots) }}"
+                    data-research-ascend-metal="{{ b.research_lab_ascension_tribute_metal|default(0) }}"
+                    data-research-ascend-crystal="{{ b.research_lab_ascension_tribute_crystal|default(0) }}">
+              {{ T('research_network_ascend', rank=b.research_lab_next_roman) }}
+            </button>
+            {% elif _lab_next_rank > 0 %}
+            <div class="hint">{{ T('research_network_requires', rank=b.research_lab_next_roman, level=_lab_gate) }}</div>
+            {% else %}
+            <div class="hint">{{ T('research_network_max') }}</div>
             {% endif %}
           </div>
           {% endif %}
@@ -495,6 +527,52 @@
   </div>
 </div>
 
+<div id="gc-research-network-confirm-modal"
+     class="gc-player-card-modal gc-bld-evo-confirm-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-research-network-confirm-cancel tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-research-network-confirm-title">
+    <header class="gc-player-card-head">
+      <h2 id="gc-research-network-confirm-title" class="gc-player-card-head-title">{{ T('research_network_title') }}</h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-research-network-confirm-cancel
+              aria-label="{{ T('close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body gc-bld-evo-confirm-body">
+      <p class="gc-bld-evo-confirm-lead" id="gc-research-network-confirm-lead"></p>
+      <div class="gc-bld-evo-confirm-rank-chip" id="gc-research-network-confirm-rank-chip" aria-hidden="false"></div>
+      <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-research-network-confirm-benefit-label">
+        <h3 class="gc-bld-evo-confirm-section-title" id="gc-research-network-confirm-benefit-label">
+          {{ T('buildings_mine_evo_modal_benefit_label', 'Permanenter Vorteil') }}
+        </h3>
+        <p class="gc-bld-evo-confirm-benefit" id="gc-research-network-confirm-benefit"></p>
+      </section>
+      <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-research-network-confirm-tribute-label">
+        <h3 class="gc-bld-evo-confirm-section-title" id="gc-research-network-confirm-tribute-label">
+          {{ T('buildings_mine_evo_modal_tribute_label', 'Tribute') }}
+        </h3>
+        <ul class="gc-bld-evo-confirm-tribute-list" id="gc-research-network-confirm-tribute-list">
+          <li id="gc-research-network-confirm-tribute-metal"></li>
+          <li id="gc-research-network-confirm-tribute-crystal"></li>
+        </ul>
+      </section>
+      <div class="gc-bld-evo-confirm-actions">
+        <button type="button" class="gc-btn gc-btn-primary" id="gc-research-network-confirm-submit">
+          {{ T('buildings_mine_evo_modal_confirm', 'Ascension bestätigen') }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-secondary" data-research-network-confirm-cancel>
+          {{ T('buildings_mine_evo_modal_cancel', 'Abbrechen') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="gc-stellar-forge-modal"
      class="gc-player-card-modal gc-sf-modal"
      hidden
@@ -616,4 +694,5 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/pages/buildings.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/pages/research_network.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
