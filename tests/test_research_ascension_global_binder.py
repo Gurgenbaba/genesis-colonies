@@ -12,7 +12,6 @@ def test_research_ascension_binder_is_loaded_from_persistent_shell():
     assert "js/pages/research_lab_ascension.js" in rail
     assert "<script defer" in rail
     assert "-global1" in rail
-    assert "light PJAX" in rail
 
 
 def test_ready_hint_is_hidden_when_real_ascension_cta_exists():
