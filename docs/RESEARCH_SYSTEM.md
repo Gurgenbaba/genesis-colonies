@@ -144,7 +144,7 @@ Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Hel
 |------|--------|
 | `energy_tech` | `mine_energy_factor` |
 | `mining_tech`, `crystal_tech`, `drone_tech` | Prod-Faktoren (metal / crystal / both) |
-| `storage_tech` | `storage_factor` (+15 %/Lvl, additiv) |
+| `storage_tech` | `storage_factor` (+50 %/Lvl, additiv) |
 | `buildtime_tech` | Build + research speed |
 | `weapon_tech`, `armor_tech`, `shield_tech` | Combat modifiers → `simulate_battle()` |
 | `navigation_tech`, `engine_tech` | `fleet_speed_multiplier` → `fleet.py` / `fleet_calc.py` |
