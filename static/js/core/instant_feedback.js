@@ -261,6 +261,65 @@
     if (event && payload.player) patchWorldBossParticipant(event.id, payload.player);
   }
 
+  function applyMessageNotificationSummary(data) {
+    if (!data || typeof data !== "object" || data.ok === false) return false;
+    if (data.unread_messages_count == null) return false;
+    var n = Math.max(0, Number(data.unread_messages_count) || 0);
+    var localCount = document.getElementById("messages-unread-count");
+    if (localCount) localCount.textContent = String(n);
+    if (typeof GC.mergeLastState === "function") {
+      GC.mergeLastState({ unread_messages_count: n }, "messages_sync");
+    }
+    if (typeof GC.setMessagesUnreadPollBaseline === "function") {
+      GC.setMessagesUnreadPollBaseline(n);
+    }
+    return true;
+  }
+
+  /**
+   * Messages only asks for refreshGameState("messages_sync") to reconcile the
+   * unread badge. Route that reason through the existing tiny, server-authoritative
+   * notification heartbeat instead of rebuilding the complete game-state payload.
+   * Any malformed/failed summary falls back to the original canonical refresh.
+   */
+  function installMessagesSyncFastPath() {
+    if (typeof GC.refreshGameState !== "function") return;
+    if (GC.refreshGameState.__gcMessagesSyncFastPath) return;
+    var originalRefreshGameState = GC.refreshGameState;
+    var wrappedRefreshGameState = function instantFeedbackRefreshGameState(reason) {
+      if (String(reason || "") !== "messages_sync") {
+        return originalRefreshGameState.apply(this, arguments);
+      }
+
+      var self = this;
+      var args = arguments;
+      if (typeof window.fetch !== "function") {
+        return originalRefreshGameState.apply(self, args);
+      }
+
+      return window.fetch("/api/notifications/summary", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+        cache: "no-store",
+      }).then(function (response) {
+        if (!response || !response.ok) throw new Error("notification_summary_failed");
+        return response.json();
+      }).then(function (data) {
+        if (!applyMessageNotificationSummary(data)) throw new Error("notification_summary_invalid");
+        return data;
+      }).catch(function () {
+        return originalRefreshGameState.apply(self, args);
+      });
+    };
+    wrappedRefreshGameState.__gcMessagesSyncFastPath = true;
+    wrappedRefreshGameState.__gcPreviousRefreshGameState = originalRefreshGameState;
+    GC.refreshGameState = wrappedRefreshGameState;
+  }
+
   function applyActionFeedback(url, options, response) {
     if (!response || typeof response !== "object" || response.ok === false) return;
     var parsed = parsedUrl(url);
@@ -292,6 +351,8 @@
       }
       return response;
     };
+
+    installMessagesSyncFastPath();
 
     var originalFetch = typeof window.fetch === "function" ? window.fetch.bind(window) : null;
     if (originalFetch && !window.fetch.__gcInstantFeedbackWrapped) {
@@ -325,6 +386,7 @@
       patchPlanetBuildingLevels: patchPlanetBuildingLevels,
       patchWorldBossParticipant: patchWorldBossParticipant,
       patchWorldBossLivePayload: patchWorldBossLivePayload,
+      applyMessageNotificationSummary: applyMessageNotificationSummary,
     };
   }
 

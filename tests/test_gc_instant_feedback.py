@@ -55,8 +55,29 @@ def test_world_boss_compact_live_poll_mirrors_current_player_without_blocking_po
     assert "return response;" in src
 
 
+def test_messages_sync_uses_tiny_notification_summary_before_game_state_fallback():
+    src = _read("static/js/core/instant_feedback.js")
+    assert 'String(reason || "") !== "messages_sync"' in src
+    assert 'window.fetch("/api/notifications/summary"' in src
+    assert "applyMessageNotificationSummary(data)" in src
+    assert 'GC.mergeLastState({ unread_messages_count: n }, "messages_sync")' in src
+    assert "GC.setMessagesUnreadPollBaseline(n)" in src
+    assert "originalRefreshGameState.apply(self, args)" in src
+    assert "notification_summary_failed" in src
+    assert "notification_summary_invalid" in src
+
+
+def test_messages_sync_fast_path_does_not_replace_other_game_state_reasons():
+    src = _read("static/js/core/instant_feedback.js")
+    fast_path = src.split("function installMessagesSyncFastPath()")[1].split("function applyActionFeedback")[0]
+    assert "originalRefreshGameState.apply(this, arguments)" in fast_path
+    assert "__gcMessagesSyncFastPath" in fast_path
+    assert "GC.refreshGameState = wrappedRefreshGameState" in fast_path
+
+
 def test_instant_feedback_is_fail_open_and_keeps_canonical_state_authoritative():
     src = _read("static/js/core/instant_feedback.js")
     assert "originalFetchGameAction.call(this, url, options)" in src
     assert "UI acceleration is fail-open" in src
     assert "return response;" in src
+    assert "originalRefreshGameState.apply(self, args)" in src
