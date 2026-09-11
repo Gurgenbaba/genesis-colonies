@@ -404,3 +404,15 @@ python -m pytest tests/test_fleet.py -k "logistics or collect_creates_report or 
 ---
 
 **Ergebnis dokumentieren (gesamt):** Datum, Browser, Viewport, auffällige Fehler (Console + Screenshot).
+
+---
+
+## 13. Production Infinity-Load Regression (automatisiert)
+
+Nach dem Incident 2026-08-29 ([Incident-Report](incidents/2026-08-29-production-infinity-load.md)):
+
+| # | Schritt | Erwartung |
+|---|---------|-----------|
+| 13.1 | `pytest tests/test_gc_prod_infinity_load_ab.py -q` | Gates grün (EXPLAIN + wiederholte `/api/game-state`) |
+| 13.2 | Optional lokal: `python scripts/prod_infinity_load_ab.py --scales baseline,10x` | A/B Worktrees A=`9027ec0` B=`b0fade84` C=`7f3990b` ohne Multi-Sekunden-Outliers; Report unter `artifacts/prod_infinity_load_ab/` |
+| 13.3 | Manuell: eingeloggt 2–3 Min Overview/Fleet pollen | Kein Infinity-Load; `/api/game-state` bleibt responsiv |

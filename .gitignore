@@ -32,7 +32,11 @@ htmlcov/
 .nox/
 .tmp_gc547_audit/
 .tmp_sentinel/
+.tmp_browser_smoke/
 artifacts/browser/
+artifacts/browser-smoke/
+artifacts/prod_infinity_load_ab/
+artifacts/prod_infinity_load_ab_smoke/
 
 # SQLite — lokale Spielstände nicht committen
 game/game.db

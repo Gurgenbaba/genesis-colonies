@@ -180,6 +180,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).
 | `main.js` Modularisierung | 🔄 Scaffold | Echter Split → GC-PERF-JS-002 |
 | Redis / Definition Cache | ✅ Basis | EffectResolver-Cache → GC-PERF-EFFECT-CACHE-001 |
 | Lasttest-Werkzeug | ✅ | `scripts/perf_load_test.py` — Staging-Baseline später |
+| Prod Infinity-Load prevention (2026-08-29) | 🔄 | Incident [`incidents/2026-08-29-production-infinity-load.md`](incidents/2026-08-29-production-infinity-load.md); Scale-A/B `scripts/prod_infinity_load_ab.py`; Gates `tests/test_gc_prod_infinity_load_ab.py` — RC under investigation |
 | WebSocket Push (optional) | 💡 | Polling bleibt Fallback |
 | i18n UI-Switch (DE/EN) | 🔄 | `game/i18n.py`, Locales; Default `de` — siehe CAPABILITY P1 |
 | CDN / Asset-Pipeline | 💡 | `VERSION` Cache-Bust |

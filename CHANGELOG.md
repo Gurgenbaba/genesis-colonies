@@ -376,6 +376,7 @@ Built from:
 
 ## Unreleased / Next
 
+- **GC-PROD-RECOVERY-001 / Infinity-Load follow-up (2026-08-29):** Incident-Report [`docs/incidents/2026-08-29-production-infinity-load.md`](docs/incidents/2026-08-29-production-infinity-load.md); lokale Scale-A/B-Harnesses `scripts/prod_infinity_load_ab.py` + Gates `tests/test_gc_prod_infinity_load_ab.py`. Root Cause der Production-Hänger weiterhin **under investigation** (STATE-012/013 nicht bestätigt).
 - Knowledge / LiveOps catch-up für Spieler: siehe **v0.9.2** (Universe News Pack + Codex-Landkarte)
 - **GC-650** — Patch Notes versioning (version tags, categories, badges on `/news`) — teilweise live via Release-Publisher
 - **GC-700** — Combat polish gaps (no resolver rebuild)
