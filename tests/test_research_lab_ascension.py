@@ -149,6 +149,36 @@ def test_static_integration_contracts_are_present():
     assert "GC.reloadCurrentPage" not in building_script
     assert "GC.navigateTo" not in building_script
     assert "location.reload" not in building_script
-    assert "GC.registerCleanup" in building_script
-    assert 'removeEventListener("click", onDocumentClick)' in building_script
-    assert 'removeEventListener("keydown", onKeydown)' in building_script
+
+
+def test_research_ascension_binding_survives_light_pjax_tab_swaps():
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "static/js/pages/research_lab_ascension.js").read_text(encoding="utf-8")
+
+    assert "GC._researchLabAscensionPersistentBound" in src
+    assert 'document.addEventListener("click", onDocumentClick)' in src
+    assert 'document.addEventListener("keydown", onKeydown)' in src
+    assert "new MutationObserver(queueNormalize)" in src
+    assert 'byId("main-content")' in src
+    assert "Page cleanup must not tear these down" in src
+    assert 'removeEventListener("click", onDocumentClick)' not in src
+    assert 'removeEventListener("keydown", onKeydown)' not in src
+    assert "GC.registerCleanup" not in src
+    # Submit is delegated as well, so replacing the modal DOM cannot leave a stale
+    # element reference behind after a PJAX fragment swap.
+    assert 'target.closest("#gc-research-lab-ascension-confirm-submit")' in src
+    assert "async function ascend(submit)" in src
+
+
+def test_building_card_ascension_surface_is_normalized_to_shared_evo_ui():
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "static/js/pages/research_lab_ascension.js").read_text(encoding="utf-8")
+
+    assert "ensureResearchRankBadge" in src
+    assert 'badge.className = "gc-hero-stat-badge gc-bld-evo-badge"' in src
+    assert 't("buildings_mine_evo_short", "EVO")' in src
+    assert 'card.classList.add("gc-building-card--evolved")' in src
+    assert 'block.parentNode.insertBefore(trigger, block)' in src
+    assert "block.remove()" in src
+    assert 'button.classList.add("gc-bld-evo-btn")' in src
+    assert 'badge.classList.add("gc-bld-evo-badge")' in src
