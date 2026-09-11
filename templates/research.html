@@ -257,13 +257,6 @@
             {{ T('research_network_next_lab', level=next_unlock.lab_level, slots=next_unlock.slots) }}
           {% endif %}
         </div>
-        {% if next_unlock.kind == 'ascension' and next_unlock.ready %}
-          {% set tribute_m = network.next_tribute_metal if network.next_tribute_metal is defined else 0 %}
-          {% set tribute_c = network.next_tribute_crystal if network.next_tribute_crystal is defined else 0 %}
-          <button type="button" class="gc-btn gc-bld-evo-btn" data-research-network-ascend>
-            {{ T('research_network_ascend', rank=next_unlock.roman) }}
-          </button>
-        {% endif %}
       {% else %}
         <div class="hint">{{ T('research_network_max') }}</div>
       {% endif %}
@@ -294,10 +287,4 @@
   </section>
 </div>
 
-{% endblock %}
-
-
-{% block extra_scripts %}
-{{ super() }}
-<script src="{{ url_for('static', filename='js/pages/research_network.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
