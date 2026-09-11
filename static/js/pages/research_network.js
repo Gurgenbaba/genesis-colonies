@@ -2,8 +2,8 @@
   "use strict";
 
   var GC = window.GC = window.GC || {};
-  var bound = false;
-  var pendingButton = null;
+  var state = GC.__researchNetworkAscensionState || { pendingButton: null };
+  GC.__researchNetworkAscensionState = state;
 
   function requestId() {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -45,15 +45,15 @@
     root.hidden = true;
     root.setAttribute("aria-hidden", "true");
     document.body.classList.remove("gc-modal-open");
-    var restore = pendingButton;
-    pendingButton = null;
-    if (restore && typeof restore.focus === "function") restore.focus();
+    var restore = state.pendingButton;
+    state.pendingButton = null;
+    if (restore && typeof restore.focus === "function" && restore.isConnected) restore.focus();
   }
 
   function openModal(btn) {
     var root = modal();
     if (!root || !btn) return;
-    pendingButton = btn;
+    state.pendingButton = btn;
 
     var rank = String(btn.dataset.researchAscendRank || "");
     var benefit = String(btn.dataset.researchAscendBenefit || "");
@@ -106,8 +106,8 @@
   }
 
   function bind() {
-    if (bound) return;
-    bound = true;
+    if (GC.__researchNetworkAscensionBound) return;
+    GC.__researchNetworkAscensionBound = true;
     document.addEventListener("click", function (event) {
       var target = event.target;
       var btn = target && target.closest ? target.closest("[data-research-network-ascend]") : null;
@@ -122,9 +122,9 @@
         return;
       }
       var submit = target && target.closest ? target.closest("#gc-research-network-confirm-submit") : null;
-      if (submit && pendingButton) {
+      if (submit && state.pendingButton) {
         event.preventDefault();
-        ascend(pendingButton);
+        ascend(state.pendingButton);
       }
     });
     document.addEventListener("keydown", function (event) {
