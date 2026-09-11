@@ -49,6 +49,25 @@
     if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
   }
 
+  function retireAscendTrigger(trigger) {
+    if (!trigger || !document.contains(trigger)) return;
+    trigger.disabled = true;
+    trigger.setAttribute("aria-disabled", "true");
+    trigger.removeAttribute("data-research-lab-ascend");
+    trigger.dataset.gcAwaitingReconcile = "1";
+  }
+
+  function reconcileBuildingsPanel() {
+    if (typeof GC.forceCanonicalGameStateRefresh !== "function") return;
+    try {
+      var pending = GC.forceCanonicalGameStateRefresh("research_lab_ascension");
+      if (pending && typeof pending.catch === "function") pending.catch(function () {});
+    } catch (_) {
+      // Response-first acceleration is fail-open. The next canonical page/state
+      // refresh still owns the final server-authoritative representation.
+    }
+  }
+
   async function ascend() {
     if (!submit || submit.disabled || submit.dataset.busy === "1") return;
     submit.dataset.busy = "1";
@@ -64,13 +83,16 @@
         if (typeof GC.toast === "function") GC.toast(messageFor(res), "error");
         return;
       }
+
+      // GC-INSTANT-FEEDBACK-V2: response first, canonical panel reconcile later.
+      // The action response is authoritative for HUD/resources immediately. Retire
+      // the stale CTA before the async panel reconcile so a fast second click can
+      // never ascend another rank against pre-response markup.
+      var completedTrigger = activeTrigger;
       closeModal();
+      retireAscendTrigger(completedTrigger);
       if (typeof GC.applyActionState === "function") GC.applyActionState(res, "research_lab_ascension");
-      if (typeof GC.reloadCurrentPage === "function") {
-        await GC.reloadCurrentPage({ force: true });
-      } else if (typeof GC.navigateTo === "function") {
-        await GC.navigateTo(window.location.pathname + window.location.search, { force: true });
-      }
+      reconcileBuildingsPanel();
     } catch (err) {
       if (typeof GC.toast === "function") GC.toast(messageFor(null), "error");
       else if (window.console && console.error) console.error(err);
