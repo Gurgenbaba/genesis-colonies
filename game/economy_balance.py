@@ -141,12 +141,15 @@ STORAGE_BASE_CAPACITY = 150_000
 STORAGE_REFERENCE_RESOURCE = "metal"
 STORAGE_REFERENCE_MINE_LEVEL_FACTOR = 3
 STORAGE_REFERENCE_HOURS = 24
-# GC-MANDO-STORAGE-001 — preserve the 24h early-game anchor, but give mature
-# depots enough buffer for L450+ mines. L50 stays at 24h; the horizon ramps
-# linearly to 72h by L150 and remains 72h beyond that.
+# GC-STORAGE-V2 — preserve the 24h early-game anchor, then grow the
+# guaranteed production buffer forever.  The historic L150/72h point stays an
+# anchor for compatibility; it is no longer a maximum.  0.48h/level == 12/25.
 STORAGE_ENDGAME_START_LEVEL = 50
-STORAGE_ENDGAME_FULL_LEVEL = 150
-STORAGE_ENDGAME_MAX_HOURS = 72
+STORAGE_ENDGAME_FULL_LEVEL = 150  # historic 72h anchor, not a cap
+STORAGE_ENDGAME_ANCHOR_HOURS = 72
+STORAGE_ENDGAME_MAX_HOURS = STORAGE_ENDGAME_ANCHOR_HOURS  # compatibility alias
+STORAGE_ENDGAME_HOURS_PER_LEVEL_NUMERATOR = 12
+STORAGE_ENDGAME_HOURS_PER_LEVEL_DENOMINATOR = 25
 
 # GC-863 — nanofactory upgrade costs (target level X); GC-863A steeper growth.
 NANOFACTORY_METAL_BASE = 10_000.0
@@ -531,22 +534,33 @@ def mine_roi_cost_multiplier(target_level: int) -> float:
 
 
 def storage_reference_hours_at_depot_level(storage_level: int) -> int:
-    """Buffer horizon for one depot level; early game remains on the GC-872 24h anchor."""
+    """Guaranteed production-buffer hours; unchanged through L50, unbounded afterwards."""
     lvl = max(0, int(storage_level))
     if lvl <= STORAGE_ENDGAME_START_LEVEL:
         return STORAGE_REFERENCE_HOURS
-    if lvl >= STORAGE_ENDGAME_FULL_LEVEL:
-        return STORAGE_ENDGAME_MAX_HOURS
-    span = STORAGE_ENDGAME_FULL_LEVEL - STORAGE_ENDGAME_START_LEVEL
     progress = lvl - STORAGE_ENDGAME_START_LEVEL
     extra = (
-        (STORAGE_ENDGAME_MAX_HOURS - STORAGE_REFERENCE_HOURS) * progress
-    ) // span
+        STORAGE_ENDGAME_HOURS_PER_LEVEL_NUMERATOR * progress
+    ) // STORAGE_ENDGAME_HOURS_PER_LEVEL_DENOMINATOR
     return STORAGE_REFERENCE_HOURS + int(extra)
 
 
+def storage_production_buffer_capacity(production_per_hour: Any, storage_level: int) -> int:
+    """Exact Storage V2 floor from canonical full-power production and depot horizon."""
+    lvl = max(0, int(storage_level))
+    if lvl < STORAGE_ENDGAME_START_LEVEL:
+        return 0
+    production = max(Decimal(0), decimal_value(production_per_hour, "0"))
+    if production <= 0:
+        return 0
+    hours = storage_reference_hours_at_depot_level(lvl)
+    with localcontext() as ctx:
+        ctx.prec = max(96, _decimal_digits(production) + 64)
+        return max(0, int((production * Decimal(hours)).to_integral_value(rounding=ROUND_FLOOR)))
+
+
 def storage_capacity_at_depot_level(storage_level: int) -> int:
-    """GC-872 + GC-MANDO-STORAGE-001 — 3× reference mine with an endgame buffer horizon."""
+    """Legacy/reference depot floor; Storage V2 live production is layered by EffectResolver."""
     lvl = max(0, int(storage_level))
     if lvl <= 0:
         return STORAGE_BASE_CAPACITY

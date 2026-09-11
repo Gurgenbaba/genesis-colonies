@@ -371,13 +371,19 @@ def production_context_from_resolver(
     temp = temperature_mid_c_for_slot(resolver.planet_position)
     overlay = resolver.prod_overlay_factor(key)
 
-    event_mod = 1.0
-    try:
-        from .server_events import active_production_mult
-
-        event_mod = float(active_production_mult(conn=getattr(resolver, "_conn", None)) or 1.0)
-    except Exception:
+    event_mod = getattr(resolver, "_production_event_mult_cache", None)
+    if event_mod is None:
         event_mod = 1.0
+        try:
+            from .server_events import active_production_mult
+
+            event_mod = float(active_production_mult(conn=getattr(resolver, "_conn", None)) or 1.0)
+        except Exception:
+            event_mod = 1.0
+        try:
+            resolver._production_event_mult_cache = float(event_mod)  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
     # EPIC-29: Mine Evolution → building_modifier (planet-scoped rank).
     building_mod = 1.0

@@ -121,6 +121,17 @@ def get_storage_capacity(
             except Exception:
                 research = {}
 
+    if user_id is not None:
+        resolver = get_effect_resolver(
+            int(user_id),
+            buildings=buildings,
+            research=research,
+            conn=conn,
+        )
+        if mods is not None:
+            resolver._mods = dict(mods)
+        return resolver.get_storage_capacity()
+
     return _resolver(buildings, research, mods).get_storage_capacity()
 
 def apply_production_delta(
@@ -130,13 +141,18 @@ def apply_production_delta(
     delta_crystal: int = 0,
     research: Optional[Dict[str, int]] = None,
     mods: Optional[Dict[str, float]] = None,
+    resolver: Optional[EffectResolver] = None,
 ) -> None:
     """
     PRODUKTIONS-Delta:
     - Produktion darf NICHT über die Lagerkapazität hinauswachsen.
     - Bereits vorhandener Overflow (z.B. durch Farming/Rewards) wird NIE abgeschnitten.
     """
-    caps = get_storage_capacity(buildings, research=research, mods=mods)
+    caps = (
+        resolver.get_storage_capacity()
+        if resolver is not None
+        else get_storage_capacity(buildings, research=research, mods=mods)
+    )
     metal_cap = max(0, int(caps.get("metal", 0) or 0))
     crystal_cap = max(0, int(caps.get("crystal", 0) or 0))
 
@@ -161,6 +177,7 @@ def apply_fuel_production_delta(
     delta_fuel_cells: int = 0,
     research: Optional[Dict[str, int]] = None,
     mods: Optional[Dict[str, float]] = None,
+    resolver: Optional[EffectResolver] = None,
 ) -> None:
     """
     Brennzellen-Produktion:
@@ -169,7 +186,11 @@ def apply_fuel_production_delta(
     """
     if delta_fuel_cells <= 0:
         return
-    caps = get_storage_capacity(buildings, research=research, mods=mods)
+    caps = (
+        resolver.get_storage_capacity()
+        if resolver is not None
+        else get_storage_capacity(buildings, research=research, mods=mods)
+    )
     fuel_cap = int(caps.get("fuel_cells") or 0)
     current_fuel = max(0, int(planet.get("fuel_cells") or 0))
     if fuel_cap > 0 and current_fuel >= fuel_cap:
@@ -305,6 +326,7 @@ def _apply_production_tick(
         delta_crystal=delta_crystal,
         research=research,
         mods=mods,
+        resolver=resolver,
     )
     apply_fuel_production_delta(
         planet,
@@ -312,6 +334,7 @@ def _apply_production_tick(
         delta_fuel_cells=delta_fuel_cells,
         research=research,
         mods=mods,
+        resolver=resolver,
     )
 
     if not monotonic_floor:

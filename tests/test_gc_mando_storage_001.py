@@ -18,12 +18,15 @@ def test_early_storage_anchor_is_unchanged():
     assert storage_reference_hours_at_depot_level(STORAGE_ENDGAME_START_LEVEL) == 24
 
 
-def test_endgame_storage_horizon_ramps_to_three_days():
+def test_endgame_storage_horizon_keeps_growing_after_three_day_anchor():
     assert STORAGE_ENDGAME_START_LEVEL == 50
     assert storage_reference_hours_at_depot_level(100) == 48
     assert STORAGE_ENDGAME_FULL_LEVEL == 150
     assert storage_reference_hours_at_depot_level(150) == STORAGE_ENDGAME_MAX_HOURS == 72
-    assert storage_reference_hours_at_depot_level(999) == 72
+    assert storage_reference_hours_at_depot_level(200) == 96
+    assert storage_reference_hours_at_depot_level(300) == 144
+    assert storage_reference_hours_at_depot_level(450) == 216
+    assert storage_reference_hours_at_depot_level(999) > 216
 
 
 def test_l150_depot_buffers_three_days_of_l450_reference_mine():

@@ -1420,11 +1420,45 @@ class EffectResolver:
         return self.fuel_storage_capacity()
 
     def _storage_base_cap(self, resource: str, storage_level: int) -> int:
-        """GC-872 Ferdi reference depot cap; resource-independent."""
-        from ..economy_balance import storage_capacity_at_depot_level
+        """Storage V2: legacy floor vs canonical full-power production buffer."""
+        from ..economy_balance import (
+            STORAGE_ENDGAME_START_LEVEL,
+            storage_capacity_at_depot_level,
+            storage_production_buffer_capacity,
+        )
 
-        _ = resource
-        return storage_capacity_at_depot_level(max(0, int(storage_level)))
+        lvl = max(0, int(storage_level))
+        legacy_cap = storage_capacity_at_depot_level(lvl)
+        if lvl < STORAGE_ENDGAME_START_LEVEL:
+            return legacy_cap
+
+        key = str(resource or "")
+        cache = getattr(self, "_storage_v2_floor_cache", None)
+        if cache is None:
+            cache = {}
+            self._storage_v2_floor_cache = cache
+        cache_key = (key, lvl)
+        if cache_key in cache:
+            return max(legacy_cap, int(cache[cache_key]))
+
+        try:
+            from ..production_formula import (
+                calculate_resource_output_decimal,
+                production_context_from_resolver,
+            )
+
+            context = production_context_from_resolver(self, key, energy_ratio=1.0)
+            production_per_hour = calculate_resource_output_decimal(key, context)
+            live_floor = storage_production_buffer_capacity(production_per_hour, lvl)
+        except Exception:
+            if EFFECT_DEBUG:
+                logger.exception("Storage V2 production floor failed resource=%s level=%s", key, lvl)
+            else:
+                logger.warning("Storage V2 production floor fallback resource=%s level=%s", key, lvl)
+            live_floor = 0
+
+        cache[cache_key] = int(live_floor)
+        return max(legacy_cap, int(live_floor))
 
     def _metal_crystal_storage_base_cap(self, resource: str, storage_level: int) -> int:
         """Backward-compatible alias — use _storage_base_cap."""
