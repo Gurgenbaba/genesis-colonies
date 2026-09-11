@@ -1,7 +1,7 @@
 # EPIC Performance Core — Maximum Speed Stack
 
 > Status: ✅ **Core Foundation + Production Postgres cutover** (2026-08-31) · Next: [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md)  
-> Related: [ROADMAP.md](ROADMAP.md) Phase 7 · [EPICS.md](EPICS.md) EPIC-12 / EPIC-19 · [ARCHITECTURE.md](ARCHITECTURE.md) · [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md)
+> Related: [ROADMAP.md](ROADMAP.md) Phase 7 · [EPICS.md](EPICS.md) EPIC-12 / EPIC-19 · [ARCHITECTURE.md](ARCHITECTURE.md) · [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · [GC-PG-NUMERIC-READINESS-AUDIT-2026](database/GC-PG-NUMERIC-READINESS-AUDIT-2026.md)
 
 ## Entscheidung
 
@@ -21,6 +21,7 @@
 | Diet-State / Poll-Delta | ✅ Client `?since=` + default-on (**GC-PERF-LIVE-001**); server early-exit (**GC-PERF-STATE-004**) |
 | Lazy-Persistierung / Cache / Lasttest-Tool | ✅ Basis |
 | PostgreSQL-Schema (alle Tabellen/Migrationen) | ✅ **GC-PERF-PG-SCHEMA-001** |
+| PostgreSQL Numeric Readiness | 🔴 **nicht vollständig** — Core-Ressourcen/Exchange/Auction/derived values siehe **GC-PG-NUMERIC-READINESS-AUDIT-2026** |
 | Backend-Parität auf leerer PG-DB | ✅ **GC-PERF-PG-PARITY-001** (SQLite + PG Staging; live cutover 2026-08-31) |
 | SQLite→Postgres Datenimport | ✅ **GC-PERF-PG-MIGRATE-001** + live cutover |
 | Railway Staging + Smoke + Baseline | ✅ cutover smoke; continue via Highspeed gates |
