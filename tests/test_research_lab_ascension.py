@@ -129,12 +129,27 @@ def test_static_integration_contracts_are_present():
     buildings = (root / "game/buildings.py").read_text(encoding="utf-8")
     effects = (root / "game/effects/effect_resolver.py").read_text(encoding="utf-8")
     app = (root / "app.py").read_text(encoding="utf-8")
-    template = (root / "templates/research.html").read_text(encoding="utf-8")
+    research_template = (root / "templates/research.html").read_text(encoding="utf-8")
+    buildings_template = (root / "templates/buildings.html").read_text(encoding="utf-8")
+    research_network_js = (root / "static/js/pages/research_network.js").read_text(encoding="utf-8")
 
     assert "research_queue_capacity" in research
     assert 'building_type == "research_lab"' in buildings
     assert "max_lab_level_for_rank" in buildings
     assert "_research_lab_ascension_rank_cache" in effects
     assert '/api/research/ascend-lab' in app
-    assert "data-research-network-ascend" in template
-    assert "js/pages/research_network.js" in template
+
+    # /research is intentionally display-only; activation belongs to the Lab card.
+    assert "data-research-network-ascend" not in research_template
+    assert "js/pages/research_network.js" not in research_template
+
+    # /buildings owns the canonical Mine/Shipyard-style Ascension interaction.
+    assert "data-research-lab-ascension" in buildings_template
+    assert "gc-bld-evo-bar" in buildings_template
+    assert "data-research-network-ascend" in buildings_template
+    assert "gc-research-network-confirm-modal" in buildings_template
+    assert "research_lab_ascension_tribute_metal" in buildings_template
+    assert "research_lab_ascension_tribute_crystal" in buildings_template
+    assert "js/pages/research_network.js" in buildings_template
+    assert 'GC.fetchGameAction("/api/research/ascend-lab"' in research_network_js
+    assert "gc-research-network-confirm-modal" in research_network_js
