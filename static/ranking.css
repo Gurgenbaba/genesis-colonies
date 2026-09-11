@@ -176,6 +176,44 @@ html.gc-ranking-focus .gc-planet-registry {
   text-align: right;
 }
 
+/* GC-RANKING-PAGE-004 — keep 100 entries per visible page while retaining exact ranks. */
+.ranking-page .gc-ranking-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 18px 10px 4px;
+}
+
+.ranking-page .gc-ranking-pager-btn {
+  min-width: 42px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid rgba(74, 126, 161, 0.58);
+  border-radius: 2px;
+  background: rgba(7, 15, 30, 0.92);
+  color: var(--gc-text, #d5e4f0);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ranking-page .gc-ranking-pager-btn:hover:not(:disabled),
+.ranking-page .gc-ranking-pager-btn[aria-current="page"] {
+  border-color: var(--gc-accent, #ff6f9f);
+  color: var(--gc-accent, #ff6f9f);
+}
+
+.ranking-page .gc-ranking-pager-btn:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.ranking-page .gc-ranking-pager-btn[aria-current="page"] {
+  opacity: 1;
+}
+
 @media (max-width: 1180px) {
   .ranking-page .gc-ranking-panel-head {
     grid-template-columns: 1fr;
@@ -194,5 +232,15 @@ html.gc-ranking-focus .gc-planet-registry {
 
   .ranking-page .gc-ranking-my-strip > :last-child {
     min-width: 0;
+  }
+
+  .ranking-page .gc-ranking-pager {
+    gap: 6px;
+    padding-inline: 4px;
+  }
+
+  .ranking-page .gc-ranking-pager-btn {
+    min-width: 38px;
+    padding-inline: 9px;
   }
 }
