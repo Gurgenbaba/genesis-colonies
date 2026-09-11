@@ -144,8 +144,10 @@ def test_static_integration_contracts_are_present():
     assert "gc-research-lab-ascension-confirm-modal" in buildings_template
     assert "js/pages/research_lab_ascension.js" in buildings_template
     assert '/api/research/ascend-lab' in building_script
-    assert "GC.reloadCurrentPage" in building_script
-    assert "GC.navigateTo" in building_script
+    assert "GC.forceCanonicalGameStateRefresh" in building_script
+    assert 'removeAttribute("data-research-lab-ascend")' in building_script
+    assert "GC.reloadCurrentPage" not in building_script
+    assert "GC.navigateTo" not in building_script
     assert "location.reload" not in building_script
     assert "GC.registerCleanup" in building_script
     assert 'removeEventListener("click", onDocumentClick)' in building_script
