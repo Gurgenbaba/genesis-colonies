@@ -100,17 +100,9 @@
     var roman = researchRankFromCard(card, block, trigger);
     if (roman) ensureResearchRankBadge(card, roman);
 
-    // At an Ascension gate the normal next-level price is not actionable. Match
-    // Mine/Forge UX: the ready state has one clear Ascension CTA, not a stale
-    // building-cost footer competing with it.
-    if (trigger) {
-      var costs = card.querySelector(".gc-bld-card-meta--costs-only");
-      if (costs) costs.remove();
-    }
-
     // The research lab used to render a one-off network/progress panel that made
     // its Ascension surface look different from Mine/Forge cards. Keep only the
-    // real CTA; the rank itself lives in the shared EVO badge on the hero.
+    // real CTA; the normal building cost footer remains visible and actionable.
     if (block) {
       if (trigger && block.parentNode) {
         trigger.classList.add("gc-bld-evo-btn");
