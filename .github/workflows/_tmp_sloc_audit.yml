@@ -1,0 +1,133 @@
+name: Temporary SLOC audit
+
+on:
+  push:
+    branches:
+      - audit/sloc-20260911
+
+permissions:
+  contents: read
+
+jobs:
+  sloc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout audited main snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: 2b04197b8174d5ffcffbd2813eae76fa150b70d5
+          fetch-depth: 1
+
+      - name: Install cloc
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cloc
+          cloc --version
+
+      - name: Count tracked source lines
+        shell: bash
+        run: |
+          set -euo pipefail
+          cloc --vcs=git --json --out=/tmp/all.json .
+          cloc --vcs=git --by-file --csv --out=/tmp/by-file.csv .
+
+          python - <<'PY'
+          import csv
+          import json
+          from collections import Counter, defaultdict
+          from pathlib import Path
+
+          repo = Path('.')
+          all_data = json.load(open('/tmp/all.json', encoding='utf-8'))
+
+          print('\n=== GC SLOC AUDIT ===')
+          print('AUDITED_COMMIT=2b04197b8174d5ffcffbd2813eae76fa150b70d5')
+          print('COUNTER=cloc')
+          print('\n=== LANGUAGE SUMMARY (tracked files; code excludes blanks/comments) ===')
+          langs = []
+          for lang, data in all_data.items():
+              if lang in {'header', 'SUM'} or not isinstance(data, dict) or 'code' not in data:
+                  continue
+              langs.append((int(data.get('code', 0)), lang, int(data.get('nFiles', 0)), int(data.get('blank', 0)), int(data.get('comment', 0))))
+          for code, lang, files, blank, comment in sorted(langs, reverse=True):
+              print(f'LANG|{lang}|files={files}|code={code}|comments={comment}|blanks={blank}|physical={code+comment+blank}')
+          s = all_data['SUM']
+          print(f"TOTAL|files={s['nFiles']}|code={s['code']}|comments={s['comment']}|blanks={s['blank']}|physical={s['code']+s['comment']+s['blank']}")
+
+          rows = []
+          with open('/tmp/by-file.csv', newline='', encoding='utf-8-sig') as f:
+              reader = csv.DictReader(f)
+              for r in reader:
+                  try:
+                      rows.append({
+                          'language': r['language'],
+                          'filename': r['filename'].replace('\\\\', '/').lstrip('./'),
+                          'blank': int(r['blank']),
+                          'comment': int(r['comment']),
+                          'code': int(r['code']),
+                      })
+                  except (KeyError, ValueError, TypeError):
+                      pass
+
+          def category(path: str) -> str:
+              p = path.lower()
+              name = Path(p).name
+              if p.startswith('tests/') or '/tests/' in p or name.startswith('test_'):
+                  return 'tests'
+              if p.startswith('docs/') or p.endswith('.md') or p.endswith('.rst'):
+                  return 'docs'
+              if p.startswith('.github/') or p.startswith('.ci/') or p.startswith('.cursor/'):
+                  return 'ci_tooling'
+              if p.startswith('scripts/') or p in {'migrate.py'}:
+                  return 'dev_tooling'
+              if p == 'app.py' or p.startswith('game/') or p.startswith('templates/') or p.startswith('static/') or p.startswith('migrations/'):
+                  return 'product_runtime'
+              return 'other_tracked'
+
+          cats = defaultdict(lambda: {'files':0,'code':0,'comment':0,'blank':0,'physical':0})
+          cat_lang = defaultdict(Counter)
+          for r in rows:
+              c = category(r['filename'])
+              cats[c]['files'] += 1
+              cats[c]['code'] += r['code']
+              cats[c]['comment'] += r['comment']
+              cats[c]['blank'] += r['blank']
+              cats[c]['physical'] += r['code'] + r['comment'] + r['blank']
+              cat_lang[c][r['language']] += r['code']
+
+          print('\n=== CATEGORY SUMMARY ===')
+          for c in ('product_runtime','tests','docs','dev_tooling','ci_tooling','other_tracked'):
+              d = cats[c]
+              print(f"CAT|{c}|files={d['files']}|code={d['code']}|comments={d['comment']}|blanks={d['blank']}|physical={d['physical']}")
+              print('CATLANG|' + c + '|' + '|'.join(f'{k}={v}' for k,v in cat_lang[c].most_common()))
+
+          print('\n=== TOP 35 PRODUCT FILES BY SLOC ===')
+          product_rows = [r for r in rows if category(r['filename']) == 'product_runtime']
+          for r in sorted(product_rows, key=lambda x: x['code'], reverse=True)[:35]:
+              print(f"TOPPRODUCT|{r['code']}|{r['language']}|{r['filename']}|comments={r['comment']}|blanks={r['blank']}")
+
+          print('\n=== TOP 25 TEST FILES BY SLOC ===')
+          test_rows = [r for r in rows if category(r['filename']) == 'tests']
+          for r in sorted(test_rows, key=lambda x: x['code'], reverse=True)[:25]:
+              print(f"TOPTEST|{r['code']}|{r['language']}|{r['filename']}|comments={r['comment']}|blanks={r['blank']}")
+
+          print('\n=== PRODUCT DIRECTORY SLOC ===')
+          dirs = Counter()
+          for r in product_rows:
+              p = Path(r['filename'])
+              key = p.parts[0] if len(p.parts) > 1 else '<root>'
+              if key == 'game' and len(p.parts) > 2:
+                  key = '/'.join(p.parts[:2])
+              dirs[key] += r['code']
+          for k,v in dirs.most_common(30):
+              print(f'DIR|{k}|code={v}')
+
+          print('\n=== SIMPLE DUPLICATE BASENAME SIGNALS ===')
+          by_name = defaultdict(list)
+          for r in product_rows:
+              by_name[Path(r['filename']).name].append(r['filename'])
+          dup_names = [(n, ps) for n,ps in by_name.items() if len(ps) > 1]
+          for n, ps in sorted(dup_names, key=lambda x: (-len(x[1]), x[0]))[:30]:
+              print('DUPNAME|' + n + '|' + '|'.join(ps))
+          PY
