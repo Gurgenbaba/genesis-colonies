@@ -1,8 +1,8 @@
 name: Apply storage tech 50 hotfix
 
 on:
-  push:
-    branches: [hotfix/storage-tech-50]
+  pull_request:
+    branches: [main]
     paths:
       - .github/workflows/_hotfix_storage50.yml
 
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   patch:
+    if: github.head_ref == 'hotfix/storage-tech-50'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
