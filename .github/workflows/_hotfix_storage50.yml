@@ -17,6 +17,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: hotfix/storage-tech-50
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install test dependencies
+        run: pip install -r requirements-prod.txt pytest
       - name: Apply focused balance hotfix
         shell: bash
         run: |
