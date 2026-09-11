@@ -10,6 +10,9 @@ python-dotenv>=1.0.0,<2.0.0
 Pillow>=10.0.0,<12.0.0
 argon2-cffi>=23.1.0,<26.0.0
 
+# TEMP Storage V2 runner dependency — removed before merge.
+pytest>=8.0.0,<9.0.0
+
 # WebSocket push (galaxy live updates) — requires gunicorn -k gevent, see
 # scripts/docker-entrypoint.sh / docs/RAILWAY_OPERATOR.md
 gevent>=24.2.0,<25.0.0
