@@ -106,9 +106,11 @@ Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 ## Storage
 
 - Basis **150.000** Ferronit/Crytite/Brennzellen ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
-- Mit `metal_storage` / `crystal_storage` / `fuel_storage`: **Ferdi-Referenzkurve** (`storage_capacity_at_depot_level`: Basis + 24h Ferronit-Minenproduktion bei `Lagerlevel × 3`)
-- Multiplier: `storage_tech` (+50 %/Lvl, additiv), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
-- Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
+- Mit `metal_storage` / `crystal_storage` / `fuel_storage`: die bisherige **Ferdi-Referenzkurve** bleibt als Mindestwert erhalten. Ab Lager L50 greift zusätzlich **Storage V2**: `max(Referenzkurve, kanonische Vollenergie-Produktion der Ressource × Pufferstunden)`.
+- Pufferhorizont: bis L50 **24h**, danach unbegrenzt **+0,48h pro Lagerlevel** (L100=48h, L150=72h, L200=96h, L300=144h, L450=216h). Kein Endgame-Cap.
+- Die Produktionsbasis ist ressourcenspezifisch und übernimmt den kanonischen Produktionspfad inkl. Slot/Temperatur, Forschung, Mine-Ascension/Evolution, Directives/Diplomatie, Klassen/Booster, `production_speed` und aktive Produktions-Events; Energie-Drosselung wird für die Kapazitätsgarantie bewusst als 100% behandelt.
+- Multiplier danach: `storage_tech` (+50 %/Lvl, additiv), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`.
+- Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt. Produktions-Tick und HUD verwenden denselben contextual `EffectResolver`.
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
 
 ---
