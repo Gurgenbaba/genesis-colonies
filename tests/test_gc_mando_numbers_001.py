@@ -83,3 +83,12 @@ def test_desktop_command_header_is_one_outer_surface_not_detached_cards():
     assert "border-inline-start: 0 !important" in hardened
     assert ".gc-score-pill > #hud-score-total" in css
     assert "display: none !important" in css
+
+
+def test_live_events_popover_can_escape_desktop_shell_clip_only_while_open():
+    partial = (ROOT / "templates" / "partials" / "header_icon_rail.html").read_text(encoding="utf-8")
+    selector = '.gc-header-row-top:has([data-header-live-events-toggle][aria-expanded="true"])'
+    assert selector in partial
+    open_block = partial.split(selector, 1)[1].split("}", 1)[0]
+    assert "overflow: visible !important" in open_block
+    assert "z-index: var(--gc-z-dropdown, 1200) !important" in open_block
