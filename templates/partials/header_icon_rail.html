@@ -76,8 +76,18 @@
     z-index: var(--gc-z-dropdown, 1200) !important;
   }
 }
+
+/* Research Lab hotfix: a ready gate has one CTA, never a second passive
+   "Ascension … ready" line while the shared EVO normalizer is settling. */
+[data-research-lab-ascension]:has(> [data-research-lab-ascend]) > .hint {
+  display: none !important;
+}
 </style>
 
 <script src="{{ url_for('static', filename='js/core/hud_partial_state_guard.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/core/instant_feedback.js') }}?v={{ GC_ASSET_VERSION }}-instant1"></script>
 <script src="{{ url_for('static', filename='js/core/timekeeper_building_instant_reconcile.js') }}?v={{ GC_ASSET_VERSION }}-tkbuild1"></script>
+{# Must exist on the persistent shell, not only in buildings extra_scripts: light PJAX
+   can enter Buildings without executing/de-duplicated page scripts. defer guarantees
+   #main-content exists before the binder installs its MutationObserver. #}
+<script defer src="{{ url_for('static', filename='js/pages/research_lab_ascension.js') }}?v={{ GC_ASSET_VERSION }}-global1"></script>
