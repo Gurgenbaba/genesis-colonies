@@ -72,10 +72,13 @@ html.gc-ranking-focus .gc-planet-registry {
   table-layout: auto;
 }
 
+/* GC-RANKING-SCORE-GUTTER-003 — reserve more desktop width for arbitrary-precision scores.
+   The wider final column pulls Alliance left and keeps long totals away from the panel edge. */
 .ranking-page .gc-ranking-table thead th.gc-ranking-score,
 .ranking-page .gc-ranking-table tbody td.gc-ranking-score {
   width: 300px;
-  min-width: 300px;
+  min-width: 380px;
+  padding-right: 28px;
   overflow: visible;
   text-overflow: clip;
   white-space: nowrap;
@@ -89,6 +92,14 @@ html.gc-ranking-focus .gc-planet-registry {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.015em;
+}
+
+@media (max-width: 1180px) {
+  .ranking-page .gc-ranking-table thead th.gc-ranking-score,
+  .ranking-page .gc-ranking-table tbody td.gc-ranking-score {
+    min-width: 300px;
+    padding-right: 18px;
+  }
 }
 
 @media (max-width: 760px) {
