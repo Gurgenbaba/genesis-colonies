@@ -172,9 +172,21 @@ VERSION_FILE = BASE_DIR / "VERSION"
 
 def get_asset_version() -> str:
     try:
-        return VERSION_FILE.read_text(encoding="utf-8").strip() or "dev"
+        base_version = VERSION_FILE.read_text(encoding="utf-8").strip() or "dev"
     except Exception:
-        return "dev"
+        base_version = "dev"
+
+    # GC-ASSET-CACHE-001: VERSION changes are intentionally sparse, while JS/CSS
+    # hotfixes can ship multiple times between releases. Scope cache-busting URLs
+    # to the deployed source commit so an old immutable/static browser cache can
+    # never pin a player to stale frontend logic after a production deploy.
+    for key in ("RAILWAY_GIT_COMMIT_SHA", "GC_GIT_SHA", "SOURCE_COMMIT", "GIT_COMMIT"):
+        raw_sha = str(os.environ.get(key, "") or "").strip()
+        if raw_sha:
+            deploy_sha = re.sub(r"[^0-9A-Za-z._-]+", "", raw_sha)[:12]
+            if deploy_sha:
+                return f"{base_version}-{deploy_sha}"
+    return base_version
 
 
 def versioned_static_url(endpoint: str, **values):
