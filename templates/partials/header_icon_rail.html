@@ -62,3 +62,20 @@
           aria-hidden="true"></span>
   </a>
 </div>
+
+{# gc-shell-badge-clip-guard: the desktop command strip intentionally clips its outer
+   frame. Keep notification/BiS badges inside their hit targets instead of letting the
+   negative legacy offsets get cut off by that frame. #}
+<style>
+@media (min-width: 1181px) {
+  .gc-header-row-top .gc-header-icon-btn__badge,
+  .gc-header-row-top .gc-initiation-hud__badge {
+    top: 2px !important;
+    right: 2px !important;
+  }
+}
+</style>
+
+{# Loaded in the shell before main.js; it installs after DOMContentLoaded so it wraps
+   the final GC.fetchGameAction implementation without changing Timekeeper payload size. #}
+<script src="{{ url_for('static', filename='js/core/hud_partial_state_guard.js') }}?v={{ GC_ASSET_VERSION }}"></script>
