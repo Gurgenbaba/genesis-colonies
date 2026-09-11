@@ -129,12 +129,24 @@ def test_static_integration_contracts_are_present():
     buildings = (root / "game/buildings.py").read_text(encoding="utf-8")
     effects = (root / "game/effects/effect_resolver.py").read_text(encoding="utf-8")
     app = (root / "app.py").read_text(encoding="utf-8")
-    template = (root / "templates/research.html").read_text(encoding="utf-8")
+    research_template = (root / "templates/research.html").read_text(encoding="utf-8")
+    buildings_template = (root / "templates/buildings.html").read_text(encoding="utf-8")
+    building_script = (root / "static/js/pages/research_lab_ascension.js").read_text(encoding="utf-8")
 
     assert "research_queue_capacity" in research
     assert 'building_type == "research_lab"' in buildings
     assert "max_lab_level_for_rank" in buildings
     assert "_research_lab_ascension_rank_cache" in effects
     assert '/api/research/ascend-lab' in app
-    assert "data-research-network-ascend" in template
-    assert "js/pages/research_network.js" in template
+    assert "data-research-network-ascend" not in research_template
+    assert "js/pages/research_network.js" not in research_template
+    assert "data-research-lab-ascend" in buildings_template
+    assert "gc-research-lab-ascension-confirm-modal" in buildings_template
+    assert "js/pages/research_lab_ascension.js" in buildings_template
+    assert '/api/research/ascend-lab' in building_script
+    assert "GC.reloadCurrentPage" in building_script
+    assert "GC.navigateTo" in building_script
+    assert "location.reload" not in building_script
+    assert "GC.registerCleanup" in building_script
+    assert 'removeEventListener("click", onDocumentClick)' in building_script
+    assert 'removeEventListener("keydown", onKeydown)' in building_script

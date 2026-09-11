@@ -97,6 +97,7 @@ Wichtige Invarianten:
 - PostgreSQL nutzt Player-/Planet-Locks plus konditionales Rank-Update gegen Doppel-Ascension/Races.
 - Mehrere ascended Labore werden **nicht summiert**. Der Resolver wählt genau das Labor mit der höchsten wirksamen Prestige-Kapazität; Ties werden deterministisch aufgelöst.
 - Rank V ist Endpunkt dieses Prestige-Pfads; die allgemeine Research-Queue bleibt dennoch sequenziell.
+- Ascension wird wie andere Gebäude-Ascensions **am Forschungslabor in der Gebäude-UI** aktiviert; `/research` zeigt das Forschungsnetzwerk nur read-only an.
 
 ---
 
@@ -166,7 +167,7 @@ Research-Effekte skalieren linear pro Level ohne Balancing-Cap. Anzeige-% ist un
 | `/research_start/<tech_key>` | GET | Legacy |
 | `/api/research/start` | POST | `{ tech_key, request_id? }` |
 | `/api/research/cancel` | POST | `{ job_id }` |
-| `/api/research/lab-ascend` | POST | Research-Lab-Ascension der aktiven/context world |
+| `/api/research/ascend-lab` | POST | Research-Lab-Ascension der aktiven/context world |
 
 Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 
@@ -175,8 +176,8 @@ Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 ## UI
 
 - Template: `templates/research.html`
-- **Forschungsnetzwerk-Header:** belegte/gesamte Slots, stärkstes Labor, Ascension-Rang, nächster Unlock/Tribute.
-- Gebäude-UI: Forschungslabor zeigt Rank, Queue-Kapazität, nächsten Gate-Level, Research-Speedbonus und Ascension-Aktion.
+- **Forschungsnetzwerk-Header auf `/research`:** read-only; belegte/gesamte Slots, stärkstes Labor, Ascension-Rang und nächster Unlock.
+- **Gebäude-UI:** Forschungslabor zeigt Rank, Queue-Kapazität, Gate-Fortschritt und Research-Speedbonus; bei erreichtem Gate läuft die Ascension dort über Tribute-CTA + Bestätigungsdialog.
 - **Queue-UX (GC-536C):** Status in jeder Tech-Card (`queue_job` via `game/queue_card.py`).
 - Kompakt-Header: `#research-queue-compact`.
 - Poll/Action-State: Research-State verwendet dieselbe serverseitig aufgelöste Kapazität; keine duplizierte Client-Mathematik.

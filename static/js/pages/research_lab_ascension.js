@@ -1,0 +1,113 @@
+(function () {
+  "use strict";
+
+  var GC = window.GC = window.GC || {};
+  var modal = document.getElementById("gc-research-lab-ascension-confirm-modal");
+  var submit = document.getElementById("gc-research-lab-ascension-confirm-submit");
+  var lead = document.getElementById("gc-research-lab-ascension-confirm-lead");
+  var rank = document.getElementById("gc-research-lab-ascension-confirm-rank");
+  var benefit = document.getElementById("gc-research-lab-ascension-benefit");
+  var metal = document.getElementById("gc-research-lab-ascension-tribute-metal");
+  var crystal = document.getElementById("gc-research-lab-ascension-tribute-crystal");
+  var activeTrigger = null;
+
+  function requestId() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    return "research-lab-asc-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  }
+
+  function messageFor(res) {
+    var reason = String((res && (res.reason || res.error)) || "research_ascension_failed");
+    if (typeof GC.t === "function") {
+      return GC.t("research_network_error_" + reason, GC.t("research_network_error_generic", ""));
+    }
+    return reason;
+  }
+
+  function openModal(btn) {
+    if (!modal || !btn) return;
+    activeTrigger = btn;
+    if (lead) lead.textContent = btn.dataset.ascLead || "";
+    if (rank) rank.textContent = btn.dataset.ascRankLabel || "";
+    if (benefit) benefit.textContent = btn.dataset.ascBenefit || "";
+    if (metal) metal.textContent = btn.dataset.ascTributeMetalLabel || "";
+    if (crystal) crystal.textContent = btn.dataset.ascTributeCrystalLabel || "";
+    if (submit) submit.textContent = btn.dataset.ascActionLabel || "";
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("gc-modal-open");
+    if (submit) submit.focus();
+  }
+
+  function closeModal() {
+    if (!modal) return;
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("gc-modal-open");
+    var focusTarget = activeTrigger;
+    activeTrigger = null;
+    if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
+  }
+
+  async function ascend() {
+    if (!submit || submit.disabled || submit.dataset.busy === "1") return;
+    submit.dataset.busy = "1";
+    submit.disabled = true;
+    try {
+      if (typeof GC.fetchGameAction !== "function") throw new Error("fetchGameAction missing");
+      var res = await GC.fetchGameAction("/api/research/ascend-lab", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ request_id: requestId() })
+      });
+      if (!res || !res.ok) {
+        if (typeof GC.toast === "function") GC.toast(messageFor(res), "error");
+        return;
+      }
+      closeModal();
+      if (typeof GC.applyActionState === "function") GC.applyActionState(res, "research_lab_ascension");
+      if (typeof GC.reloadCurrentPage === "function") {
+        await GC.reloadCurrentPage({ force: true });
+      } else if (typeof GC.navigateTo === "function") {
+        await GC.navigateTo(window.location.pathname + window.location.search, { force: true });
+      }
+    } catch (err) {
+      if (typeof GC.toast === "function") GC.toast(messageFor(null), "error");
+      else if (window.console && console.error) console.error(err);
+    } finally {
+      submit.dataset.busy = "0";
+      submit.disabled = false;
+    }
+  }
+
+  function onDocumentClick(event) {
+    var trigger = event.target && event.target.closest ? event.target.closest("[data-research-lab-ascend]") : null;
+    if (trigger) {
+      event.preventDefault();
+      openModal(trigger);
+      return;
+    }
+    if (event.target && event.target.closest && event.target.closest("[data-research-lab-ascension-cancel]")) {
+      event.preventDefault();
+      closeModal();
+    }
+  }
+
+  function onKeydown(event) {
+    if (event.key === "Escape" && modal && !modal.hidden) closeModal();
+  }
+
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onKeydown);
+  if (submit) submit.addEventListener("click", ascend);
+
+  if (typeof GC.registerCleanup === "function") {
+    GC.registerCleanup(function researchLabAscensionCleanup() {
+      document.removeEventListener("click", onDocumentClick);
+      document.removeEventListener("keydown", onKeydown);
+      if (submit) submit.removeEventListener("click", ascend);
+      document.body.classList.remove("gc-modal-open");
+      activeTrigger = null;
+    });
+  }
+}());
