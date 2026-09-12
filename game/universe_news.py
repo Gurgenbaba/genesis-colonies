@@ -1916,52 +1916,88 @@ def ensure_changelog_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[s
 
 
 def sidebar_release_nav(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
-    """Label + deep-link for sidebar version chip → Genesis Timeline (/news)."""
-    entries = list_news(limit=500, audience=AUDIENCE_PLAYER, conn=conn)
-    published = [row for row in entries if not row.get("is_draft")]
-    has_dev_stream = False
+    """Label + deep-link for sidebar version chip → Genesis Timeline (/news).
 
-    major_tags: List[Tuple[Tuple[int, int, str], str]] = []
-    for row in published:
-        version_tag = str(row.get("version_tag") or "").strip()
-        if row.get("is_major_release") and version_tag:
-            major_tags.append((_version_sort_key(version_tag), version_tag))
+    GC-PERF-WB-HOT-010: this shell helper needs release metadata only. The old
+    500-row news path localized every World-Boss news row, and each localization
+    loaded its event again. With a large LiveOps history that turned one shell
+    render into ~500 identical ``get_event_by_id`` queries. Read the tiny version
+    metadata set directly; full localization remains owned by /news.
+    """
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        ensure_legacy_motd_migrated(conn)
+        rows = conn.execute(
+            """
+            SELECT version_tag, is_major_release
+            FROM universe_news
+            WHERE is_draft = 0
+              AND audience = ?
+              AND TRIM(COALESCE(version_tag, '')) <> ''
+              AND COALESCE(category, '') <> 'EVENT'
+              AND COALESCE(source_ref, '') NOT LIKE 'world_boss:%'
+              AND COALESCE(source_ref, '') NOT LIKE 'pirate%'
+            ORDER BY published_at DESC, id DESC
+            LIMIT 500;
+            """,
+            (AUDIENCE_PLAYER,),
+        ).fetchall()
 
-    label = ""
-    anchor_id = ""
-    version_tag = ""
+        published = [
+            {
+                "version_tag": str(row["version_tag"] or "").strip(),
+                "is_major_release": bool(int(row["is_major_release"] or 0)),
+            }
+            for row in rows
+        ]
+        has_dev_stream = False
 
-    if major_tags:
-        major_tags.sort(key=lambda item: item[0], reverse=True)
-        version_tag = major_tags[0][1]
-        label = _format_sidebar_version_label(version_tag)
-        anchor_id = f"version-{version_tag.replace('.', '-')}"
-    elif published:
-        version_tags = sorted(
-            {str(row.get("version_tag") or "").strip() for row in published if row.get("version_tag")},
-            key=_version_sort_key,
-            reverse=True,
-        )
-        if version_tags:
-            version_tag = version_tags[0]
+        major_tags: List[Tuple[Tuple[int, int, str], str]] = []
+        for row in published:
+            version_tag = str(row.get("version_tag") or "").strip()
+            if row.get("is_major_release") and version_tag:
+                major_tags.append((_version_sort_key(version_tag), version_tag))
+
+        label = ""
+        anchor_id = ""
+        version_tag = ""
+
+        if major_tags:
+            major_tags.sort(key=lambda item: item[0], reverse=True)
+            version_tag = major_tags[0][1]
             label = _format_sidebar_version_label(version_tag)
-            if version_tag:
-                anchor_id = f"version-{version_tag.replace('.', '-')}"
+            anchor_id = f"version-{version_tag.replace('.', '-')}"
+        elif published:
+            version_tags = sorted(
+                {str(row.get("version_tag") or "").strip() for row in published if row.get("version_tag")},
+                key=_version_sort_key,
+                reverse=True,
+            )
+            if version_tags:
+                version_tag = version_tags[0]
+                label = _format_sidebar_version_label(version_tag)
+                if version_tag:
+                    anchor_id = f"version-{version_tag.replace('.', '-')}"
 
-    if not label:
-        label = _player_release_fallback_label()
-        fallback_tag = str(_latest_changelog_version() or "").strip()
-        if fallback_tag:
-            version_tag = fallback_tag
-            anchor_id = f"version-{fallback_tag.replace('.', '-')}"
+        if not label:
+            label = _player_release_fallback_label()
+            fallback_tag = str(_latest_changelog_version() or "").strip()
+            if fallback_tag:
+                version_tag = fallback_tag
+                anchor_id = f"version-{fallback_tag.replace('.', '-')}"
 
-    news_url = "/news"
-    href = f"{news_url}#{anchor_id}" if anchor_id else news_url
-    return {
-        "label": label,
-        "version_tag": version_tag,
-        "url": news_url,
-        "href": href,
-        "anchor_id": anchor_id,
-        "has_dev_stream": has_dev_stream,
-    }
+        news_url = "/news"
+        href = f"{news_url}#{anchor_id}" if anchor_id else news_url
+        return {
+            "label": label,
+            "version_tag": version_tag,
+            "url": news_url,
+            "href": href,
+            "anchor_id": anchor_id,
+            "has_dev_stream": has_dev_stream,
+        }
+    finally:
+        if own:
+            conn.close()
