@@ -1,0 +1,47 @@
+name: TMP WB Inspect
+
+on:
+  push:
+    branches:
+      - hotfix/world-boss-action-fastlane
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print World Boss frontend contexts
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('static/main.js')
+          s = p.read_text(encoding='utf-8')
+          needles = [
+              '/api/world-boss/attack',
+              '/api/world-boss/auto-attack',
+              'data-wb-instant-attack',
+              'data-wb-auto-attack',
+              'wbPlayAttackFx',
+              'wbRequestId("instant',
+          ]
+          for needle in needles:
+              print('\n' + '='*20 + ' ' + needle + ' ' + '='*20)
+              start = 0
+              found = 0
+              while True:
+                  i = s.find(needle, start)
+                  if i < 0:
+                      break
+                  found += 1
+                  a = max(0, i - 3500)
+                  b = min(len(s), i + 7000)
+                  print(f'--- occurrence {found} at {i} ---')
+                  print(s[a:b])
+                  start = i + len(needle)
+              if not found:
+                  print('NOT FOUND')
+          PY
