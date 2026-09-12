@@ -8485,10 +8485,13 @@ def api_world_boss_catch():
     finally:
         conn.close()
 
+    # GC-PERF-WB-HOT-011: catch already owns/finishes its mutation.
+    # Never rebuild the full Overview panel before returning the click.
     state, _ = _build_game_state_payload(
-        include_panel=True,
-        panel_page="overview",
+        include_panel=False,
         finish_source="api_world_boss_catch",
+        action_slim=True,
+        post_mutation_committed=bool(result.get("ok")),
     )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
@@ -8561,10 +8564,13 @@ def api_world_boss_companion_mission():
     finally:
         conn.close()
 
+    # GC-PERF-WB-HOT-011: mission mutation is already committed/rolled back.
+    # Return canonical slim shell state instead of rebuilding the full Overview.
     state, _ = _build_game_state_payload(
-        include_panel=True,
-        panel_page="overview",
+        include_panel=False,
         finish_source="api_world_boss_companion_mission",
+        action_slim=True,
+        post_mutation_committed=bool(result.get("ok")),
     )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
