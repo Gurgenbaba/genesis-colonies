@@ -48,6 +48,27 @@ HOTPATH_INDEXES: tuple[tuple[str, str, str], ...] = (
         "ON shipyard_queue(status, finish_at, planet_id);",
     ),
     (
+        "defense_queue",
+        "idx_defense_queue_planet_due_queued",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_defense_queue_planet_due_queued "
+        "ON defense_queue(planet_id, finish_at) WHERE status = 'queued';",
+    ),
+    (
+        "troop_queue",
+        "idx_troop_queue_player_due_queued",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_troop_queue_player_due_queued "
+        "ON troop_queue(player_id, finish_at, planet_id) WHERE status = 'queued';",
+    ),
+    (
+        "player_messages",
+        "idx_player_messages_unread_active_recipient",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_player_messages_unread_active_recipient "
+        "ON player_messages(recipient_player_id) "
+        "WHERE COALESCE(is_archived, 0) = 0 "
+        "AND COALESCE(is_read, 0) = 0 "
+        "AND (deleted_at IS NULL OR deleted_at = 0);",
+    ),
+    (
         "player_messages",
         "idx_player_messages_combat_cursor",
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_player_messages_combat_cursor "
