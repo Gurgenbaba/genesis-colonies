@@ -10,136 +10,17 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore: apply wb action fastlane'
+    if: github.event.head_commit.message == 'chore: run wb fastlane patch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Patch World Boss action hot paths
+      - name: Apply patch
+        run: python .github/tmp_wb_fastlane_patch.py
+      - name: Focused gates
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          app_path = Path('app.py')
-          src = app_path.read_text(encoding='utf-8')
-          route_names = [
-              'api_world_boss_attack',
-              'api_world_boss_auto_attack',
-              'api_world_boss_claim',
-              'api_world_boss_catch',
-              'api_world_boss_companion_mission',
-          ]
-
-          def get_span(text: str, func: str):
-              marker = f'def {func}():'
-              start = text.find(marker)
-              if start < 0:
-                  raise SystemExit(f'missing route {func}')
-              end = text.find('\n@app.route(', start + len(marker))
-              if end < 0:
-                  end = len(text)
-              return start, end
-
-          for func in route_names:
-              start, end = get_span(src, func)
-              block = src[start:end]
-              lines = block.splitlines(keepends=True)
-              builder = next((i for i, line in enumerate(lines) if 'state, _ = _build_game_state_payload(' in line), None)
-              if builder is None:
-                  raise SystemExit(f'{func}: missing state builder before patch')
-
-              close = None
-              for i in range(builder + 1, len(lines)):
-                  if lines[i] == '    )\n' or lines[i] == '    )\r\n':
-                      close = i
-                      break
-              if close is None:
-                  raise SystemExit(f'{func}: could not find state-builder close')
-
-              remove_from = builder
-              j = builder - 1
-              comment_indexes = []
-              while j >= 0 and (lines[j].lstrip().startswith('#') or not lines[j].strip()):
-                  if lines[j].lstrip().startswith('#'):
-                      comment_indexes.append(j)
-                  j -= 1
-              if comment_indexes and any('GC-PERF-WB' in lines[k] for k in comment_indexes):
-                  remove_from = min(comment_indexes)
-                  # Keep at most one blank separator before the body.
-                  while remove_from > 0 and not lines[remove_from - 1].strip():
-                      remove_from -= 1
-
-              del lines[remove_from:close + 1]
-              block = ''.join(lines)
-              block = re.sub(r'^\s*"state"\s*:\s*state\s*,?\s*\n', '', block, flags=re.M)
-              block = block.replace(', "state": state', '')
-              block = block.replace('"state": state, ', '')
-              block = block.replace('"state": state', '')
-              src = src[:start] + block + src[end:]
-
-          for func in route_names:
-              start, end = get_span(src, func)
-              block = src[start:end]
-              if '_build_game_state_payload' in block:
-                  raise SystemExit(f'{func}: generic state builder still present')
-              if '"state": state' in block:
-                  raise SystemExit(f'{func}: stale state response still present')
-
-          app_path.write_text(src, encoding='utf-8')
-
-          tpl_path = Path('templates/world_boss.html')
-          tpl = tpl_path.read_text(encoding='utf-8')
-          token = 'world_boss_btn_galaxy'
-          if tpl.count(token) != 1:
-              raise SystemExit(f'expected one Galaxy CTA token, got {tpl.count(token)}')
-          token_i = tpl.index(token)
-          start = tpl.rfind('{% if boss.galaxy_href %}', 0, token_i)
-          end = tpl.find('{% endif %}', token_i)
-          if start < 0 or end < 0:
-              raise SystemExit('Galaxy CTA wrapper not found')
-          end += len('{% endif %}')
-          # Consume indentation/newline around the deleted CTA without touching neighbours.
-          line_start = tpl.rfind('\n', 0, start) + 1
-          line_end = tpl.find('\n', end)
-          if line_end < 0:
-              line_end = end
-          else:
-              line_end += 1
-          tpl = tpl[:line_start] + tpl[line_end:]
-          if 'world_boss_btn_galaxy' in tpl or 'boss.galaxy_href' in tpl:
-              raise SystemExit('Galaxy CTA remnants remain in World Boss template')
-          tpl_path.write_text(tpl, encoding='utf-8')
-
-          changed_tests = []
-          for test_path in Path('tests').glob('test_*.py'):
-              text = test_path.read_text(encoding='utf-8')
-              original = text
-              text = re.sub(r'assert\s+"boss\\.galaxy_href"\s+in\s+(\w+)', r'assert "boss.galaxy_href" not in \1', text)
-              text = re.sub(r'assert\s+"world_boss_btn_galaxy"\s+in\s+(\w+)', r'assert "world_boss_btn_galaxy" not in \1', text)
-              if text != original:
-                  test_path.write_text(text, encoding='utf-8')
-                  changed_tests.append(str(test_path))
-          print('Updated existing Galaxy CTA tests:', changed_tests)
-
-          regression = Path('tests/test_gc_perf_wb_hot_012.py')
-          regression.write_text('''from pathlib import Path\n\nROOT = Path(__file__).resolve().parents[1]\n\ndef _read(path: str) -> str:\n    return (ROOT / path).read_text(encoding="utf-8")\n\ndef _route_block(src: str, func: str) -> str:\n    marker = f"def {func}():"\n    block = src.split(marker, 1)[1]\n    return block.split("\\n@app.route(", 1)[0]\n\ndef test_world_boss_mutations_do_not_gate_on_generic_game_state():\n    src = _read("app.py")\n    for func in (\n        "api_world_boss_attack",\n        "api_world_boss_auto_attack",\n        "api_world_boss_claim",\n        "api_world_boss_catch",\n        "api_world_boss_companion_mission",\n    ):\n        block = _route_block(src, func)\n        assert "_build_game_state_payload" not in block, func\n        assert '\"state\": state' not in block, func\n\ndef test_world_boss_frontend_accepts_fastlane_without_generic_state():\n    src = _read("static/main.js")\n    assert 'if (res && res.state && typeof GC.applyActionState === "function")' in src\n    assert 'hit_mult: hitMult' in src\n    assert 'if (hitMult !== 5) hitMult = 1' in src\n    assert '/api/world-boss/attack' in src\n    assert '/api/world-boss/auto-attack' in src\n\ndef test_world_boss_galaxy_cta_is_removed():\n    template = _read("templates/world_boss.html")\n    assert "world_boss_btn_galaxy" not in template\n    assert "boss.galaxy_href" not in template\n''', encoding='utf-8')
-
-          version = Path('VERSION')
-          current = version.read_text(encoding='utf-8').strip()
-          if current != '0.5.9.162':
-              raise SystemExit(f'unexpected VERSION before hotfix: {current}')
-          version.write_text('0.5.9.163\n', encoding='utf-8')
-
-          perf = Path('docs/PERFORMANCE.md')
-          perf_text = perf.read_text(encoding='utf-8')
-          section = '''\n\n## GC-PERF-WB-HOT-012 — World Boss action fastlane\n\nWorld Boss mutation responses (`attack`, `auto-attack`, `claim`, `catch`, companion mission) return their authoritative mutation payload immediately and no longer gate the click on a generic `_build_game_state_payload` rebuild. The existing World Boss live poll and normal game-state poll remain the reconciliation owners; no second client state model or gameplay math is introduced. The x5 strike remains one server-authoritative request with `hit_mult=5`. The redundant Galaxy CTA was removed from World Boss cards.\n'''
-          if 'GC-PERF-WB-HOT-012' not in perf_text:
-              perf.write_text(perf_text.rstrip() + section + '\n', encoding='utf-8')
-          PY
-
           python -m py_compile app.py
           node --check static/main.js
           pytest -q tests/test_gc_perf_wb_hot_010.py tests/test_gc_perf_wb_hot_012.py
@@ -148,7 +29,6 @@ jobs:
             pytest -q $WB_TESTS
           fi
           git diff --check
-
       - name: Commit hotfix
         shell: bash
         run: |
