@@ -1,5 +1,7 @@
 from pathlib import Path
 
+# Contract guard for the World Boss mutation fastlane: mutation payload now returns
+# before generic empire-state reconciliation; canonical polls still reconcile later.
 ROOT = Path(__file__).resolve().parents[1]
 
 
