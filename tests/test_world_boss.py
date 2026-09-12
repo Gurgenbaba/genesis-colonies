@@ -1566,17 +1566,15 @@ def test_resolve_world_boss_auto_attack_ships_empty(wb_db):
         conn.close()
 
 
-def test_world_boss_attack_response_uses_slim_post_mutation_state():
-    """GC-PERF-WB-ACTION-001: instant strike must not rebuild full panel state."""
+def test_world_boss_attack_response_uses_action_fastlane():
+    """GC-PERF-WB-HOT-012: instant strike returns mutation payload without generic state rebuild."""
     src = Path("app.py").read_text(encoding="utf-8")
     block = src.split('def api_world_boss_attack():', 1)[1].split(
         '@app.route("/api/world-boss/auto-attack"', 1
     )[0]
-    assert "include_panel=False" in block
-    assert "action_slim=True" in block
-    assert 'post_mutation_committed=bool(result.get("ok"))' in block
+    assert "_build_game_state_payload" not in block
     assert "include_panel=True" not in block
-    assert '"state": state' in block
+    assert '"state": state' not in block
 
 
 def test_api_world_boss_instant_attack(wb_db, monkeypatch):
@@ -1636,7 +1634,7 @@ def test_api_world_boss_instant_attack(wb_db, monkeypatch):
     assert "projectile_profile" in body["attack"]
     assert body["boss"]["hp"] < body["boss"]["max_hp"]
     assert body["player"]["cooldown_until"] > 0
-    assert "state" in body
+    assert "state" not in body
     assert get_planet_ships(pid) == before
 
     # Idempotent replay
