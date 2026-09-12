@@ -446,3 +446,12 @@ Legacy detailed line `[GC REQUEST PERF]` remains env-gated (`GC_REQUEST_PERF_DEB
 ## Poll jitter (GC-PERF-AUTO-005)
 
 Singleton `GC.polling` applies a **stable per-tab** jitter of ±12.5% around active/idle/hidden intervals. No second poll engine; `/api/game-state` remains SSoT.
+
+
+### GC-PERF-WB-HOT-010 — World Boss action reconcile + shell release N+1
+
+Production spike evidence showed `api_world_boss_auto_attack` at ~4.1s and `api_world_boss_claim` at ~2.4–3.5s because both rebuilt a full game-state after their mutation had already committed. The same sample showed `admin_panel` executing the World-Boss event lookup **501×**: the persistent shell release chip loaded 500 news rows and localized each World-Boss row through `get_event_by_id()`.
+
+- Auto-Attack and Claim now use the same canonical `action_slim + post_mutation_committed` read path as instant World-Boss Attack: no second empire queue finish, resource materialization, or page catalog build after a successful mutation.
+- `sidebar_release_nav()` reads only release metadata in one SQL query and explicitly excludes LiveOps rows. Full localized World-Boss news remains owned by `/news` / banner rendering.
+- No gameplay formulas, reward ordering, queue authority, or World-Boss mutation semantics changed.
