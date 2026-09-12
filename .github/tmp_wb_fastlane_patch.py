@@ -53,15 +53,12 @@ def strip_generic_state_builder(block: str, func: str) -> str:
 
     del lines[remove_from : close + 1]
     block = "".join(lines)
-
-    # Multiline response dict member.
     block = re.sub(
         r'^\s*"state"\s*:\s*state\s*,?\s*\n',
         "",
         block,
         flags=re.MULTILINE,
     )
-    # Compact return dict (claim) and defensive variants.
     block = block.replace(', "state": state', "")
     block = block.replace('"state": state, ', "")
     block = block.replace('"state": state', "")
@@ -81,27 +78,29 @@ for func in ROUTES:
     assert '"state": state' not in block, func
 APP.write_text(src, encoding="utf-8")
 
-# Remove the redundant Galaxy CTA from World Boss cards.
+# World Boss cards must not offer a redundant Galaxy CTA. Current main may
+# already be free of the old CTA; make this patch idempotent either way.
 tpl_path = Path("templates/world_boss.html")
 tpl = tpl_path.read_text(encoding="utf-8")
 token = "world_boss_btn_galaxy"
-if tpl.count(token) != 1:
-    raise SystemExit(f"expected exactly one Galaxy CTA token, got {tpl.count(token)}")
-token_i = tpl.index(token)
-start = tpl.rfind("{% if boss.galaxy_href %}", 0, token_i)
-end = tpl.find("{% endif %}", token_i)
-if start < 0 or end < 0:
-    raise SystemExit("Galaxy CTA wrapper not found")
-end += len("{% endif %}")
-line_start = tpl.rfind("\n", 0, start) + 1
-line_end = tpl.find("\n", end)
-line_end = end if line_end < 0 else line_end + 1
-tpl = tpl[:line_start] + tpl[line_end:]
+count = tpl.count(token)
+if count > 1:
+    raise SystemExit(f"unexpected duplicate Galaxy CTA tokens: {count}")
+if count == 1:
+    token_i = tpl.index(token)
+    start = tpl.rfind("{% if boss.galaxy_href %}", 0, token_i)
+    end = tpl.find("{% endif %}", token_i)
+    if start < 0 or end < 0:
+        raise SystemExit("Galaxy CTA wrapper not found")
+    end += len("{% endif %}")
+    line_start = tpl.rfind("\n", 0, start) + 1
+    line_end = tpl.find("\n", end)
+    line_end = end if line_end < 0 else line_end + 1
+    tpl = tpl[:line_start] + tpl[line_end:]
 assert "world_boss_btn_galaxy" not in tpl
 assert "boss.galaxy_href" not in tpl
 tpl_path.write_text(tpl, encoding="utf-8")
 
-# Flip any existing template regression that expected the now-removed CTA.
 changed_tests: list[str] = []
 for test_path in Path("tests").glob("test_*.py"):
     text = test_path.read_text(encoding="utf-8")
@@ -181,6 +180,6 @@ if "GC-PERF-WB-HOT-012" not in perf_text:
 
 ## GC-PERF-WB-HOT-012 — World Boss action fastlane
 
-World Boss mutation responses (`attack`, `auto-attack`, `claim`, `catch`, companion mission) return their authoritative mutation payload immediately and no longer gate the click on a generic `_build_game_state_payload` rebuild. The existing World Boss live poll and normal game-state poll remain the reconciliation owners; no second client state model or gameplay math is introduced. The x5 strike remains one server-authoritative request with `hit_mult=5`. The redundant Galaxy CTA was removed from World Boss cards.
+World Boss mutation responses (`attack`, `auto-attack`, `claim`, `catch`, companion mission) return their authoritative mutation payload immediately and no longer gate the click on a generic `_build_game_state_payload` rebuild. The existing World Boss live poll and normal game-state poll remain the reconciliation owners; no second client state model or gameplay math is introduced. The x5 strike remains one server-authoritative request with `hit_mult=5`. World Boss cards do not expose a redundant Galaxy CTA.
 '''
     perf.write_text(perf_text + "\n", encoding="utf-8")
