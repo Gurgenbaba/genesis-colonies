@@ -8293,18 +8293,11 @@ def api_world_boss_attack():
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(
-        include_panel=False,
-        finish_source="api_world_boss_attack",
-        action_slim=True,
-        post_mutation_committed=bool(result.get("ok")),
-    )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
         "attack": result.get("attack"),
         "boss": result.get("boss"),
         "player": result.get("player"),
-        "state": state,
     }
     if not result.get("ok"):
         body["error"] = result.get("error") or "world_boss_attack_failed"
@@ -8372,23 +8365,12 @@ def api_world_boss_auto_attack():
         return jsonify({"ok": False, "error": "world_boss_auto_failed"}), 500
     finally:
         conn.close()
-
-    # GC-PERF-WB-HOT-010: the mutation already committed authoritative WB state.
-    # The response only needs the global HUD/action slice; do not finish queues,
-    # materialize resources, or rebuild page catalogs a second time.
-    state, _ = _build_game_state_payload(
-        include_panel=False,
-        finish_source="api_world_boss_auto_attack",
-        action_slim=True,
-        post_mutation_committed=bool(result.get("ok")),
-    )
     body = {
         "ok": bool(result.get("ok")),
         "auto_attack": result,
         "attack": result.get("attack"),
         "boss": result.get("boss"),
         "player": result.get("player"),
-        "state": state,
     }
     if not result.get("ok"):
         body["error"] = result.get("error") or "world_boss_auto_failed"
@@ -8429,18 +8411,8 @@ def api_world_boss_claim():
         return jsonify({"ok": False, "error": "world_boss_claim_failed"}), 500
     finally:
         conn.close()
-
-    # GC-PERF-WB-HOT-010: claim already owns and commits the reward mutation.
-    # Reconcile the shell through the canonical post-mutation read path instead
-    # of paying another empire queue/resource finish before returning the click.
-    state, _ = _build_game_state_payload(
-        include_panel=False,
-        finish_source="api_world_boss_claim",
-        action_slim=True,
-        post_mutation_committed=bool(result.get("ok")),
-    )
     status = 200 if result.get("ok") else 400
-    return jsonify({"ok": bool(result.get("ok")), "claim": result, "state": state}), status
+    return jsonify({"ok": bool(result.get("ok")), "claim": result}), status
 
 
 @app.route("/api/world-boss/catch", methods=["POST"])
@@ -8484,19 +8456,9 @@ def api_world_boss_catch():
         return jsonify({"ok": False, "error": "world_boss_catch_failed"}), 500
     finally:
         conn.close()
-
-    # GC-PERF-WB-HOT-011: catch already owns/finishes its mutation.
-    # Never rebuild the full Overview panel before returning the click.
-    state, _ = _build_game_state_payload(
-        include_panel=False,
-        finish_source="api_world_boss_catch",
-        action_slim=True,
-        post_mutation_committed=bool(result.get("ok")),
-    )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
         "catch": result,
-        "state": state,
     }
     if not result.get("ok"):
         body["error"] = result.get("error") or "world_boss_catch_failed"
@@ -8563,19 +8525,9 @@ def api_world_boss_companion_mission():
         return jsonify({"ok": False, "error": "companion_mission_failed"}), 500
     finally:
         conn.close()
-
-    # GC-PERF-WB-HOT-011: mission mutation is already committed/rolled back.
-    # Return canonical slim shell state instead of rebuilding the full Overview.
-    state, _ = _build_game_state_payload(
-        include_panel=False,
-        finish_source="api_world_boss_companion_mission",
-        action_slim=True,
-        post_mutation_committed=bool(result.get("ok")),
-    )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
         "mission": result,
-        "state": state,
     }
     if not result.get("ok"):
         body["error"] = result.get("error") or "companion_mission_failed"
