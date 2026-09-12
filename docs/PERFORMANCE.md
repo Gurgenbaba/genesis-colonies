@@ -455,3 +455,7 @@ Production spike evidence showed `api_world_boss_auto_attack` at ~4.1s and `api_
 - Auto-Attack and Claim now use the same canonical `action_slim + post_mutation_committed` read path as instant World-Boss Attack: no second empire queue finish, resource materialization, or page catalog build after a successful mutation.
 - `sidebar_release_nav()` reads only release metadata in one SQL query and explicitly excludes LiveOps rows. Full localized World-Boss news remains owned by `/news` / banner rendering.
 - No gameplay formulas, reward ordering, queue authority, or World-Boss mutation semantics changed.
+
+## GC-PERF-WB-HOT-012 — World Boss action fastlane
+
+World Boss mutation responses (`attack`, `auto-attack`, `claim`, `catch`, companion mission) return their authoritative mutation payload immediately and no longer gate the click on a generic `_build_game_state_payload` rebuild. The existing World Boss live poll and normal game-state poll remain the reconciliation owners; no second client state model or gameplay math is introduced. The x5 strike remains one server-authoritative request with `hit_mult=5`. World Boss cards do not expose a redundant Galaxy CTA.
