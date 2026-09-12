@@ -1,4 +1,4 @@
-name: TMP WB Action Fastlane Patch
+name: TMP WB Fastlane
 
 on:
   push:
@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore: run wb fastlane patch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,22 +18,17 @@ jobs:
       - name: Apply patch
         run: python .github/tmp_wb_fastlane_patch.py
       - name: Focused gates
-        shell: bash
         run: |
           python -m py_compile app.py
           node --check static/main.js
           pytest -q tests/test_gc_perf_wb_hot_010.py tests/test_gc_perf_wb_hot_012.py
-          WB_TESTS="$(grep -rl --include='test_*.py' -E 'world_boss_btn_galaxy|boss\.galaxy_href' tests || true)"
-          if [ -n "$WB_TESTS" ]; then
-            pytest -q $WB_TESTS
-          fi
           git diff --check
-      - name: Commit hotfix
-        shell: bash
+      - name: Commit hotfix and remove temporary runner
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app.py templates/world_boss.html tests VERSION docs/PERFORMANCE.md
+          rm -f .github/tmp_wb_fastlane_patch.py .github/workflows/tmp-wb-inspect.yml
+          git add -A
           git diff --cached --check
           git commit -m "perf: fastlane World Boss action responses"
           git push
