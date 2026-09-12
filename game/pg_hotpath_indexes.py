@@ -74,6 +74,19 @@ HOTPATH_INDEXES: tuple[tuple[str, str, str], ...] = (
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_player_messages_combat_cursor "
         "ON player_messages(category, id);",
     ),
+    (
+        "auction_house_bids",
+        "idx_auction_bids_listing_player_created",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_auction_bids_listing_player_created "
+        "ON auction_house_bids(listing_id, player_id, created_at DESC) "
+        "INCLUDE (refunded, id);",
+    ),
+    (
+        "universe_news",
+        "idx_universe_news_published_visible",
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_universe_news_published_visible "
+        "ON universe_news(published_at DESC, id DESC) WHERE is_draft = 0;",
+    ),
 )
 
 
