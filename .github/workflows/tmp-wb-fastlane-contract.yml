@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore: update wb fastlane contract tests'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,34 +18,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Update contract tests
-        shell: bash
+      - name: Patch contract tests
+        run: python .github/tmp_wb_contract_patch.py
+      - name: Focused test gate
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('tests/test_world_boss.py')
-          s = p.read_text(encoding='utf-8')
-          old = '''def test_world_boss_attack_response_uses_slim_post_mutation_state():\n    """GC-PERF-WB-ACTION-001: instant strike must not rebuild full panel state."""\n    src = Path("app.py").read_text(encoding="utf-8")\n    block = src.split('def api_world_boss_attack():', 1)[1].split(\n        '@app.route("/api/world-boss/auto-attack"', 1\n    )[0]\n    assert "include_panel=False" in block\n    assert "action_slim=True" in block\n    assert 'post_mutation_committed=bool(result.get("ok"))' in block\n    assert "include_panel=True" not in block\n    assert '\"state\": state' in block\n'''
-          new = '''def test_world_boss_attack_response_uses_action_fastlane():\n    """GC-PERF-WB-HOT-012: instant strike returns mutation payload without generic state rebuild."""\n    src = Path("app.py").read_text(encoding="utf-8")\n    block = src.split('def api_world_boss_attack():', 1)[1].split(\n        '@app.route("/api/world-boss/auto-attack"', 1\n    )[0]\n    assert "_build_game_state_payload" not in block\n    assert "include_panel=True" not in block\n    assert '\"state\": state' not in block\n'''
-          if s.count(old) != 1:
-              raise SystemExit(f'expected one legacy static contract, got {s.count(old)}')
-          s = s.replace(old, new, 1)
-          old_body = '    assert "state" in body\n'
-          if s.count(old_body) < 1:
-              raise SystemExit('legacy API state assertion missing')
-          s = s.replace(old_body, '    assert "state" not in body\n', 1)
-          p.write_text(s, encoding='utf-8')
-          PY
           python -m pip install -r requirements.txt pytest
           python -m py_compile app.py tests/test_world_boss.py
           pytest -q tests/test_world_boss.py -k 'world_boss_attack_response_uses_action_fastlane or api_world_boss_instant_attack'
           git diff --check
-      - name: Commit and remove temporary runner
-        shell: bash
+      - name: Commit and remove temporary files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -f .github/workflows/tmp-wb-fastlane-contract.yml
+          rm -f .github/tmp_wb_contract_patch.py .github/workflows/tmp-wb-fastlane-contract.yml
           git add -A
           git diff --cached --check
           git commit -m "test: align World Boss fastlane contract"
