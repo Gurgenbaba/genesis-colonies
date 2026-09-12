@@ -1,0 +1,55 @@
+name: P0 World Boss Action State Patch
+
+on:
+  push:
+    branches:
+      - hotfix/world-boss-action-state-lag
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'chore: run p0 world-boss action patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch post-mutation action state
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app.py')
+          src = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  '''    state, _ = _build_game_state_payload(\n        include_panel=True,\n        panel_page="overview",\n        finish_source="api_world_boss_catch",\n    )''',
+                  '''    # GC-PERF-WB-HOT-011: catch already owns/finishes its mutation.\n    # Never rebuild the full Overview panel before returning the click.\n    state, _ = _build_game_state_payload(\n        include_panel=False,\n        finish_source="api_world_boss_catch",\n        action_slim=True,\n        post_mutation_committed=bool(result.get("ok")),\n    )''',
+              ),
+              (
+                  '''    state, _ = _build_game_state_payload(\n        include_panel=True,\n        panel_page="overview",\n        finish_source="api_world_boss_companion_mission",\n    )''',
+                  '''    # GC-PERF-WB-HOT-011: mission mutation is already committed/rolled back.\n    # Return canonical slim shell state instead of rebuilding the full Overview.\n    state, _ = _build_game_state_payload(\n        include_panel=False,\n        finish_source="api_world_boss_companion_mission",\n        action_slim=True,\n        post_mutation_committed=bool(result.get("ok")),\n    )''',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = src.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, got {count}: {old!r}')
+              src = src.replace(old, new, 1)
+
+          path.write_text(src, encoding='utf-8')
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git diff --cached --check
+          git commit -m "perf: slim World Boss catch and companion action state"
+          git push
