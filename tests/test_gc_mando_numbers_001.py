@@ -50,11 +50,76 @@ def test_hud_prioritizes_three_main_resources_and_compacts_energy_without_ellips
     assert "display: none !important" in tk_block
     assert "min-height: 4.35rem" in css
     assert ".resource-bar-cmd .hud-res-energy .res-icon--hud" in css
-    assert "min-inline-size: 10rem" in css
-    assert "min-inline-size: 18rem" not in css
     assert "overflow-x: auto" in value_block
     assert "text-overflow: ellipsis" not in value_block
     assert "text-align: right" in value_block
+
+
+def test_mobile_resource_bar_is_compact_2x2_grid_without_overflow():
+    """GC-166 HOTFIX: Mobile <=760px resource bar must be 2x2 grid with no horizontal overflow.
+    
+    Ensures:
+    - grid uses repeat(2, minmax(0, 1fr)) for flexible columns
+    - no fixed min-inline-size 16rem or 10rem on mobile
+    - overflow-x: hidden on bar container
+    - exact values stay nowrap and right-aligned with per-amount horizontal scroll only
+    - compact sizing: ~3.4rem min-height, ~1.55rem icons, 0.66rem values, 0.52rem caps/rates
+    """
+    css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
+    
+    # Extract the @media (max-width: 760px) block
+    media_start = css.find("@media (max-width: 760px) {")
+    assert media_start != -1, "Mobile media query not found"
+    
+    # Find the closing brace of this media query
+    brace_count = 0
+    media_end = media_start
+    for i in range(media_start, len(css)):
+        if css[i] == "{":
+            brace_count += 1
+        elif css[i] == "}":
+            brace_count -= 1
+            if brace_count == 0:
+                media_end = i + 1
+                break
+    
+    mobile_block = css[media_start:media_end]
+    
+    # Assertions for the mobile resource-bar hotfix
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr)) !important" in mobile_block, \
+        "Mobile resource bar must use 2-column flex grid"
+    assert "overflow-x: hidden !important" in mobile_block, \
+        "Mobile resource bar must hide horizontal overflow"
+    assert ".resource-bar-cmd .hud-res-metal" in mobile_block and \
+           "min-inline-size: 0 !important" in mobile_block, \
+        "Mobile resource cards must have min-inline-size: 0 !important"
+    
+    # Ensure NO fixed 16rem or 10rem min-sizes on mobile
+    assert "min-inline-size: 16rem" not in mobile_block, \
+        "Mobile must not have min-inline-size: 16rem (bloat culprit)"
+    assert "min-inline-size: 10rem" not in mobile_block, \
+        "Mobile must not have min-inline-size: 10rem (bloat culprit)"
+    
+    # Verify compact sizing
+    assert "min-height: 3.4rem" in mobile_block, \
+        "Mobile resource cards need min-height: 3.4rem"
+    assert "width: 1.55rem" in mobile_block, \
+        "Mobile icons must be ~1.55rem"
+    assert "font-size: 0.66rem" in mobile_block, \
+        "Mobile res-value must be 0.66rem (readable but compact)"
+    assert "font-size: 0.52rem" in mobile_block, \
+        "Mobile res-cap and res-rate must be 0.52rem"
+    
+    # Ensure exact values preserve no-ellipsis overflow-x:auto per-amount behavior
+    assert ".resource-bar-cmd .res-value {" in mobile_block
+    res_value_idx = mobile_block.find(".resource-bar-cmd .res-value {")
+    res_value_block = mobile_block[res_value_idx:mobile_block.find("}", res_value_idx) + 1]
+    assert "overflow-x: auto" in res_value_block, \
+        "Mobile res-value must allow horizontal scroll within its own amount"
+    assert "text-overflow: ellipsis" not in res_value_block, \
+        "Mobile must not ellipsis exact values"
+    assert "white-space: nowrap" in res_value_block, \
+        "Mobile res-value must stay on one line"
 
 
 def test_timekeeper_is_presented_in_header_and_mirrors_live_resource_balance():
@@ -92,3 +157,4 @@ def test_live_events_popover_can_escape_desktop_shell_clip_only_while_open():
     open_block = partial.split(selector, 1)[1].split("}", 1)[0]
     assert "overflow: visible !important" in open_block
     assert "z-index: var(--gc-z-dropdown, 1200) !important" in open_block
+
