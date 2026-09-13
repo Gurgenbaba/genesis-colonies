@@ -15,6 +15,7 @@ from .db import get_db_backend
 
 PRESENCE_TABLE = "player_presence"
 
+
 def uses_dedicated_presence(*, backend: str | None = None) -> bool:
     return str(backend or get_db_backend()) == "postgres"
 
@@ -135,6 +136,40 @@ def get_effective_last_seen_by_ids(
     for row in cur.fetchall():
         out[int(row["player_id"])] = int(row["last_seen"] or 0)
     return out
+
+
+def set_presence_last_seen(
+    conn,
+    player_id: int,
+    *,
+    last_seen: int,
+    backend: str | None = None,
+) -> None:  # noqa: ANN001
+    """Set one canonical presence timestamp exactly.
+
+    This is intentionally distinct from :func:`touch_presence`, which is
+    monotonic.  It is used when a synthetic Living Universe shift ends so the
+    account returns to the real human activity timestamp it had before the
+    shift.  Real authenticated touches must continue to use ``touch_presence``.
+    """
+    pid = int(player_id)
+    ts = max(0, int(last_seen))
+    if uses_dedicated_presence(backend=backend):
+        conn.execute(
+            f"""
+            INSERT INTO {PRESENCE_TABLE} (player_id, last_seen, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (player_id) DO UPDATE
+            SET last_seen = excluded.last_seen,
+                updated_at = excluded.updated_at;
+            """,
+            (pid, ts, ts),
+        )
+        return
+    conn.execute(
+        "UPDATE players SET last_seen = ? WHERE id = ?;",
+        (ts, pid),
+    )
 
 
 def touch_presence(
