@@ -86,3 +86,131 @@
     grid-column: 1;
   }
 }
+
+/* GC-MOBILE-RESBAR-001 — emergency mobile shell density fix.
+   This stylesheet is intentionally loaded after mando_exact_numbers.css, so these
+   <=760px rules replace the old 16rem/10rem minimum-card layout without touching
+   tablet/desktop. Huge integers remain exact: nowrap + per-value overflow is kept,
+   while the resource BAR itself never scrolls horizontally. */
+@media (max-width: 760px) {
+  .gc-header-row-resources .gc-resource-sticky {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .resource-bar.resource-bar-cmd {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-auto-flow: row !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    scrollbar-gutter: auto !important;
+  }
+
+  .resource-bar-cmd .hud-res-metal,
+  .resource-bar-cmd .hud-res-crystal,
+  .resource-bar-cmd .hud-res-fuel-cells,
+  .resource-bar-cmd .hud-res-energy {
+    width: auto !important;
+    min-width: 0 !important;
+    min-inline-size: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  .resource-bar-cmd .hud-res-panel {
+    min-height: 3.05rem !important;
+    height: auto !important;
+    padding: 0.18rem 0.28rem 0.16rem !important;
+  }
+
+  .resource-bar-cmd .hud-res-body {
+    display: grid !important;
+    grid-template-columns: 1.2rem minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 0.28rem !important;
+    min-width: 0 !important;
+  }
+
+  .resource-bar-cmd .res-icon--hud {
+    width: 1.2rem !important;
+    height: 1.2rem !important;
+    min-width: 1.2rem !important;
+  }
+
+  .resource-bar-cmd .hud-res-amount {
+    display: block !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    line-height: 1 !important;
+  }
+
+  .resource-bar-cmd .res-value {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    scrollbar-width: none !important;
+    text-align: right !important;
+    font-size: clamp(0.56rem, 2.35vw, 0.68rem) !important;
+    line-height: 1.05 !important;
+    letter-spacing: -0.035em !important;
+  }
+
+  .resource-bar-cmd .res-value::-webkit-scrollbar,
+  .resource-bar-cmd .hud-res-cap-line::-webkit-scrollbar,
+  .resource-bar-cmd .res-rate::-webkit-scrollbar {
+    display: none;
+  }
+
+  .resource-bar-cmd .hud-res-cap-line {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 0.03rem !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    white-space: nowrap !important;
+    scrollbar-width: none !important;
+    text-align: right !important;
+    line-height: 1 !important;
+  }
+
+  .resource-bar-cmd .res-cap,
+  .resource-bar-cmd .res-rate {
+    font-size: clamp(0.47rem, 1.9vw, 0.56rem) !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    text-overflow: clip !important;
+  }
+
+  .resource-bar-cmd .hud-res-capacity {
+    margin-top: 0.08rem !important;
+  }
+
+  .resource-bar-cmd .hud-res-footer {
+    min-height: 0 !important;
+    margin-top: 0.05rem !important;
+    line-height: 1 !important;
+  }
+
+  .resource-bar-cmd .hud-res-warn {
+    margin-top: 0.05rem !important;
+    font-size: 0.48rem !important;
+    line-height: 1 !important;
+  }
+
+  /* In a 2x2 matrix, right-column cards need their seam restored. */
+  .resource-bar-cmd .hud-res-crystal,
+  .resource-bar-cmd .hud-res-energy {
+    border-inline-start-width: 1px !important;
+  }
+}
