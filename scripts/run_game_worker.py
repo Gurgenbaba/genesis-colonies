@@ -67,6 +67,22 @@ def _queue_tick_has_activity(result: Mapping[str, Any]) -> bool:
     return False
 
 
+def _queue_tick_has_retryable_db_conflict(result: Mapping[str, Any]) -> bool:
+    """True for a queue tick whose failed scope can be retried after rollback.
+
+    PostgreSQL deadlocks abort only the savepoint-wrapped finish subsection; the
+    owning per-planet transaction is recovered by the queue engine. A fresh due
+    scan is therefore safe and avoids waiting for the next normal worker cadence.
+    Keep this deliberately narrow: ordinary gameplay/validation errors must not
+    create retry loops.
+    """
+    errors = result.get("errors") or ()
+    if isinstance(errors, str):
+        errors = (errors,)
+    text = "\n".join(str(err or "").lower() for err in errors)
+    return "deadlock detected" in text
+
+
 def _should_persist_queue_heartbeat(
     result: Mapping[str, Any],
     *,
@@ -149,6 +165,18 @@ def main() -> int:
     while True:
         started = time.perf_counter()
         result = _tick()
+        deadlock_retry = False
+        if args.queue_only and _queue_tick_has_retryable_db_conflict(result):
+            # The failed finish subsection has already been rolled back to its
+            # PostgreSQL savepoint. Give the competing short transaction a tiny
+            # head start, then rescan once instead of waiting another full 5s.
+            deadlock_retry = True
+            time.sleep(0.075)
+            retry_result = _tick()
+            retry_result["deadlock_retry"] = 1
+            retry_result["deadlock_retry_recovered"] = bool(retry_result.get("ok", False))
+            result = retry_result
+
         heartbeat_persisted = False
         if args.queue_only and persist_queue_result is not None:
             now_mono = time.monotonic()
@@ -176,6 +204,7 @@ def main() -> int:
             if args.queue_only
             else ""
         )
+        retry_extra = f" deadlock_retry={1 if deadlock_retry else 0}" if args.queue_only else ""
         print(
             f"[{log_prefix}] ok={str(bool(result.get('ok'))).lower()} "
             f"players={int(result.get('players_processed') or 0)} "
@@ -186,7 +215,7 @@ def main() -> int:
             f"shipyard={int(finished.get('shipyard') or 0)} "
             f"defense={int(finished.get('defense') or 0)} "
             f"troops={int(finished.get('troops') or 0)} "
-            f"duration_ms={elapsed_ms}{heartbeat_extra}",
+            f"duration_ms={elapsed_ms}{heartbeat_extra}{retry_extra}",
             flush=True,
         )
         if args.once:
