@@ -13,6 +13,7 @@ def test_action_pool_has_asteroids_and_world_boss_as_real_decisions():
 def test_shift_eviction_restores_real_presence_and_sets_revisit_cooldown():
     from game.inactive_autoplay import _park_roster_member
 
+    conn = object()
     item = {
         "player_id": 44,
         "presence_before_shift": 123,
@@ -23,11 +24,11 @@ def test_shift_eviction_restores_real_presence_and_sets_revisit_cooldown():
     with patch("game.inactive_autoplay.set_presence_last_seen") as restore, patch(
         "game.inactive_autoplay._record_revisit_cooldown"
     ) as cooldown, patch("game.inactive_autoplay._send_autoplay_report") as report:
-        _park_roster_member(object(), item, now=1_000.0)
+        _park_roster_member(conn, item, now=1_000.0)
 
-    restore.assert_called_once_with(object(), 44, last_seen=123)
-    cooldown.assert_called_once_with(object(), 44, now=1_000.0)
-    report.assert_called_once_with(object(), item)
+    restore.assert_called_once_with(conn, 44, last_seen=123)
+    cooldown.assert_called_once_with(conn, 44, now=1_000.0)
+    report.assert_called_once_with(conn, item)
 
 
 def test_asteroid_activity_uses_canonical_recycle_send():
