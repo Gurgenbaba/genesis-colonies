@@ -237,6 +237,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+    white-space: nowrap;
   text-align: right;
   font-size: clamp(0.76rem, 0.88vw, 1rem);
 }
@@ -247,6 +248,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+    white-space: nowrap;
 }
 
 .resource-bar-cmd .hud-res-cap-line {
@@ -400,28 +402,59 @@
     font-size: 0.72rem;
   }
 
+  /* GC-166 HOTFIX: Mobile resource bar compact 2x2 grid without overflow.
+     Replace 4-column bloated layout (repeat(3, minmax(16rem,1fr)) + minmax(10rem,0.62fr))
+     with flexible 2x2 grid: metal/crystal in row 1, fuel/energy in row 2. */
   .resource-bar.resource-bar-cmd {
-    grid-template-columns: repeat(3, minmax(16rem, 1fr)) minmax(10rem, 0.62fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    overflow-x: hidden !important;
+    scrollbar-gutter: auto;
   }
 
   .resource-bar-cmd .hud-res-metal,
   .resource-bar-cmd .hud-res-crystal,
-  .resource-bar-cmd .hud-res-fuel-cells {
-    min-inline-size: 16rem;
+  .resource-bar-cmd .hud-res-fuel-cells,
+  .resource-bar-cmd .hud-res-energy {
+    min-inline-size: 0 !important;
+    width: auto;
+    min-height: 3.4rem;
+    padding-block: 0.24rem 0.18rem;
   }
 
-  .resource-bar-cmd .hud-res-energy {
-    min-inline-size: 10rem;
+  .resource-bar-cmd .hud-res-body {
+    gap: 0.28rem;
+    min-width: 0;
+  }
+
+  .resource-bar-cmd .res-icon--hud {
+    width: 1.55rem;
+    height: 1.55rem;
+    flex: 0 0 auto;
   }
 
   .resource-bar-cmd .res-value {
-    font-size: 0.70rem;
+    font-size: 0.66rem;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    white-space: nowrap;
   }
 
   .resource-bar-cmd .res-cap,
   .resource-bar-cmd .res-rate {
-    font-size: 0.60rem;
+    font-size: 0.52rem;
   }
+
+  .resource-bar-cmd .hud-res-capacity {
+    margin-top: 0.08rem;
+  }
+
+  .resource-bar-cmd .hud-res-footer {
+    min-height: 0.75rem;
+    margin-top: 0.06rem;
+  }
+
 
   .gc-records-row {
     grid-template-columns: 40px minmax(0, 1fr);
