@@ -1500,6 +1500,51 @@ def _expedition_fleet_target(
     return True, "", (int(target_galaxy), int(target_system), EXPEDITION_POSITION), target_info
 
 
+
+def _effective_asteroid_recycle_ships(
+    mission: str,
+    target_info: Mapping[str, Any] | None,
+    origin_planet_id: int,
+    ships: Mapping[str, int],
+    *,
+    conn,
+) -> Dict[str, int]:
+    """Clamp asteroid Harvest Reclaimers to the count that can actually launch.
+
+    This is intentionally asteroid-only. Generic debris recycling and every
+    other fleet mission retain their existing all-or-nothing ship semantics.
+    Mixed asteroid fleets remain supported; only ``harvest_reclaimer`` is
+    clamped because it is the asteroid harvesting ship.
+    """
+    ships_n = normalize_ships(ships)
+    if (
+        str(mission or "").strip().lower() != "recycle"
+        or str((target_info or {}).get("target_type") or "") != "asteroid"
+    ):
+        return ships_n
+
+    asteroid = (target_info or {}).get("asteroid") or {}
+    requested = max(0, int(ships_n.get("harvest_reclaimer") or 0))
+    available = max(
+        0,
+        int(
+            get_planet_ships(int(origin_planet_id), conn=conn).get(
+                "harvest_reclaimer", 0
+            )
+            or 0
+        ),
+    )
+    needed = max(0, int(asteroid.get("recycler_slots_needed") or 0))
+    effective = min(requested, available, needed)
+
+    out = dict(ships_n)
+    if effective > 0:
+        out["harvest_reclaimer"] = int(effective)
+    else:
+        out.pop("harvest_reclaimer", None)
+    return normalize_ships(out)
+
+
 def validate_fleet_send(
     *,
     player_id: int,
@@ -1605,6 +1650,24 @@ def validate_fleet_send(
         )
         if not ok_target:
             return False, t_reason, {"target": target_info}
+
+    if (
+        mission == "recycle"
+        and target_info
+        and str(target_info.get("target_type") or "") == "asteroid"
+    ):
+        ships_n = _effective_asteroid_recycle_ships(
+            mission,
+            target_info,
+            int(origin_planet_id),
+            ships_n,
+            conn=conn,
+        )
+        if int(ships_n.get("harvest_reclaimer") or 0) <= 0:
+            return False, "recycle_requires_reclaimer", {
+                "target": target_info,
+                "effective_ships": dict(ships_n),
+            }
 
     if mission in ("attack", "spy") and target_info:
         target_pid = target_info.get("target_player_id")
@@ -1741,6 +1804,7 @@ def validate_fleet_send(
         "preview": preview,
         "origin_planet": origin_planet,
         "resolved_target": target,
+        "effective_ships": dict(ships_n),
     }
     if attack_limit_info is not None:
         out["attack_limit"] = attack_limit_info
@@ -1852,6 +1916,18 @@ def build_fleet_send_preview(
         if mission_locked:
             mission_ok = False
             mission_reason = "mission_locked"
+        if (
+            mission == "recycle"
+            and target_info
+            and str(target_info.get("target_type") or "") == "asteroid"
+        ):
+            ships_n = _effective_asteroid_recycle_ships(
+                mission,
+                target_info,
+                int(origin_planet.get("id") or 0),
+                ships_n,
+                conn=conn,
+            )
         origin_galaxy = int(origin_planet.get("galaxy") or 0) or None
         fleet_modifiers = _fleet_galactic_modifiers(
             int(player_id), conn, galaxy=origin_galaxy
@@ -1935,6 +2011,7 @@ def build_fleet_send_preview(
 
         payload = {
             **flight,
+            "effective_ships": dict(ships_n),
             "target": target_info,
             "mission_type": mission,
             "mission_allowed": mission_ok,
@@ -3940,6 +4017,13 @@ def send_fleet(
                 rollback(conn)
             extra = send_ctx if isinstance(send_ctx, dict) else None
             return False, send_reason, extra
+
+        if isinstance(send_ctx, dict) and "effective_ships" in send_ctx:
+            ships_n = normalize_ships(send_ctx.get("effective_ships") or {})
+        if not ships_n:
+            if own:
+                rollback(conn)
+            return False, "no_ships", None
 
         origin_planet = send_ctx["origin_planet"]
         preview = send_ctx["preview"]
