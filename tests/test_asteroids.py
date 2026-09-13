@@ -32,7 +32,10 @@ from game.asteroids import (
 from game.db import begin_write_transaction, commit, db
 from game.fleet import (
     add_planet_ships,
+    build_fleet_send_preview,
     evaluate_fleet_mission_target,
+    get_planet_ships,
+    preview_fleet_flight,
     process_fleet_tick,
     resolve_fleet_target,
     send_fleet,
@@ -1047,3 +1050,187 @@ def test_asteroid_viewer_lifecycle_distinguishes_return_and_clears_stale_engagem
     assert completed["viewer_en_route"] is False
     assert completed["viewer_returning"] is False
     assert completed["viewer_harvest_locked"] is False
+
+
+
+def test_asteroid_send_clamps_to_available_reclaimers_and_exact_fuel(ast_db):
+    uid = _player("FuelClamp")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="mixed_belt",
+            rng=random.Random(818),
+        )
+        assert ins["ok"]
+        conn.execute(
+            "UPDATE asteroid_fields SET metal = 50000000, crystal = 50000000, fuel_cells = 50000000 WHERE id = ?;",
+            (int(ins["asteroid"]["id"]),),
+        )
+        conn.execute(
+            "UPDATE planets SET metal = 500000, crystal = 500000, fuel_cells = 500000, last_update = ? WHERE id = ?;",
+            (time.time() + 60, home_id),
+        )
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 7}, conn=conn)
+        commit(conn)
+
+        origin = dict(conn.execute("SELECT * FROM planets WHERE id = ?;", (home_id,)).fetchone())
+        expected = preview_fleet_flight(
+            origin_planet=origin,
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 7},
+            resources={},
+            speed_percent=100,
+            player_id=uid,
+            mission_type="recycle",
+            conn=conn,
+        )
+        expected_fuel = int(expected["fuel_cost"])
+
+        begin_write_transaction(conn)
+        ok, err, result = send_fleet(
+            player_id=uid,
+            origin_planet_id=home_id,
+            mission_type="recycle",
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 100},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert ok, err
+        fleet_id = int(result["fleet"]["id"])
+        commit(conn)
+
+        row = conn.execute(
+            "SELECT ships_json, fuel_cost FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()
+        assert json.loads(row["ships_json"] or "{}") == {"harvest_reclaimer": 7}
+        assert int(row["fuel_cost"]) == expected_fuel
+        assert int(result["fuel_cost"]) == expected_fuel
+        assert int(get_planet_ships(home_id, conn=conn).get("harvest_reclaimer") or 0) == 0
+        fuel_after = int(float(conn.execute(
+            "SELECT fuel_cells FROM planets WHERE id = ?;", (home_id,)
+        ).fetchone()["fuel_cells"]))
+        assert fuel_after == 500000 - expected_fuel
+    finally:
+        conn.close()
+
+
+def test_asteroid_send_clamps_to_current_asteroid_need(ast_db):
+    uid = _player("NeedClamp")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="ferronite_rock",
+            rng=random.Random(919),
+        )
+        assert ins["ok"]
+        conn.execute(
+            "UPDATE asteroid_fields SET metal = 1, crystal = 0, fuel_cells = 0 WHERE id = ?;",
+            (int(ins["asteroid"]["id"]),),
+        )
+        conn.execute(
+            "UPDATE planets SET fuel_cells = 500000, last_update = ? WHERE id = ?;",
+            (time.time() + 60, home_id),
+        )
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 20}, conn=conn)
+        commit(conn)
+
+        begin_write_transaction(conn)
+        ok, err, result = send_fleet(
+            player_id=uid,
+            origin_planet_id=home_id,
+            mission_type="recycle",
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 20},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert ok, err
+        fleet_id = int(result["fleet"]["id"])
+        commit(conn)
+
+        row = conn.execute(
+            "SELECT ships_json FROM fleet_movements WHERE id = ?;", (fleet_id,)
+        ).fetchone()
+        assert json.loads(row["ships_json"] or "{}") == {"harvest_reclaimer": 1}
+        assert int(get_planet_ships(home_id, conn=conn).get("harvest_reclaimer") or 0) == 19
+    finally:
+        conn.close()
+
+
+def test_asteroid_preview_uses_effective_ship_map_and_fuel(ast_db):
+    uid = _player("PreviewClamp")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="mixed_belt",
+            rng=random.Random(1010),
+        )
+        assert ins["ok"]
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 7}, conn=conn)
+        conn.execute(
+            "UPDATE planets SET fuel_cells = 500000, last_update = ? WHERE id = ?;",
+            (time.time() + 60, home_id),
+        )
+        commit(conn)
+
+        origin = dict(conn.execute("SELECT * FROM planets WHERE id = ?;", (home_id,)).fetchone())
+        expected = preview_fleet_flight(
+            origin_planet=origin,
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 7},
+            resources={},
+            speed_percent=100,
+            player_id=uid,
+            mission_type="recycle",
+            conn=conn,
+        )
+        preview = build_fleet_send_preview(
+            player_id=uid,
+            origin_planet=origin,
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            mission_type="recycle",
+            ships={"harvest_reclaimer": 100},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert preview["effective_ships"] == {"harvest_reclaimer": 7}
+        assert int(preview["fuel_cost"]) == int(expected["fuel_cost"])
+        assert preview["can_send"] is True
+    finally:
+        conn.close()
