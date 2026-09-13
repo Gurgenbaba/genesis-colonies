@@ -39,13 +39,16 @@ def test_mobile_resource_values_stay_exact_without_ellipsis_or_scientific_notati
     assert "ellipsis" not in value_block
 
 
-def test_mobile_hotfix_overrides_legacy_mando_rule_by_load_order():
+def test_mobile_density_layer_reinforces_canonical_mando_grid_by_load_order():
     base = _read("templates/base.html")
     mando = _read("static/css/mando_exact_numbers.css")
-    hotfix = _read("static/css/empire_resource_relay.css")
+    density = _read("static/css/empire_resource_relay.css")
 
-    # The legacy mobile rule is the regression source; the last-loaded shell CSS must win.
-    assert "repeat(3, minmax(16rem, 1fr)) minmax(10rem, 0.62fr)" in mando
+    # #366 fixed the canonical mobile layout itself; #367 only tightens density later.
+    assert "repeat(3, minmax(16rem, 1fr)) minmax(10rem, 0.62fr)" not in mando
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr)) !important;" in mando
+    assert "min-inline-size: 16rem" not in mando
+    assert "min-inline-size: 10rem" not in mando
     assert base.index("css/mando_exact_numbers.css") < base.index("css/empire_resource_relay.css")
-    assert "repeat(2, minmax(0, 1fr)) !important" in hotfix
-    assert "GC-MOBILE-RESBAR-001" in hotfix
+    assert "repeat(2, minmax(0, 1fr)) !important" in density
+    assert "GC-MOBILE-RESBAR-001" in density
