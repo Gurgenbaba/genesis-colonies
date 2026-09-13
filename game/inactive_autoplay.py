@@ -2,7 +2,7 @@
 
 GC-INACTIVE-SHIFT-001 — Day Shift: a small shift crew (2–3) stays visibly
 online; after a fixed tenure they rotate back to the dormant queue. Human Play
-V5 adds sparse canonical shipyard and expedition decisions without another loop.
+V6 adds strategic asteroid and world-boss decisions through canonical owners.
 """
 
 from __future__ import annotations
@@ -24,7 +24,11 @@ from .auto_empire import (
 )
 from .db import begin_write_transaction, column_exists, commit, in_transaction, rollback
 from .ranking import RANKING_INACTIVE_AFTER_SEC
-from .presence_store import effective_last_seen_scalar_sql, touch_presence_bulk
+from .presence_store import (
+    effective_last_seen_scalar_sql,
+    set_presence_last_seen,
+    touch_presence_bulk,
+)
 from .runtime_state import get_runtime_value, set_runtime_value
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ ROSTER_KEY = "inactive_autoplay_roster"
 SESSIONS_KEY = "inactive_autoplay_sessions"  # legacy merge
 CURSOR_KEY = "inactive_autoplay_cursor"
 TICK_CURSOR_KEY = "inactive_autoplay_tick_cursor"
+REVISIT_COOLDOWNS_KEY = "living_universe_revisit_cooldowns"
 # GC-PERF-AUTOPLAY-001: cross-process overlap guard (same pattern as ranking_worker).
 BUSY_KEY = "inactive_autoplay_busy"
 BUSY_STALE_SEC = 900.0
@@ -46,17 +51,72 @@ INACTIVE_RESEARCH_DURATION_CAP = 1200  # 20 min
 # GC-PERF-AUTOPLAY-003: no same-tick force-complete chains (was 2).
 INACTIVE_CHAIN_LIMIT = 1
 
-# GC-2621 — Living Universe V3. One dormant commander decision starts at most
-# one progression domain. Per-player cadence breaks ranking lockstep without
-# increasing the global SQLite writer budget.
-INACTIVE_ACTION_DOMAINS = ("building", "research", "ships", "defense", "expedition")
+# GC-2623 — Living Universe V6. One shift decision starts at most one domain.
+# Fleet activity is part of the same cadence/roster, never a second bot loop.
+INACTIVE_ACTION_DOMAINS = (
+    "building",
+    "research",
+    "ships",
+    "defense",
+    "expedition",
+    "asteroid",
+    "world_boss",
+)
 INACTIVE_ACTION_WEIGHTS = {
-    "economy": {"building": 55, "research": 20, "ships": 10, "defense": 8, "expedition": 7},
-    "aggressive": {"building": 30, "research": 15, "ships": 30, "defense": 15, "expedition": 10},
-    "turtle": {"building": 35, "research": 10, "ships": 12, "defense": 35, "expedition": 8},
-    "spy": {"building": 25, "research": 35, "ships": 12, "defense": 8, "expedition": 20},
-    "swarm": {"building": 30, "research": 15, "ships": 35, "defense": 10, "expedition": 10},
-    "elite": {"building": 28, "research": 25, "ships": 27, "defense": 10, "expedition": 10},
+    "economy": {
+        "building": 44,
+        "research": 16,
+        "ships": 12,
+        "defense": 7,
+        "expedition": 6,
+        "asteroid": 12,
+        "world_boss": 3,
+    },
+    "aggressive": {
+        "building": 24,
+        "research": 10,
+        "ships": 24,
+        "defense": 10,
+        "expedition": 7,
+        "asteroid": 7,
+        "world_boss": 18,
+    },
+    "turtle": {
+        "building": 28,
+        "research": 8,
+        "ships": 12,
+        "defense": 28,
+        "expedition": 6,
+        "asteroid": 10,
+        "world_boss": 8,
+    },
+    "spy": {
+        "building": 20,
+        "research": 27,
+        "ships": 12,
+        "defense": 7,
+        "expedition": 16,
+        "asteroid": 10,
+        "world_boss": 8,
+    },
+    "swarm": {
+        "building": 22,
+        "research": 10,
+        "ships": 30,
+        "defense": 8,
+        "expedition": 8,
+        "asteroid": 8,
+        "world_boss": 14,
+    },
+    "elite": {
+        "building": 22,
+        "research": 20,
+        "ships": 24,
+        "defense": 8,
+        "expedition": 8,
+        "asteroid": 8,
+        "world_boss": 10,
+    },
 }
 INACTIVE_ACTION_PACE_RANGES_SEC = {
     "aggressive": (5 * 60, 14 * 60),
@@ -78,11 +138,44 @@ INACTIVE_AMBITION_BASE = {
 # Longer strategic phases shift priorities without extra polling or workers.
 INACTIVE_STRATEGIC_PHASES = ("growth", "research", "fortification", "balanced")
 INACTIVE_PHASE_DOMAIN_MULT = {
-    "growth": {"building": 1.75, "research": 0.70, "ships": 0.85, "defense": 0.55, "expedition": 0.75},
-    "research": {"building": 0.70, "research": 1.85, "ships": 0.75, "defense": 0.55, "expedition": 0.90},
-    "fortification": {"building": 0.70, "research": 0.65, "ships": 1.15, "defense": 1.90, "expedition": 0.65},
-    "balanced": {"building": 1.00, "research": 1.00, "ships": 1.00, "defense": 1.00, "expedition": 1.00},
+    "growth": {
+        "building": 1.75,
+        "research": 0.70,
+        "ships": 0.85,
+        "defense": 0.55,
+        "expedition": 0.75,
+        "asteroid": 1.40,
+        "world_boss": 0.60,
+    },
+    "research": {
+        "building": 0.70,
+        "research": 1.85,
+        "ships": 0.75,
+        "defense": 0.55,
+        "expedition": 0.90,
+        "asteroid": 0.80,
+        "world_boss": 0.70,
+    },
+    "fortification": {
+        "building": 0.70,
+        "research": 0.65,
+        "ships": 1.15,
+        "defense": 1.90,
+        "expedition": 0.65,
+        "asteroid": 0.70,
+        "world_boss": 1.50,
+    },
+    "balanced": {
+        "building": 1.00,
+        "research": 1.00,
+        "ships": 1.00,
+        "defense": 1.00,
+        "expedition": 1.00,
+        "asteroid": 1.00,
+        "world_boss": 1.00,
+    },
 }
+# Compatibility constant retained for imports; the strategy owner enforces it.
 INACTIVE_WORLD_BOSS_SAFE_HP_RATIO = 0.05
 INACTIVE_EXPEDITION_SHIP_PREFERENCE = ("solar_skiff", "eclipse_runner")
 
@@ -267,7 +360,15 @@ def _action_domain_for_player(player_id: int, personality: str, action_seq: int)
     phase = _strategic_phase_for_player(player_id, action_seq)
     phase_mult = INACTIVE_PHASE_DOMAIN_MULT.get(phase) or INACTIVE_PHASE_DOMAIN_MULT["balanced"]
     weights = {
-        key: max(0, int(round(float(base_weights.get(key) or 0) * float(phase_mult.get(key) or 1.0))))
+        key: max(
+            0,
+            int(
+                round(
+                    float(base_weights.get(key) or 0)
+                    * float(phase_mult.get(key) or 1.0)
+                )
+            ),
+        )
         for key in INACTIVE_ACTION_DOMAINS
     }
     total = sum(max(0, int(weights.get(key) or 0)) for key in INACTIVE_ACTION_DOMAINS)
@@ -392,6 +493,35 @@ def _touch_presence_bulk(conn, player_ids: Sequence[int], *, now: float) -> None
         logger.exception("inactive autoplay bulk presence touch failed")
 
 
+def _load_revisit_cooldowns(*, conn=None) -> Dict[int, float]:
+    raw = _load_json(REVISIT_COOLDOWNS_KEY, conn=conn)
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[int, float] = {}
+    for key, value in raw.items():
+        try:
+            pid = int(key)
+            until = float(value)
+        except (TypeError, ValueError):
+            continue
+        if pid > 0 and until > 0:
+            out[pid] = until
+    return out
+
+
+def _record_revisit_cooldown(conn, player_id: int, *, now: float) -> None:
+    cooldowns = _load_revisit_cooldowns(conn=conn)
+    ts = float(now)
+    # Prune expired entries while touching the map so it never grows forever.
+    compact = {
+        str(pid): float(until)
+        for pid, until in cooldowns.items()
+        if float(until) > ts
+    }
+    compact[str(int(player_id))] = ts + revisit_sec()
+    _save_json(REVISIT_COOLDOWNS_KEY, compact, conn=conn)
+
+
 def _is_excluded_ai(conn, player_id: int) -> bool:
     try:
         from .pirates.accounts import is_pirate_bot_player
@@ -436,10 +566,11 @@ def list_dormant_candidates(
     exclude_ids: Optional[Set[int]] = None,
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
-    """Humans whose presence is stale (revisit window) or already inactive."""
+    """Humans whose real presence is stale and whose shift revisit cooldown is clear."""
     ts = float(now if now is not None else _now())
     cutoff = ts - revisit_sec()
     excluded = {int(x) for x in (exclude_ids or set())}
+    revisit_cooldowns = _load_revisit_cooldowns(conn=conn)
     vac_select = (
         "COALESCE(p.vacation_mode_active, 0)"
         if column_exists(conn, "players", "vacation_mode_active")
@@ -462,6 +593,8 @@ def list_dormant_candidates(
     for row in cur.fetchall():
         pid = int(row["player_id"])
         if pid in excluded:
+            continue
+        if float(revisit_cooldowns.get(pid) or 0) > ts:
             continue
         if _vacation_active(row):
             continue
@@ -530,8 +663,9 @@ def _load_roster(conn=None) -> List[Dict[str, Any]]:
                     "builds_done": int(item.get("builds_done") or 0),
                     "research_done": int(item.get("research_done") or 0),
                     "defense_done": int(item.get("defense_done") or 0),
-                "action_seq": int(item.get("action_seq") or 0),
-                "next_action_at": item.get("next_action_at"),
+                    "action_seq": int(item.get("action_seq") or 0),
+                    "next_action_at": item.get("next_action_at"),
+                    "presence_before_shift": item.get("presence_before_shift"),
                 }
             )
 
@@ -558,6 +692,9 @@ def _load_roster(conn=None) -> List[Dict[str, Any]]:
                     "builds_done": 0,
                     "research_done": 0,
                     "defense_done": 0,
+                    "action_seq": 0,
+                    "next_action_at": None,
+                    "presence_before_shift": item.get("presence_before_shift"),
                 }
             )
             changed = True
@@ -579,7 +716,6 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             continue
         if _player_vacation(conn, pid):
             continue
-        # Drop vanished players.
         row = conn.execute(
             "SELECT 1 AS ok FROM players WHERE id = ? LIMIT 1;", (pid,)
         ).fetchone()
@@ -596,9 +732,102 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "defense_done": int(item.get("defense_done") or 0),
                 "action_seq": int(item.get("action_seq") or 0),
                 "next_action_at": item.get("next_action_at"),
+                "presence_before_shift": item.get("presence_before_shift"),
             }
         )
     return kept
+
+
+def _send_autoplay_report(conn, item: Mapping[str, Any]) -> None:
+    """One neutral colony-operations inbox report per autonomous shift."""
+    pid = int(item.get("player_id") or 0)
+    builds = int(item.get("builds_done") or 0)
+    research = int(item.get("research_done") or 0)
+    defense = int(item.get("defense_done") or 0)
+    if pid <= 0 or (builds <= 0 and research <= 0 and defense <= 0):
+        return
+    try:
+        from .i18n import get_player_locale, tr
+        from .messages import create_message
+
+        loc = get_player_locale(pid, conn=conn)
+        lines = []
+        if builds > 0:
+            lines.append(
+                tr(
+                    "inactive_autoplay_report_line_builds",
+                    "- %(count)s Gebäude-Ausbauten abgeschlossen",
+                    locale=loc,
+                    count=builds,
+                )
+            )
+        if research > 0:
+            lines.append(
+                tr(
+                    "inactive_autoplay_report_line_research",
+                    "- %(count)s Forschungen abgeschlossen",
+                    locale=loc,
+                    count=research,
+                )
+            )
+        if defense > 0:
+            lines.append(
+                tr(
+                    "inactive_autoplay_report_line_defense",
+                    "- %(count)s Verteidigungsanlagen gebaut",
+                    locale=loc,
+                    count=defense,
+                )
+            )
+        intro = tr(
+            "inactive_autoplay_report_intro",
+            "Während deiner Abwesenheit hat die Kolonieverwaltung den laufenden Betrieb fortgesetzt:",
+            locale=loc,
+        )
+        subject = tr(
+            "inactive_autoplay_report_subject",
+            "Kolonie-Betriebsbericht",
+            locale=loc,
+        )
+        sender = tr(
+            "inactive_autoplay_report_sender",
+            "Kolonieverwaltung",
+            locale=loc,
+        )
+        body = intro + "\n\n" + "\n".join(lines)
+        create_message(
+            pid,
+            subject,
+            body,
+            category="system",
+            sender_name=sender,
+            metadata={
+                "kind": "colony_operations_report",
+                "builds_done": builds,
+                "research_done": research,
+                "defense_done": defense,
+            },
+            conn=conn,
+        )
+    except Exception:
+        logger.exception("inactive autoplay report send failed player=%s", pid)
+
+
+def _park_roster_member(conn, item: Mapping[str, Any], *, now: float) -> None:
+    """End one synthetic shift and restore the commander's real activity age."""
+    pid = int(item.get("player_id") or 0)
+    if pid <= 0:
+        return
+    try:
+        previous = int(float(item.get("presence_before_shift") or 0))
+        set_presence_last_seen(conn, pid, last_seen=previous)
+    except Exception:
+        logger.exception("living universe presence restore failed player=%s", pid)
+    try:
+        _record_revisit_cooldown(conn, pid, now=float(now))
+    except Exception:
+        logger.exception("living universe revisit cooldown failed player=%s", pid)
+    _send_autoplay_report(conn, item)
 
 
 def _trim_roster_to_cap(
@@ -607,12 +836,9 @@ def _trim_roster_to_cap(
     *,
     now: Optional[float] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Immediately LRU-evict excess above live ``shift_cap``.
-
-    Deploy-safe shrink when the stored roster still holds a pre-shift size
-    (e.g. 6 → 3). Uses the same inbox report owner as tenure eviction.
-    """
-    cap = shift_cap(now=now, conn=conn)
+    """Immediately LRU-evict excess above live ``shift_cap``."""
+    ts = float(now if now is not None else _now())
+    cap = shift_cap(now=ts, conn=conn)
     if len(roster) <= cap:
         return roster, 0
     roster = list(roster)
@@ -625,7 +851,7 @@ def _trim_roster_to_cap(
     to_evict = roster[:excess]
     kept = roster[excess:]
     for evicted_item in to_evict:
-        _send_autoplay_report(conn, evicted_item)
+        _park_roster_member(conn, evicted_item, now=ts)
     return kept, excess
 
 
@@ -684,7 +910,12 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
             SET metal = ?, crystal = ?, fuel_cells = ?
             WHERE id = ?;
             """,
-            (resource_db_param(metal), resource_db_param(crystal), resource_db_param(fuel), int(planet_id)),
+            (
+                resource_db_param(metal),
+                resource_db_param(crystal),
+                resource_db_param(fuel),
+                int(planet_id),
+            ),
         )
     return {
         "metal": int(metal),
@@ -714,7 +945,7 @@ def _describe_last_action(results: Sequence[Mapping[str, Any]]) -> Optional[str]
 
 
 def _weakest_combat_ship_for_player(conn, player_id: int) -> Optional[Dict[str, Any]]:
-    """Find one weakest combat-capable ship across the commander's empire."""
+    """Legacy helper kept for import compatibility; no longer used for boss play."""
     from .combat_models import combat_stats_for_ship
 
     rows = conn.execute(
@@ -731,7 +962,11 @@ def _weakest_combat_ship_for_player(conn, player_id: int) -> Optional[Dict[str, 
         stats = combat_stats_for_ship(str(row["ship_key"]))
         if stats is None or int(stats.attack or 0) <= 0:
             continue
-        candidate = (int(stats.attack or 0), str(row["ship_key"]), int(row["planet_id"]))
+        candidate = (
+            int(stats.attack or 0),
+            str(row["ship_key"]),
+            int(row["planet_id"]),
+        )
         if best is None or candidate < best:
             best = candidate
     if best is None:
@@ -739,60 +974,41 @@ def _weakest_combat_ship_for_player(conn, player_id: int) -> Optional[Dict[str, 
     return {"planet_id": best[2], "ships": {best[1]: 1}}
 
 
-def _maybe_join_world_boss(conn, player_id: int, *, now: float) -> Dict[str, Any]:
-    """One tiny canonical instant strike per boss, never during the final 5% HP."""
+def _maybe_join_world_boss(
+    conn,
+    player_id: int,
+    *,
+    now: float,
+    personality: str = "economy",
+    fallback_planet_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Delegate to the canonical-selector Living Universe boss strategy."""
     try:
-        from .world_boss import can_player_attack_boss, execute_instant_attack, list_active_events
+        from .living_universe_strategy import maybe_join_world_boss
 
-        token_force = _weakest_combat_ship_for_player(conn, int(player_id))
-        if not token_force:
-            return {"ok": True, "joined": False, "reason": "no_combat_ships"}
-        for event in list_active_events(conn=conn, now=float(now), limit=3):
-            max_hp = max(1, int(event.get("max_hp") or 1))
-            current_hp = max(0, int(event.get("current_hp") or 0))
-            with localcontext() as ctx:
-                ctx.prec = max(64, len(str(max_hp)) + 32)
-                safe_hp = (
-                    Decimal(max_hp)
-                    * Decimal(str(INACTIVE_WORLD_BOSS_SAFE_HP_RATIO))
-                )
-                if Decimal(current_hp) <= safe_hp:
-                    continue
-            ok, _reason, meta = can_player_attack_boss(
-                int(player_id),
-                int(event["id"]),
-                conn=conn,
-                now=float(now),
-                enforce_cooldown=False,
-                check_inflight=False,
-            )
-            if not ok or int((meta or {}).get("waves") or 0) > 0:
-                continue
-            strike = execute_instant_attack(
-                int(player_id),
-                int(event["id"]),
-                token_force["ships"],
-                planet_id=int(token_force["planet_id"]),
-                conn=conn,
-                now=float(now),
-                auto_select=False,
-                hit_mult=1,
-            )
-            if strike.get("ok"):
-                return {
-                    "ok": True,
-                    "joined": True,
-                    "event_id": int(event["id"]),
-                    "damage": int(strike.get("damage") or 0),
-                    "ships": dict(token_force["ships"]),
-                }
-        return {"ok": True, "joined": False, "reason": "no_eligible_boss"}
+        return maybe_join_world_boss(
+            conn,
+            int(player_id),
+            now=float(now),
+            personality=str(personality),
+            fallback_planet_id=(
+                int(fallback_planet_id)
+                if fallback_planet_id is not None
+                else None
+            ),
+        )
     except Exception:
         logger.exception("inactive autoplay world boss participation failed player=%s", player_id)
-        return {"ok": False, "joined": False, "reason": "world_boss_error"}
+        return {
+            "ok": False,
+            "joined": False,
+            "building": False,
+            "reason": "world_boss_error",
+        }
+
 
 def _stockpile_snapshot(conn, planet_id: int) -> Dict[str, int]:
-    """Read the real stockpile; Human Play V5 never injects resources."""
+    """Read the real stockpile; Human Play never injects resources."""
     row = conn.execute(
         """
         SELECT COALESCE(metal, 0) AS metal,
@@ -854,7 +1070,7 @@ def _sync_planet_for_decision(
         build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
         research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
         target_scale=float(ambition_scale),
-        source="inactive_autoplay",
+        source="living_universe",
         update_scores=True,
         chain_limit=INACTIVE_CHAIN_LIMIT,
         idle_chance=0.0,
@@ -1038,7 +1254,7 @@ def _run_player_economy(
                     build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
                     research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
                     target_scale=ambition_scale,
-                    source="inactive_autoplay",
+                    source="living_universe",
                     update_scores=True,
                     chain_limit=INACTIVE_CHAIN_LIMIT,
                     idle_chance=(
@@ -1093,6 +1309,19 @@ def _run_player_economy(
                 )
 
     expedition = {"ok": True, "sent": False, "reason": "not_selected"}
+    asteroid_activity = {
+        "ok": True,
+        "sent": False,
+        "built": False,
+        "reason": "not_selected",
+    }
+    boss_participation = {
+        "ok": True,
+        "joined": False,
+        "building": False,
+        "reason": "not_selected",
+    }
+
     if (
         action_domain == "expedition"
         and not personal_cooldown
@@ -1120,6 +1349,47 @@ def _run_player_economy(
                 "reason": "exception",
             }
 
+    if (
+        action_domain == "asteroid"
+        and not personal_cooldown
+        and not should_idle
+    ):
+        try:
+            from .living_universe_strategy import maybe_harvest_asteroid
+
+            asteroid_activity = maybe_harvest_asteroid(
+                conn,
+                int(player_id),
+                now=float(now),
+                action_seq=seq,
+                personality=str(personality),
+            )
+            if int(asteroid_activity.get("planet_id") or 0) == home_id:
+                home_synced = True
+        except Exception:
+            logger.exception(
+                "inactive autoplay asteroid activity failed player=%s", player_id
+            )
+            asteroid_activity = {
+                "ok": False,
+                "sent": False,
+                "built": False,
+                "reason": "exception",
+            }
+
+    if (
+        action_domain == "world_boss"
+        and not personal_cooldown
+        and not should_idle
+    ):
+        boss_participation = _maybe_join_world_boss(
+            conn,
+            int(player_id),
+            now=float(now),
+            personality=str(personality),
+            fallback_planet_id=home_id,
+        )
+
     # A human may idle, use a colony, or fail to launch a fleet. Due homeworld
     # work must still complete so old queues do not freeze between sessions.
     if not home_synced:
@@ -1141,15 +1411,22 @@ def _run_player_economy(
                 "inactive autoplay home sync failed player=%s", player_id
             )
 
-    enqueued = any(
-        r.get("build")
-        or r.get("research")
-        or r.get("ships")
-        or r.get("defense")
-        or r.get("builds")
-        or r.get("researches")
-        for r in results
-    ) or bool(expedition.get("sent"))
+    enqueued = (
+        any(
+            r.get("build")
+            or r.get("research")
+            or r.get("ships")
+            or r.get("defense")
+            or r.get("builds")
+            or r.get("researches")
+            for r in results
+        )
+        or bool(expedition.get("sent"))
+        or bool(asteroid_activity.get("sent"))
+        or bool(asteroid_activity.get("built"))
+        or bool(boss_participation.get("joined"))
+        or bool(boss_participation.get("building"))
+    )
     finished_any = any((r.get("finished") or {}) for r in results)
     finished_totals = {
         "buildings": 0,
@@ -1165,7 +1442,6 @@ def _run_player_economy(
             except (TypeError, ValueError):
                 continue
 
-    boss_participation = _maybe_join_world_boss(conn, player_id, now=now)
     next_seq = seq if personal_cooldown else seq + 1
     next_at = (
         float(next_action_at)
@@ -1180,6 +1456,14 @@ def _run_player_economy(
     last_action = _describe_last_action(results)
     if not last_action and expedition.get("sent"):
         last_action = "expedition"
+    if not last_action and asteroid_activity.get("sent"):
+        last_action = "asteroid_harvest"
+    if not last_action and asteroid_activity.get("built"):
+        last_action = "harvest_reclaimer_build"
+    if not last_action and boss_participation.get("joined"):
+        last_action = "world_boss"
+    if not last_action and boss_participation.get("building"):
+        last_action = "combat_fleet_build"
     return {
         "ok": True,
         "player_id": player_id,
@@ -1197,6 +1481,7 @@ def _run_player_economy(
         "strategic_phase": strategic_phase,
         "ambition_scale": ambition_scale,
         "expedition": expedition,
+        "asteroid_activity": asteroid_activity,
         "boss_participation": boss_participation,
     }
 
@@ -1225,7 +1510,7 @@ def get_last_worker_run(*, conn=None) -> Dict[str, Any]:
 def _apply_economy_result_to_roster_item(
     item: Dict[str, Any], result: Mapping[str, Any]
 ) -> None:
-    """GC-2615: accumulate what a roster member actually did while sticky."""
+    """Accumulate what a roster member actually did while sticky."""
     totals = result.get("finished_totals") or {}
     item["builds_done"] = int(item.get("builds_done") or 0) + int(
         totals.get("buildings") or 0
@@ -1245,102 +1530,11 @@ def _apply_economy_result_to_roster_item(
         item["last_action"] = action
 
 
-def _send_autoplay_report(conn, item: Mapping[str, Any]) -> None:
-    """GC-2615: one inbox message per roster session — visible activity instead
-    of a silent tick. Reuses the canonical Inbox owner (`messages.create_message`,
-    same pattern as `alliance._notify_alliance_members`); no parallel feed.
-    """
-    pid = int(item.get("player_id") or 0)
-    builds = int(item.get("builds_done") or 0)
-    research = int(item.get("research_done") or 0)
-    defense = int(item.get("defense_done") or 0)
-    if pid <= 0 or (builds <= 0 and research <= 0 and defense <= 0):
-        return
-    try:
-        from .i18n import get_player_locale, tr
-        from .messages import create_message
-
-        loc = get_player_locale(pid, conn=conn)
-        lines = []
-        if builds > 0:
-            lines.append(
-                tr(
-                    "inactive_autoplay_report_line_builds",
-                    "- %(count)s Gebäude-Ausbauten abgeschlossen",
-                    locale=loc,
-                    count=builds,
-                )
-            )
-        if research > 0:
-            lines.append(
-                tr(
-                    "inactive_autoplay_report_line_research",
-                    "- %(count)s Forschungen abgeschlossen",
-                    locale=loc,
-                    count=research,
-                )
-            )
-        if defense > 0:
-            lines.append(
-                tr(
-                    "inactive_autoplay_report_line_defense",
-                    "- %(count)s Verteidigungsanlagen gebaut",
-                    locale=loc,
-                    count=defense,
-                )
-            )
-        intro = tr(
-            "inactive_autoplay_report_intro",
-            "Während deiner Abwesenheit hat die Kolonieverwaltung den laufenden Betrieb fortgesetzt:",
-            locale=loc,
-        )
-        subject = tr(
-            "inactive_autoplay_report_subject",
-            "Kolonie-Betriebsbericht",
-            locale=loc,
-        )
-        sender = tr(
-            "inactive_autoplay_report_sender",
-            "Kolonieverwaltung",
-            locale=loc,
-        )
-        body = intro + "\n\n" + "\n".join(lines)
-        create_message(
-            pid,
-            subject,
-            body,
-            category="system",
-            sender_name=sender,
-            metadata={
-                "kind": "inactive_autoplay_report",
-                "builds_done": builds,
-                "research_done": research,
-                "defense_done": defense,
-            },
-            conn=conn,
-        )
-    except Exception:
-        logger.exception("inactive autoplay report send failed player=%s", pid)
-
-
 def release_active_player_from_roster(player_id: int, *, conn) -> bool:
-    """GC-2619: instant full control back the moment a real human is seen.
+    """Instant full control back the moment a real human is seen.
 
-    Called from `models.touch_player_online` — the single canonical signal
-    for "a real authenticated request just happened" (`require_login` /
-    `require_admin` / `require_login_api`). GC-PERF-LOCK-001: release runs on
-    every successful touch TX, including when the throttled ``last_seen`` UPDATE
-    writes 0 rows (so humans regain control without waiting 30s).
-    immediately instead of waiting for LRU eviction to eventually rotate
-    them off — the very next autoplay tick will no longer enqueue anything
-    on their account. They only rejoin the roster once they go dormant again
-    and get picked up by the normal wake-candidate selection
-    (`list_dormant_candidates`), same as any other inactive account.
-
-    Sends the same "what happened while you were away" report used on
-    eviction (`_send_autoplay_report`) — no separate message/feed owner.
-    No-op (single JSON read, no writes) when autoplay is off or the account
-    was never on the roster.
+    A real login/touch intentionally does NOT restore the pre-shift timestamp:
+    the new human presence is authoritative and the account leaves the roster.
     """
     if not is_inactive_autoplay_enabled(conn=conn):
         return False
@@ -1400,15 +1594,10 @@ def run_inactive_autoplay_tick(
 ) -> Dict[str, Any]:
     """Day-shift roster: tenure rotate, fill to shift_cap, RR economy + presence.
 
-    GC-INACTIVE-SHIFT-001:
-    1. Trim oversize to live ``shift_cap`` (deploy-safe).
-    2. On wake waves: evict at most one tenure-expired member, then fill
-       empty slots (batch default 1). Fresh ``last_seen`` + revisit window
-       parks evicted accounts at the back of the dormant queue.
-    3. Standing RR economy (``tick_per_cron=1``) + presence = full shift roster.
-
-    GC-PERF-AUTOPLAY-001/002/003: short write TXs, busy lease, yield, budget;
-    standing economy gated by ``economy_interval_sec`` (not every fleet tick).
+    Only the current roster is synthetically visible. Autonomous eviction
+    restores the real pre-shift human activity timestamp and a separate revisit
+    cooldown keeps the account at the back of the rotation without faking
+    ``last_seen`` for hours or days afterward.
     """
     ts = float(now if now is not None else _now())
     tick_t0 = time.perf_counter()
@@ -1534,7 +1723,11 @@ def run_inactive_autoplay_tick(
                 evicted_count += len(to_evict)
                 expired_count += len(to_evict)
                 for evicted_item in to_evict:
-                    _step(lambda item=evicted_item: _send_autoplay_report(conn, item))
+                    _step(
+                        lambda item=evicted_item: _park_roster_member(
+                            conn, item, now=ts
+                        )
+                    )
 
             room = max(0, live_cap - len(roster))
             if room > 0:
@@ -1563,6 +1756,9 @@ def run_inactive_autoplay_tick(
                         "builds_done": 0,
                         "research_done": 0,
                         "defense_done": 0,
+                        "action_seq": 0,
+                        "next_action_at": None,
+                        "presence_before_shift": int(float(cand.get("last_seen") or 0)),
                     }
                     roster.append(new_item)
 
@@ -1654,7 +1850,8 @@ def run_inactive_autoplay_tick(
                 if int(item["player_id"]) in ticked_ids:
                     item["last_ticked_at"] = ts
 
-        # Shift roster == visible online set.
+        # Shift roster == visible online set. Evicted members were restored to
+        # their real human timestamp before this flush, so no overlap remains.
         presence_ids: Set[int] = {int(item["player_id"]) for item in roster}
 
         def _flush_roster_presence():

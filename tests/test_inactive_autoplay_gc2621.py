@@ -88,11 +88,9 @@ def test_gc2621_one_progression_domain_per_decision(autoplay_v3_db):
                 "researches": [],
                 "finished": {},
             }
-            with patch("game.inactive_autoplay._maybe_join_world_boss") as boss:
-                boss.return_value = {"ok": True, "joined": False}
-                result = _run_player_economy(
-                    conn, uid, now=time.time(), is_wake=True, action_seq=3
-                )
+            result = _run_player_economy(
+                conn, uid, now=time.time(), is_wake=True, action_seq=3
+            )
         kwargs = planner.call_args.kwargs
         enabled = (
             int(bool(kwargs["allow_buildings"]))
@@ -121,15 +119,13 @@ def test_gc2621_personal_cooldown_finishes_due_without_enqueue(autoplay_v3_db):
         now = time.time()
         with patch("game.inactive_autoplay.plan_passive_planet_tick") as planner:
             planner.return_value = {"finished": {"buildings": 1}}
-            with patch("game.inactive_autoplay._maybe_join_world_boss") as boss:
-                boss.return_value = {"ok": True, "joined": False}
-                result = _run_player_economy(
-                    conn,
-                    uid,
-                    now=now,
-                    action_seq=8,
-                    next_action_at=now + 600,
-                )
+            result = _run_player_economy(
+                conn,
+                uid,
+                now=now,
+                action_seq=8,
+                next_action_at=now + 600,
+            )
         kwargs = planner.call_args.kwargs
         assert kwargs["allow_buildings"] is False
         assert kwargs["allow_research"] is False
@@ -144,7 +140,7 @@ def test_gc2621_personal_cooldown_finishes_due_without_enqueue(autoplay_v3_db):
         conn.close()
 
 
-def test_gc2621_inactive_token_world_boss_participation(autoplay_v3_db):
+def test_gc2621_world_boss_participation_uses_credible_force(autoplay_v3_db):
     from game.fleet import add_planet_ships, get_planet_ships
     from game.inactive_autoplay import _maybe_join_world_boss
     from game.world_boss import list_contributions, spawn_world_boss
@@ -157,7 +153,7 @@ def test_gc2621_inactive_token_world_boss_participation(autoplay_v3_db):
         add_planet_ships(
             int(player["planet_id"]),
             uid,
-            {"falcon_interceptor": 3},
+            {"falcon_interceptor": 30, "ironclad_frigate": 12},
             conn=conn,
         )
         before = get_planet_ships(int(player["planet_id"]), conn=conn)
@@ -172,11 +168,17 @@ def test_gc2621_inactive_token_world_boss_participation(autoplay_v3_db):
         assert spawned["ok"], spawned
         event_id = int(spawned["event"]["id"])
 
-        joined = _maybe_join_world_boss(conn, uid, now=time.time())
+        joined = _maybe_join_world_boss(
+            conn,
+            uid,
+            now=time.time(),
+            personality="aggressive",
+            fallback_planet_id=int(player["planet_id"]),
+        )
         assert joined["ok"] is True
         assert joined["joined"] is True
         assert int(joined["damage"]) > 0
-        assert sum(int(v) for v in joined["ships"].values()) == 1
+        assert sum(int(v) for v in joined["ships"].values()) >= 4
         assert get_planet_ships(int(player["planet_id"]), conn=conn) == before
 
         board = list_contributions(event_id, conn=conn, limit=20)
@@ -184,7 +186,13 @@ def test_gc2621_inactive_token_world_boss_participation(autoplay_v3_db):
         assert int(mine["waves"]) == 1
         assert int(mine["damage"]) > 0
 
-        again = _maybe_join_world_boss(conn, uid, now=time.time() + 301)
+        again = _maybe_join_world_boss(
+            conn,
+            uid,
+            now=time.time() + 301,
+            personality="aggressive",
+            fallback_planet_id=int(player["planet_id"]),
+        )
         assert again["joined"] is False
         board2 = list_contributions(event_id, conn=conn, limit=20)
         mine2 = next(row for row in board2 if int(row["player_id"]) == uid)
