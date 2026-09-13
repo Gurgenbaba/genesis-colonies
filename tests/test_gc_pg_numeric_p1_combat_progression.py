@@ -75,7 +75,7 @@ def test_world_boss_runtime_has_no_huge_hp_float_roundtrip():
     companions = (ROOT / "game" / "world_boss_companions.py").read_text(
         encoding="utf-8"
     )
-    autoplay = (ROOT / "game" / "inactive_autoplay.py").read_text(
+    autoplay_strategy = (ROOT / "game" / "living_universe_strategy.py").read_text(
         encoding="utf-8"
     )
 
@@ -93,8 +93,11 @@ def test_world_boss_runtime_has_no_huge_hp_float_roundtrip():
 
     assert "hp_phase_from_values(current_hp, max_hp)" in companions
     assert "float(current_hp) / float(max_hp)" not in companions
-    assert 'Decimal(str(INACTIVE_WORLD_BOSS_SAFE_HP_RATIO))' in autoplay
-    assert 'float(event.get("current_hp") or 0) / float(max_hp)' not in autoplay
+    assert (
+        "Decimal(current_hp) <= Decimal(max_hp) * WORLD_BOSS_SAFE_HP_RATIO"
+        in autoplay_strategy
+    )
+    assert 'float(event.get("current_hp") or 0) / float(max_hp)' not in autoplay_strategy
 
 
 @requires_postgres
