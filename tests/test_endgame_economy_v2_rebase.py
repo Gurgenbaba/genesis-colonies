@@ -114,10 +114,10 @@ def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
         }
     )
     code = (
-        "import json; "
+        "import inspect, json; "
         "from game.production_formula import ENDGAME_ECONOMY_MODE, endgame_economy_mode; "
         "from game.ranking_core import _sanitize_scores; "
-        f"print(json.dumps({{'requested': {mode!r}, 'constant': ENDGAME_ECONOMY_MODE, 'resolved': endgame_economy_mode(), 'scores': _sanitize_scores({payload!r})}}, sort_keys=True))"
+        f"print(json.dumps({{'requested': {mode!r}, 'constant': ENDGAME_ECONOMY_MODE, 'resolved': endgame_economy_mode(), 'scores': _sanitize_scores({payload!r}), 'source': inspect.getsource(_sanitize_scores)}}, sort_keys=True))"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
