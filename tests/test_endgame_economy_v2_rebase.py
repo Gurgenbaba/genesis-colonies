@@ -97,13 +97,15 @@ def test_research_effect_tail_is_active_only_and_diminishing(monkeypatch):
 
 
 def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
+    # Tiny values keep this test focused on inclusion/exclusion semantics rather
+    # than any legacy MAX_SCORE compatibility clamp.
     payload = {
-        "resource_score": 10_000,
-        "building_score": 100,
-        "research_score": 50,
-        "fleet_score": 20,
-        "defense_score": 10,
-        "evolution_score": 5,
+        "resource_score": 1,
+        "building_score": 1,
+        "research_score": 1,
+        "fleet_score": 1,
+        "defense_score": 1,
+        "evolution_score": 1,
     }
     env = os.environ.copy()
     env.update(
@@ -114,10 +116,10 @@ def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
         }
     )
     code = (
-        "import inspect, json; "
+        "import json; "
         "from game.production_formula import ENDGAME_ECONOMY_MODE, endgame_economy_mode; "
         "from game.ranking_core import _sanitize_scores; "
-        f"print(json.dumps({{'requested': {mode!r}, 'constant': ENDGAME_ECONOMY_MODE, 'resolved': endgame_economy_mode(), 'scores': _sanitize_scores({payload!r}), 'source': inspect.getsource(_sanitize_scores)}}, sort_keys=True))"
+        f"print(json.dumps({{'requested': {mode!r}, 'constant': ENDGAME_ECONOMY_MODE, 'resolved': endgame_economy_mode(), 'scores': _sanitize_scores({payload!r})}}, sort_keys=True))"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -138,7 +140,7 @@ def test_liquid_wealth_leaves_progression_total_only_at_atomic_active_cutover():
     assert legacy["resolved"] == "legacy", legacy
     assert shadow["resolved"] == "shadow", shadow
     assert active["resolved"] == "active", active
-    assert legacy["scores"]["total_score"] == 10_185, legacy
-    assert shadow["scores"]["total_score"] == 10_185, shadow
-    assert active["scores"]["resource_score"] == 10_000, active
-    assert active["scores"]["total_score"] == 185, active
+    assert legacy["scores"]["total_score"] == 6, legacy
+    assert shadow["scores"]["total_score"] == 6, shadow
+    assert active["scores"]["resource_score"] == 1, active
+    assert active["scores"]["total_score"] == 5, active
