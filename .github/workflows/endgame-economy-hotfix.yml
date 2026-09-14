@@ -8,6 +8,11 @@ on:
       - "game/effects/effect_resolver.py"
       - "game/mine_evolution/**"
       - "tests/test_endgame_economy_guardrail.py"
+      - "tests/test_production_formula.py"
+      - "tests/test_gc_big_number_runtime_production.py"
+      - "tests/test_gc_ferro_l388_001.py"
+      - "tests/test_gc_mando_storage_001.py"
+      - "tests/test_mine_evolution.py"
       - ".github/workflows/endgame-economy-hotfix.yml"
   push:
     branches: [main]
@@ -17,6 +22,11 @@ on:
       - "game/effects/effect_resolver.py"
       - "game/mine_evolution/**"
       - "tests/test_endgame_economy_guardrail.py"
+      - "tests/test_production_formula.py"
+      - "tests/test_gc_big_number_runtime_production.py"
+      - "tests/test_gc_ferro_l388_001.py"
+      - "tests/test_gc_mando_storage_001.py"
+      - "tests/test_mine_evolution.py"
       - ".github/workflows/endgame-economy-hotfix.yml"
 
 concurrency:
