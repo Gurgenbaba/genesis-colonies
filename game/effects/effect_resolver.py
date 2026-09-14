@@ -215,21 +215,21 @@ class EffectResolver:
 
     @staticmethod
     def metal_prod_bonus_pct(level: int) -> int:
-        from ..production_formula import MINING_TECH_PER_LEVEL
+        from ..production_formula import MINING_TECH_PER_LEVEL, research_effective_level
 
-        return int(round(MINING_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
+        return int(round(MINING_TECH_PER_LEVEL * research_effective_level(level) * 100))
 
     @staticmethod
     def crystal_prod_bonus_pct(level: int) -> int:
-        from ..production_formula import CRYSTAL_TECH_PER_LEVEL
+        from ..production_formula import CRYSTAL_TECH_PER_LEVEL, research_effective_level
 
-        return int(round(CRYSTAL_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
+        return int(round(CRYSTAL_TECH_PER_LEVEL * research_effective_level(level) * 100))
 
     @staticmethod
     def drone_prod_bonus_pct(level: int) -> int:
-        from ..production_formula import DRONE_TECH_PER_LEVEL
+        from ..production_formula import DRONE_TECH_PER_LEVEL, research_effective_level
 
-        return int(round(DRONE_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
+        return int(round(DRONE_TECH_PER_LEVEL * research_effective_level(level) * 100))
 
     @staticmethod
     def storage_bonus_pct(level: int) -> int:

@@ -509,8 +509,15 @@ def _mine_upgrade_cost_total_raw(building_type: str, target_level: int) -> float
 
 
 def mine_roi_anchor_hours(level: int) -> float:
-    """Log-interpolated ROI target between GC-821F anchor levels."""
-    return _log_interpolate_anchor_map(level, MINE_UPGRADE_ROI_TARGET_HOURS)
+    """Mine ROI target; V2 rises smoothly after the historical L120 anchor."""
+    lvl = max(1, int(level))
+    from .production_formula import ENDGAME_PRODUCTION_PIVOT_LEVEL, endgame_economy_mode
+
+    pivot = max(120, int(ENDGAME_PRODUCTION_PIVOT_LEVEL))
+    if endgame_economy_mode() == "active" and lvl > pivot:
+        pivot_hours = _log_interpolate_anchor_map(pivot, MINE_UPGRADE_ROI_TARGET_HOURS)
+        return float(pivot_hours) * ((float(lvl) / float(pivot)) ** 0.70)
+    return _log_interpolate_anchor_map(lvl, MINE_UPGRADE_ROI_TARGET_HOURS)
 
 
 def mine_roi_cost_multiplier(target_level: int) -> float:
