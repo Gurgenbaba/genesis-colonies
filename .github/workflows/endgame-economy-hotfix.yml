@@ -50,12 +50,16 @@ jobs:
         run: |
           python -m py_compile game/production_formula.py game/economy_balance.py game/effects/effect_resolver.py
           git diff --check
-      - name: Endgame economy focused regression
+      - name: Guardrail + canonical production regression
         run: |
           python -m pytest -q --tb=line \
             tests/test_endgame_economy_guardrail.py \
-            tests/test_production_formula.py \
-            tests/test_gc_big_number_runtime_production.py \
-            tests/test_gc_ferro_l388_001.py \
-            tests/test_gc_mando_storage_001.py \
-            tests/test_mine_evolution.py
+            tests/test_production_formula.py
+      - name: Big-number production regression (isolated DB lifecycle)
+        run: python -m pytest -q --tb=line tests/test_gc_big_number_runtime_production.py
+      - name: Mando/high-level economy regression (isolated DB lifecycle)
+        run: |
+          python -m pytest -q --tb=line tests/test_gc_ferro_l388_001.py
+          python -m pytest -q --tb=line tests/test_gc_mando_storage_001.py
+      - name: Mine evolution regression (isolated DB lifecycle)
+        run: python -m pytest -q --tb=line tests/test_mine_evolution.py
