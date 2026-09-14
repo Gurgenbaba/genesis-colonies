@@ -51,17 +51,19 @@ jobs:
             game/endgame_economy_shadow.py \
             game/ranking_core.py \
             game/effects/effect_resolver.py \
-            scripts/endgame_economy_shadow_report.py
+            scripts/endgame_economy_shadow_report.py \
+            scripts/endgame_economy_rebuild_scores.py
           git diff --check
-      - name: Endgame V2 regression
-        run: |
-          python -m pytest -q --tb=line \
-            tests/test_endgame_economy_guardrail.py \
-            tests/test_endgame_economy_v2_rebase.py \
-            tests/test_production_formula.py \
-            tests/test_gc_score_b_ranking.py \
-            tests/test_noob_protection.py \
-            tests/test_commander_classes.py
+      - name: Guardrail regression
+        run: python -m pytest -q --tb=line tests/test_endgame_economy_guardrail.py
+      - name: Coordinated V2 regression
+        run: python -m pytest -q --tb=line tests/test_endgame_economy_v2_rebase.py
+      - name: Production regression
+        run: python -m pytest -q --tb=line tests/test_production_formula.py
+      - name: Ranking regression
+        run: python -m pytest -q --tb=line tests/test_gc_score_b_ranking.py
+      - name: PvP protection regression
+        run: python -m pytest -q --tb=line tests/test_noob_protection.py
       - name: Commit generated source patch
         run: |
           git config user.name "github-actions[bot]"
