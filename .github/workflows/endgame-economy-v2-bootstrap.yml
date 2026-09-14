@@ -54,6 +54,14 @@ jobs:
             scripts/endgame_economy_shadow_report.py \
             scripts/endgame_economy_rebuild_scores.py
           git diff --check
+      - name: Materialize generated source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION game/production_formula.py game/economy_balance.py game/ranking_core.py game/effects/effect_resolver.py
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: wire coordinated endgame economy v2 [v2-generated]"
+          git push origin HEAD:feature/endgame-economy-v2-rebase
       - name: Guardrail regression
         run: python -m pytest -q --tb=line tests/test_endgame_economy_guardrail.py
       - name: Coordinated V2 regression
@@ -64,11 +72,3 @@ jobs:
         run: python -m pytest -q --tb=line tests/test_gc_score_b_ranking.py
       - name: PvP protection regression
         run: python -m pytest -q --tb=line tests/test_noob_protection.py
-      - name: Commit generated source patch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSION game/production_formula.py game/economy_balance.py game/ranking_core.py game/effects/effect_resolver.py
-          git diff --cached --quiet && exit 0
-          git commit -m "feat: wire coordinated endgame economy v2 [v2-generated]"
-          git push origin HEAD:feature/endgame-economy-v2-rebase
