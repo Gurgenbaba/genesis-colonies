@@ -115,8 +115,9 @@ def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
     )
     code = (
         "import json; "
+        "from game.production_formula import ENDGAME_ECONOMY_MODE, endgame_economy_mode; "
         "from game.ranking_core import _sanitize_scores; "
-        f"print(json.dumps(_sanitize_scores({payload!r}), sort_keys=True))"
+        f"print(json.dumps({{'requested': {mode!r}, 'constant': ENDGAME_ECONOMY_MODE, 'resolved': endgame_economy_mode(), 'scores': _sanitize_scores({payload!r})}}, sort_keys=True))"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -134,7 +135,10 @@ def test_liquid_wealth_leaves_progression_total_only_at_atomic_active_cutover():
     legacy = _sanitize_total_in_cold_start_mode("legacy")
     shadow = _sanitize_total_in_cold_start_mode("shadow")
     active = _sanitize_total_in_cold_start_mode("active")
-    assert legacy["total_score"] == 10_185
-    assert shadow["total_score"] == 10_185
-    assert active["resource_score"] == 10_000
-    assert active["total_score"] == 185
+    assert legacy["resolved"] == "legacy", legacy
+    assert shadow["resolved"] == "shadow", shadow
+    assert active["resolved"] == "active", active
+    assert legacy["scores"]["total_score"] == 10_185, legacy
+    assert shadow["scores"]["total_score"] == 10_185, shadow
+    assert active["scores"]["resource_score"] == 10_000, active
+    assert active["scores"]["total_score"] == 185, active
