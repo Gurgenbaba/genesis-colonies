@@ -46,6 +46,9 @@ def test_decimal_production_crosses_ieee754_range_without_infinity():
 
 
 def test_authoritative_integer_output_uses_decimal_curve():
+    # Keep this arithmetic-only contract independent from the application DB.
+    # EffectResolver otherwise lazily probes game_settings, which makes the test
+    # pass only when another test has happened to initialize a schema first.
     resolver = EffectResolver(
         {
             "metal_mine": FLOAT_OVERFLOW_LEVEL,
@@ -55,6 +58,7 @@ def test_authoritative_integer_output_uses_decimal_curve():
             "metal_storage": 7_000,
         },
         {},
+        settings={},
     )
     output = resolver.get_building_production_per_hour(1.0)
     assert isinstance(output["metal_mine"], int)
