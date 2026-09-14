@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -16,7 +19,6 @@ from game.progression_valuation import (
     reference_mine_output_v2,
     research_progression_resources_v2,
 )
-from game.ranking_core import _sanitize_scores
 from game.research import cumulative_research_resource_totals
 
 
@@ -94,7 +96,7 @@ def test_research_effect_tail_is_active_only_and_diminishing(monkeypatch):
     assert pf.research_effective_level(1000) > pf.research_effective_level(650)
 
 
-def test_liquid_wealth_leaves_progression_total_only_at_atomic_active_cutover(monkeypatch):
+def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
     payload = {
         "resource_score": 10_000,
         "building_score": 100,
@@ -103,10 +105,36 @@ def test_liquid_wealth_leaves_progression_total_only_at_atomic_active_cutover(mo
         "defense_score": 10,
         "evolution_score": 5,
     }
-    assert _sanitize_scores(payload)["total_score"] == 10_185
-    monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "shadow")
-    assert _sanitize_scores(payload)["total_score"] == 10_185
-    monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
-    clean = _sanitize_scores(payload)
-    assert clean["resource_score"] == 10_000
-    assert clean["total_score"] == 185
+    env = os.environ.copy()
+    env.update(
+        {
+            "GC_ENDGAME_ECONOMY_MODE": str(mode),
+            "GC_ENDGAME_PRODUCTION_PIVOT": "120",
+            "GC_ENDGAME_PRODUCTION_TAIL_POWER": "2",
+        }
+    )
+    code = (
+        "import json; "
+        "from game.ranking_core import _sanitize_scores; "
+        f"print(json.dumps(_sanitize_scores({payload!r}), sort_keys=True))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_liquid_wealth_leaves_progression_total_only_at_atomic_active_cutover():
+    legacy = _sanitize_total_in_cold_start_mode("legacy")
+    shadow = _sanitize_total_in_cold_start_mode("shadow")
+    active = _sanitize_total_in_cold_start_mode("active")
+    assert legacy["total_score"] == 10_185
+    assert shadow["total_score"] == 10_185
+    assert active["resource_score"] == 10_000
+    assert active["total_score"] == 185
