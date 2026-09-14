@@ -86,7 +86,6 @@ def _rank_map(rows: List[Dict[str, Any]], prefix: str) -> Dict[int, int]:
 
 
 def _corridor_allowed(attacker_score: int, defender_score: int, factor: int) -> bool:
-    """Score-only portion of fleet.check_noob_protection (inactive bypass excluded)."""
     atk = max(0, int(attacker_score))
     deff = max(0, int(defender_score))
     fac = max(1, int(factor))
@@ -95,6 +94,17 @@ def _corridor_allowed(attacker_score: int, defender_score: int, factor: int) -> 
     min_def = (atk + fac - 1) // fac
     max_def = atk * fac
     return min_def <= deff <= max_def
+
+
+def _noob_protection_allowed(
+    attacker_score: int,
+    defender_score: int,
+    factor: int,
+    *,
+    defender_inactive: bool,
+) -> bool:
+    # Canonical gameplay exception: inactive defenders are always attackable.
+    return bool(defender_inactive) or _corridor_allowed(attacker_score, defender_score, factor)
 
 
 def _commander_milestone_delta(player_id: int, old_score: int, new_score: int, *, conn) -> Dict[str, Any]:
@@ -132,17 +142,23 @@ def _commander_milestone_delta(player_id: int, old_score: int, new_score: int, *
 
 def build_shadow_ranking_report(*, conn, noob_factor: int = 5, max_pair_examples: int = 250) -> Dict[str, Any]:
     """Compare current ranking with V2 without changing any live score row."""
-    from .ranking_core import compute_player_scores
+    from .ranking_core import compute_player_scores, is_player_id_inactive
 
     cur = conn.cursor()
     cur.execute("SELECT id FROM players ORDER BY id ASC;")
     player_ids = [int(row["id"]) for row in (cur.fetchall() or [])]
+    inactive_by_player = {
+        int(player_id): bool(is_player_id_inactive(int(player_id), conn=conn))
+        for player_id in player_ids
+    }
+
     rows: List[Dict[str, Any]] = []
     for player_id in player_ids:
         old = compute_player_scores(player_id, conn=conn)
         new = compute_player_v2_scores(player_id, conn=conn)
         row: Dict[str, Any] = {
             "player_id": player_id,
+            "inactive": bool(inactive_by_player[player_id]),
             "old_total_score": int(old["total_score"]),
             "new_total_score": int(new["total_score"]),
             "old_resource_score": int(old["resource_score"]),
@@ -179,11 +195,18 @@ def build_shadow_ranking_report(*, conn, noob_factor: int = 5, max_pair_examples
         for defender in rows:
             if attacker["player_id"] == defender["player_id"]:
                 continue
-            old_allowed = _corridor_allowed(
-                attacker["old_total_score"], defender["old_total_score"], fac
+            defender_inactive = bool(defender["inactive"])
+            old_allowed = _noob_protection_allowed(
+                attacker["old_total_score"],
+                defender["old_total_score"],
+                fac,
+                defender_inactive=defender_inactive,
             )
-            new_allowed = _corridor_allowed(
-                attacker["new_total_score"], defender["new_total_score"], fac
+            new_allowed = _noob_protection_allowed(
+                attacker["new_total_score"],
+                defender["new_total_score"],
+                fac,
+                defender_inactive=defender_inactive,
             )
             if old_allowed == new_allowed:
                 continue
@@ -193,6 +216,7 @@ def build_shadow_ranking_report(*, conn, noob_factor: int = 5, max_pair_examples
                     {
                         "attacker_id": int(attacker["player_id"]),
                         "defender_id": int(defender["player_id"]),
+                        "defender_inactive": defender_inactive,
                         "old_allowed": old_allowed,
                         "new_allowed": new_allowed,
                         "old_attacker_score": int(attacker["old_total_score"]),
@@ -207,10 +231,13 @@ def build_shadow_ranking_report(*, conn, noob_factor: int = 5, max_pair_examples
         "player_count": len(rows),
         "noob_factor": fac,
         "players": rows,
+        "pvp_pairing_changed_count": changed_count,
+        "pvp_pairing_changed_examples": changed_pairs,
+        # Backward-compatible aliases for early GC-ENDGAME-ECO-REBASE-002 tooling.
         "pvp_score_corridor_changed_count": changed_count,
         "pvp_score_corridor_changed_examples": changed_pairs,
         "notes": [
-            "PvP comparison covers the score corridor only; inactive-defender bypass remains unchanged.",
+            "PvP comparison mirrors the 5x score corridor and the inactive-defender bypass.",
             "Claimed Commander SP milestones are reported separately and are never revoked by V2.",
             "No player_scores rows are mutated by this report.",
         ],
