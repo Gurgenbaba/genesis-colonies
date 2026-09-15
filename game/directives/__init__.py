@@ -16,7 +16,15 @@ from .generator import (
     weekly_expires_at,
     weekly_period_key,
 )
-from .progress import apply_directive_events
+from . import progress as _progress
+from .big_number_runtime import install_directive_progress_big_number_guard
+
+# Endgame upgrades can spend more than signed i64. Keep the optional
+# directive_progress audit/idempotency delta DB-safe without changing the
+# authoritative gameplay event amount or objective completion semantics.
+install_directive_progress_big_number_guard(_progress)
+apply_directive_events = _progress.apply_directive_events
+
 from .rewards import claim_all_directive_rewards, claim_directive_reward
 from .scaling import compute_scaled_target, scale_profile_config
 from .balancing import compute_directive_target, directive_hard_cap, is_directive_target_stale
