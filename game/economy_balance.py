@@ -17,6 +17,7 @@ from .production_formula import (
     LEVEL_GROWTH,
     ProductionContext,
     calculate_resource_output,
+    legacy_mine_output_decimal,
     mine_output,
     mine_output_decimal,
     normalize_resource_type,
@@ -567,13 +568,17 @@ def storage_production_buffer_capacity(production_per_hour: Any, storage_level: 
 
 
 def storage_capacity_at_depot_level(storage_level: int) -> int:
-    """Legacy/reference depot floor; Storage V2 live production is layered by EffectResolver."""
+    """Compatibility depot floor that must not shrink when the live production curve changes."""
     lvl = max(0, int(storage_level))
     if lvl <= 0:
         return STORAGE_BASE_CAPACITY
     reference_mine_level = lvl * int(STORAGE_REFERENCE_MINE_LEVEL_FACTOR)
     reference_hours = storage_reference_hours_at_depot_level(lvl)
-    reference_buffer_cap = mine_output_decimal(
+    # Storage capacity is a persisted progression promise.  Re-anchoring it to
+    # an active production cutover would retroactively shrink already-built
+    # depots and freeze players above the new cap.  Keep the historical Ferdi
+    # curve as the continuity floor; live production remains q4 independently.
+    reference_buffer_cap = legacy_mine_output_decimal(
         STORAGE_REFERENCE_RESOURCE,
         reference_mine_level,
     ) * reference_hours
