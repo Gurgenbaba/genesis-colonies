@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guarded one-shot ranking rebuild for the Endgame Economy V2 activation.
 
-Run only after the service process itself is configured with active / pivot 120 / q2.
+Run only after the service process itself is configured with active / pivot 120 / q4.
 The script deliberately refuses every other configuration.
 """
 
@@ -22,9 +22,9 @@ def main() -> int:
     mode = endgame_economy_mode()
     pivot = int(ENDGAME_PRODUCTION_PIVOT_LEVEL)
     power = int(ENDGAME_PRODUCTION_TAIL_POWER)
-    if (mode, pivot, power) != ("active", 120, 2):
+    if (mode, pivot, power) != ("active", 120, 4):
         raise SystemExit(
-            f"refusing V2 score rebuild: expected active/pivot=120/q=2, got "
+            f"refusing V2 score rebuild: expected active/pivot=120/q=4, got "
             f"{mode}/pivot={pivot}/q={power}"
         )
 
