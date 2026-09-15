@@ -167,12 +167,14 @@ def test_caller_owned_poll_lock_recovers_without_full_rollback(monkeypatch):
         lambda conn=None, now=None: True,
     )
 
-    def _finish(uid, conn, **kwargs):
+    def _finish(*, player_id=None, conn=None, **kwargs):
+        assert int(player_id) == 7
+        assert kwargs.get("include_fleet") is False
         conn._fail_on_finish = True
         conn.execute("SELECT FINISH_INJECT")
         return {"derived_sync_count": 0}
 
-    monkeypatch.setattr("game.queue_engine.finish_player_due_work", _finish)
+    monkeypatch.setattr("game.queue_engine.finish_due_work", _finish)
     monkeypatch.setattr("game.db.begin_write_transaction", begin_write_transaction)
     monkeypatch.setattr("game.db.in_transaction", lambda c: True)
 
