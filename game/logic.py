@@ -184,7 +184,7 @@ def read_player_live_state_for_poll(
     """
     from .db import begin_write_transaction, in_transaction
     from .models import db as _db, load_player, rollback
-    from .queue_engine import finish_player_due_work
+    from .queue_engine import finish_due_work
     from .queue_poll import (
         player_fleet_is_dirty,
         record_poll_queue_finish,
@@ -283,13 +283,16 @@ def read_player_live_state_for_poll(
                     conn.execute(f"SAVEPOINT {poll_sp}")
                 if should_finish_queues:
                     finish_t0 = time.perf_counter()
-                    # Keep update_scores=True: applies mark_player_score_dirty only.
-                    finish_result = finish_player_due_work(
-                        uid,
-                        conn,
+                    # GC-FLEET-PG-ABORT-002: request queue finish must never run
+                    # fleet arrivals on the caller-owned transaction. Fleet has a
+                    # dedicated short-TX path above plus the maintenance worker.
+                    finish_result = finish_due_work(
+                        player_id=uid,
+                        conn=conn,
                         source="game_state",
                         update_scores=True,
                         recalc_ranks=False,
+                        include_fleet=False,
                     )
                     finish_ms = (time.perf_counter() - finish_t0) * 1000.0
                     try:
@@ -432,7 +435,7 @@ def refresh_player_live_state(
     """
     from .db import begin_write_transaction, commit, in_transaction
     from .models import db as _db, get_homeworld, load_player
-    from .queue_engine import finish_player_due_work
+    from .queue_engine import finish_due_work
 
     uid = int(player_id)
     own_conn = conn is None
@@ -444,7 +447,7 @@ def refresh_player_live_state(
     try:
         from .planet_evolution.repository import get_context_planet
         from .db import get_db_backend, is_db_lock_error, recover_aborted_transaction
-        from .queue_engine import finish_player_due_work, _run_optional_side_effect
+        from .queue_engine import finish_due_work, _run_optional_side_effect
 
         player = load_player(uid, conn=conn)
         if not player:
@@ -505,12 +508,17 @@ def refresh_player_live_state(
             conn.execute(f"SAVEPOINT {refresh_sp}")
 
         try:
-            finish_result = finish_player_due_work(
-                uid,
-                conn,
+            # GC-FLEET-PG-ABORT-002: SSR/page refresh owns a broader transaction
+            # (queues + derived state + resource sync). Fleet arrival handlers must
+            # stay on their dedicated short-TX owner so one movement can never poison
+            # the page transaction and turn a successful login redirect into HTTP 500.
+            finish_result = finish_due_work(
+                player_id=uid,
+                conn=conn,
                 source=str(finish_source or "live_state"),
                 update_scores=True,
                 recalc_ranks=bool(recalc_ranks),
+                include_fleet=False,
             )
         except Exception as finish_exc:
             if isinstance(finish_exc, sqlite3.OperationalError) or is_db_lock_error(
@@ -747,7 +755,6 @@ def apply_resource_delta_unbounded(
 # ============================================================================ #
 # BUILD QUEUE
 # ============================================================================ #
-
 def get_build_queue_status(
     user_id: int,
     *,
@@ -849,7 +856,6 @@ def cancel_build(player: dict, job_id: int) -> Tuple[bool, str, Any]:
 # ============================================================================ #
 # RESEARCH
 # ============================================================================ #
-
 def queue_research(player: dict, tech_key: str, *, queue_mode: str = "single"):
     """
     Thin-Wrapper um game.research.queue_research.
@@ -916,7 +922,6 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
 # ============================================================================ #
 # TECHTREE
 # ============================================================================ #
-
 def get_techtree_data(
     buildings: Optional[Dict[str, int]] = None,
     research: Optional[Dict[str, int]] = None,
