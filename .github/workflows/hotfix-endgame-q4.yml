@@ -1,0 +1,187 @@
+name: Apply Endgame Q4 Hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/endgame-q4-roi045
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply coordinated q4 + ROI 0.45 candidate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, *, count: int = 1) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              found = text.count(old)
+              if found != count:
+                  raise SystemExit(f"{path}: expected {count} occurrence(s), found {found}: {old!r}")
+              p.write_text(text.replace(old, new), encoding="utf-8")
+
+          # Canonical production candidate: same L120 pivot, stronger polynomial tail.
+          replace(
+              "game/production_formula.py",
+              'ENDGAME_PRODUCTION_TAIL_POWER = _env_int(\n    "GC_ENDGAME_PRODUCTION_TAIL_POWER",\n    2,\n    minimum=1,\n    maximum=8,\n)',
+              'ENDGAME_PRODUCTION_TAIL_POWER = _env_int(\n    "GC_ENDGAME_PRODUCTION_TAIL_POWER",\n    4,\n    minimum=1,\n    maximum=8,\n)',
+          )
+
+          # Live mine pricing: production delta × smoother endgame ROI horizon.
+          replace(
+              "game/economy_balance.py",
+              'return float(pivot_hours) * ((float(lvl) / float(pivot)) ** 0.70)',
+              'return float(pivot_hours) * ((float(lvl) / float(pivot)) ** 0.45)',
+          )
+
+          # Frozen progression/ranking valuation must match the candidate atomically.
+          replace(
+              "game/progression_valuation.py",
+              'mine levels > 120 use the C1 q=2 production continuation and the V2 reference',
+              'mine levels > 120 use the C1 q=4 production continuation and the V2 reference',
+          )
+          replace("game/progression_valuation.py", 'V2_TAIL_POWER = 2', 'V2_TAIL_POWER = 4')
+          replace(
+              "game/progression_valuation.py",
+              'V2_HORIZON_EXPONENT = Decimal("0.70")',
+              'V2_HORIZON_EXPONENT = Decimal("0.45")',
+          )
+          replace(
+              "game/progression_valuation.py",
+              'return Decimal(str(2000.0 * (ratio ** 0.70)))',
+              'return Decimal(str(float(V2_HORIZON_AT_PIVOT_HOURS) * (ratio ** float(V2_HORIZON_EXPONENT))))',
+          )
+
+          # Guarded one-shot score rebuild must refuse stale q2 activations.
+          replace(
+              "scripts/endgame_economy_rebuild_scores.py",
+              'configured with active / pivot 120 / q2.',
+              'configured with active / pivot 120 / q4.',
+          )
+          replace(
+              "scripts/endgame_economy_rebuild_scores.py",
+              'if (mode, pivot, power) != ("active", 120, 2):',
+              'if (mode, pivot, power) != ("active", 120, 4):',
+          )
+          replace(
+              "scripts/endgame_economy_rebuild_scores.py",
+              'expected active/pivot=120/q=2, got',
+              'expected active/pivot=120/q=4, got',
+          )
+
+          # Regression suite: lock the approved q4 shape, ROI horizon, and score consequence.
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              'monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 2)',
+              'monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 4)',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              'def test_final_candidate_defaults_to_l120_q2():',
+              'def test_final_candidate_defaults_to_l120_q4():',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              'assert pf.ENDGAME_PRODUCTION_TAIL_POWER == 2',
+              'assert pf.ENDGAME_PRODUCTION_TAIL_POWER == 4',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              '''    expected = {\n        120: 1.0,\n        150: 4.88,\n        200: 17.86,\n        300: 68.21,\n        500: 266.5,\n        650: 500.6,\n        1000: 1331.0,\n    }''',
+              '''    expected = {\n        120: 1.0,\n        150: 6.634,\n        200: 46.624,\n        300: 459.314,\n        500: 5629.874,\n        650: 18653.520,\n        1000: 123434.874,\n    }''',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              'expected_days = {120: 83.33, 200: 119, 300: 158, 650: 272, 1000: 368}',
+              'expected_days = {120: 83.33, 200: 104.87, 300: 125.86, 400: 143.26, 500: 158.39, 650: 178.24, 1000: 216.37}',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              'def test_metal_mine_l650_progression_value_is_about_203_billion():\n    value = building_progression_value_v2("metal_mine", 650)\n    assert value == pytest.approx(203_000_000_000, rel=0.02)',
+              'def test_metal_mine_l650_progression_value_is_about_5_77_trillion():\n    value = building_progression_value_v2("metal_mine", 650)\n    assert value == pytest.approx(5_770_000_000_000, rel=0.02)',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              'assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(272, rel=0.035)\n    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(368, rel=0.035)',
+              'assert mine_roi_anchor_hours(500) / 24.0 == pytest.approx(158.39, rel=0.035)\n    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(178.24, rel=0.035)\n    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(216.37, rel=0.035)',
+          )
+          replace(
+              "tests/test_endgame_economy_v2_rebase.py",
+              '"GC_ENDGAME_PRODUCTION_TAIL_POWER": "2",',
+              '"GC_ENDGAME_PRODUCTION_TAIL_POWER": "4",',
+          )
+
+          # Rebase master doc: make the candidate and cutover instructions internally consistent.
+          p = Path("docs/GC-ENDGAME-ECO-REBASE-002.md")
+          text = p.read_text(encoding="utf-8")
+          replacements = {
+              'uses pivot **L120** and tail power **q=2**.': 'uses pivot **L120** and tail power **q=4**.',
+              'f_v2(P+x) = f(P) × (1 + s×x/2)^2': 'f_v2(P+x) = f(P) × (1 + s×x/4)^4',
+              '| 150 | 4.88× |': '| 150 | 6.63× |',
+              '| 200 | 17.86× |': '| 200 | 46.62× |',
+              '| 300 | 68.21× |': '| 300 | 459.31× |',
+              '| 500 | 266.5× |': '| 500 | 5,629.87× |',
+              '| 650 | 500.6× |': '| 650 | 18,653.52× |',
+              '| 1000 | 1331× |': '| 1000 | 123,434.87× |',
+              'H(L) = 2000h × (L / 120)^0.70': 'H(L) = 2000h × (L / 120)^0.45',
+              '| 200 | ~2,860 | 119.2 |': '| 200 | ~2,517 | 104.9 |',
+              '| 300 | ~3,798 | 158.3 |': '| 300 | ~3,021 | 125.9 |',
+              '| 650 | ~6,526 | 271.9 |': '| 400 | ~3,438 | 143.3 |\n| 500 | ~3,801 | 158.4 |\n| 650 | ~4,278 | 178.2 |',
+              '| 1000 | ~8,823 | 367.6 |': '| 1000 | ~5,193 | 216.4 |',
+              'Reference check: one Ferronit Mine L650 is approximately **203 billion building\npoints**': 'Reference check: one Ferronit Mine L650 is approximately **5.77 trillion building\npoints**',
+              'pivot `120`, q=`2`.': 'pivot `120`, q=`4`.',
+              'pivot `120`, q=`2`.': 'pivot `120`, q=`4`.',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"docs/GC-ENDGAME-ECO-REBASE-002.md missing expected text: {old!r}")
+              text = text.replace(old, new)
+          p.write_text(text, encoding="utf-8")
+
+          # Earlier guardrail doc: sync the runtime defaults to the rebase candidate.
+          replace(
+              "docs/GC-ENDGAME-ECO-HOTFIX-001.md",
+              '- `GC_ENDGAME_PRODUCTION_PIVOT`: default `650`, hard-clamped to `120..100000`',
+              '- `GC_ENDGAME_PRODUCTION_PIVOT`: default `120`, hard-clamped to `120..100000`',
+          )
+          replace(
+              "docs/GC-ENDGAME-ECO-HOTFIX-001.md",
+              '- `GC_ENDGAME_PRODUCTION_TAIL_POWER`: default `2`, hard-clamped to `1..8`',
+              '- `GC_ENDGAME_PRODUCTION_TAIL_POWER`: default `4`, hard-clamped to `1..8`',
+          )
+
+          # Release bump for the hotfix candidate.
+          version = Path("VERSION")
+          if version.read_text(encoding="utf-8").strip() != "0.5.9.171":
+              raise SystemExit("VERSION moved; refusing blind hotfix")
+          version.write_text("0.5.9.172\n", encoding="utf-8")
+
+          # This bootstrap workflow must not remain in the final tree.
+          Path(".github/workflows/hotfix-endgame-q4.yml").unlink()
+          PY
+
+      - name: Sanity check hotfix diff
+        shell: bash
+        run: |
+          python -m compileall -q game scripts tests/test_endgame_economy_v2_rebase.py
+          git diff --check
+          git diff -- game/production_formula.py game/economy_balance.py game/progression_valuation.py scripts/endgame_economy_rebuild_scores.py tests/test_endgame_economy_v2_rebase.py docs/GC-ENDGAME-ECO-REBASE-002.md docs/GC-ENDGAME-ECO-HOTFIX-001.md VERSION
+
+      - name: Commit hotfix
+        shell: bash
+        run: |
+          git config user.name "Genesis Hotfix Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: tune endgame shadow candidate to q4 ROI 0.45"
+          git push origin HEAD:hotfix/endgame-q4-roi045
