@@ -18,8 +18,10 @@ watchPatterns = [
 ]
 
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 60
+# Cheap liveness is the deploy gate; deep readiness stays available at /health.
+# Startup can legitimately spend >60s on migrations/catalog/bootstrap work in production.
+healthcheckPath = "/healthz"
+healthcheckTimeout = 180
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 # Migrations run automatically in scripts/docker-entrypoint.sh (main container + /data volume).
