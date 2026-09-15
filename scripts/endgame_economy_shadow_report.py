@@ -5,7 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+# This CLI is intentionally invoked directly by Railway before the app starts.
+# Direct file execution puts ``scripts/`` on sys.path, not the repository root,
+# so bootstrap the root before importing the canonical ``game`` package.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from game.db import db
 from game.endgame_economy_shadow import build_shadow_ranking_report
