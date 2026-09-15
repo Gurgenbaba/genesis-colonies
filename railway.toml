@@ -1,5 +1,6 @@
 # Railway deploy config — https://docs.railway.com/reference/config-as-code
 # GC-DEPLOY-20260827: redeploy after Galaxy action-feedback hardening and CI stabilization.
+# GC-DEPLOY-20260915: force latest-main rebuild after Endgame Economy V2 hotfix chain.
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
