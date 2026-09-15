@@ -99,7 +99,7 @@ def _normalize_endgame_mode(raw: Any) -> str:
 ENDGAME_ECONOMY_MODE = _normalize_endgame_mode(os.environ.get("GC_ENDGAME_ECONOMY_MODE", "legacy"))
 ENDGAME_PRODUCTION_PIVOT_LEVEL = _env_int(
     "GC_ENDGAME_PRODUCTION_PIVOT",
-    650,
+    120,
     minimum=120,
     maximum=100_000,
 )
@@ -122,6 +122,29 @@ _ENDGAME_SHADOW_SEEN: set[tuple[Any, Any, str, int]] = set()
 def endgame_economy_mode() -> str:
     """Return the process-local rollout mode: legacy, shadow, or active."""
     return _normalize_endgame_mode(ENDGAME_ECONOMY_MODE)
+
+
+ENDGAME_RESEARCH_PIVOT_LEVEL = 120
+ENDGAME_RESEARCH_TAIL_SCALE = 120
+
+
+def research_effective_level(level: int, *, force_v2: Optional[bool] = None) -> float:
+    """Effective production-research level with a C1 diminishing tail after L120.
+
+    Legacy and shadow modes intentionally preserve the historical linear effect.
+    Active mode keeps levels <=120 byte-for-byte equivalent, then continues as
+    ``120 + 120*ln(1 + (L-120)/120)``: monotone, unbounded, but diminishing.
+    """
+    lvl = max(0, int(level or 0))
+    use_v2 = endgame_economy_mode() == "active" if force_v2 is None else bool(force_v2)
+    if not use_v2 or lvl <= ENDGAME_RESEARCH_PIVOT_LEVEL:
+        return float(lvl)
+    pivot = Decimal(ENDGAME_RESEARCH_PIVOT_LEVEL)
+    with localcontext() as ctx:
+        ctx.prec = max(96, len(str(lvl)) + 64)
+        ratio = Decimal(lvl - ENDGAME_RESEARCH_PIVOT_LEVEL) / pivot
+        effective = pivot + Decimal(ENDGAME_RESEARCH_TAIL_SCALE) * (Decimal(1) + ratio).ln()
+        return float(effective)
 
 
 def _lvl(levels: Optional[Mapping[str, Any]], key: str) -> int:
@@ -332,9 +355,9 @@ def temperature_modifier_for(resource_type: str, temperature_mid_c: Optional[flo
 
 def research_modifier_for(resource_type: str, research: Optional[Mapping[str, Any]]) -> float:
     key = _normalize_resource_type(resource_type)
-    mining = _lvl(research, "mining_tech")
-    crystal = _lvl(research, "crystal_tech")
-    drone = _lvl(research, "drone_tech")
+    mining = research_effective_level(_lvl(research, "mining_tech"))
+    crystal = research_effective_level(_lvl(research, "crystal_tech"))
+    drone = research_effective_level(_lvl(research, "drone_tech"))
     if key == "metal":
         return (1.0 + MINING_TECH_PER_LEVEL * mining) * (1.0 + DRONE_TECH_PER_LEVEL * drone)
     if key == "crystal":

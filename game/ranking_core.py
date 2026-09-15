@@ -68,7 +68,12 @@ def _sanitize_scores(scores: Dict[str, Any]) -> Dict[str, int]:
     combat = _safe_int(
         scores.get("combat_score", scores.get("score_combat", compute_combat_score(fleet, defense)))
     )
-    total = _safe_int(resources + building + research + fleet + defense + evolution)
+    from .production_formula import endgame_economy_mode
+
+    if endgame_economy_mode() == "active":
+        total = _safe_int(building + research + fleet + defense + evolution)
+    else:
+        total = _safe_int(resources + building + research + fleet + defense + evolution)
     destroyed_raw = _safe_int(scores.get("destroyed_raw", scores.get("score_destroyed_raw", 0)))
 
     return {
@@ -154,6 +159,8 @@ def _compute_building_score(player_id: int, conn) -> int:
     from .buildings import BUILDING_ORDER
     from .economy_balance import cumulative_upgrade_resource_totals
     from .models import get_planet_buildings, get_planets_by_player
+    from .production_formula import endgame_economy_mode
+    from .progression_valuation import building_progression_resources_v2
     from .resource_score import score_from_cost_dict
 
     total_metal = 0
@@ -165,10 +172,16 @@ def _compute_building_score(player_id: int, conn) -> int:
             level = int(buildings.get(key, 0) or 0)
             if level <= 0:
                 continue
-            totals = cumulative_upgrade_resource_totals(key, level)
-            total_metal += int(totals.get("metal") or 0)
-            total_crystal += int(totals.get("crystal") or 0)
-            total_fuel += int(totals.get("fuel_cells") or 0)
+            if endgame_economy_mode() == "active":
+                m, c, f = building_progression_resources_v2(str(key), level)
+                total_metal += int(m)
+                total_crystal += int(c)
+                total_fuel += int(f)
+            else:
+                totals = cumulative_upgrade_resource_totals(key, level)
+                total_metal += int(totals.get("metal") or 0)
+                total_crystal += int(totals.get("crystal") or 0)
+                total_fuel += int(totals.get("fuel_cells") or 0)
     return score_from_cost_dict(
         {"metal": total_metal, "crystal": total_crystal, "fuel_cells": total_fuel}
     )
@@ -176,6 +189,8 @@ def _compute_building_score(player_id: int, conn) -> int:
 
 def _compute_research_score(player_id: int, conn) -> int:
     from .models import get_research_levels
+    from .production_formula import endgame_economy_mode
+    from .progression_valuation import research_progression_resources_v2
     from .research import RESEARCH_TECHS, cumulative_research_resource_totals
     from .resource_score import score_from_cost_dict
 
@@ -187,10 +202,16 @@ def _compute_research_score(player_id: int, conn) -> int:
         level = int(levels.get(tech_key, 0) or 0)
         if level <= 0:
             continue
-        totals = cumulative_research_resource_totals(tech_key, level)
-        total_metal += int(totals.get("metal") or 0)
-        total_crystal += int(totals.get("crystal") or 0)
-        total_fuel += int(totals.get("fuel_cells") or 0)
+        if endgame_economy_mode() == "active":
+            m, c, f = research_progression_resources_v2(str(tech_key), level)
+            total_metal += int(m)
+            total_crystal += int(c)
+            total_fuel += int(f)
+        else:
+            totals = cumulative_research_resource_totals(tech_key, level)
+            total_metal += int(totals.get("metal") or 0)
+            total_crystal += int(totals.get("crystal") or 0)
+            total_fuel += int(totals.get("fuel_cells") or 0)
     return score_from_cost_dict(
         {"metal": total_metal, "crystal": total_crystal, "fuel_cells": total_fuel}
     )
@@ -344,8 +365,10 @@ def _normalize_payload(data: Optional[dict]) -> Dict[str, int]:
 
 
 def _total_score_sql(conn) -> str:
+    from .production_formula import endgame_economy_mode
+
     parts = []
-    if column_exists(conn, "player_scores", "score_resources"):
+    if endgame_economy_mode() != "active" and column_exists(conn, "player_scores", "score_resources"):
         parts.append("COALESCE(ps.score_resources, '0')")
     parts.extend(
         [
