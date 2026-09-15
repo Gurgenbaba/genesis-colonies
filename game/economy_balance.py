@@ -516,7 +516,7 @@ def mine_roi_anchor_hours(level: int) -> float:
     pivot = max(120, int(ENDGAME_PRODUCTION_PIVOT_LEVEL))
     if endgame_economy_mode() == "active" and lvl > pivot:
         pivot_hours = _log_interpolate_anchor_map(pivot, MINE_UPGRADE_ROI_TARGET_HOURS)
-        return float(pivot_hours) * ((float(lvl) / float(pivot)) ** 0.70)
+        return float(pivot_hours) * ((float(lvl) / float(pivot)) ** 0.45)
     return _log_interpolate_anchor_map(lvl, MINE_UPGRADE_ROI_TARGET_HOURS)
 
 

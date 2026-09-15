@@ -26,26 +26,26 @@ from game.research import cumulative_research_resource_totals
 def _restore_rollout(monkeypatch):
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "legacy")
     monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_PIVOT_LEVEL", 120)
-    monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 2)
+    monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 4)
     yield
 
 
-def test_final_candidate_defaults_to_l120_q2():
+def test_final_candidate_defaults_to_l120_q4():
     assert V2_PIVOT_LEVEL == 120
     assert pf.ENDGAME_PRODUCTION_PIVOT_LEVEL == 120
-    assert pf.ENDGAME_PRODUCTION_TAIL_POWER == 2
+    assert pf.ENDGAME_PRODUCTION_TAIL_POWER == 4
 
 
 def test_v2_tail_matches_approved_relative_shape():
     base = reference_mine_output_v2("metal", 120)
     expected = {
         120: 1.0,
-        150: 4.88,
-        200: 17.86,
-        300: 68.21,
-        500: 266.5,
-        650: 500.6,
-        1000: 1331.0,
+        150: 6.634,
+        200: 46.624,
+        300: 459.314,
+        500: 5629.874,
+        650: 18653.520,
+        1000: 123434.874,
     }
     for level, ratio in expected.items():
         actual = float(reference_mine_output_v2("metal", level) / base)
@@ -53,15 +53,15 @@ def test_v2_tail_matches_approved_relative_shape():
 
 
 def test_v2_investment_horizon_matches_approved_days():
-    expected_days = {120: 83.33, 200: 119, 300: 158, 650: 272, 1000: 368}
+    expected_days = {120: 83.33, 200: 104.87, 300: 125.86, 400: 143.26, 500: 158.39, 650: 178.24, 1000: 216.37}
     for level, days in expected_days.items():
         actual = float(reference_investment_horizon_hours_v2(level)) / 24.0
         assert actual == pytest.approx(days, rel=0.035)
 
 
-def test_metal_mine_l650_progression_value_is_about_203_billion():
+def test_metal_mine_l650_progression_value_is_about_5_77_trillion():
     value = building_progression_value_v2("metal_mine", 650)
-    assert value == pytest.approx(203_000_000_000, rel=0.02)
+    assert value == pytest.approx(5_770_000_000_000, rel=0.02)
 
 
 def test_v2_building_valuation_preserves_historical_range_through_l120():
@@ -82,8 +82,9 @@ def test_active_mine_cost_horizon_rises_after_l120(monkeypatch):
     assert mine_roi_anchor_hours(120) == pytest.approx(2000.0)
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
     assert mine_roi_anchor_hours(120) == pytest.approx(2000.0)
-    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(272, rel=0.035)
-    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(368, rel=0.035)
+    assert mine_roi_anchor_hours(500) / 24.0 == pytest.approx(158.39, rel=0.035)
+    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(178.24, rel=0.035)
+    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(216.37, rel=0.035)
 
 
 def test_research_effect_tail_is_active_only_and_diminishing(monkeypatch):
@@ -112,7 +113,7 @@ def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
         {
             "GC_ENDGAME_ECONOMY_MODE": str(mode),
             "GC_ENDGAME_PRODUCTION_PIVOT": "120",
-            "GC_ENDGAME_PRODUCTION_TAIL_POWER": "2",
+            "GC_ENDGAME_PRODUCTION_TAIL_POWER": "4",
         }
     )
     code = (

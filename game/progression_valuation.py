@@ -5,7 +5,7 @@ not be retroactively rewritten when gameplay prices are rebalanced later.
 
 V2 contract:
 - levels <= 120 preserve the economy values that were live at the cutover baseline;
-- mine levels > 120 use the C1 q=2 production continuation and the V2 reference
+- mine levels > 120 use the C1 q=4 production continuation and the V2 reference
   investment horizon;
 - research valuation uses a frozen V2 reference-income curve, independent from
   events, boosters, commander effects, directives, energy, or live colony state;
@@ -21,10 +21,10 @@ from typing import Any, Dict, Mapping, Tuple
 
 VALUATION_VERSION = "v2"
 V2_PIVOT_LEVEL = 120
-V2_TAIL_POWER = 2
+V2_TAIL_POWER = 4
 V2_GROWTH_RATE = Decimal("1.075")
 V2_HORIZON_AT_PIVOT_HOURS = Decimal("2000")
-V2_HORIZON_EXPONENT = Decimal("0.70")
+V2_HORIZON_EXPONENT = Decimal("0.45")
 
 SCORE_METAL_DIVISOR = 1500
 SCORE_CRYSTAL_DIVISOR = 1000
@@ -155,7 +155,7 @@ def reference_investment_horizon_hours_v2(level: int) -> Decimal:
     # tiny bounded balance exponent, so compute the dimensionless ratio in float
     # and immediately convert back. Levels themselves remain integer-exact.
     ratio = float(lvl) / float(V2_PIVOT_LEVEL)
-    return Decimal(str(2000.0 * (ratio ** 0.70)))
+    return Decimal(str(float(V2_HORIZON_AT_PIVOT_HOURS) * (ratio ** float(V2_HORIZON_EXPONENT))))
 
 
 def _log_interpolate(level: int, anchors: Mapping[int, float]) -> float:

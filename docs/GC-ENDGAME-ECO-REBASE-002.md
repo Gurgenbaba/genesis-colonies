@@ -18,7 +18,7 @@ operator gate:
 - `active`: the coordinated V2 rules below.
 
 **Never enable `active` with the old L650 candidate pivot.** The final V2 candidate
-uses pivot **L120** and tail power **q=2**.
+uses pivot **L120** and tail power **q=4**.
 
 ## Production V2
 
@@ -26,7 +26,7 @@ For pivot `P=120`, historical mine output `f(P)`, `x=L-P`, and
 `s = 1/P + ln(1.075)`:
 
 ```text
-f_v2(P+x) = f(P) × (1 + s×x/2)^2
+f_v2(P+x) = f(P) × (1 + s×x/4)^4
 ```
 
 It is value- and derivative-continuous at L120, monotone, unbounded, and replaces
@@ -37,12 +37,12 @@ Approximate output relative to L120:
 | Level | V2 / L120 |
 |---:|---:|
 | 120 | 1.00× |
-| 150 | 4.88× |
-| 200 | 17.86× |
-| 300 | 68.21× |
-| 500 | 266.5× |
-| 650 | 500.6× |
-| 1000 | 1331× |
+| 150 | 6.63× |
+| 200 | 46.62× |
+| 300 | 459.31× |
+| 500 | 5,629.87× |
+| 650 | 18,653.52× |
+| 1000 | 123,434.87× |
 
 `legacy` and `shadow` continue returning the old production values.
 
@@ -51,7 +51,7 @@ Approximate output relative to L120:
 Through L120 the historical GC-821 ROI anchors are unchanged. Above L120:
 
 ```text
-H(L) = 2000h × (L / 120)^0.70
+H(L) = 2000h × (L / 120)^0.45
 ```
 
 The live upgrade-cost owner continues to price mines from the canonical production
@@ -64,10 +64,12 @@ Reference horizons:
 | Level | Hours | Days |
 |---:|---:|---:|
 | 120 | 2,000 | 83.3 |
-| 200 | ~2,860 | 119.2 |
-| 300 | ~3,798 | 158.3 |
-| 650 | ~6,526 | 271.9 |
-| 1000 | ~8,823 | 367.6 |
+| 200 | ~2,517 | 104.9 |
+| 300 | ~3,021 | 125.9 |
+| 400 | ~3,438 | 143.3 |
+| 500 | ~3,801 | 158.4 |
+| 650 | ~4,278 | 178.2 |
+| 1000 | ~5,193 | 216.4 |
 
 ## Research V2
 
@@ -101,7 +103,7 @@ cannot retroactively rewrite historical progression ranking.
   using the frozen per-building resource split.
 - Non-mine buildings: frozen cutover reference curves.
 
-Reference check: one Ferronit Mine L650 is approximately **203 billion building
+Reference check: one Ferronit Mine L650 is approximately **5.77 trillion building
 points**, rather than ~`3.8×10^25` under the old cost-derived valuation.
 
 ### Research
@@ -146,13 +148,13 @@ The report never writes `player_scores`.
 
 ## Atomic cutover procedure
 
-1. Deploy this code with `GC_ENDGAME_ECONOMY_MODE=shadow`, pivot `120`, q=`2`.
+1. Deploy this code with `GC_ENDGAME_ECONOMY_MODE=shadow`, pivot `120`, q=`4`.
 2. Run and review the complete shadow ranking report on Production data.
 3. At cutover timestamp **T**, while still on V1 gameplay, settle outstanding
    resource ticks through T using the normal authoritative resource/tick path.
 4. Existing queued jobs keep their stored paid-cost snapshots. Do not reprice or
    refund them from V2 formulas.
-5. Switch `GC_ENDGAME_ECONOMY_MODE=active` with pivot `120`, q=`2`.
+5. Switch `GC_ENDGAME_ECONOMY_MODE=active` with pivot `120`, q=`4`.
 6. Recompute every player's score with V2 and run one full rank rebuild.
 7. Verify ranking, 5× PvP corridors, Commander claims, economy endpoints and
    high-level storage before reopening normal operations.
