@@ -38,4 +38,6 @@ jobs:
             tests/test_gc_action_tx_domain_isolation_003.py \
             tests/test_gc_fleet_detached_owner_004.py \
             tests/test_gc_fleet_pg_abort_001.py \
-            tests/test_admin_fleet.py
+            tests/test_admin_fleet.py \
+            tests/test_fleet.py::test_expedition_return_credit_admin_advance_phases \
+            tests/test_fleet.py::test_gc620k_contract_admin_complete_expedition_credit_invariant
