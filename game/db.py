@@ -409,6 +409,51 @@ def db() -> DbConn:
     return conn
 
 
+def db_detached() -> DbConn:
+    """Open a fresh backend connection without Flask request pinning.
+
+    GC-FLEET-PG-ABORT-004: domain owners such as Fleet short-TX processing
+    sometimes need a truly independent PostgreSQL checkout even while invoked
+    from an HTTP request. ``db()`` intentionally reuses the request-pinned
+    checkout; this helper deliberately bypasses that reuse. Callers own and
+    must close the returned connection.
+    """
+    backend = get_db_backend()
+    if backend != "postgres":
+        return db()
+
+    conn_t0 = time.perf_counter()
+    try:
+        from game.db_pg import connect_postgres
+
+        conn = connect_postgres()
+    except NotImplementedError:
+        raise
+    except Exception as exc:
+        if is_db_pool_timeout(exc):
+            raise DbPoolTimeout(str(exc)) from exc
+        raise NotImplementedError(f"{_POSTGRES_NOT_CONFIGURED} ({exc})") from exc
+
+    try:
+        from game.live_state import (
+            attach_request_perf_sql_trace,
+            is_request_perf_active,
+            record_request_perf_db_connection_open,
+            record_request_perf_phase,
+        )
+
+        record_request_perf_db_connection_open()
+        if is_request_perf_active():
+            record_request_perf_phase(
+                "db_detached_connection_ms",
+                (time.perf_counter() - conn_t0) * 1000.0,
+            )
+        attach_request_perf_sql_trace(conn)
+    except Exception:
+        pass
+    return conn
+
+
 def in_transaction(conn: DbConn) -> bool:
     if hasattr(conn, "in_transaction"):
         return bool(conn.in_transaction)

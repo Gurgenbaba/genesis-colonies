@@ -1564,29 +1564,16 @@ def reset_fleet_attack_protection_admin(admin_id: int, body: Dict[str, Any]) -> 
 
 
 def advance_admin_fleet(admin_id: int, movement_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    from game.fleet import admin_advance_fleet_movement, fleet_schema_ready
+    from game.fleet import admin_advance_fleet_movement_owned
 
     complete = bool(body.get("complete"))
-    conn = db()
-    try:
-        if not fleet_schema_ready(conn):
-            return _err("fleet_unavailable", "Fleet schema not ready.")
-        begin_write_transaction(conn)
-        result = admin_advance_fleet_movement(
-            int(movement_id),
-            conn=conn,
-            complete=complete,
-        )
-        if not result.get("ok"):
-            rollback(conn)
-            code = str(result.get("error") or "advance_failed")
-            return _err(code, code)
-        commit(conn)
-    except Exception:
-        rollback(conn)
-        raise
-    finally:
-        conn.close()
+    result = admin_advance_fleet_movement_owned(
+        int(movement_id),
+        complete=complete,
+    )
+    if not result.get("ok"):
+        code = str(result.get("error") or "advance_failed")
+        return _err(code, str(result.get("detail") or code))
 
     audit(
         admin_id,
