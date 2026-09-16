@@ -130,7 +130,9 @@ def test_deadline_safety_net_is_bounded_short_tx_and_return_first():
     helper = src.split("def process_player_due_fleets_now(", 1)[1].split(
         "\ndef mass_expedition_available_slots", 1
     )[0]
-    assert "conn=None" in helper
+    assert "db_detached" in helper
+    assert "conn = db_detached()" in helper
+    assert "conn=conn" in helper
     assert "manage_transaction=True" in helper
     assert "GC_POLL_FLEET_MAX_MOVEMENTS" in helper
     assert "GC_POLL_FLEET_MAX_MS" in helper
@@ -152,6 +154,7 @@ def test_poll_source_no_longer_defers_due_fleet_on_worker_freshness():
     assert "process_player_due_fleets_now(uid, now=now)" in block
     assert "is_fleet_worker_heartbeat_fresh" not in block
     assert "if fleet_dirty:" in block
+
 
 def test_expedition_holding_resolution_serializes_before_side_effects():
     fleet_src = Path("game/fleet.py").read_text(encoding="utf-8")
@@ -177,4 +180,3 @@ def test_expedition_holding_resolution_serializes_before_side_effects():
     assert "ON CONFLICT(movement_id) DO NOTHING" in daily
     assert "SELECT 1 FROM expedition_daily_recorded" not in daily
     assert "if int(cur.rowcount or 0) <= 0:" in daily
-

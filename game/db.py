@@ -183,6 +183,13 @@ def _pin_request_postgres_connection(conn: DbConn) -> bool:
     at once before teardown runs. Pinning collapses all nested ``db()`` calls in
     a request onto one checkout. Helper ``close()`` becomes a transaction-cleanup
     boundary; the actual pool return happens exactly once in teardown_request.
+
+    GC-FLEET-PG-ABORT-002: request-local helpers may also call ``commit()`` or
+    ``rollback()`` while an outer queue/fleet SAVEPOINT owns the transaction.
+    A real commit destroys every Postgres SAVEPOINT and caused the production
+    ``InvalidSavepointSpecification -> InFailedSqlTransaction`` cascade. Track
+    request-local SAVEPOINT ownership and make nested direct commit/rollback
+    non-destructive; the SAVEPOINT owner remains responsible for release/commit.
     """
     try:
         from flask import g, has_request_context
@@ -190,6 +197,70 @@ def _pin_request_postgres_connection(conn: DbConn) -> bool:
         if not has_request_context():
             return False
         real_close = conn.close
+        real_commit = conn.commit
+        real_rollback = conn.rollback
+        real_execute = conn.execute
+        savepoints: list[str] = []
+
+        def _savepoint_name(sql: str) -> str:
+            text = str(sql or "").strip().rstrip(";")
+            if not text:
+                return ""
+            return text.split()[-1].strip('"').lower()
+
+        def _last_savepoint_index(name: str) -> int:
+            for idx in range(len(savepoints) - 1, -1, -1):
+                if savepoints[idx] == name:
+                    return idx
+            return -1
+
+        def _request_local_execute(sql, params=None):  # noqa: ANN001
+            text = str(sql or "")
+            upper = " ".join(text.strip().upper().split())
+            if upper.startswith("SAVEPOINT "):
+                out = real_execute(sql, params)
+                name = _savepoint_name(text)
+                if name:
+                    savepoints.append(name)
+                return out
+            if upper.startswith("ROLLBACK TO SAVEPOINT "):
+                out = real_execute(sql, params)
+                name = _savepoint_name(text)
+                idx = _last_savepoint_index(name)
+                if idx >= 0:
+                    # PostgreSQL keeps the target SAVEPOINT but discards newer ones.
+                    del savepoints[idx + 1 :]
+                return out
+            if upper.startswith("RELEASE SAVEPOINT "):
+                out = real_execute(sql, params)
+                name = _savepoint_name(text)
+                idx = _last_savepoint_index(name)
+                if idx >= 0:
+                    # RELEASE also releases any SAVEPOINTs nested after the target.
+                    del savepoints[idx:]
+                return out
+            return real_execute(sql, params)
+
+        def _request_local_commit() -> None:
+            # A nested helper does not own an outer SAVEPOINT. Committing here
+            # would silently erase queue/fleet SAVEPOINTs and poison the caller.
+            if savepoints:
+                return None
+            real_commit()
+
+        def _request_local_rollback() -> None:
+            if savepoints:
+                # Rewind the current owner scope, but leave the SAVEPOINT intact
+                # so queue/fleet recovery can still RELEASE it deterministically.
+                sp = savepoints[-1]
+                try:
+                    real_execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    return None
+                except Exception:
+                    # If the SAVEPOINT is already gone, only a full rollback can
+                    # recover the checkout for request teardown.
+                    savepoints.clear()
+            real_rollback()
 
         def _request_local_close() -> None:
             # One pooled checkout is shared by the entire Flask request. A nested
@@ -198,9 +269,15 @@ def _pin_request_postgres_connection(conn: DbConn) -> bool:
             # and pool-return boundary is teardown_request.
             return None
 
+        conn.execute = _request_local_execute  # type: ignore[method-assign]
+        conn.commit = _request_local_commit  # type: ignore[method-assign]
+        conn.rollback = _request_local_rollback  # type: ignore[method-assign]
         conn.close = _request_local_close  # type: ignore[method-assign]
+        conn._gc_request_savepoints = savepoints  # type: ignore[attr-defined]
         g.gc_pg_request_connection = conn
         g.gc_pg_request_connection_real_close = real_close
+        g.gc_pg_request_connection_real_commit = real_commit
+        g.gc_pg_request_connection_real_rollback = real_rollback
         # Legacy marker retained for the original request-pool guard contract.
         g.gc_pg_request_connections = [conn]
         return True
@@ -224,19 +301,31 @@ def close_request_postgres_connections() -> int:
             return 0
         conn = getattr(g, "gc_pg_request_connection", None)
         real_close = getattr(g, "gc_pg_request_connection_real_close", None)
+        real_rollback = getattr(g, "gc_pg_request_connection_real_rollback", None)
         g.gc_pg_request_connection = None
         g.gc_pg_request_connection_real_close = None
+        g.gc_pg_request_connection_real_commit = None
+        g.gc_pg_request_connection_real_rollback = None
         g.gc_pg_request_connections = []
     except Exception:
         return 0
     if conn is None:
         return 0
     try:
+        savepoints = getattr(conn, "_gc_request_savepoints", None)
+        if isinstance(savepoints, list):
+            savepoints.clear()
         if in_transaction(conn):
-            rollback(conn)
+            if callable(real_rollback):
+                real_rollback()
+            else:
+                rollback(conn)
     except Exception:
         try:
-            conn.rollback()
+            if callable(real_rollback):
+                real_rollback()
+            else:
+                conn.rollback()
         except Exception:
             pass
     try:
@@ -317,6 +406,51 @@ def db() -> DbConn:
     # immediate SQLITE_BUSY on HTTP touch / game-state paths.
     conn.execute("PRAGMA busy_timeout=20000")
     conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+
+
+def db_detached() -> DbConn:
+    """Open a fresh backend connection without Flask request pinning.
+
+    GC-FLEET-PG-ABORT-004: domain owners such as Fleet short-TX processing
+    sometimes need a truly independent PostgreSQL checkout even while invoked
+    from an HTTP request. ``db()`` intentionally reuses the request-pinned
+    checkout; this helper deliberately bypasses that reuse. Callers own and
+    must close the returned connection.
+    """
+    backend = get_db_backend()
+    if backend != "postgres":
+        return db()
+
+    conn_t0 = time.perf_counter()
+    try:
+        from game.db_pg import connect_postgres
+
+        conn = connect_postgres()
+    except NotImplementedError:
+        raise
+    except Exception as exc:
+        if is_db_pool_timeout(exc):
+            raise DbPoolTimeout(str(exc)) from exc
+        raise NotImplementedError(f"{_POSTGRES_NOT_CONFIGURED} ({exc})") from exc
+
+    try:
+        from game.live_state import (
+            attach_request_perf_sql_trace,
+            is_request_perf_active,
+            record_request_perf_db_connection_open,
+            record_request_perf_phase,
+        )
+
+        record_request_perf_db_connection_open()
+        if is_request_perf_active():
+            record_request_perf_phase(
+                "db_detached_connection_ms",
+                (time.perf_counter() - conn_t0) * 1000.0,
+            )
+        attach_request_perf_sql_trace(conn)
+    except Exception:
+        pass
     return conn
 
 
