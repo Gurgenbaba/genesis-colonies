@@ -1,0 +1,84 @@
+name: Hotfix Action TX Domain Isolation (one-shot)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.ref == 'hotfix/fleet-tx-mutation-isolation'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Apply central action-TX domain isolation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('game/queue_engine.py')
+          text = path.read_text(encoding='utf-8')
+
+          old_sig = '''    include_account_research: bool = True,\n    include_fleet: bool = True,\n    include_relocations: bool = True,\n    skip_locked_planets: bool = False,\n'''
+          new_sig = '''    include_account_research: bool = True,\n    include_fleet: Optional[bool] = None,\n    include_relocations: Optional[bool] = None,\n    skip_locked_planets: bool = False,\n'''
+          if old_sig not in text:
+              raise SystemExit('queue_engine signature anchor not found')
+          text = text.replace(old_sig, new_sig, 1)
+
+          old_anchor = '''    owns_conn = conn is None\n    if owns_conn:\n        conn = db()\n\n    if now is None:\n        now = time.time()\n\n    domain_filter = (\n'''
+          new_anchor = '''    owns_conn = conn is None\n    if owns_conn:\n        conn = db()\n\n    # GC-FLEET-PG-ABORT-003: action mutations already own a gameplay/account\n    # transaction. Fleet movement completion and planet relocation are separate\n    # domains with their own workers / safety nets and must not be pulled into\n    # an unrelated caller-owned action TX. This is the central default so every\n    # current and future action caller gets the invariant without duplicating\n    # include_fleet=False / include_relocations=False at each call site.\n    # Explicit True remains an opt-in for deliberately coupled maintenance code.\n    action_owned_tx = (\n        str(source or '').strip().lower() == 'action'\n        and not owns_conn\n        and in_transaction(conn)\n    )\n    if include_fleet is None:\n        include_fleet = not action_owned_tx\n    if include_relocations is None:\n        include_relocations = not action_owned_tx\n\n    if now is None:\n        now = time.time()\n\n    domain_filter = (\n'''
+          if old_anchor not in text:
+              raise SystemExit('queue_engine ownership anchor not found')
+          text = text.replace(old_anchor, new_anchor, 1)
+
+          old_doc = '''    The ``include_*`` switches let the dedicated queue worker execute the exact\n    scope discovered by its read-only candidate scan. Defaults preserve the\n    historical request/admin behavior.\n'''
+          new_doc = '''    The ``include_*`` switches let the dedicated queue worker execute the exact\n    scope discovered by its read-only candidate scan. Fleet/relocation default\n    to disabled only for caller-owned ``source="action"`` transactions; all\n    other historical request/admin/worker behavior stays unchanged.\n'''
+          if old_doc not in text:
+              raise SystemExit('queue_engine doc anchor not found')
+          text = text.replace(old_doc, new_doc, 1)
+          path.write_text(text, encoding='utf-8')
+
+          test = Path('tests/test_gc_action_tx_domain_isolation_003.py')
+          test.write_text('''from __future__ import annotations\n\nfrom game import queue_engine\n\n\nclass _Conn:\n    in_transaction = True\n\n\ndef test_action_owned_tx_defaults_fleet_and_relocation_off(monkeypatch):\n    conn = _Conn()\n\n    # If the central default regresses, these explode immediately.\n    import game.fleet as fleet\n    import game.galaxy as galaxy\n\n    monkeypatch.setattr(fleet, "fleet_schema_ready", lambda _conn: (_ for _ in ()).throw(AssertionError("fleet entered action tx")))\n    monkeypatch.setattr(galaxy, "relocation_schema_ready", lambda _conn: (_ for _ in ()).throw(AssertionError("relocation entered action tx")))\n\n    result = queue_engine.finish_due_work(\n        player_id=123,\n        conn=conn,\n        source="action",\n        manage_transaction=False,\n        queue_domains=set(),\n    )\n\n    assert result["ok"] is True\n    assert result["finished"]["fleet_arrivals"] == 0\n    assert result["finished"]["fleet_returns"] == 0\n    assert result["finished"]["planet_relocations"] == 0\n\n\ndef test_action_owned_tx_allows_explicit_cross_domain_opt_in(monkeypatch):\n    conn = _Conn()\n    calls = {"fleet": 0, "reloc": 0}\n\n    import game.fleet as fleet\n    import game.galaxy as galaxy\n\n    monkeypatch.setattr(fleet, "fleet_schema_ready", lambda _conn: True)\n\n    def _fleet_tick(**_kwargs):\n        calls["fleet"] += 1\n        return {"processed_arrivals": 0, "processed_returns": 0, "errors": []}\n\n    monkeypatch.setattr(fleet, "process_fleet_tick", _fleet_tick)\n    monkeypatch.setattr(galaxy, "relocation_schema_ready", lambda _conn: True)\n\n    def _reloc(_conn, **_kwargs):\n        calls["reloc"] += 1\n        return 0\n\n    monkeypatch.setattr(galaxy, "finish_due_relocations", _reloc)\n\n    result = queue_engine.finish_due_work(\n        player_id=123,\n        conn=conn,\n        source="action",\n        manage_transaction=False,\n        queue_domains=set(),\n        include_fleet=True,\n        include_relocations=True,\n    )\n\n    assert result["ok"] is True\n    assert calls == {"fleet": 1, "reloc": 1}\n\n\ndef test_non_action_shared_tx_preserves_historical_defaults(monkeypatch):\n    conn = _Conn()\n    calls = {"fleet": 0, "reloc": 0}\n\n    import game.fleet as fleet\n    import game.galaxy as galaxy\n\n    monkeypatch.setattr(fleet, "fleet_schema_ready", lambda _conn: True)\n    monkeypatch.setattr(\n        fleet,\n        "process_fleet_tick",\n        lambda **_kwargs: calls.__setitem__("fleet", calls["fleet"] + 1)\n        or {"processed_arrivals": 0, "processed_returns": 0, "errors": []},\n    )\n    monkeypatch.setattr(galaxy, "relocation_schema_ready", lambda _conn: True)\n    monkeypatch.setattr(\n        galaxy,\n        "finish_due_relocations",\n        lambda _conn, **_kwargs: calls.__setitem__("reloc", calls["reloc"] + 1) or 0,\n    )\n\n    result = queue_engine.finish_due_work(\n        player_id=123,\n        conn=conn,\n        source="system",\n        manage_transaction=False,\n        queue_domains=set(),\n    )\n\n    assert result["ok"] is True\n    assert calls == {"fleet": 1, "reloc": 1}\n''', encoding='utf-8')
+
+          version = Path('VERSION')
+          if version.read_text(encoding='utf-8').strip() == '0.5.9.174':
+              version.write_text('0.5.9.175\n', encoding='utf-8')
+
+          doc = Path('docs/GC-FLEET-PG-ABORT-003.md')
+          doc.write_text('''# GC-FLEET-PG-ABORT-003 — Action transaction domain isolation\n\nFollow-up hardening for the PostgreSQL SAVEPOINT ownership repair.\n\n## Invariant\n\nA caller-owned `source="action"` transaction settles only the gameplay/account queue domains the mutation depends on. Fleet movement completion and planet relocation stay on their dedicated owners and are not pulled into research/build/evolution/ascension transactions by default.\n\n`finish_due_work()` now owns this policy centrally: `include_fleet` and `include_relocations` are tri-state. `None` resolves to `False` for an already-open caller-owned action transaction and to the historical `True` everywhere else. Explicit `True` remains available for deliberate maintenance coupling.\n\nThis removes the need to scatter `include_fleet=False` / `include_relocations=False` across every present and future action call site and keeps the production fix aligned with the queue-domain refactor.\n''', encoding='utf-8')
+          PY
+
+      - name: Targeted regressions
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+          python -m pytest -q --tb=line \
+            tests/test_gc_action_tx_domain_isolation_003.py \
+            tests/test_gc_fleet_pg_abort_001.py \
+            tests/test_gc_pg_request_savepoint_guard_002.py \
+            tests/test_gc862_buildings_hotpath_optimization.py::test_gc862_build_enqueue_scopes_queue_finish_domains
+
+      - name: Commit follow-up and remove one-shot workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/hotfix_action_tx_domain_isolation_once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/queue_engine.py tests/test_gc_action_tx_domain_isolation_003.py docs/GC-FLEET-PG-ABORT-003.md VERSION
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix: isolate fleet and relocation from action transactions"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
