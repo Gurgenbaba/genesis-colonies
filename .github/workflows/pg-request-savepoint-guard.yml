@@ -1,14 +1,14 @@
-name: PG Request Savepoint Guard
+name: PG Transaction Ownership Guard
 
 on:
   pull_request:
 
 concurrency:
-  group: pg-request-savepoint-${{ github.ref }}
+  group: pg-transaction-ownership-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  pg-request-savepoint-guard:
+  pg-transaction-ownership:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -30,6 +30,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
       - name: Compile transaction layer
-        run: python -m py_compile game/db.py
-      - name: Request-pinned PostgreSQL SAVEPOINT regressions
-        run: python -m pytest -q --tb=line tests/test_gc_pg_request_savepoint_guard_002.py
+        run: python -m py_compile game/db.py game/queue_engine.py
+      - name: PostgreSQL ownership and action-domain regressions
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_gc_pg_request_savepoint_guard_002.py \
+            tests/test_gc_action_tx_domain_isolation_003.py \
+            tests/test_gc_fleet_pg_abort_001.py
