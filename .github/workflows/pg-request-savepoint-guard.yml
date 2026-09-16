@@ -30,10 +30,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
       - name: Compile transaction layer
-        run: python -m py_compile game/db.py game/queue_engine.py
-      - name: PostgreSQL ownership and action-domain regressions
+        run: python -m py_compile game/db.py game/queue_engine.py game/fleet.py game/admin_api.py
+      - name: PostgreSQL ownership and Fleet-domain regressions
         run: |
           python -m pytest -q --tb=line \
             tests/test_gc_pg_request_savepoint_guard_002.py \
             tests/test_gc_action_tx_domain_isolation_003.py \
-            tests/test_gc_fleet_pg_abort_001.py
+            tests/test_gc_fleet_detached_owner_004.py \
+            tests/test_gc_fleet_pg_abort_001.py \
+            tests/test_admin_fleet.py
