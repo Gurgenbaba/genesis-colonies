@@ -1,0 +1,205 @@
+/* GC-UNIVERSE-DIRECTORY-001
+   Landing server selector: deliberately angular, compact and readable.
+   Keep this isolated from the 1.3 MB legacy stylesheet. */
+
+.landing-server-select {
+  position: relative;
+  z-index: 3;
+  width: min(1120px, calc(100% - 32px));
+  margin: 42px auto 54px;
+  padding: 28px;
+  border: 1px solid rgba(92, 237, 221, 0.26);
+  background:
+    linear-gradient(180deg, rgba(5, 20, 32, 0.94), rgba(3, 12, 22, 0.97)),
+    radial-gradient(circle at 12% 0%, rgba(58, 220, 202, 0.08), transparent 42%);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.32);
+}
+
+.landing-server-select::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 96px;
+  height: 2px;
+  background: currentColor;
+  color: rgba(91, 244, 225, 0.9);
+}
+
+.landing-server-select-head {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.landing-server-kicker {
+  font: 700 0.72rem/1.2 var(--gc-font-mono, monospace);
+  letter-spacing: 0.18em;
+  color: rgba(127, 247, 231, 0.72);
+}
+
+.landing-server-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.landing-server-card {
+  position: relative;
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid rgba(118, 174, 199, 0.28);
+  border-left-width: 3px;
+  background:
+    linear-gradient(145deg, rgba(9, 29, 43, 0.97), rgba(4, 15, 27, 0.98));
+  overflow: hidden;
+}
+
+.landing-server-card--live {
+  border-left-color: rgba(91, 244, 225, 0.92);
+}
+
+.landing-server-card--uni1 {
+  border-left-color: rgba(139, 112, 255, 0.92);
+  background:
+    linear-gradient(145deg, rgba(20, 18, 48, 0.97), rgba(6, 14, 30, 0.98));
+}
+
+.landing-server-card::after {
+  content: "";
+  position: absolute;
+  right: -34px;
+  bottom: -54px;
+  width: 150px;
+  height: 150px;
+  border: 1px solid rgba(129, 234, 223, 0.08);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.landing-server-card.is-locked {
+  filter: saturate(0.78);
+}
+
+.landing-server-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.landing-server-code {
+  display: block;
+  margin-bottom: 4px;
+  font: 800 1.34rem/1 var(--gc-font-mono, monospace);
+  letter-spacing: 0.09em;
+  color: #eafcff;
+}
+
+.landing-server-name {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+  color: rgba(214, 237, 244, 0.72);
+}
+
+.landing-server-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid rgba(155, 188, 207, 0.28);
+  font: 750 0.68rem/1 var(--gc-font-mono, monospace);
+  letter-spacing: 0.08em;
+  color: rgba(223, 241, 248, 0.78);
+  white-space: nowrap;
+}
+
+.landing-server-status--live {
+  border-color: rgba(77, 239, 189, 0.34);
+  color: #7ff4c5;
+  background: rgba(28, 113, 82, 0.14);
+}
+
+.landing-server-status--prepare {
+  border-color: rgba(151, 126, 255, 0.32);
+  color: #c4b7ff;
+  background: rgba(72, 52, 141, 0.15);
+}
+
+.landing-server-status-dot {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.landing-server-desc {
+  margin: 0;
+  max-width: 56ch;
+  color: rgba(225, 239, 244, 0.88);
+  line-height: 1.55;
+}
+
+.landing-server-meta {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(128, 176, 196, 0.14);
+  font: 650 0.74rem/1.5 var(--gc-font-mono, monospace);
+  color: rgba(150, 188, 204, 0.76);
+}
+
+.landing-server-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.landing-server-actions .gc-btn {
+  min-width: 132px;
+}
+
+.landing-server-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .landing-server-select {
+    width: min(100% - 20px, 1120px);
+    margin: 26px auto 38px;
+    padding: 18px 14px;
+  }
+
+  .landing-server-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-server-card {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .landing-server-card-head {
+    gap: 10px;
+  }
+
+  .landing-server-status {
+    font-size: 0.62rem;
+  }
+
+  .landing-server-actions .gc-btn {
+    flex: 1 1 120px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-server-status-dot {
+    box-shadow: none;
+  }
+}
