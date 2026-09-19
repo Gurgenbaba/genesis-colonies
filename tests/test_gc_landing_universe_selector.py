@@ -41,3 +41,13 @@ def test_selector_styles_are_isolated_from_legacy_bundle():
     assert ".landing-server-card--live" in css
     assert ".landing-server-card--uni1" in css
     assert "@media (max-width: 760px)" in css
+
+
+def test_auth_pages_keep_universe_identity_visible():
+    for rel in ("templates/login.html", "templates/register.html"):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "auth-universe-badge" in text
+        assert "Development Universe" in text
+        assert "Genesis Universe 1" in text
+        assert "genesis-colonies-u2" in text
+        assert "uni1." in text
