@@ -1,8 +1,17 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing-universe-selector.css', v=GC_ASSET_VERSION) }}">
+{% endblock %}
+
 {% block content %}
 
 {% set err = (error if error is defined and error else "") %}
+{% set auth_host = request.host|string|lower %}
+{% set auth_is_uni1 = ('genesis-colonies-u2' in auth_host) or auth_host.startswith('uni1.') %}
+{% set auth_universe_code = 'UNI 1' if auth_is_uni1 else 'DEV' %}
+{% set auth_universe_name = 'Genesis Universe 1' if auth_is_uni1 else 'Development Universe' %}
+{% set auth_universe_note = ('Fresh Start · eigene Progression' if (GC_LOCALE|string|lower).startswith('de') else 'Fresh start · separate progression') if auth_is_uni1 else ('Bestehender DEV-Fortschritt' if (GC_LOCALE|string|lower).startswith('de') else 'Existing DEV progression') %}
 
 {% set ttl = T("login_title") %}
 {% if ttl == "login_title" %}{% set ttl = "Willkommen zurück, Commander." %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
@@ -50,6 +59,13 @@
 
     <div class="auth-hero">
       <p class="auth-eyebrow">Genesis Colonies</p>
+      <div class="auth-universe-badge{% if auth_is_uni1 %} auth-universe-badge--uni1{% endif %}" aria-label="{{ auth_universe_name }}">
+        <span class="auth-universe-code">{{ auth_universe_code }}</span>
+        <span class="auth-universe-copy">
+          <strong>{{ auth_universe_name }}</strong>
+          <small>{{ auth_universe_note }}</small>
+        </span>
+      </div>
       <h1 class="auth-hero-title">{{ ttl }}</h1>
       <p class="auth-hero-sub">{{ subtitle }}</p>
     </div>
