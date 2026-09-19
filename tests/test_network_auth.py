@@ -54,6 +54,14 @@ def test_signed_handoff_round_trip_and_replay_guard(network_db, monkeypatch):
     ok, reason, token = network_auth.issue_handoff(int(user["id"]), "uni1")
     assert ok, reason
     assert token
+    ok_again, reason_again, token_again = network_auth.issue_handoff(int(user["id"]), "uni1")
+    assert ok_again, reason_again
+    assert token_again
+    valid_a, _, payload_a = network_auth._decode_token(token, expected_audience="uni1")
+    valid_b, _, payload_b = network_auth._decode_token(token_again, expected_audience="uni1")
+    assert valid_a and valid_b
+    assert payload_a["sub"] == payload_b["sub"]
+    assert str(payload_a["sub"]).startswith("acct_")
 
     network_db("uni1")
     network_auth = _reload_network(monkeypatch, "uni1")
@@ -101,7 +109,7 @@ def test_first_uni1_entry_gets_10x_resources_and_72h_timekeeper(network_db, monk
             "SELECT network_account_id FROM network_account_links WHERE local_user_id = ?;",
             (uid,),
         ).fetchone()
-        assert str(link["network_account_id"]).startswith("dev:")
+        assert str(link["network_account_id"]).startswith("acct_")
     finally:
         conn.close()
 
