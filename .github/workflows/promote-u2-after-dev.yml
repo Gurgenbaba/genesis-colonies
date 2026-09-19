@@ -1,0 +1,66 @@
+name: Promote U2 after DEV success
+
+on:
+  status:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Optional main SHA to promote (defaults to current main)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-u2-after-dev
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: >-
+      (github.event_name == 'status' &&
+       github.event.state == 'success' &&
+       github.event.context == 'Genesis-Colonies - genesis-colonies') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward U2 to verified DEV SHA
+        shell: bash
+        env:
+          EVENT_SHA: ${{ github.event.sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main u2/staging-runtime --prune
+
+          main_sha="$(git rev-parse origin/main)"
+          target_sha="${INPUT_SHA:-${EVENT_SHA:-}}"
+          if [[ -z "$target_sha" ]]; then
+            target_sha="$main_sha"
+          fi
+
+          if [[ "$target_sha" != "$main_sha" ]]; then
+            echo "::error::Refusing promotion: target $target_sha is not current main $main_sha"
+            exit 1
+          fi
+
+          u2_sha="$(git rev-parse origin/u2/staging-runtime)"
+          if [[ "$u2_sha" == "$target_sha" ]]; then
+            echo "U2 already matches main: $target_sha"
+            exit 0
+          fi
+
+          merge_base="$(git merge-base "$u2_sha" "$target_sha")"
+          if [[ "$merge_base" != "$u2_sha" ]]; then
+            echo "::error::Refusing non-fast-forward promotion: u2=$u2_sha target=$target_sha"
+            exit 1
+          fi
+
+          git push origin "$target_sha:refs/heads/u2/staging-runtime"
+          echo "Promoted U2 to DEV-verified SHA $target_sha"
