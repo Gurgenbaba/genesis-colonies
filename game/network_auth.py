@@ -535,4 +535,8 @@ def install_network_auth(app) -> None:
     app.before_request(_network_before_request)
     app.after_request(_network_after_request)
 
+    app.jinja_env.globals["GC_NETWORK_ENABLED"] = network_enabled()
+    app.jinja_env.globals["GC_NETWORK_UNIVERSE_KEY"] = current_universe_key()
+    app.jinja_env.globals["GC_NETWORK_AUTHORITY_URL"] = authority_url()
+    app.jinja_env.globals["GC_NETWORK_UNI1_URL"] = universe_url("uni1")
     app.jinja_env.globals["GC_NETWORK_UNI1_OPEN"] = universe_is_open("uni1")
