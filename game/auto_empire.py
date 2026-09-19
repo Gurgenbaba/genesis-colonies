@@ -13,6 +13,8 @@ import random
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from .db import in_transaction
+
 logger = logging.getLogger(__name__)
 
 # Building ladder (early empire → combat infrastructure).
@@ -491,6 +493,7 @@ def try_enqueue_building(
     now: float,
     duration_cap: Optional[int] = None,
     target_scale: float = 1.0,
+    queue_known_free: bool = False,
 ) -> Dict[str, Any]:
     from .buildings import (
         BuildingsPanelContext,
@@ -506,7 +509,7 @@ def try_enqueue_building(
     )
 
     planet_id = int(planet["id"])
-    if _queue_has_building(conn, planet_id):
+    if not queue_known_free and _queue_has_building(conn, planet_id):
         return {"ok": False, "error": "queue_busy"}
 
     buildings = get_planet_buildings(planet_id, conn=conn)
@@ -566,6 +569,7 @@ def try_enqueue_research(
     now: float,
     duration_cap: Optional[int] = None,
     target_scale: float = 1.0,
+    queue_known_free: bool = False,
 ) -> Dict[str, Any]:
     from .models import (
         add_research_job,
@@ -585,7 +589,7 @@ def try_enqueue_research(
 
     if tech_key not in RESEARCH_TECHS:
         return {"ok": False, "error": "unknown_tech"}
-    if _queue_has_research(conn, player_id):
+    if not queue_known_free and _queue_has_research(conn, player_id):
         return {"ok": False, "error": "queue_busy"}
 
     home = get_homeworld(player_id, conn=conn)
@@ -906,58 +910,73 @@ def plan_passive_planet_tick(
                     out["finished"][k] = v
 
         progressed = False
+        # Reusing a queue probe is race-safe only while the probe and enqueue
+        # live inside the same transaction. Direct/non-transactional callers
+        # retain the canonical guard inside try_enqueue_*.
+        queue_probe_reusable = in_transaction(conn)
         if allow_buildings and not is_idle_tick:
-            for bkey in build_order:
-                if int(BUILD_TARGETS.get(bkey, 0)) <= 0:
-                    continue
-                res = try_enqueue_building(
-                    conn,
-                    player_id=int(player_id),
-                    planet=planet,
-                    building_type=bkey,
-                    now=ts,
-                    duration_cap=build_duration_cap,
+            # GC-PERF-PIRATE-MAINT-001: one queue probe per planning step.
+            # Without this guard every candidate key repeated the identical
+            # SELECT 1 queue_busy check before doing any useful work.
+            build_queue_busy = _queue_has_building(conn, planet_id)
+            if not build_queue_busy:
+                for bkey in build_order:
+                    if int(BUILD_TARGETS.get(bkey, 0)) <= 0:
+                        continue
+                    res = try_enqueue_building(
+                        conn,
+                        player_id=int(player_id),
+                        planet=planet,
+                        building_type=bkey,
+                        now=ts,
+                        duration_cap=build_duration_cap,
                         target_scale=target_scale,
-                )
-                if res.get("ok"):
-                    out["build"] = res
-                    out["builds"].append(res)
-                    progressed = True
-                    if build_duration_cap is not None and chains > 1:
-                        _force_complete_job(
-                            conn,
-                            table="build_queue",
-                            id_col="id",
-                            job_id=int(res["job_id"]),
-                            finish_col="finish_time",
-                            now=ts,
-                        )
-                    break
+                        queue_known_free=queue_probe_reusable,
+                    )
+                    if res.get("ok"):
+                        out["build"] = res
+                        out["builds"].append(res)
+                        progressed = True
+                        if build_duration_cap is not None and chains > 1:
+                            _force_complete_job(
+                                conn,
+                                table="build_queue",
+                                id_col="id",
+                                job_id=int(res["job_id"]),
+                                finish_col="finish_time",
+                                now=ts,
+                            )
+                        break
 
         if allow_research and is_home and not is_idle_tick:
-            for tech in research_order:
-                res = try_enqueue_research(
-                    conn,
-                    player_id=int(player_id),
-                    tech_key=tech,
-                    now=ts,
-                    duration_cap=research_duration_cap,
+            # Same invariant for account research: the queue cannot become
+            # occupied while failed candidate checks are running in this TX.
+            research_queue_busy = _queue_has_research(conn, int(player_id))
+            if not research_queue_busy:
+                for tech in research_order:
+                    res = try_enqueue_research(
+                        conn,
+                        player_id=int(player_id),
+                        tech_key=tech,
+                        now=ts,
+                        duration_cap=research_duration_cap,
                         target_scale=target_scale,
-                )
-                if res.get("ok"):
-                    out["research"] = res
-                    out["researches"].append(res)
-                    progressed = True
-                    if research_duration_cap is not None and chains > 1:
-                        _force_complete_job(
-                            conn,
-                            table="research_queue",
-                            id_col="id",
-                            job_id=int(res["job_id"]),
-                            finish_col="finish_at",
-                            now=ts,
-                        )
-                    break
+                        queue_known_free=queue_probe_reusable,
+                    )
+                    if res.get("ok"):
+                        out["research"] = res
+                        out["researches"].append(res)
+                        progressed = True
+                        if research_duration_cap is not None and chains > 1:
+                            _force_complete_job(
+                                conn,
+                                table="research_queue",
+                                id_col="id",
+                                job_id=int(res["job_id"]),
+                                finish_col="finish_at",
+                                now=ts,
+                            )
+                        break
 
         out["chains"] = step + 1
         # Without caps, one enqueue pass is enough (real timers).
