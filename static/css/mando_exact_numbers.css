@@ -38,16 +38,6 @@
   outline-offset: -2px;
 }
 
-@media (max-width: 760px) {
-  .gc-universe-switcher select {
-    min-width: 3.9rem;
-    min-height: 2rem;
-    padding-inline: 0.35rem 1.2rem;
-    font-size: 0.64rem;
-    letter-spacing: 0.025em;
-  }
-}
-
 .gc-header-timekeeper {
   display: inline-flex;
   align-items: center;
@@ -421,6 +411,14 @@
 @media (max-width: 760px) {
   .gc-hslot-lang {
     gap: 0.35rem;
+  }
+
+  .gc-universe-switcher select {
+    min-width: 3.9rem;
+    min-height: 2rem;
+    padding-inline: 0.35rem 1.2rem;
+    font-size: 0.64rem;
+    letter-spacing: 0.025em;
   }
 
   .gc-header-timekeeper {
