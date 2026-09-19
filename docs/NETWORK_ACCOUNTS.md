@@ -34,3 +34,18 @@ For UNI 1 launch the intended values are `10` and `259200` (72h). The bundle is 
 - `GC_NETWORK_AUTH_SECRET=<shared 32+ character secret>`
 
 The shared auth secret must exist only in deployment secrets and must never be committed.
+
+
+## Production readiness guard
+
+Production multi-universe deployments fail closed when the Network layer is configured but unsafe.
+
+Required invariants:
+
+- `GC_UNIVERSE_KEY` is explicit on every universe.
+- `GC_NETWORK_AUTH_SECRET` has at least 32 characters.
+- Authority and UNI 1 browser handoff URLs are explicit HTTPS URLs.
+- An open non-authority universe has a live maintenance path:
+  `GC_MAINTENANCE_WORKER=1` or `GC_EMBEDDED_CRON=1`.
+
+This prevents a Railway environment named “production” from silently running the app with development semantics or opening UNI 1 without fleet/live-ops maintenance.
