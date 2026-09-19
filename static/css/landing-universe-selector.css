@@ -203,3 +203,55 @@
     box-shadow: none;
   }
 }
+
+
+/* Auth continuity: once a commander picked a host, keep that universe visible
+   throughout login/registration so cross-server accounts are not confused. */
+.auth-universe-badge {
+  width: min(100%, 420px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 18px;
+  padding: 10px 12px;
+  border: 1px solid rgba(91, 244, 225, 0.28);
+  border-left: 3px solid rgba(91, 244, 225, 0.92);
+  background: rgba(5, 24, 34, 0.72);
+}
+
+.auth-universe-badge--uni1 {
+  border-color: rgba(155, 133, 255, 0.3);
+  border-left-color: rgba(155, 133, 255, 0.95);
+  background: rgba(19, 16, 48, 0.72);
+}
+
+.auth-universe-code {
+  flex: 0 0 auto;
+  min-width: 58px;
+  font: 800 0.86rem/1 var(--gc-font-mono, monospace);
+  letter-spacing: 0.09em;
+  color: #e9fcff;
+}
+
+.auth-universe-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.auth-universe-copy strong {
+  color: rgba(232, 247, 251, 0.92);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.auth-universe-copy small {
+  color: rgba(154, 193, 207, 0.76);
+  font: 600 0.68rem/1.35 var(--gc-font-mono, monospace);
+}
+
+@media (max-width: 520px) {
+  .auth-universe-badge {
+    align-items: flex-start;
+  }
+}
