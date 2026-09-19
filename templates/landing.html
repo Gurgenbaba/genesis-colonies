@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block extra_head %}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing-universe-selector.css', v=GC_ASSET_VERSION) }}">
+{% endblock %}
 
 {% block content %}
 
@@ -32,6 +34,42 @@
 
 {% set cta_logout = T("landing_cta_logout") %}
 {% if cta_logout == "landing_cta_logout" %}{% set cta_logout = "Abmelden" %}{% endif %}
+
+{# GC-UNIVERSE-DIRECTORY-001 — public server selector. U1 remains visible but
+   intentionally locked until the fresh universe is explicitly released. #}
+{% set landing_is_de = (GC_LOCALE|string|lower).startswith('de') %}
+{% set dev_base_url = "https://www.genesis-colonies.de" %}
+{% set uni1_base_url = "https://genesis-colonies-u2-production.up.railway.app" %}
+{% set uni1_open = false %}
+{% if landing_is_de %}
+  {% set server_select_title = "Server auswählen" %}
+  {% set server_select_sub = "Jedes Universum hat eigene Accounts, Fortschritt und Ranglisten." %}
+  {% set server_current_label = "Aktueller Server" %}
+  {% set server_live_label = "LIVE" %}
+  {% set server_prepare_label = "IN VORBEREITUNG" %}
+  {% set server_dev_desc = "Das bestehende Entwicklungs-Universum. Dein bisheriger Fortschritt bleibt vollständig erhalten." %}
+  {% set server_uni1_desc = "Der saubere Neustart mit neuem Balancing, Ascension V3 und eigener Progression." %}
+  {% set server_dev_meta = "Bestehende Accounts · Legacy-Ökonomie · laufender Testbetrieb" %}
+  {% set server_uni1_meta = "Fresh Start · neue Wirtschaft · neue Rankings" %}
+  {% set server_register = "Registrieren" %}
+  {% set server_login = "Login" %}
+  {% set server_soon = "Bald verfügbar" %}
+  {% set server_choose = "Server auswählen" %}
+{% else %}
+  {% set server_select_title = "Choose your server" %}
+  {% set server_select_sub = "Each universe has separate accounts, progression and rankings." %}
+  {% set server_current_label = "Current server" %}
+  {% set server_live_label = "LIVE" %}
+  {% set server_prepare_label = "PREPARING" %}
+  {% set server_dev_desc = "The existing development universe. Your current progression remains fully preserved." %}
+  {% set server_uni1_desc = "A clean fresh start with new balancing, Ascension V3 and its own progression." %}
+  {% set server_dev_meta = "Existing accounts · legacy economy · ongoing test universe" %}
+  {% set server_uni1_meta = "Fresh start · new economy · new rankings" %}
+  {% set server_register = "Register" %}
+  {% set server_login = "Login" %}
+  {% set server_soon = "Coming soon" %}
+  {% set server_choose = "Choose server" %}
+{% endif %}
 
 {% set lbl_systems = T("landing_systems_heading") %}
 {% if lbl_systems == "landing_systems_heading" %}{% set lbl_systems = "Was dich erwartet" %}{% endif %}
@@ -194,13 +232,13 @@
             {{ cta_logout }}
           </a>
         {% else %}
-          <a href="{{ url_for('register') }}"
+          <a href="#landing-universes"
              class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">
-            {{ cta_play }}
+            {{ server_choose }}
           </a>
-          <a href="{{ url_for('login') }}"
+          <a href="{{ dev_base_url }}/login"
              class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost">
-            {{ cta_login }}
+            DEV · {{ cta_login }}
           </a>
         {% endif %}
         {% if has_trailer %}
@@ -209,6 +247,56 @@
           </button>
         {% endif %}
       </div>
+    </div>
+  </section>
+
+  <section class="landing-server-select" id="landing-universes" aria-labelledby="landing-server-select-title" data-landing-server-select>
+    <header class="landing-server-select-head">
+      <span class="landing-server-kicker">GENESIS NETWORK</span>
+      <h2 class="landing-section-title" id="landing-server-select-title">{{ server_select_title }}</h2>
+      <p class="landing-section-sub">{{ server_select_sub }}</p>
+    </header>
+
+    <div class="landing-server-grid">
+      <article class="landing-server-card landing-server-card--live">
+        <div class="landing-server-card-head">
+          <div>
+            <span class="landing-server-code">DEV</span>
+            <h3 class="landing-server-name">Development Universe</h3>
+          </div>
+          <span class="landing-server-status landing-server-status--live">
+            <span class="landing-server-status-dot" aria-hidden="true"></span>{{ server_live_label }}
+          </span>
+        </div>
+        <p class="landing-server-desc">{{ server_dev_desc }}</p>
+        <div class="landing-server-meta">{{ server_dev_meta }}</div>
+        <div class="landing-server-actions">
+          <a class="gc-btn gc-btn-primary" href="{{ dev_base_url }}/register">{{ server_register }}</a>
+          <a class="gc-btn gc-btn-ghost" href="{{ dev_base_url }}/login">{{ server_login }}</a>
+        </div>
+      </article>
+
+      <article class="landing-server-card landing-server-card--uni1{% if not uni1_open %} is-locked{% endif %}">
+        <div class="landing-server-card-head">
+          <div>
+            <span class="landing-server-code">UNI 1</span>
+            <h3 class="landing-server-name">Genesis Universe 1</h3>
+          </div>
+          <span class="landing-server-status{% if uni1_open %} landing-server-status--live{% else %} landing-server-status--prepare{% endif %}">
+            {% if uni1_open %}<span class="landing-server-status-dot" aria-hidden="true"></span>{{ server_live_label }}{% else %}{{ server_prepare_label }}{% endif %}
+          </span>
+        </div>
+        <p class="landing-server-desc">{{ server_uni1_desc }}</p>
+        <div class="landing-server-meta">{{ server_uni1_meta }}</div>
+        <div class="landing-server-actions">
+          {% if uni1_open %}
+            <a class="gc-btn gc-btn-primary" href="{{ uni1_base_url }}/register">{{ server_register }}</a>
+            <a class="gc-btn gc-btn-ghost" href="{{ uni1_base_url }}/login">{{ server_login }}</a>
+          {% else %}
+            <button class="gc-btn gc-btn-ghost landing-server-disabled" type="button" disabled aria-disabled="true">{{ server_soon }}</button>
+          {% endif %}
+        </div>
+      </article>
     </div>
   </section>
 
@@ -400,8 +488,8 @@
       {% if AUTH_USER and AUTH_USER.id %}
         <a href="{{ url_for('overview') }}" class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">{{ cta_cc }}</a>
       {% else %}
-        <a href="{{ url_for('register') }}" class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">{{ cta_play }}</a>
-        <a href="{{ url_for('login') }}" class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost">{{ cta_login }}</a>
+        <a href="#landing-universes" class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">{{ server_choose }}</a>
+        <a href="{{ dev_base_url }}/login" class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost">DEV · {{ cta_login }}</a>
       {% endif %}
     </div>
   </section>
