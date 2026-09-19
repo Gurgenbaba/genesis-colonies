@@ -147,24 +147,64 @@ def issue_handoff(player_id: int, target_key: str) -> tuple[bool, str, str | Non
     if not universe_is_open(target):
         return False, "universe_closed", None
 
+    now = int(time.time())
     conn = db()
     try:
+        if not schema_ready(conn):
+            return False, "network_schema_missing", None
+        begin_write_transaction(conn)
         row = conn.execute(
             "SELECT id, username FROM users WHERE id = ? LIMIT 1;",
             (int(player_id),),
         ).fetchone()
         if not row:
+            rollback(conn)
             return False, "account_missing", None
         user = dict(row)
+
+        link = conn.execute(
+            f"""
+            SELECT network_account_id
+              FROM {NETWORK_LINK_TABLE}
+             WHERE local_user_id = ?
+             LIMIT 1;
+            """,
+            (int(player_id),),
+        ).fetchone()
+        if link:
+            network_account_id = str(
+                link["network_account_id"] if isinstance(link, dict) else link[0]
+            )
+            conn.execute(
+                f"""
+                UPDATE {NETWORK_LINK_TABLE}
+                   SET last_login_at = ?
+                 WHERE local_user_id = ?;
+                """,
+                (now, int(player_id)),
+            )
+        else:
+            network_account_id = f"acct_{secrets.token_urlsafe(24)}"
+            conn.execute(
+                f"""
+                INSERT INTO {NETWORK_LINK_TABLE}
+                    (local_user_id, network_account_id, authority_key, created_at, last_login_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (int(player_id), network_account_id, authority_key(), now, now),
+            )
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
     finally:
         conn.close()
 
-    now = int(time.time())
     payload = {
         "v": 1,
         "iss": authority_key(),
         "aud": target,
-        "sub": f"{authority_key()}:{int(user['id'])}",
+        "sub": network_account_id,
         "username": str(user.get("username") or "").strip(),
         "iat": now,
         "exp": now + HANDOFF_TTL_SECONDS,
