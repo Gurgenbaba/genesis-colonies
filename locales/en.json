@@ -9090,7 +9090,7 @@
   "research_network_error_ascension_race": "Ascension was already processed. Refreshing state.",
   "landing_server_kicker": "GENESIS NETWORK",
   "landing_server_select_title": "Choose your server",
-  "landing_server_select_sub": "Each universe has separate accounts, progression and rankings.",
+  "landing_server_select_sub": "One Genesis account, separate commanders, progression and rankings per universe.",
   "landing_server_live": "LIVE",
   "landing_server_preparing": "PREPARING",
   "landing_server_dev_code": "DEV",
