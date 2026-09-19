@@ -8,11 +8,11 @@
           data-gc-universe-select
           aria-label="{{ T('network_universe_switcher_label') }}">
     {% if GC_NETWORK_UNIVERSE_KEY == 'dev' %}
-      <option value="" selected>DEV</option>
-      <option value="{{ url_for('network_universe_enter', target_key='uni1') }}">UNI 1</option>
+      <option value="" selected>{{ T("network_universe_dev") }}</option>
+      <option value="{{ url_for('network_universe_enter', target_key='uni1') }}">{{ T("network_universe_uni1") }}</option>
     {% else %}
-      <option value="{{ GC_NETWORK_AUTHORITY_URL }}/overview">DEV</option>
-      <option value="" selected>UNI 1</option>
+      <option value="{{ GC_NETWORK_AUTHORITY_URL }}/overview">{{ T("network_universe_dev") }}</option>
+      <option value="" selected>{{ T("network_universe_uni1") }}</option>
     {% endif %}
   </select>
 </div>
