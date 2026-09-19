@@ -13,6 +13,7 @@ def test_gc_perf_pirate_maint_001_busy_queues_are_probed_once():
 
     with (
         patch("game.auto_empire._finish_due", return_value={}),
+        patch("game.auto_empire.in_transaction", return_value=True),
         patch("game.auto_empire._queue_has_building", return_value=True) as build_busy,
         patch("game.auto_empire._queue_has_research", return_value=True) as research_busy,
         patch("game.auto_empire.try_enqueue_building") as enqueue_build,
@@ -48,6 +49,7 @@ def test_gc_perf_pirate_maint_001_free_build_queue_reuses_probe_across_candidate
 
     with (
         patch("game.auto_empire._finish_due", return_value={}),
+        patch("game.auto_empire.in_transaction", return_value=True),
         patch("game.auto_empire._queue_has_building", return_value=False) as build_busy,
         patch("game.auto_empire.try_enqueue_building", side_effect=attempts) as enqueue_build,
     ):
@@ -79,6 +81,7 @@ def test_gc_perf_pirate_maint_001_free_research_queue_reuses_probe_across_candid
 
     with (
         patch("game.auto_empire._finish_due", return_value={}),
+        patch("game.auto_empire.in_transaction", return_value=True),
         patch("game.auto_empire._queue_has_research", return_value=False) as research_busy,
         patch("game.auto_empire.try_enqueue_research", side_effect=attempts) as enqueue_research,
     ):
@@ -98,3 +101,34 @@ def test_gc_perf_pirate_maint_001_free_research_queue_reuses_probe_across_candid
     assert research_busy.call_count == 1
     assert enqueue_research.call_count == 2
     assert all(call.kwargs["queue_known_free"] is True for call in enqueue_research.call_args_list)
+
+
+def test_gc_perf_pirate_maint_001_non_transactional_call_keeps_enqueue_guard():
+    """A reusable probe must never weaken the queue race guard outside a TX."""
+    from game.auto_empire import plan_passive_planet_tick
+
+    attempts = [
+        {"ok": False, "error": "at_target"},
+        {"ok": True, "job_id": 61, "building_type": "crystal_mine", "target_level": 8},
+    ]
+
+    with (
+        patch("game.auto_empire._finish_due", return_value={}),
+        patch("game.auto_empire.in_transaction", return_value=False),
+        patch("game.auto_empire._queue_has_building", return_value=False),
+        patch("game.auto_empire.try_enqueue_building", side_effect=attempts) as enqueue_build,
+    ):
+        result = plan_passive_planet_tick(
+            object(),
+            player_id=7,
+            planet=_planet(),
+            is_home=True,
+            allow_research=False,
+            allow_ships=False,
+            allow_defense=False,
+            chain_limit=1,
+        )
+
+    assert result["build"]["job_id"] == 61
+    assert enqueue_build.call_count == 2
+    assert all(call.kwargs["queue_known_free"] is False for call in enqueue_build.call_args_list)
