@@ -19,7 +19,7 @@ def test_uni1_is_visible_but_locked_until_release():
 
     assert "{% set uni1_open = false %}" in text
     assert "landing-server-disabled" in text
-    assert "aria-disabled="true"" in text
+    assert 'aria-disabled="true"' in text
     assert "Bald verfügbar" in text
     assert "Coming soon" in text
 
