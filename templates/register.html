@@ -9,9 +9,9 @@
 {% set err = (error if error is defined and error else "") %}
 {% set auth_host = request.host|string|lower %}
 {% set auth_is_uni1 = ('genesis-colonies-u2' in auth_host) or auth_host.startswith('uni1.') %}
-{% set auth_universe_code = 'UNI 1' if auth_is_uni1 else 'DEV' %}
-{% set auth_universe_name = 'Genesis Universe 1' if auth_is_uni1 else 'Development Universe' %}
-{% set auth_universe_note = ('Fresh Start · eigene Progression' if (GC_LOCALE|string|lower).startswith('de') else 'Fresh start · separate progression') if auth_is_uni1 else ('Bestehender DEV-Fortschritt' if (GC_LOCALE|string|lower).startswith('de') else 'Existing DEV progression') %}
+{% set auth_universe_code = T("landing_server_uni1_code") if auth_is_uni1 else T("landing_server_dev_code") %}
+{% set auth_universe_name = T("landing_server_uni1_name") if auth_is_uni1 else T("landing_server_dev_name") %}
+{% set auth_universe_note = T("auth_universe_uni1_note") if auth_is_uni1 else T("auth_universe_dev_note") %}
 {% set v_user = (request.form.get('username') or '') if request.method == 'POST' else '' %}
 {% set v_ref = (request.form.get('referral_code') or prefilled_referral or '') if prefilled_referral is defined else ((request.form.get('referral_code') or '') if request.method == 'POST' else '') %}
 
