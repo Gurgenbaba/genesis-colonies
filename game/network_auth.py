@@ -386,10 +386,11 @@ def _network_after_request(response: Response) -> Response:
     if not session.get("user_id") or response.status_code not in {301, 302, 303, 307, 308}:
         return response
 
+    pending_target = session.pop("gc_network_target", "")
     target = str(
         request.args.get("network_target")
         or request.form.get("network_target")
-        or session.pop("gc_network_target", "")
+        or pending_target
         or ""
     ).strip().lower()
     if target and target != current_universe_key() and universe_url(target) and universe_is_open(target):
