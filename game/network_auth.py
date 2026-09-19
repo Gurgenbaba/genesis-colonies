@@ -18,7 +18,7 @@ import time
 from typing import Any
 from urllib.parse import urlencode
 
-from flask import Response, redirect, request, session, url_for
+from flask import Response, jsonify, redirect, request, session, url_for
 
 from .db import begin_write_transaction, commit, db, is_integrity_error, rollback, table_exists
 from .models import create_user, get_homeworld
@@ -361,6 +361,18 @@ def _network_before_request():
     universe = current_universe_key()
 
     if not is_authority():
+        if request.path in {
+            "/api/options/email",
+            "/api/options/password",
+            "/api/options/resend-verification",
+        }:
+            return jsonify({
+                "ok": False,
+                "error": "network_identity_managed",
+                "authority_url": f"{authority_url()}/options",
+            }), 409
+        if endpoint in {"auth_discord_start", "auth_discord_link_start"}:
+            return redirect(f"{authority_url()}/options", code=302)
         if endpoint in {"login", "register"}:
             if session.get("user_id"):
                 return redirect(url_for("overview"))
