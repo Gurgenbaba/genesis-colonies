@@ -185,14 +185,44 @@ def issue_handoff(player_id: int, target_key: str) -> tuple[bool, str, str | Non
             )
         else:
             network_account_id = f"acct_{secrets.token_urlsafe(24)}"
-            conn.execute(
-                f"""
-                INSERT INTO {NETWORK_LINK_TABLE}
-                    (local_user_id, network_account_id, authority_key, created_at, last_login_at)
-                VALUES (?, ?, ?, ?, ?);
-                """,
-                (int(player_id), network_account_id, authority_key(), now, now),
-            )
+            try:
+                conn.execute(
+                    f"""
+                    INSERT INTO {NETWORK_LINK_TABLE}
+                        (local_user_id, network_account_id, authority_key, created_at, last_login_at)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    (int(player_id), network_account_id, authority_key(), now, now),
+                )
+            except Exception as exc:
+                if not is_integrity_error(exc):
+                    raise
+                # Parallel first handoffs can both observe "no link". The winner
+                # persists the identity; the loser rolls back and reuses it.
+                rollback(conn)
+                begin_write_transaction(conn)
+                link = conn.execute(
+                    f"""
+                    SELECT network_account_id
+                      FROM {NETWORK_LINK_TABLE}
+                     WHERE local_user_id = ?
+                     LIMIT 1;
+                    """,
+                    (int(player_id),),
+                ).fetchone()
+                if not link:
+                    raise
+                network_account_id = str(
+                    link["network_account_id"] if isinstance(link, dict) else link[0]
+                )
+                conn.execute(
+                    f"""
+                    UPDATE {NETWORK_LINK_TABLE}
+                       SET last_login_at = ?
+                     WHERE local_user_id = ?;
+                    """,
+                    (now, int(player_id)),
+                )
         commit(conn)
     except Exception:
         rollback(conn)
