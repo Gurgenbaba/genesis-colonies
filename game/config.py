@@ -523,6 +523,65 @@ def get_client_runtime_config() -> dict[str, int | bool]:
     }
 
 
+
+def _network_env_truthy(name: str) -> bool:
+    return _env_str(name).lower() in ("1", "true", "yes", "on")
+
+
+def _validate_network_runtime_config() -> list[str]:
+    """Fail closed for production multi-universe deployments."""
+    network_names = (
+        "GC_UNIVERSE_KEY",
+        "GC_NETWORK_AUTHORITY_KEY",
+        "GC_NETWORK_AUTHORITY_URL",
+        "GC_NETWORK_AUTH_SECRET",
+        "GC_NETWORK_UNI1_URL",
+        "GC_NETWORK_UNI1_OPEN",
+    )
+    if not any(os.environ.get(name) is not None for name in network_names):
+        return []
+
+    errors: list[str] = []
+    universe = (_env_str("GC_UNIVERSE_KEY") or "dev").lower()
+    authority = (_env_str("GC_NETWORK_AUTHORITY_KEY") or "dev").lower()
+    authority_url = _env_str("GC_NETWORK_AUTHORITY_URL")
+    uni1_url = _env_str("GC_NETWORK_UNI1_URL")
+    secret = _env_str("GC_NETWORK_AUTH_SECRET")
+    uni1_open = _network_env_truthy("GC_NETWORK_UNI1_OPEN")
+
+    if not _env_str("GC_UNIVERSE_KEY"):
+        errors.append(
+            "Genesis Network is configured in production but GC_UNIVERSE_KEY is not explicit."
+        )
+
+    if len(secret) < 32:
+        errors.append(
+            "Genesis Network production requires GC_NETWORK_AUTH_SECRET with at least 32 characters."
+        )
+
+    if not authority_url.lower().startswith("https://"):
+        errors.append(
+            "Genesis Network production requires an explicit HTTPS GC_NETWORK_AUTHORITY_URL."
+        )
+
+    if (uni1_open or universe == "uni1") and not uni1_url.lower().startswith("https://"):
+        errors.append(
+            "UNI 1 requires an explicit HTTPS GC_NETWORK_UNI1_URL before production use."
+        )
+
+    if universe != authority and uni1_open:
+        maintenance_ready = (
+            is_maintenance_worker_sidecar_enabled() or is_embedded_cron_enabled()
+        )
+        if not maintenance_ready:
+            errors.append(
+                "Open non-authority universes require GC_MAINTENANCE_WORKER=1 "
+                "or GC_EMBEDDED_CRON=1 so fleet/live-ops maintenance cannot stall."
+            )
+
+    return errors
+
+
 def validate_config(*, strict: bool | None = None) -> list[str]:
     """
     Validate environment. Returns list of error strings (empty = OK).
@@ -588,6 +647,9 @@ def validate_config(*, strict: bool | None = None) -> list[str]:
                     "Set GC_DB_BACKEND=sqlite (and GC_DB_PATH=/data/game.db). "
                     "Only set GC_ALLOW_POSTGRES_PROD=1 for an intentional Postgres cutover."
                 )
+
+    if is_production():
+        errors.extend(_validate_network_runtime_config())
 
     if strict and is_production():
         db_url = os.environ.get("DATABASE_URL", "").strip().lower()
