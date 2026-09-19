@@ -9090,7 +9090,7 @@
   "research_network_error_ascension_race": "Yükseliş zaten işlendi. Durum yenileniyor.",
   "landing_server_kicker": "GENESIS AĞI",
   "landing_server_select_title": "Sunucu seç",
-  "landing_server_select_sub": "Her evrenin hesapları, ilerlemesi ve sıralamaları ayrıdır.",
+  "landing_server_select_sub": "Tek Genesis hesabı; her evrende ayrı komutan, ilerleme ve sıralamalar.",
   "landing_server_live": "AÇIK",
   "landing_server_preparing": "HAZIRLANIYOR",
   "landing_server_dev_code": "DEV",

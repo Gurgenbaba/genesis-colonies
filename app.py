@@ -116,6 +116,10 @@ from flask_sock import Sock
 
 sock = Sock(app)
 
+from game.network_auth import install_network_auth
+
+install_network_auth(app)
+
 from game.db import DbPoolTimeout
 
 

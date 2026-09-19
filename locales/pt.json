@@ -9090,7 +9090,7 @@
   "research_network_error_ascension_race": "A Ascensão já foi processada. A atualizar o estado.",
   "landing_server_kicker": "REDE GENESIS",
   "landing_server_select_title": "Escolher servidor",
-  "landing_server_select_sub": "Cada universo tem contas, progresso e classificações separados.",
+  "landing_server_select_sub": "Uma conta Genesis, com comandantes, progressão e classificações separados por universo.",
   "landing_server_live": "ABERTO",
   "landing_server_preparing": "EM PREPARAÇÃO",
   "landing_server_dev_code": "DEV",

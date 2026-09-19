@@ -9090,7 +9090,7 @@
   "research_network_error_ascension_race": "Ascension wurde bereits verarbeitet. Zustand wird aktualisiert.",
   "landing_server_kicker": "GENESIS NETWORK",
   "landing_server_select_title": "Server auswählen",
-  "landing_server_select_sub": "Jedes Universum hat eigene Accounts, Fortschritt und Ranglisten.",
+  "landing_server_select_sub": "Ein Genesis-Account, getrennte Commander, Fortschritte und Ranglisten pro Universum.",
   "landing_server_live": "LIVE",
   "landing_server_preparing": "IN VORBEREITUNG",
   "landing_server_dev_code": "DEV",

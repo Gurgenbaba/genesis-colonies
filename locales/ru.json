@@ -9090,7 +9090,7 @@
   "research_network_error_ascension_race": "Вознесение уже обработано. Состояние обновляется.",
   "landing_server_kicker": "СЕТЬ GENESIS",
   "landing_server_select_title": "Выберите сервер",
-  "landing_server_select_sub": "У каждой вселенной отдельные аккаунты, прогресс и рейтинги.",
+  "landing_server_select_sub": "Один аккаунт Genesis, отдельные командиры, прогресс и рейтинги для каждой вселенной.",
   "landing_server_live": "ОТКРЫТ",
   "landing_server_preparing": "ГОТОВИТСЯ",
   "landing_server_dev_code": "DEV",
