@@ -13,6 +13,8 @@ import random
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from .db import in_transaction
+
 logger = logging.getLogger(__name__)
 
 # Building ladder (early empire → combat infrastructure).
@@ -908,6 +910,10 @@ def plan_passive_planet_tick(
                     out["finished"][k] = v
 
         progressed = False
+        # Reusing a queue probe is race-safe only while the probe and enqueue
+        # live inside the same transaction. Direct/non-transactional callers
+        # retain the canonical guard inside try_enqueue_*.
+        queue_probe_reusable = in_transaction(conn)
         if allow_buildings and not is_idle_tick:
             # GC-PERF-PIRATE-MAINT-001: one queue probe per planning step.
             # Without this guard every candidate key repeated the identical
@@ -925,7 +931,7 @@ def plan_passive_planet_tick(
                         now=ts,
                         duration_cap=build_duration_cap,
                         target_scale=target_scale,
-                        queue_known_free=True,
+                        queue_known_free=queue_probe_reusable,
                     )
                     if res.get("ok"):
                         out["build"] = res
@@ -955,7 +961,7 @@ def plan_passive_planet_tick(
                         now=ts,
                         duration_cap=research_duration_cap,
                         target_scale=target_scale,
-                        queue_known_free=True,
+                        queue_known_free=queue_probe_reusable,
                     )
                     if res.get("ok"):
                         out["research"] = res
