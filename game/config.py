@@ -631,14 +631,14 @@ def _validate_network_runtime_config() -> list[str]:
         try:
             from game.mine_evolution.ruleset import ASCENSION_RULESET
 
-            if ASCENSION_RULESET != "nodebuster-v1":
+            if ASCENSION_RULESET != "skill-tree-v1":
                 errors.append(
-                    "UNI 1 launch requires Nodebuster mine Ascension ruleset "
-                    "(ASCENSION_RULESET=nodebuster-v1)."
+                    "UNI 1 launch requires Mine Ascension Skill Tree mine Ascension ruleset "
+                    "(ASCENSION_RULESET=skill-tree-v1)."
                 )
         except Exception:
             errors.append(
-                "UNI 1 launch requires the Nodebuster mine Ascension ruleset."
+                "UNI 1 launch requires the Mine Ascension Skill Tree mine Ascension ruleset."
             )
 
     return errors
