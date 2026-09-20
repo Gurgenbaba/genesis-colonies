@@ -142,6 +142,7 @@
   }
 
   async function buySkill(btn, event) {
+    var completed = false;
     if (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -167,6 +168,7 @@
         return;
       }
 
+      completed = true;
       toast(t("nodebuster_skill_success", "Ascension skill upgraded."), "success");
       if (typeof GC.applyActionState === "function") {
         GC.applyActionState(res, "nodebuster_mine_skill");
@@ -177,6 +179,7 @@
       if (window.console && console.error) console.error(err);
     } finally {
       btn.dataset.busy = "0";
+      if (!completed && document.contains(btn)) btn.disabled = false;
     }
   }
 
