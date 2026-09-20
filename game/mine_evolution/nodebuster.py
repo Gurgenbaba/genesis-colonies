@@ -510,7 +510,10 @@ def ascend_mine(
         commit(conn)
         _invalidate_request_cache(planet_id)
 
+        from ..effects.effect_resolver import clear_effect_resolver_cache
         from ..ranking import invalidate_player_score_cache
+
+        clear_effect_resolver_cache(int(user_id))
         invalidate_player_score_cache(int(user_id))
 
         return True, "ok", {
@@ -610,6 +613,10 @@ def purchase_skill(
         )
         commit(conn)
         _invalidate_request_cache(planet_id)
+
+        from ..effects.effect_resolver import clear_effect_resolver_cache
+
+        clear_effect_resolver_cache(int(user_id))
 
         updated_skills = dict(skills)
         updated_skills[skill] = new_rank
