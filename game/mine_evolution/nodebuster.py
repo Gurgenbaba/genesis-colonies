@@ -355,13 +355,16 @@ def panel_fields(
     for key, cfg in SKILL_CATALOG.items():
         rank = int(skills.get(key, 0) or 0)
         max_rank = int(cfg["max_rank"])
+        cost = 0 if rank >= max_rank else skill_point_cost(key, rank)
+        available = rank < max_rank and skill_prerequisites_met(key, skills)
         skill_rows.append(
             {
                 "key": key,
                 "rank": rank,
                 "max_rank": max_rank,
-                "cost": 0 if rank >= max_rank else skill_point_cost(key, rank),
-                "available": rank < max_rank and skill_prerequisites_met(key, skills),
+                "cost": cost,
+                "available": available,
+                "affordable": available and int(state["points_unspent"]) >= int(cost),
                 "requires": dict(cfg.get("requires") or {}),
             }
         )
