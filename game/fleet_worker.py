@@ -41,6 +41,12 @@ def _is_background_maintenance_source(source: str) -> bool:
     return str(source or "").strip().lower() in _BACKGROUND_MAINTENANCE_SOURCES
 
 
+def _env_hard_disabled(name: str) -> bool:
+    """True only for an explicit deployment-level hard-off."""
+    raw = os.environ.get(str(name))
+    return raw is not None and str(raw).strip().lower() in {"0", "false", "no", "off"}
+
+
 def _stage_skip_streak_key(stage: str) -> str:
     return f"post_maint_skip_streak_{stage}"
 
@@ -295,8 +301,14 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         # the most expensive stage and must not starve inactive accounts of budget.
         # GC-PERF-AUTOPLAY-001 / GC-PERF-TK-001: both heavy stages manage short
         # write transactions themselves so Timekeeper/live HTTP can interleave.
-        _run_stage("inactive_autoplay", _inactive_autoplay, manage_tx=False)
-        _run_stage("pirates", _pirates, manage_tx=False)
+        # Deployment hard-offs are a true no-op: do not call the subsystem,
+        # do not write stage bookkeeping, and do not emit worker timing/summary
+        # lines. UNI1 uses these gates so disabled synthetic play stays absent
+        # from Railway logs and any downstream Discord/operator log bridge.
+        if not _env_hard_disabled("GC_INACTIVE_AUTOPLAY_ENABLED"):
+            _run_stage("inactive_autoplay", _inactive_autoplay, manage_tx=False)
+        if not _env_hard_disabled("GC_PIRATE_AI_ENABLED"):
+            _run_stage("pirates", _pirates, manage_tx=False)
         _run_stage("debris", _debris)
     except Exception:
         logger.exception("post fleet maintenance failed source=%s", source)
