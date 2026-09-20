@@ -130,7 +130,9 @@ def test_deadline_safety_net_is_bounded_short_tx_and_return_first():
     helper = src.split("def process_player_due_fleets_now(", 1)[1].split(
         "\ndef mass_expedition_available_slots", 1
     )[0]
-    assert "conn=None" in helper
+    assert "db_detached" in helper
+    assert "conn = db_detached()" in helper
+    assert "conn=conn" in helper
     assert "manage_transaction=True" in helper
     assert "GC_POLL_FLEET_MAX_MOVEMENTS" in helper
     assert "GC_POLL_FLEET_MAX_MS" in helper

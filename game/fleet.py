@@ -2496,7 +2496,12 @@ def admin_advance_fleet_movement(
     now: float | None = None,
     complete: bool = False,
 ) -> Dict[str, Any]:
-    """Force-advance one fleet movement via due timestamps + process_fleet_tick (GC-621G)."""
+    """Force-advance exactly one Fleet through Fleet-owned short transactions.
+
+    Production callers should use ``admin_advance_fleet_movement_owned`` so the
+    connection is detached from Flask request pinning. ``conn`` remains injectable
+    for tests and maintenance tooling.
+    """
     if not fleet_schema_ready(conn):
         return {"ok": False, "error": "fleet_unavailable"}
 
@@ -2505,7 +2510,6 @@ def admin_advance_fleet_movement(
     max_steps = 8 if complete else 1
     steps = 0
     tick_snapshots: List[Dict[str, Any]] = []
-    status_before = ""
 
     cur = conn.cursor()
     cur.execute("SELECT status FROM fleet_movements WHERE id = ? LIMIT 1;", (mid,))
@@ -2515,7 +2519,10 @@ def admin_advance_fleet_movement(
     status_before = str(first["status"] or "")
 
     for _ in range(max_steps):
-        cur.execute("SELECT * FROM fleet_movements WHERE id = ? LIMIT 1;", (mid,))
+        cur.execute(
+            "SELECT status, player_id, mission_type FROM fleet_movements WHERE id = ? LIMIT 1;",
+            (mid,),
+        )
         row = cur.fetchone()
         if not row:
             break
@@ -2524,21 +2531,22 @@ def admin_advance_fleet_movement(
             break
 
         player_id = int(row["player_id"])
+        mission = str(row["mission_type"] or "")
+        counter_key = ""
+        fail_fn = None
+        fail_missions = None
         if status == "outbound":
-            cur.execute(
-                "UPDATE fleet_movements SET arrival_at = ? WHERE id = ? AND status = 'outbound';",
-                (ts - 1, mid),
-            )
+            handler = _handle_arrival
+            counter_key = "processed_arrivals"
+            fail_fn = _fail_outbound_movement
+            fail_missions = {"attack", "expedition"}
         elif status == "holding":
-            cur.execute(
-                "UPDATE fleet_movements SET holding_until = ? WHERE id = ? AND status = 'holding';",
-                (ts - 1, mid),
-            )
+            handler = _handle_holding_end
+            counter_key = "processed_holding"
         elif status == "returning":
-            cur.execute(
-                "UPDATE fleet_movements SET return_at = ? WHERE id = ? AND status = 'returning';",
-                (ts - 1, mid),
-            )
+            handler = _handle_return
+            counter_key = "processed_returns"
+            fail_fn = _fail_returning_movement
         else:
             return {
                 "ok": False,
@@ -2547,11 +2555,39 @@ def admin_advance_fleet_movement(
                 "movement_id": mid,
             }
 
-        tick_result = process_fleet_tick(player_id=player_id, now=ts, conn=conn)
-        tick_snapshots.append(dict(tick_result))
+        handled, err = _run_one_movement_short_tx(
+            conn,
+            movement_id=mid,
+            expect_status=status,
+            handler=handler,
+            now=ts,
+            fail_fn=fail_fn,
+            fail_missions=fail_missions,
+            context_player_id=player_id,
+            context_mission=mission,
+        )
+        tick_result = {
+            "processed_arrivals": 0,
+            "processed_holding": 0,
+            "processed_returns": 0,
+            "errors": [err] if err else [],
+        }
+        if handled and counter_key:
+            tick_result[counter_key] = 1
+        tick_snapshots.append(tick_result)
         steps += 1
 
-        if not complete:
+        if err:
+            return {
+                "ok": False,
+                "error": "advance_failed",
+                "detail": err,
+                "movement_id": mid,
+                "status_before": status_before,
+                "steps": steps,
+                "tick": tick_result,
+            }
+        if not handled or not complete:
             break
 
     cur.execute("SELECT status FROM fleet_movements WHERE id = ? LIMIT 1;", (mid,))
@@ -2567,6 +2603,27 @@ def admin_advance_fleet_movement(
         "complete": bool(complete),
         "tick": tick_snapshots[-1] if tick_snapshots else {},
     }
+
+
+def admin_advance_fleet_movement_owned(
+    movement_id: int,
+    *,
+    now: float | None = None,
+    complete: bool = False,
+) -> Dict[str, Any]:
+    """Production/admin boundary: selected Fleet on a detached DB checkout."""
+    from .db import db_detached
+
+    conn = db_detached()
+    try:
+        return admin_advance_fleet_movement(
+            int(movement_id),
+            conn=conn,
+            now=now,
+            complete=bool(complete),
+        )
+    finally:
+        conn.close()
 
 
 FLEET_DRAWER_VISIBLE_LIMIT = 1
@@ -7849,13 +7906,13 @@ def process_player_due_fleets_now(
     max_movements: Optional[int] = None,
     max_ms: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Bounded short-TX safety-net for an online player with genuinely due fleets.
+    """Bounded short-TX safety-net on a truly detached Fleet connection.
 
-    This is not a second polling engine. Callers first use player_fleet_is_dirty
-    (indexed deadline probe) and invoke this only after a real deadline has passed.
-    A dedicated connection keeps a mass return wave out of the caller request TX.
+    ``db()`` is request-pinned on PostgreSQL; a Fleet owner needs its own checkout
+    to stay outside the caller's HTTP transaction.
     """
     import os
+    from .db import db_detached
 
     is_postgres = get_db_backend() == "postgres"
     default_max_movements = 256 if is_postgres else 64
@@ -7881,15 +7938,20 @@ def process_player_due_fleets_now(
         except (TypeError, ValueError):
             max_ms = default_max_ms
 
-    return process_fleet_tick(
-        player_id=int(player_id),
-        now=now,
-        conn=None,
-        manage_transaction=True,
-        max_movements=max(1, int(max_movements)),
-        max_ms=max(50.0, float(max_ms)),
-        prioritize_returns=True,
-    )
+    conn = db_detached()
+    try:
+        return process_fleet_tick(
+            player_id=int(player_id),
+            now=now,
+            conn=conn,
+            manage_transaction=True,
+            max_movements=max(1, int(max_movements)),
+            max_ms=max(50.0, float(max_ms)),
+            prioritize_returns=True,
+        )
+    finally:
+        conn.close()
+
 
 def mass_expedition_available_slots(player_id: int, *, conn) -> int:
     """Free fleet slots mass expedition may use — always leaves MASS_EXPEDITION_SLOT_RESERVE free."""
