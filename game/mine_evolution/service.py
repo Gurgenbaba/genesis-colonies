@@ -177,6 +177,8 @@ def panel_evolution_fields(
     level: int,
     *,
     ranks: Optional[Dict[str, int]] = None,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """SSR/UI fields for building cards. Non-mines → empty/disabled."""
     if not is_evolvable_mine(building_type) or planet_id is None:
@@ -202,12 +204,14 @@ def panel_evolution_fields(
             int(planet_id),
             str(building_type),
             int(level or 0),
+            conn=conn,
+            profiles=profiles,
         )
 
     if ranks is not None:
         rank = int(ranks.get(building_type, 0) or 0)
     else:
-        rank = get_evolution_rank(int(planet_id), building_type)
+        rank = get_evolution_rank(int(planet_id), building_type, conn=conn)
     next_n = rank + 1
     required = required_level_for_evolution(next_n)
     bonus = building_modifier_from_rank(rank) - 1.0
