@@ -64,6 +64,14 @@ class TestGc850aBuildTimeWiring:
         assert er.get_build_time_seconds("metal_mine", 1) == 10
         assert er.get_build_time_seconds("nanofactory", 1) == 10
 
+    def test_account_research_has_hard_ten_second_floor(self):
+        er = EffectResolver(
+            {"research_lab": 500, "academy": 500},
+            {"buildtime_tech": 500},
+            settings={"build_speed": 1_000_000.0, "research_speed": 1_000_000.0},
+        )
+        assert er.get_research_time_seconds("energy_tech", 1) == BUILD_TIME_MIN_SECONDS
+
     def test_buildtime_tech_reduces_duration(self):
         base_er = _resolver_at_speed_one()
         mod_er = EffectResolver({}, {"buildtime_tech": 10}, settings=SPEED_ONE)
