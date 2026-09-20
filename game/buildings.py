@@ -593,7 +593,7 @@ def _scale_bps(value: int, bps: int, *, minimum: int = 0) -> int:
     return max(int(minimum), int(scaled))
 
 
-def _nodebuster_rebuild_bps(
+def _ascension_rebuild_bps(
     planet_id: Optional[int],
     building_type: str,
     target_level: int,
@@ -604,12 +604,12 @@ def _nodebuster_rebuild_bps(
     if planet_id is None:
         return 10000, 10000
     from .mine_evolution import is_evolvable_mine
-    from .mine_evolution.ruleset import is_nodebuster_ruleset
+    from .mine_evolution.ruleset import is_skill_tree_ruleset
 
-    if not is_nodebuster_ruleset() or not is_evolvable_mine(building_type):
+    if not is_skill_tree_ruleset() or not is_evolvable_mine(building_type):
         return 10000, 10000
 
-    from .mine_evolution.nodebuster import (
+    from .mine_evolution.ascension_skill_tree import (
         get_profiles_for_planet,
         get_skills,
         get_state,
@@ -660,7 +660,7 @@ def recalculate_build_queue_finish_times(
         current = int(buildings.get(btype, 0) or 0)
         queued_same = int(queued_counts.get(btype, 0))
         target_level = current + queued_same + 1
-        _cost_bps, _time_bps = _nodebuster_rebuild_bps(
+        _cost_bps, _time_bps = _ascension_rebuild_bps(
             planet_id,
             btype,
             target_level,
@@ -1683,9 +1683,9 @@ def _effective_building_queue_cap(
     if not is_evolvable_mine(building_type) or planet_id is None:
         return max_level
 
-    from .mine_evolution.ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .mine_evolution.nodebuster import QUEUE_SAFETY_SENTINEL
+    from .mine_evolution.ruleset import is_skill_tree_ruleset
+    if is_skill_tree_ruleset():
+        from .mine_evolution.ascension_skill_tree import QUEUE_SAFETY_SENTINEL
         return int(QUEUE_SAFETY_SENTINEL)
     rank = (
         max(0, int(evolution_rank))
@@ -1775,7 +1775,7 @@ def _make_panel_row(
             research_levels=research_levels,
         )
 
-    rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+    rebuild_cost_bps, rebuild_time_bps = _ascension_rebuild_bps(
         pid,
         building_type,
         target_level,
@@ -2201,7 +2201,7 @@ def preview_max_queueable_build_jobs(
     queue_free_slots: int,
     planet_id: Optional[int] = None,
     conn=None,
-    nodebuster_profiles=None,
+    ascension_profiles=None,
 ) -> int:
     """How many +1 build jobs can be queued (resources, cap, queue slots)."""
     if building_type not in BASE_COST or int(queue_free_slots) <= 0:
@@ -2215,12 +2215,12 @@ def preview_max_queueable_build_jobs(
         if target > int(max_level):
             break
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
-        rebuild_cost_bps, _time_bps = _nodebuster_rebuild_bps(
+        rebuild_cost_bps, _time_bps = _ascension_rebuild_bps(
             planet_id,
             building_type,
             target,
             conn=conn,
-            profiles=nodebuster_profiles,
+            profiles=ascension_profiles,
         )
         cost_m = _scale_bps(cost_m, rebuild_cost_bps)
         cost_c = _scale_bps(cost_c, rebuild_cost_bps)
@@ -2249,15 +2249,15 @@ def summarize_max_queueable_build_jobs(
     conn=None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX queue UX: levels, total cost, cumulative build time."""
-    nodebuster_profiles = None
+    ascension_profiles = None
     if planet_id is not None:
         try:
-            from .mine_evolution.ruleset import is_nodebuster_ruleset
-            if is_nodebuster_ruleset():
-                from .mine_evolution.nodebuster import get_profiles_for_planet
-                nodebuster_profiles = get_profiles_for_planet(int(planet_id), conn=conn)
+            from .mine_evolution.ruleset import is_skill_tree_ruleset
+            if is_skill_tree_ruleset():
+                from .mine_evolution.ascension_skill_tree import get_profiles_for_planet
+                ascension_profiles = get_profiles_for_planet(int(planet_id), conn=conn)
         except Exception:
-            nodebuster_profiles = None
+            ascension_profiles = None
 
     jobs = preview_max_queueable_build_jobs(
         building_type,
@@ -2269,7 +2269,7 @@ def summarize_max_queueable_build_jobs(
         queue_free_slots=queue_free_slots,
         planet_id=planet_id,
         conn=conn,
-        nodebuster_profiles=nodebuster_profiles,
+        ascension_profiles=ascension_profiles,
     )
     if jobs <= 0:
         return {"jobs": 0}
@@ -2281,12 +2281,12 @@ def summarize_max_queueable_build_jobs(
         eff = from_level + i
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
         target = eff + 1
-        rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+        rebuild_cost_bps, rebuild_time_bps = _ascension_rebuild_bps(
             planet_id,
             building_type,
             target,
             conn=conn,
-            profiles=nodebuster_profiles,
+            profiles=ascension_profiles,
         )
         cost_m = _scale_bps(cost_m, rebuild_cost_bps)
         cost_c = _scale_bps(cost_c, rebuild_cost_bps)
@@ -2641,11 +2641,11 @@ def queue_build_for_planet(
         )
         rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))
 
-        nodebuster_profiles = None
-        from .mine_evolution.ruleset import is_nodebuster_ruleset
-        if is_nodebuster_ruleset():
-            from .mine_evolution.nodebuster import get_profiles_for_planet
-            nodebuster_profiles = get_profiles_for_planet(planet_id, conn=conn)
+        ascension_profiles = None
+        from .mine_evolution.ruleset import is_skill_tree_ruleset
+        if is_skill_tree_ruleset():
+            from .mine_evolution.ascension_skill_tree import get_profiles_for_planet
+            ascension_profiles = get_profiles_for_planet(planet_id, conn=conn)
 
         from .mine_evolution import (
             get_evolution_rank,
@@ -2752,12 +2752,12 @@ def queue_build_for_planet(
                 break
 
             cost_metal, cost_crystal = get_upgrade_cost(building_type, current_level + queued_same)
-            rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+            rebuild_cost_bps, rebuild_time_bps = _ascension_rebuild_bps(
                 planet_id,
                 building_type,
                 target_level,
                 conn=conn,
-                profiles=nodebuster_profiles,
+                profiles=ascension_profiles,
             )
             cost_metal = _scale_bps(cost_metal, rebuild_cost_bps)
             cost_crystal = _scale_bps(cost_crystal, rebuild_cost_bps)
