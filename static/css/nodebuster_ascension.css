@@ -1,0 +1,147 @@
+/* Nodebuster Mine Ascension — page-local building-card surface. */
+
+.gc-nodebuster{
+  display:grid;
+  gap:10px;
+}
+
+.gc-nodebuster-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.gc-nodebuster-run{
+  margin-top:3px;
+  opacity:.78;
+  font-size:.78rem;
+}
+
+.gc-nodebuster-ap{
+  min-width:64px;
+  display:grid;
+  justify-items:end;
+  line-height:1;
+}
+
+.gc-nodebuster-ap strong{
+  font-size:1.2rem;
+}
+
+.gc-nodebuster-ap span{
+  margin-top:3px;
+  font-size:.68rem;
+  letter-spacing:.08em;
+  opacity:.72;
+}
+
+.gc-nodebuster-stats{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:6px;
+}
+
+.gc-nodebuster-stat{
+  min-width:0;
+  display:grid;
+  gap:2px;
+  padding:7px 8px;
+  border:1px solid var(--gc-border-soft,rgba(255,255,255,.10));
+  background:var(--gc-panel-soft,rgba(255,255,255,.025));
+}
+
+.gc-nodebuster-stat span{
+  font-size:.66rem;
+  line-height:1.2;
+  opacity:.68;
+}
+
+.gc-nodebuster-stat strong{
+  font-size:.78rem;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.gc-nodebuster-bonuses{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px 12px;
+  font-size:.7rem;
+  opacity:.82;
+}
+
+.gc-nodebuster-tree{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+}
+
+.gc-nodebuster-node{
+  min-width:0;
+  display:grid;
+  gap:3px;
+  text-align:left;
+  padding:8px 9px;
+  border:1px solid var(--gc-border-soft,rgba(255,255,255,.10));
+  background:var(--gc-panel-soft,rgba(255,255,255,.025));
+  color:inherit;
+  cursor:pointer;
+}
+
+.gc-nodebuster-node:last-child{
+  grid-column:1 / -1;
+}
+
+.gc-nodebuster-node:not(:disabled):hover,
+.gc-nodebuster-node.is-buyable{
+  border-color:var(--gc-neon-cyan,currentColor);
+}
+
+.gc-nodebuster-node:disabled{
+  cursor:default;
+  opacity:.54;
+}
+
+.gc-nodebuster-node.is-max{
+  opacity:.8;
+}
+
+.gc-nodebuster-node-title{
+  font-weight:700;
+  font-size:.76rem;
+}
+
+.gc-nodebuster-node-desc{
+  font-size:.64rem;
+  line-height:1.3;
+  opacity:.72;
+}
+
+.gc-nodebuster-node-meta{
+  margin-top:2px;
+  font-size:.66rem;
+  opacity:.82;
+}
+
+.gc-nodebuster-ascend{
+  width:100%;
+}
+
+.gc-nodebuster-lock-hint{
+  margin:0;
+}
+
+@media (max-width:700px){
+  .gc-nodebuster-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .gc-nodebuster-tree{
+    grid-template-columns:1fr;
+  }
+
+  .gc-nodebuster-node:last-child{
+    grid-column:auto;
+  }
+}
