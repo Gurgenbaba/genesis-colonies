@@ -438,6 +438,18 @@ def ascend_mine(
             recalc_ranks=False,
         )
 
+        # Settle production through the exact Ascension cutover while the old
+        # run level is still authoritative. Nodebuster has no Tribute spend,
+        # so it must not rely on try_spend_resources_conn to perform this tick.
+        from ..resources import update_planet_resources
+
+        update_planet_resources(
+            dict(planet),
+            conn=conn,
+            skip_queue_finish=True,
+            persist=True,
+        )
+
         buildings = get_planet_buildings(planet_id, conn=conn)
         level = int(buildings.get(bt, 0) or 0)
         if level < ASCENSION_MIN_LEVEL:
