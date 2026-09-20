@@ -1813,6 +1813,8 @@ def _make_panel_row(
             buildings=buildings,
             research_levels=research_levels,
             panel_ctx=panel_ctx,
+            planet_id=pid,
+            conn=evo_conn,
         )
 
     # For evolvable mines, at_queue_max means the next Ascension gate was reached.
