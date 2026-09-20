@@ -579,6 +579,68 @@ def _validate_network_runtime_config() -> list[str]:
                 "or GC_EMBEDDED_CRON=1 so fleet/live-ops maintenance cannot stall."
             )
 
+    if universe == "uni1" and uni1_open:
+        if _env_str("GC_UNIVERSE_SPEED_PROFILE").lower() != "x1":
+            errors.append(
+                "UNI 1 launch requires GC_UNIVERSE_SPEED_PROFILE=x1."
+            )
+
+        if _env_str("GC_ENDGAME_ECONOMY_MODE").lower() != "active":
+            errors.append(
+                "UNI 1 launch requires GC_ENDGAME_ECONOMY_MODE=active."
+            )
+        if _env_str("GC_ENDGAME_PRODUCTION_PIVOT") != "120":
+            errors.append(
+                "UNI 1 launch requires GC_ENDGAME_PRODUCTION_PIVOT=120."
+            )
+        if _env_str("GC_ENDGAME_PRODUCTION_TAIL_POWER") != "4":
+            errors.append(
+                "UNI 1 launch requires GC_ENDGAME_PRODUCTION_TAIL_POWER=4."
+            )
+
+        if _env_str("GC_NETWORK_START_RESOURCE_MULTIPLIER") != "10":
+            errors.append(
+                "UNI 1 launch requires GC_NETWORK_START_RESOURCE_MULTIPLIER=10."
+            )
+        if _env_str("GC_NETWORK_START_TIMEKEEPER_SECONDS") != "259200":
+            errors.append(
+                "UNI 1 launch requires GC_NETWORK_START_TIMEKEEPER_SECONDS=259200."
+            )
+
+        if _network_env_truthy("GC_INACTIVE_AUTOPLAY_ENABLED"):
+            errors.append(
+                "UNI 1 launch requires GC_INACTIVE_AUTOPLAY_ENABLED=0."
+            )
+        if _network_env_truthy("GC_PIRATE_AI_ENABLED"):
+            errors.append(
+                "UNI 1 launch requires GC_PIRATE_AI_ENABLED=0."
+            )
+
+        if not _network_env_truthy("SHOP_ENABLED"):
+            errors.append("UNI 1 launch requires SHOP_ENABLED=1.")
+        if _env_str("PAYPAL_MODE").lower() != "live":
+            errors.append("UNI 1 launch requires PAYPAL_MODE=live.")
+        for paypal_name in (
+            "PAYPAL_CLIENT_ID",
+            "PAYPAL_CLIENT_SECRET",
+            "PAYPAL_WEBHOOK_ID",
+        ):
+            if not _env_str(paypal_name):
+                errors.append(f"UNI 1 launch requires {paypal_name}.")
+
+        try:
+            from game.mine_evolution.ruleset import ASCENSION_RULESET
+
+            if ASCENSION_RULESET != "nodebuster-v1":
+                errors.append(
+                    "UNI 1 launch requires Nodebuster mine Ascension ruleset "
+                    "(ASCENSION_RULESET=nodebuster-v1)."
+                )
+        except Exception:
+            errors.append(
+                "UNI 1 launch requires the Nodebuster mine Ascension ruleset."
+            )
+
     return errors
 
 
