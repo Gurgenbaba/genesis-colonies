@@ -21,12 +21,23 @@ speed domains to exactly `1.0`, regardless of historical values persisted in
 Player progression modifiers (research, Nanofactory, Commander, Galactic
 Directives, etc.) still apply on top of the x1 universe baseline.
 
-### Construction floor
+### Progression time floor
 
-Normal building construction has a hard **10-second minimum** after the complete
-speed stack. Research, Nanofactory, Commander, directives and timed events may
-accelerate construction, but can never reduce a building job below 10 seconds.
-This is a gameplay floor, not a universe-speed override.
+Normal progression/production queues have a hard **10-second minimum** after the
+complete speed stack. This includes:
+
+- building construction
+- account research
+- Planet Evolution research
+- shipyard production
+- defense production
+- troop training
+
+Research, Nanofactory, laboratories, Commander effects, directives, universe
+settings and timed events may accelerate their domains, but normal calculated
+jobs can never collapse to instant/1-second completion. Explicit skip mechanics
+such as Timekeeper or deliberate admin actions remain separate from this scaling
+floor.
 
 
 ## Economy V2
