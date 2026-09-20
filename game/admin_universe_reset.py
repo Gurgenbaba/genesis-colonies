@@ -482,11 +482,27 @@ def _refresh_rankings_after_universe_reset(
     return recalculate_all_rankings(refresh_scores=True, conn=conn)
 
 
+def _clear_runtime_state_except(conn, keys: Set[str]) -> int:
+    keep = sorted(str(key) for key in keys if str(key))
+    if not keep:
+        return _clear_table(conn.cursor(), conn, "runtime_state")
+    if not table_exists(conn, "runtime_state"):
+        return 0
+    placeholders = ",".join("?" for _ in keep)
+    cur = conn.cursor()
+    cur.execute(
+        f"DELETE FROM runtime_state WHERE key NOT IN ({placeholders});",
+        tuple(keep),
+    )
+    return int(cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0)
+
+
 def execute_universe_reset_keep_inventory(
     *,
     skip_backup: bool = False,
     backup_dir: Optional[Path] = None,
     reset_options: Optional[Dict[str, Any]] = None,
+    preserve_runtime_keys: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
     """
     Season reset: wipe selected gameplay domains, preserve accounts + inventory.
@@ -516,12 +532,16 @@ def execute_universe_reset_keep_inventory(
         begin_write_transaction(conn)
         cur = conn.cursor()
 
+        runtime_keep = set(preserve_runtime_keys or set())
         for table in CLEAR_TABLES_ORDER:
             if table not in tables_to_clear:
                 continue
             if table in preserved:
                 continue
-            deleted_counts[table] = _clear_table(cur, conn, table)
+            if table == "runtime_state" and runtime_keep:
+                deleted_counts[table] = _clear_runtime_state_except(conn, runtime_keep)
+            else:
+                deleted_counts[table] = _clear_table(cur, conn, table)
 
         if options.get("colonies"):
             _reset_player_progress_columns(conn)
