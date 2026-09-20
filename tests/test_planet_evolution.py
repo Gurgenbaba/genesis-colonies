@@ -604,11 +604,8 @@ def test_compute_planet_research_reward_xp_uses_canonical_formula():
     assert t3["reward_xp_tier_bonus"] == 45
     assert t3["reward_tier"] == 3
 
-def test_planet_research_time_has_only_small_safety_floor(evo_db):
-    """
-    GC-622B / Zusatz: No 30s balancing floor.
-    Even at extreme planet_research_speed, duration must not clamp to 30s.
-    """
+def test_planet_research_time_has_ten_second_progression_floor(evo_db):
+    """Extreme planet-research speed must never make a tech instant."""
     conn = db()
     uid = _ensure_test_player(99, conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
@@ -616,8 +613,7 @@ def test_planet_research_time_has_only_small_safety_floor(evo_db):
     conn.execute("INSERT INTO game_settings (key, value) VALUES ('planet_research_speed', '10000') ON CONFLICT(key) DO UPDATE SET value = excluded.value;")
     conn.commit()
     duration = float(compute_planet_research_time(pid, 'industry_t1_automation', 3, conn=conn))
-    assert duration >= 1.0
-    assert duration < 30.0
+    assert duration == 10.0
     conn.close()
 
 def test_colonize_second_planet(evo_db):
