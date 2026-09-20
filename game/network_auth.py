@@ -424,6 +424,19 @@ def _authority_auth_url(endpoint: str, target: str) -> str:
 
 
 def _network_before_request():
+    # Once the shared UNI1 prelaunch freeze marker is set, every already-running
+    # closed-UNI1 instance with this release rejects gameplay while the
+    # synchronous reset runs. Health probes stay available for Railway.
+    if current_universe_key() == "uni1" and request.path not in {"/health", "/healthz"}:
+        try:
+            from .uni1_prelaunch import prelaunch_requests_frozen
+
+            if prelaunch_requests_frozen():
+                return ("UNI1 is in prelaunch maintenance.", 503)
+        except Exception:
+            # Fail closed on UNI1 if the maintenance gate itself cannot be read.
+            return ("UNI1 prelaunch maintenance state unavailable.", 503)
+
     if not network_enabled():
         return None
 
