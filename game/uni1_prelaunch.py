@@ -22,11 +22,12 @@ from .network_auth import (
     _starter_resource_multiplier,
     _starter_timekeeper_seconds,
 )
-from .runtime_state import get_runtime_value, set_runtime_value
+from .runtime_state import get_runtime_value
 
 PRELAUNCH_TOKEN_ENV = "GC_UNI1_PRELAUNCH_RESET_TOKEN"
 PRELAUNCH_TOKEN_KEY = "uni1_prelaunch_reset_token"
 PRELAUNCH_SUMMARY_KEY = "uni1_prelaunch_reset_summary"
+PRELAUNCH_FREEZE_KEY = "uni1_prelaunch_freeze_token"
 _FALSEY = {"0", "false", "no", "off"}
 
 
@@ -52,6 +53,10 @@ def _validate_prelaunch_environment(token: str) -> None:
         raise RuntimeError("uni1_prelaunch_requires_pivot_120")
     if str(os.environ.get("GC_ENDGAME_PRODUCTION_TAIL_POWER") or "").strip() != "4":
         raise RuntimeError("uni1_prelaunch_requires_q4")
+    if int(_starter_resource_multiplier()) != 10:
+        raise RuntimeError("uni1_prelaunch_requires_start_resource_multiplier_10")
+    if int(_starter_timekeeper_seconds()) != 72 * 3600:
+        raise RuntimeError("uni1_prelaunch_requires_start_timekeeper_72h")
     from .mine_evolution.ruleset import ASCENSION_RULESET
 
     if ASCENSION_RULESET != "nodebuster-v1":
@@ -104,6 +109,41 @@ def _linked_human_ids(conn) -> List[int]:
         params,
     ).fetchall()
     return [int(row["player_id"]) for row in rows]
+
+
+def _strict_runtime_set(conn, key: str, value: str) -> None:
+    """Persist a destructive-operation marker; lock/errors must propagate."""
+    now = float(time.time())
+    conn.execute(
+        """
+        INSERT INTO runtime_state (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at;
+        """,
+        (str(key), str(value), now),
+    )
+    row = conn.execute(
+        "SELECT value FROM runtime_state WHERE key = ? LIMIT 1;",
+        (str(key),),
+    ).fetchone()
+    persisted = str(row["value"]) if row else ""
+    if persisted != str(value):
+        raise RuntimeError(f"uni1_prelaunch_marker_not_persisted:{key}")
+
+
+def _activate_prelaunch_freeze(token: str) -> None:
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        _strict_runtime_set(conn, PRELAUNCH_FREEZE_KEY, str(token))
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 def _normalize_existing_linked_humans(token: str) -> Dict[str, Any]:
@@ -197,12 +237,18 @@ def _normalize_existing_linked_humans(token: str) -> Dict[str, Any]:
             "timekeeper_topups": tk_topups,
             "ranking": ranking,
         }
-        set_runtime_value(PRELAUNCH_TOKEN_KEY, str(token), conn=conn)
-        set_runtime_value(
+        _strict_runtime_set(conn, PRELAUNCH_TOKEN_KEY, str(token))
+        _strict_runtime_set(
+            conn,
             PRELAUNCH_SUMMARY_KEY,
             json.dumps(summary, ensure_ascii=False, sort_keys=True),
-            conn=conn,
         )
+        marker = conn.execute(
+            "SELECT value FROM runtime_state WHERE key = ? LIMIT 1;",
+            (PRELAUNCH_TOKEN_KEY,),
+        ).fetchone()
+        if not marker or str(marker["value"]) != str(token):
+            raise RuntimeError("uni1_prelaunch_completion_marker_missing")
         commit(conn)
         return summary
     except Exception:
@@ -216,6 +262,21 @@ def prelaunch_reset_completed() -> bool:
     """True only after a successful normalization wrote its durable marker."""
     marker = str(get_runtime_value(PRELAUNCH_TOKEN_KEY) or "").strip()
     return bool(marker)
+
+
+def prelaunch_requests_frozen() -> bool:
+    """Block closed-UNI1 gameplay once the destructive launch reset begins.
+
+    The durable freeze remains while UNI1 is closed. This makes a two-deploy
+    rollout safe: already-running instances that contain this code observe the
+    shared DB marker and stop accepting gameplay writes while the synchronous
+    reset is executing. Opening UNI1 releases the freeze automatically.
+    """
+    if str(current_universe_key() or "").lower() != "uni1":
+        return False
+    if universe_is_open("uni1"):
+        return False
+    return bool(str(get_runtime_value(PRELAUNCH_FREEZE_KEY) or "").strip())
 
 
 def require_prelaunch_reset_for_open_uni1() -> None:
@@ -236,6 +297,11 @@ def run_uni1_prelaunch_reset_once(token: str) -> Dict[str, Any]:
     previous = get_runtime_value(PRELAUNCH_TOKEN_KEY)
     if previous == token_n:
         return {"ok": True, "skipped": True, "reason": "token_already_applied", "token": token_n}
+
+    # Commit the shared DB freeze before any destructive phase. Once #400 code
+    # is already deployed closed without a token, older serving instances from
+    # the next Railway rollout observe this marker and reject gameplay writes.
+    _activate_prelaunch_freeze(token_n)
 
     pirate_cleanup = _purge_reserved_ai()
 
