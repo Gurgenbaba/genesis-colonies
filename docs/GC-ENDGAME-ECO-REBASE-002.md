@@ -48,28 +48,48 @@ Approximate output relative to L120:
 
 ## Mine Cost V2
 
-Through L120 the historical GC-821 ROI anchors are unchanged. Above L120:
+Through L120 the historical GC-821 ROI anchors are unchanged. The initial V2
+cutover used a `0.45` tail exponent. That kept the displayed incremental ROI
+moderate, but under a q4 production tail it also made every later *fresh record*
+upgrade cheaper relative to the mine's current output.
+
+For UNI1 launch hardening, **live mine pricing** above L120 now uses:
 
 ```text
-H(L) = 2000h × (L / 120)^0.45
+H_live(L) = 2000h × (L / 120)^1.00
 ```
 
-The live upgrade-cost owner continues to price mines from the canonical production
-delta; therefore in `active` mode the delta is V2 and the reference horizon is V2.
-No event, commander, directive, energy or temporary production modifier enters the
-price anchor.
+The q4 tail has marginal output/current output approaching `~1/L`; a linear
+investment horizon offsets that decay. The practical cost of pushing a new record
+therefore stays in a roughly stable multi-day saving band instead of collapsing
+toward instant late-game upgrades.
 
-Reference horizons:
+The live upgrade-cost owner continues to price mines from the canonical production
+delta. No event, Commander effect, directive, energy shortage or temporary
+production modifier enters the price anchor. Nodebuster/Ascension rebuild discounts
+remain a separate server-side modifier and still make rebuilding to the lifetime
+best meaningfully faster.
+
+Reference live horizons:
 
 | Level | Hours | Days |
 |---:|---:|---:|
 | 120 | 2,000 | 83.3 |
-| 200 | ~2,517 | 104.9 |
-| 300 | ~3,021 | 125.9 |
-| 400 | ~3,438 | 143.3 |
-| 500 | ~3,801 | 158.4 |
-| 650 | ~4,278 | 178.2 |
-| 1000 | ~5,193 | 216.4 |
+| 200 | ~3,333 | 138.9 |
+| 300 | ~5,000 | 208.3 |
+| 400 | ~6,667 | 277.8 |
+| 500 | ~8,333 | 347.2 |
+| 650 | ~10,833 | 451.4 |
+| 1000 | ~16,667 | 694.4 |
+
+These are **incremental payback horizons**, not literal saving time from zero.
+Against the q4 mine's current output, a fresh Ferronit record level remains roughly
+in the ~3–4 day reference-cost band across the deep endgame before player bonuses.
+
+**Progression score does not follow this live-price change.**
+`game/progression_valuation.py` intentionally keeps the V2 cutover reference
+horizon frozen at exponent `0.45`, so changing launch-era prices cannot
+retroactively rewrite earned ranking or Commander milestone history.
 
 ## Research V2
 
