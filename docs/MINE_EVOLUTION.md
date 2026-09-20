@@ -101,13 +101,14 @@ Ascension is atomic:
 1. Validate ownership / vacation state.
 2. Lock the selected planet.
 3. Finish due authoritative work.
-4. Require selected mine level >= 200.
-5. Reject while that mine still has pending build jobs.
-6. Compute AP from the current run depth.
-7. Persist lifetime best depth and Ascension counters.
-8. Reset only the selected mine to its reconstruction baseline.
-9. Credit AP.
-10. Commit.
+4. Persist the canonical resource tick through the Ascension timestamp while the old run level is still active.
+5. Require selected mine level >= 200.
+6. Reject while that mine still has pending build jobs.
+7. Compute AP from the current run depth.
+8. Persist lifetime best depth and Ascension counters.
+9. Reset only the selected mine to its reconstruction baseline.
+10. Credit AP.
+11. Commit.
 
 No Tribute is charged in Nodebuster V1.
 
