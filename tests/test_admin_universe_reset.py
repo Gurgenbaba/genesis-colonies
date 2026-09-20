@@ -422,3 +422,70 @@ def test_alliance_war_meta_belongs_to_combat_reset_domain() -> None:
     assert "alliance_war_stats" in combat
     assert CLEAR_TABLES_ORDER.index("alliance_war_events") < CLEAR_TABLES_ORDER.index("alliance_war_stats")
     assert CLEAR_TABLES_ORDER.index("alliance_war_stats") < CLEAR_TABLES_ORDER.index("alliances")
+
+
+
+@patch("game.admin_universe_reset.create_pre_reset_backup")
+def test_universe_reset_clears_all_existing_ascension_state_before_planets(
+    mock_backup, app_client, tmp_path
+):
+    """Regression: historical Ascension FKs without CASCADE must never block reset."""
+    mock_backup.return_value = tmp_path / "pre_universe_reset_ascension.db"
+    client, _, user_id = app_client
+    _login(client, "admin_reset", "adminpass123")
+
+    from game.models import db, get_homeworld
+
+    conn = db()
+    try:
+        planet_id = int(get_homeworld(user_id, conn=conn)["id"])
+        conn.execute(
+            """
+            INSERT INTO planet_mine_evolution
+                (planet_id, building_type, evolution_rank, updated_at)
+            VALUES (?, 'metal_mine', 3, ?);
+            """,
+            (planet_id, time.time()),
+        )
+        conn.execute(
+            """
+            INSERT INTO planet_shipyard_ascension
+                (planet_id, forge_rank, updated_at)
+            VALUES (?, 2, ?);
+            """,
+            (planet_id, time.time()),
+        )
+        conn.execute(
+            """
+            INSERT INTO player_forge_cores
+                (player_id, forge_cores, updated_at)
+            VALUES (?, 7, ?);
+            """,
+            (user_id, time.time()),
+        )
+        conn.execute(
+            """
+            INSERT INTO research_lab_ascension
+                (planet_id, rank, ascended_at, updated_at)
+            VALUES (?, 2, ?, ?);
+            """,
+            (planet_id, int(time.time()), int(time.time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.post(
+        "/api/admin/universe-reset",
+        json={"confirm_text": "RESET UNIVERSE KEEP INVENTORY"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+    for table in (
+        "planet_mine_evolution",
+        "planet_shipyard_ascension",
+        "player_forge_cores",
+        "research_lab_ascension",
+    ):
+        assert _count_table(table) == 0
