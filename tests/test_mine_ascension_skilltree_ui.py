@@ -37,3 +37,18 @@ def test_player_facing_ascension_title_never_says_nodebuster():
         assert "nodebuster" not in str(data.get("nodebuster_title", "")).lower()
         assert data.get("mine_ascension_title")
         assert data.get("skilltree_tab_ascension")
+
+
+def test_skilltree_route_forwards_mine_ascension_context():
+    source = (ROOT / "app.py").read_text(encoding="utf-8")
+    start = source.index('def skilltree_view():')
+    end = source.index('@app.route("/api/commander/class/pick"', start)
+    block = source[start:end]
+
+    assert 'page.get("mine_ascension")' in block
+    assert "mine_ascension=mine_ascension" in block
+
+
+def test_mine_ascension_handler_is_persistent_for_pjax_navigation():
+    base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "js/pages/mine_nodebuster.js" in base
