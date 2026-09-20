@@ -641,8 +641,41 @@ def serialize_for_client(player_id: int, *, conn) -> Dict[str, Any]:
 
 
 def get_skilltree_page_context(player_id: int, *, conn) -> Dict[str, Any]:
-    claim_skill_points(int(player_id), conn=conn)
-    return {"commander": serialize_for_client(int(player_id), conn=conn)}
+    uid = int(player_id)
+    claim_skill_points(uid, conn=conn)
+
+    mine_ascension = {
+        "ready": False,
+        "planet_id": None,
+        "mines": [],
+    }
+    try:
+        from .models import get_planet_buildings
+        from .planet_evolution.repository import get_context_planet
+        from .mine_evolution.nodebuster import panel_fields
+
+        planet = get_context_planet(uid, conn=conn)
+        planet_id = int(planet["id"])
+        buildings = get_planet_buildings(planet_id, conn=conn) or {}
+        mine_rows = []
+        for building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):
+            level = int(buildings.get(building_type, 0) or 0)
+            row = panel_fields(planet_id, building_type, level, conn=conn)
+            row["building_type"] = building_type
+            row["level"] = level
+            mine_rows.append(row)
+        mine_ascension = {
+            "ready": True,
+            "planet_id": planet_id,
+            "mines": mine_rows,
+        }
+    except Exception:
+        logger.exception("skilltree mine ascension context failed player=%s", uid)
+
+    return {
+        "commander": serialize_for_client(uid, conn=conn),
+        "mine_ascension": mine_ascension,
+    }
 
 
 # Story Ops stand-in when the player has not picked a Living Commander yet.
