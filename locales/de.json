@@ -9145,5 +9145,8 @@
   "nodebuster_error_queue_pending": "Bauaufträge dieser Mine zuerst abschließen oder abbrechen.",
   "nodebuster_error_insufficient_points": "Nicht genug Ascension-Punkte.",
   "nodebuster_error_skill_prerequisite": "Die benötigten Nodes sind noch nicht hoch genug.",
-  "nodebuster_error_skill_max": "Dieser Node ist bereits maximiert."
+  "nodebuster_error_skill_max": "Dieser Node ist bereits maximiert.",
+  "nodebuster_storage_bonus": "Lager +{pct}%",
+  "nodebuster_skill_deep_storage": "Tiefenlager",
+  "nodebuster_skill_deep_storage_desc": "+5% permanente Lagerkapazität pro Rang für die Ressource dieser Mine."
 }
