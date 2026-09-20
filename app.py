@@ -14641,6 +14641,54 @@ def api_buildings_mine_evolve():
     return resp
 
 
+@app.route("/api/buildings/mine-evolution/skill", methods=["POST"])
+@require_login
+def api_buildings_mine_evolution_skill():
+    """Nodebuster V1: spend permanent per-mine Ascension points."""
+    from game.mine_evolution.nodebuster import purchase_skill
+    from game.planet_evolution.repository import get_context_planet
+
+    data = request.get_json(silent=True) or {}
+    building_type = str(data.get("building_type") or "").strip()
+    skill_key = str(data.get("skill_key") or "").strip()
+    if not building_type or not skill_key:
+        return jsonify({"ok": False, "reason": "missing_skill"}), 400
+
+    user_id = int(session.get("user_id") or 0)
+    if user_id <= 0:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    planet = get_context_planet(user_id)
+    if not planet:
+        return jsonify({"ok": False, "reason": "no_planet"}), 400
+
+    ok, reason, extra = purchase_skill(
+        user_id,
+        planet,
+        building_type,
+        skill_key,
+    )
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_buildings_mine_evolution_skill",
+        include_panel=False,
+        panel_delta_keys=[building_type],
+    )
+    response_obj = resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
+
+
 @app.route("/api/shipyard/forge-campaign", methods=["GET"])
 @require_login
 def api_shipyard_forge_campaign():
