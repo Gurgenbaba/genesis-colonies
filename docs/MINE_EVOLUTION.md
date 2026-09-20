@@ -145,10 +145,17 @@ Owner: `game/mine_evolution/nodebuster.py`
 - Max rank: 10
 - +2.5% permanent production per rank for that selected mine
 
+### Deep Storage
+
+- Max rank: 10
+- +5% permanent storage capacity per rank
+- Applies only to the resource produced by that selected mine on that planet
+- Uses the canonical `EffectResolver.get_storage_capacity()` path
+
 ### Overdrive
 
 - Max rank: 3
-- Requires Reconstruction, Frugal Rebuild, Rapid Rebuild and Deep Yield at rank 5
+- Requires Reconstruction, Frugal Rebuild, Rapid Rebuild, Deep Yield and Deep Storage at rank 5
 - Per rank:
   - +10 restart levels
   - +5% permanent production
@@ -317,7 +324,7 @@ Each mine card exposes one compact Nodebuster surface:
 - current restart level
 - Ascension count
 - permanent rebuild / production bonuses
-- five-node permanent skill tree
+- six-node permanent skill tree
 - Ascend CTA from level 200 onward
 
 The confirm modal explicitly shows:
@@ -351,10 +358,11 @@ They lock:
 5. exactly-once request behavior
 6. permanent reconstruction baseline
 7. per-mine production skill isolation
-8. rebuild cost/time discounts
-9. big-number-safe cost scaling
-10. lifetime progression score preservation
-11. Nodebuster ruleset identity
+8. per-mine/resource Deep Storage isolation
+9. rebuild cost/time discounts
+10. big-number-safe cost scaling
+11. lifetime progression score preservation
+12. Nodebuster ruleset identity
 
 ---
 
