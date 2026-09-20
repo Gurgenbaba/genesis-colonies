@@ -14,19 +14,11 @@
     <p class="section-hint hint">{{ T("commander_staff_hint", "Choose the officer who will lead your empire.") }}</p>
   </header>
 
-  <nav class="gc-page-tabs gc-page-tabs--cols-2 gc-page-tabs--inline skilltree-system-tabs"
-       role="tablist"
-       aria-label="{{ T('skilltree_system_tabs_label', 'Skill Tree Bereiche') }}">
-    <a href="{{ url_for('skilltree_view', tab='commander') }}"
-       class="gc-page-tab{% if active_skilltree_tab != 'ascension' %} is-active{% endif %}"
-       role="tab"
-       aria-selected="{{ 'true' if active_skilltree_tab != 'ascension' else 'false' }}">
+  <nav class="gc-page-tabs gc-page-tabs--cols-2 gc-page-tabs--inline skilltree-system-tabs" role="tablist" aria-label="{{ T('skilltree_system_tabs_label', 'Skill Tree Bereiche') }}">
+    <a href="{{ url_for('skilltree_view', tab='commander') }}" class="gc-page-tab{% if active_skilltree_tab != 'ascension' %} is-active{% endif %}" role="tab" aria-selected="{{ 'true' if active_skilltree_tab != 'ascension' else 'false' }}">
       {{ T('skilltree_tab_commander', 'Commander') }}
     </a>
-    <a href="{{ url_for('skilltree_view', tab='ascension') }}"
-       class="gc-page-tab{% if active_skilltree_tab == 'ascension' %} is-active{% endif %}"
-       role="tab"
-       aria-selected="{{ 'true' if active_skilltree_tab == 'ascension' else 'false' }}">
+    <a href="{{ url_for('skilltree_view', tab='ascension') }}" class="gc-page-tab{% if active_skilltree_tab == 'ascension' %} is-active{% endif %}" role="tab" aria-selected="{{ 'true' if active_skilltree_tab == 'ascension' else 'false' }}">
       {{ T('skilltree_tab_ascension', 'Ascension') }}
     </a>
   </nav>
@@ -369,10 +361,7 @@
     {% else %}
     <div class="gc-building-grid gc-ascension-mine-grid" role="list">
       {% for mine in (asc.mines or []) %}
-      <article class="gc-prog-card gc-nodebuster gc-ascension-mine-card"
-               id="ascension-{{ mine.building_type }}"
-               data-nodebuster-mine="{{ mine.building_type }}"
-               role="listitem">
+      <article class="gc-prog-card gc-nodebuster gc-ascension-mine-card" id="ascension-{{ mine.building_type }}" data-nodebuster-mine="{{ mine.building_type }}" role="listitem">
         <div class="gc-nodebuster-head">
           <div>
             <div class="gc-bld-evo-progress-label">{{ T('building_' ~ mine.building_type) }}</div>
@@ -412,17 +401,9 @@
           <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
         </div>
 
-        <div class="gc-nodebuster-tree"
-             role="list"
-             aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
+        <div class="gc-nodebuster-tree" role="list" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
           {% for skill in mine.nodebuster_skills %}
-          <button type="button"
-                  class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}"
-                  data-nodebuster-skill="{{ skill.key }}"
-                  data-nodebuster-building="{{ mine.building_type }}"
-                  data-nodebuster-cost="{{ skill.cost }}"
-                  {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %}
-                  role="listitem">
+          <button type="button" class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}" data-nodebuster-skill="{{ skill.key }}" data-nodebuster-building="{{ mine.building_type }}" data-nodebuster-cost="{{ skill.cost }}" {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %} role="listitem">
             <span class="gc-nodebuster-node-title">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
             <span class="gc-nodebuster-node-desc">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
             <span class="gc-nodebuster-node-meta gc-mono">
