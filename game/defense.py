@@ -25,6 +25,7 @@ from .models import (
     resource_db_param,
 )
 from .queue_refund import refund_summary_percents, stored_cost_int
+from .time_floors import MIN_PROGRESS_DURATION_SECONDS
 
 MAX_DEFENSE_QUEUE = 3
 QUEUE_STATUS_QUEUED = "queued"
@@ -106,7 +107,7 @@ def _effective_build_seconds(
         from .shipyard import _directive_time_speed
 
         speed *= _directive_time_speed(planet_id, "defense_time_speed", conn=conn)
-    return max(1, int(math.ceil(seconds / speed)))
+    return max(MIN_PROGRESS_DURATION_SECONDS, int(math.ceil(seconds / speed)))
 
 
 def unit_build_seconds(
