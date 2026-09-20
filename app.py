@@ -3892,6 +3892,48 @@ def _inventory_action_context(
     return state, inventory, case_battles
 
 
+def _inventory_open_action_ok_response(
+    user_id: int,
+    reason: str,
+    payload: Dict[str, Any],
+    *,
+    request_id: str = "",
+):
+    """GC-PERF-INVENTORY-OPEN-009 — compact post-open response.
+
+    Opening a container is meta-only after GC-864.  It cannot change planet
+    resources or queue timing, so rebuilding the complete HUD + inventory vault
+    before the loot animation is redundant.  Return a partial canonical state
+    plus the authoritative container slice; the browser refreshes the full
+    inventory in parallel with the animation.
+    """
+    from game.inventory import build_container_action_state
+    from game.logic import attach_canonical_server_time
+
+    conn = db()
+    try:
+        containers = build_container_action_state(int(user_id), conn=conn)
+    finally:
+        conn.close()
+
+    state = attach_canonical_server_time(
+        {
+            "ok": True,
+            "player_id": int(user_id),
+        }
+    )
+    resp: Dict[str, Any] = {
+        "ok": True,
+        "reason": reason,
+        "state": state,
+        "containers": containers,
+    }
+    resp.update(payload)
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
 def _inventory_action_error_response(
     user_id: int,
     reason: str,
@@ -4052,10 +4094,9 @@ def api_inventory_open_container():
         return _inventory_action_error_response(user_id, reason, "inventory_open", extra=extra or None)
 
     result = result or {}
-    return _inventory_action_ok_response(
+    return _inventory_open_action_ok_response(
         user_id,
         "container_open_ok",
-        "inventory_open",
         {
             "rewards": result.get("rewards") or [],
             "roll_preview": result.get("roll_preview") or [],
