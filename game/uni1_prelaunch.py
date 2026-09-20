@@ -310,6 +310,7 @@ def run_uni1_prelaunch_reset_once(token: str) -> Dict[str, Any]:
     reset = execute_universe_reset_keep_inventory(
         skip_backup=True,
         reset_options=None,
+        preserve_runtime_keys={PRELAUNCH_FREEZE_KEY},
     )
 
     normalized = _normalize_existing_linked_humans(token_n)
