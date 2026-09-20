@@ -4,11 +4,11 @@
 CREATE TABLE IF NOT EXISTS planet_mine_ascension_state (
     planet_id INTEGER NOT NULL,
     building_type TEXT NOT NULL,
-    ascension_count INTEGER NOT NULL DEFAULT 0,
-    points_earned INTEGER NOT NULL DEFAULT 0,
-    points_unspent INTEGER NOT NULL DEFAULT 0,
-    best_depth INTEGER NOT NULL DEFAULT 0,
-    last_depth INTEGER NOT NULL DEFAULT 0,
+    ascension_count TEXT NOT NULL DEFAULT '0',
+    points_earned TEXT NOT NULL DEFAULT '0',
+    points_unspent TEXT NOT NULL DEFAULT '0',
+    best_depth TEXT NOT NULL DEFAULT '0',
+    last_depth TEXT NOT NULL DEFAULT '0',
     updated_at REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (planet_id, building_type),
     FOREIGN KEY (planet_id) REFERENCES planets(id)
