@@ -167,9 +167,32 @@ def _compute_building_score(player_id: int, conn) -> int:
     total_crystal = 0
     total_fuel = 0
     for planet in get_planets_by_player(int(player_id), conn=conn):
-        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+        planet_id = int(planet["id"])
+        buildings = get_planet_buildings(planet_id, conn=conn)
+
+        nodebuster_profiles = None
+        try:
+            from .mine_evolution.ruleset import is_nodebuster_ruleset
+            if is_nodebuster_ruleset():
+                from .mine_evolution.nodebuster import get_profiles_for_planet
+                nodebuster_profiles = get_profiles_for_planet(planet_id, conn=conn)
+        except Exception:
+            nodebuster_profiles = None
+
         for key in BUILDING_ORDER:
             level = int(buildings.get(key, 0) or 0)
+            if nodebuster_profiles is not None:
+                try:
+                    from .mine_evolution.nodebuster import score_level
+                    level = score_level(
+                        planet_id,
+                        str(key),
+                        level,
+                        conn=conn,
+                        profiles=nodebuster_profiles,
+                    )
+                except Exception:
+                    pass
             if level <= 0:
                 continue
             if endgame_economy_mode() == "active":
