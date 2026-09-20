@@ -6,7 +6,6 @@
   GC._nodebusterMinePersistentBound = true;
 
   var activeAscend = null;
-  var observer = null;
 
   function byId(id) {
     return document.getElementById(id);
@@ -181,57 +180,58 @@
     }
   }
 
-  function bindNodebuster(root) {
-    var host = root && root.querySelectorAll ? root : document;
+  function onDocumentClick(event) {
+    var target = event.target && event.target.closest ? event.target : null;
+    if (!target) return;
 
-    host.querySelectorAll("[data-nodebuster-mine] [data-mine-evolve]").forEach(function (btn) {
-      if (btn.dataset.nodebusterBound === "1") return;
-      btn.dataset.nodebusterBound = "1";
-      btn.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        openAscend(btn);
-      });
-    });
-
-    host.querySelectorAll("[data-nodebuster-skill]").forEach(function (btn) {
-      if (btn.dataset.nodebusterBound === "1") return;
-      btn.dataset.nodebusterBound = "1";
-      btn.addEventListener("click", function (event) {
-        buySkill(btn, event);
-      });
-    });
-  }
-
-  var submit = byId("gc-mine-evo-confirm-submit");
-  if (submit) {
-    submit.addEventListener("click", submitAscend);
-  }
-
-  document.querySelectorAll("[data-mine-evo-confirm-cancel]").forEach(function (btn) {
-    btn.addEventListener("click", function (event) {
+    var skill = target.closest("[data-nodebuster-skill]");
+    if (skill) {
       event.preventDefault();
       event.stopPropagation();
-      closeAscend();
-    });
-  });
+      event.stopImmediatePropagation();
+      buySkill(skill, event);
+      return;
+    }
 
-  document.addEventListener("keydown", function (event) {
-    var modal = byId("gc-mine-evo-confirm-modal");
-    if (event.key === "Escape" && modal && !modal.hidden && activeAscend) {
+    var ascend = target.closest("[data-nodebuster-mine] [data-mine-evolve]");
+    if (ascend) {
       event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      openAscend(ascend);
+      return;
+    }
+
+    if (activeAscend && target.closest("#gc-mine-evo-confirm-submit")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      submitAscend(event);
+      return;
+    }
+
+    if (activeAscend && target.closest("[data-mine-evo-confirm-cancel]")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
       closeAscend();
     }
-  });
-
-  bindNodebuster(document);
-
-  var main = byId("main-content");
-  if (main && typeof MutationObserver !== "undefined") {
-    observer = new MutationObserver(function () {
-      bindNodebuster(main);
-    });
-    observer.observe(main, { childList: true, subtree: true });
-    GC._nodebusterMineObserver = observer;
   }
+
+  function onDocumentKeydown(event) {
+    var modal = byId("gc-mine-evo-confirm-modal");
+    if (activeAscend && event.key === "Escape" && modal && !modal.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      closeAscend();
+    }
+  }
+
+  // Capture phase is deliberate: legacy Mine-Evolution handlers may still exist
+  // during a rolling DEV deployment. Nodebuster owns only buttons inside its
+  // own surface and prevents an older bubbling handler from double-submitting.
+  // The listeners stay persistent across Buildings light-PJAX replacements.
+  document.addEventListener("click", onDocumentClick, true);
+  document.addEventListener("keydown", onDocumentKeydown, true);
 }());
