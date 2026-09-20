@@ -729,8 +729,8 @@ def finish_due_work(
     manage_transaction: bool = True,
     include_planet_queues: bool = True,
     include_account_research: bool = True,
-    include_fleet: bool = True,
-    include_relocations: bool = True,
+    include_fleet: Optional[bool] = None,
+    include_relocations: Optional[bool] = None,
     skip_locked_planets: bool = False,
     queue_domains: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
@@ -743,14 +743,30 @@ def finish_due_work(
       - neither: global (all planets + users in research_queue) — admin/cron
 
     The ``include_*`` switches let the dedicated queue worker execute the exact
-    scope discovered by its read-only candidate scan. Defaults preserve the
-    historical request/admin behavior.
+    scope discovered by its read-only candidate scan. Fleet/relocation default
+    to disabled only for caller-owned ``source="action"`` transactions; all
+    other historical request/admin/worker behavior stays unchanged.
     """
     started = time.perf_counter()
     result = _empty_result(str(source or "system"))
     owns_conn = conn is None
     if owns_conn:
         conn = db()
+
+    # GC-FLEET-PG-ABORT-003: action mutations already own a gameplay/account
+    # transaction. Fleet movement completion and planet relocation are separate
+    # domains with their own workers / safety nets and must not be pulled into
+    # an unrelated caller-owned action TX. Explicit True remains an opt-in for
+    # deliberately coupled maintenance code.
+    action_owned_tx = (
+        str(source or "").strip().lower() == "action"
+        and not owns_conn
+        and in_transaction(conn)
+    )
+    if include_fleet is None:
+        include_fleet = not action_owned_tx
+    if include_relocations is None:
+        include_relocations = not action_owned_tx
 
     if now is None:
         now = time.time()
