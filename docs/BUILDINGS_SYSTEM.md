@@ -134,7 +134,7 @@ Panel-Daten: `get_buildings_panel_rows()` für SSR + Poll `buildings_panel` (ink
 
 - Build time: `get_build_time_seconds()` → `power_build_seconds` (GC-821 / GC-850A)
 - Max level caps für Minen/Solar/Storage
-- Storage capacity für Economy — Ferronit/Crytite/Brennzellen teilen `STORAGE_BASE_CAPACITY` ohne Depot; Storage-Gebäude behalten die Ferdi-Referenzkurve als Floor und erhalten ab L50 den ressourcenspezifischen Storage-V2-Produktionspuffer (24h bei L50, danach +0,48h/Level ohne Cap), Upgrade-Kosten ×5 (`STORAGE_BUILDING_COST_MULTIPLIER`); `storage_tech` multipliziert additiv mit +50 %/Level
+- Storage capacity für Economy — Ferronit/Crytite/Brennzellen teilen `STORAGE_BASE_CAPACITY` ohne Depot; Storage-Gebäude behalten die Ferdi-Referenzkurve als Floor und erhalten ab L50 den ressourcenspezifischen Storage-V2-Produktionspuffer (24h bei L50, danach +0,48h/Level ohne Cap), Upgrade-Kosten ×5 (`STORAGE_BUILDING_COST_MULTIPLIER`); `storage_tech` multipliziert additiv mit +10 %/Level
 
 Siehe [EFFECTS.md](EFFECTS.md).
 
