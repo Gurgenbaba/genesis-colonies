@@ -58,7 +58,7 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Compile production owners
         run: |
-          python -m py_compile game/production_formula.py game/economy_balance.py game/effects/effect_resolver.py
+          python -m py_compile game/production_formula.py game/economy_balance.py game/effects/effect_resolver.py game/mine_evolution/service.py game/mine_evolution/nodebuster.py
           git diff --check
       - name: Guardrail + canonical production regression
         run: |
@@ -71,8 +71,8 @@ jobs:
         run: |
           python -m pytest -q --tb=line tests/test_gc_ferro_l388_001.py
           python -m pytest -q --tb=line tests/test_gc_mando_storage_001.py
-      - name: Mine evolution production regression
+      - name: Nodebuster mine production regression
         run: |
           python -m pytest -q --tb=line \
-            tests/test_mine_evolution.py::TestMineEvolutionFormulas \
-            tests/test_mine_evolution.py::TestMineEvolutionProduction
+            tests/test_mine_evolution.py \
+            tests/test_gc_mine_ascension_nexus_001.py
