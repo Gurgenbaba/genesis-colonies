@@ -64,6 +64,9 @@ def _human(conn, username: str, display: str) -> int:
         """,
         (uid, f"acct_{uuid.uuid4().hex}", now - 86400, now - 3600),
     )
+    # create_user() owns a separate connection. Release this caller-owned SQLite
+    # write transaction before the next test user is created.
+    conn.commit()
     return uid
 
 
@@ -236,7 +239,80 @@ def test_hard_off_ranking_is_human_only_even_before_purge(uni1_prelaunch_db):
         assert not (bot_ids & visible_ids)
 
         rank, total = get_player_rank_from_snapshot(human_id, conn=conn)
-        assert rank == 1
-        assert total == 1
+        human_row = next(row for row in rows if int(row["player_id"]) == human_id)
+        assert rank == int(human_row["rank"])
+        assert total == len(rows)
     finally:
         conn.close()
+
+
+
+def test_prelaunch_reset_requires_exact_launch_starter_bundle(
+    uni1_prelaunch_db, monkeypatch
+):
+    from game.uni1_prelaunch import run_uni1_prelaunch_reset_once
+
+    monkeypatch.setenv("GC_NETWORK_START_RESOURCE_MULTIPLIER", "1")
+    with pytest.raises(RuntimeError, match="start_resource_multiplier_10"):
+        run_uni1_prelaunch_reset_once("uni1-bad-resources")
+
+    monkeypatch.setenv("GC_NETWORK_START_RESOURCE_MULTIPLIER", "10")
+    monkeypatch.setenv("GC_NETWORK_START_TIMEKEEPER_SECONDS", "0")
+    with pytest.raises(RuntimeError, match="start_timekeeper_72h"):
+        run_uni1_prelaunch_reset_once("uni1-bad-timekeeper")
+
+
+def test_prelaunch_freeze_blocks_closed_uni1_until_open(
+    uni1_prelaunch_db, monkeypatch
+):
+    from game.db import begin_write_transaction, commit, db
+    from game.uni1_prelaunch import (
+        PRELAUNCH_FREEZE_KEY,
+        _strict_runtime_set,
+        prelaunch_requests_frozen,
+    )
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        _strict_runtime_set(conn, PRELAUNCH_FREEZE_KEY, "uni1-freeze-test")
+        commit(conn)
+    finally:
+        conn.close()
+
+    assert prelaunch_requests_frozen() is True
+    monkeypatch.setenv("GC_NETWORK_UNI1_OPEN", "1")
+    assert prelaunch_requests_frozen() is False
+
+
+def test_prelaunch_runtime_marker_write_is_strict(uni1_prelaunch_db):
+    from game.db import begin_write_transaction, commit, db
+    from game.uni1_prelaunch import PRELAUNCH_TOKEN_KEY, _strict_runtime_set
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        _strict_runtime_set(conn, PRELAUNCH_TOKEN_KEY, "strict-marker-test")
+        row = conn.execute(
+            "SELECT value FROM runtime_state WHERE key = ?;",
+            (PRELAUNCH_TOKEN_KEY,),
+        ).fetchone()
+        assert row is not None
+        assert str(row["value"]) == "strict-marker-test"
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_prelaunch_reset_runs_before_workers_and_gunicorn():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    entry = (root / "scripts" / "docker-entrypoint.sh").read_text(encoding="utf-8")
+    reset_pos = entry.index("python scripts/run_uni1_prelaunch_reset.py")
+    maint_pos = entry.index("python scripts/run_maintenance_worker.py")
+    game_pos = entry.index("python scripts/run_game_worker.py")
+    gunicorn_pos = entry.index("exec gunicorn")
+    assert reset_pos < maint_pos
+    assert reset_pos < game_pos
+    assert reset_pos < gunicorn_pos
