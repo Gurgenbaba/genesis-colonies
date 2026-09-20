@@ -26,22 +26,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-def _maybe_run_uni1_prelaunch_reset() -> None:
-    token = str(os.environ.get("GC_UNI1_PRELAUNCH_RESET_TOKEN", "") or "").strip()
-    if not token:
-        return
-
-    from game.uni1_prelaunch import run_uni1_prelaunch_reset_once
-
-    result = run_uni1_prelaunch_reset_once(token)
-    print(
-        "[maintenance-worker] UNI1 prelaunch reset: "
-        f"skipped={bool(result.get('skipped'))} "
-        f"token={result.get('token')!r}",
-        file=sys.stderr,
-    )
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Genesis Colonies maintenance worker")
     parser.add_argument(
@@ -60,7 +44,6 @@ def main() -> int:
     from game.internal_cron import run_maintenance_worker_loop
 
     bootstrap_application(skip_migration_check=True)
-    _maybe_run_uni1_prelaunch_reset()
     run_maintenance_worker_loop(once=bool(args.once))
     return 0
 
