@@ -35,6 +35,19 @@ For UNI 1 launch the intended values are `10` and `259200` (72h). The bundle is 
 
 The shared auth secret must exist only in deployment secrets and must never be committed.
 
+## UNI 1 launch isolation
+
+Fresh public universes may run without synthetic player activity. For UNI 1:
+
+- `GC_INACTIVE_AUTOPLAY_ENABLED=0` — hard-off for dormant-human autoplay.
+- `GC_PIRATE_AI_ENABLED=0` — deployment hard-off for Pirate AI/play-loop even in production.
+- Disabled Pirate maintenance ticks are intentionally silent; they do not append recurring
+  `ai_disabled` Bot-Log rows. This keeps downstream operator/Discord log bridges quiet.
+- The hard-offs are universe-local Railway variables; DEV may keep different LiveOps behavior.
+
+Do not use `GC_PIRATE_PLAY_BOTS_PER_TICK=0` as a kill-switch: that knob is clamped to
+at least one bot and only controls batch size. Use `GC_PIRATE_AI_ENABLED=0`.
+
 
 ## Production readiness guard
 
