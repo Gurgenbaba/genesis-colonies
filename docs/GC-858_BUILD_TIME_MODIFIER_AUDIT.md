@@ -19,13 +19,13 @@ Authoritative docs: [EFFECTS.md](EFFECTS.md), [BUILDINGS_SYSTEM.md](BUILDINGS_SY
 
 `command_center` still applies `duration × 0.75^cc_level` for **nanofactory upgrades only**.
 
-The sections below retain historical endgame / 1 s floor findings; treat any `0.70` / flat-30% nano wording as obsolete.
+The sections below retain historical endgame / 10 s floor findings; treat any `0.70` / flat-30% nano wording as obsolete.
 
 ---
 
 ## Root Cause (original audit)
 
-Endgame **~1 s** mine builds are **runtime-correct**: multiplicative speed stacks divide `power_build_seconds()` until the **`max(int(seconds), 1)`** floor in `EffectResolver.get_build_time_seconds()`.
+Endgame **~10 s** mine builds are **runtime-correct**: multiplicative speed stacks divide `power_build_seconds()` until the **`max(int(seconds), 10)`** floor in `EffectResolver.get_build_time_seconds()`.
 
 Player confusion (updated):
 
@@ -78,14 +78,14 @@ player_speed = max(0.1, mods_build_time_speed / building_duration)
 effective_speed = max(0.1, player_speed × build_speed_setting)
 
 seconds = base / effective_speed
-return max(int(seconds), 1)             # 1-second floor
+return max(int(seconds), 10)             # 10-second floor
 ```
 
 ---
 
 ## Example Profiles (historical, 2026-06-24)
 
-Profiles below were computed under an older nano model documentation; **recompute via `get_build_time_seconds` for live numbers**. Kept for 1 s floor / stacking discussion.
+Profiles below were computed under an older nano model documentation; **recompute via `get_build_time_seconds` for live numbers**. Kept for 10 s floor / stacking discussion.
 
 Settings: `production_speed=1`, `research_speed=1`.
 
@@ -109,8 +109,8 @@ With high nano + `buildtime_tech` + high `build_speed`, many upgrades hit the **
 | Card seconds = Modal seconds = Queue enqueue | **OK** (`get_build_time_seconds` single path) |
 | Nanofactory explains cumulative vs marginal | **GC-NANO-001** — server preview payload |
 | Milestone `+1470 %` explains build speed | **UI GAP** — production milestone, not build time |
-| 1 s floor documented | **OK** (EFFECTS.md + here) |
-| Endgame 1 s for mines/lab/yard intended? | **BALANCE DECISION REQUIRED** |
+| 10 s floor documented | **OK** (EFFECTS.md + here) |
+| Endgame 1 s for mines/lab/yard intended? | **BALANCE DECISION RESOLVED — 10 s floor** |
 
 ---
 
