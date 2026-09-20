@@ -128,6 +128,15 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
                 file=sys.stderr,
             )
 
+    if is_production():
+        try:
+            from game.uni1_prelaunch import require_prelaunch_reset_for_open_uni1
+
+            require_prelaunch_reset_for_open_uni1()
+        except RuntimeError as exc:
+            print(f"[GC bootstrap] ERROR: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+
     if skip_migration_check:
         return
 

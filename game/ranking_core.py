@@ -1660,6 +1660,26 @@ def _get_sorted_ranking_entries_enriched_sql(
     wb_sel = _world_boss_damage_select(conn)
     total_expr = _total_score_sql(conn)
     social_select, social_join = _ranking_social_select_and_join(conn)
+    pirate_filter_sql = ""
+    pirate_filter_params: tuple[str, ...] = ()
+    try:
+        from .pirates.accounts import PIRATE_BOT_USERNAMES
+        from .pirates.settings import is_pirates_ai_hard_disabled
+
+        if is_pirates_ai_hard_disabled():
+            hidden = tuple(sorted(str(name) for name in PIRATE_BOT_USERNAMES))
+            if hidden:
+                pirate_filter_sql = (
+                    " AND NOT EXISTS (SELECT 1 FROM users pu "
+                    "WHERE pu.id = p.id AND pu.username IN ("
+                    + ",".join("?" for _ in hidden)
+                    + "))"
+                )
+                pirate_filter_params = hidden
+    except Exception:
+        pirate_filter_sql = ""
+        pirate_filter_params = ()
+
     rank_select = ""
     if column_exists(conn, "player_scores", "rank_total"):
         rank_select = ", ps.rank_total, ps.rank_building, ps.rank_research"
@@ -1690,13 +1710,14 @@ def _get_sorted_ranking_entries_enriched_sql(
             WHERE u.id = p.id
               AND u.username IN ('gc_combat_bot_alpha', 'gc_combat_bot_beta')
         )
+        {pirate_filter_sql}
         ORDER BY {total_expr} DESC,
                  COALESCE(ps.score_buildings, '0') DESC,
                  COALESCE(ps.score_research, '0') DESC,
                  p.id ASC
         LIMIT ? OFFSET ?
         """,
-        (int(limit), int(offset)),
+        tuple(pirate_filter_params) + (int(limit), int(offset)),
     )
     rows = cur.fetchall()
 
@@ -2491,6 +2512,26 @@ def _all_score_rows_exact(conn) -> List[Dict[str, Any]]:
     fleet_defense_sel = _fleet_defense_select(conn)
     evolution_sel = _evolution_score_select(conn)
     combat_sel = _combat_ranking_select(conn)
+    pirate_filter_sql = ""
+    pirate_filter_params: tuple[str, ...] = ()
+    try:
+        from .pirates.accounts import PIRATE_BOT_USERNAMES
+        from .pirates.settings import is_pirates_ai_hard_disabled
+
+        if is_pirates_ai_hard_disabled():
+            hidden = tuple(sorted(str(name) for name in PIRATE_BOT_USERNAMES))
+            if hidden:
+                pirate_filter_sql = (
+                    " WHERE NOT EXISTS (SELECT 1 FROM users pu "
+                    "WHERE pu.id = p.id AND pu.username IN ("
+                    + ",".join("?" for _ in hidden)
+                    + "))"
+                )
+                pirate_filter_params = hidden
+    except Exception:
+        pirate_filter_sql = ""
+        pirate_filter_params = ()
+
     destroyed_raw_sel = (
         "COALESCE(ps.score_destroyed_raw, '0') AS score_destroyed_raw"
         if column_exists(conn, "player_scores", "score_destroyed_raw")
@@ -2511,8 +2552,10 @@ def _all_score_rows_exact(conn) -> List[Dict[str, Any]]:
             {destroyed_raw_sel}
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
+        {pirate_filter_sql}
         ORDER BY p.id ASC
-        """
+        """,
+        tuple(pirate_filter_params),
     ).fetchall()
     out: List[Dict[str, Any]] = []
     for raw in rows:

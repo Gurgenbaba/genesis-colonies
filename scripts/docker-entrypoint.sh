@@ -16,6 +16,9 @@ ensure_db_parent_dir()
 echo "[GC] Applying migrations..."
 python migrate.py
 
+echo "[GC] Running tokenized UNI1 prelaunch reset before any serving/worker process..."
+python scripts/run_uni1_prelaunch_reset.py
+
 echo "[GC] Ensuring optional PostgreSQL hotpath indexes (concurrent / fail-open)..."
 python -m game.pg_hotpath_indexes || echo "[GC] WARNING: optional hotpath index helper failed; continuing startup."
 

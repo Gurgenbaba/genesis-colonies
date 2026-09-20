@@ -13,6 +13,12 @@ AI_ENABLED_ENV = "GC_PIRATE_AI_ENABLED"
 _FALSEY = {"0", "false", "no", "off"}
 
 
+def is_pirates_ai_hard_disabled() -> bool:
+    """Deployment-level hard-off, independent of runtime DB state."""
+    env = os.environ.get(AI_ENABLED_ENV)
+    return env is not None and str(env).strip().lower() in _FALSEY
+
+
 def is_pirates_ai_enabled(*, conn=None) -> bool:
     """Return True when pirate AI may spawn/spy/raid.
 
@@ -23,8 +29,7 @@ def is_pirates_ai_enabled(*, conn=None) -> bool:
     When the env hard-off is absent, GC-2611 semantics remain unchanged:
     runtime_state Soft-On/Off wins once set; otherwise production defaults on.
     """
-    env = os.environ.get(AI_ENABLED_ENV)
-    if env is not None and str(env).strip().lower() in _FALSEY:
+    if is_pirates_ai_hard_disabled():
         return False
 
     raw = get_runtime_value(AI_ENABLED_RUNTIME_KEY, conn=conn)
