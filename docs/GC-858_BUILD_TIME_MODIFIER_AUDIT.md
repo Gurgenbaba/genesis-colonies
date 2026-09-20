@@ -25,7 +25,7 @@ The sections below retain historical endgame / 10 s floor findings; treat any `0
 
 ## Root Cause (original audit)
 
-Endgame **~10 s** mine builds are **runtime-correct**: multiplicative speed stacks divide `power_build_seconds()` until the **`max(int(seconds), 10)`** floor in `EffectResolver.get_build_time_seconds()`.
+Historically, endgame mines could sit permanently at **~10 s** because multiplicative speed stacks divided `power_build_seconds()` down to the global floor. **GC-MANDO-PACING-001 changes that balance for production mines only:** the shared 10 s floor remains, but a level-aware mine floor begins at L225 and grows gently with level.
 
 Player confusion (updated):
 
@@ -78,7 +78,8 @@ player_speed = max(0.1, mods_build_time_speed / building_duration)
 effective_speed = max(0.1, player_speed × build_speed_setting)
 
 seconds = base / effective_speed
-return max(int(seconds), 10)             # 10-second floor
+floor = building_progress_floor_seconds(building_type, target_level)
+return max(int(seconds), floor)          # base 10s; production mines ramp after L224
 ```
 
 ---
@@ -109,8 +110,8 @@ With high nano + `buildtime_tech` + high `build_speed`, many upgrades hit the **
 | Card seconds = Modal seconds = Queue enqueue | **OK** (`get_build_time_seconds` single path) |
 | Nanofactory explains cumulative vs marginal | **GC-NANO-001** — server preview payload |
 | Milestone `+1470 %` explains build speed | **UI GAP** — production milestone, not build time |
-| 10 s floor documented | **OK** (EFFECTS.md + here) |
-| Endgame 1 s for mines/lab/yard intended? | **BALANCE DECISION RESOLVED — 10 s floor** |
+| Base 10 s floor documented | **OK** (EFFECTS.md + here) |
+| Endgame mines permanently stuck at 10 s? | **RESOLVED — GC-MANDO-PACING-001 level-aware mine floor** |
 
 ---
 
@@ -118,7 +119,7 @@ With high nano + `buildtime_tech` + high `build_speed`, many upgrades hit the **
 
 | Priority | Ticket | Action |
 |----------|--------|--------|
-| If balance team wants slower endgame | GC-858B | Raise floor, cap speed, or rebalance nano coeff / admin `build_speed` |
+| Endgame mine pacing | **GC-MANDO-PACING-001** | ✅ Dynamic mine-only floor; no max level and no speed-stack rewrite |
 | Player confusion (nano %) | **GC-NANO-BUILDTIME-AUDIT-001** | Docs + tech-card preview (this ticket family) |
 | If perceived slowness is visual | GC-859 | Building hero image LCP audit |
 
@@ -130,3 +131,24 @@ With high nano + `buildtime_tech` + high `build_speed`, many upgrades hit the **
 
 - `tests/test_gc858_build_time_modifier_audit.py` — stacking / floor / display helpers
 - `tests/test_gc_nano_buildtime_audit.py` — diminishing-returns L0→L1 + preview contract (GC-NANO-001)
+
+
+## GC-MANDO-PACING-001 anchors (2026-09)
+
+The floor is intentionally mine-only and unbounded:
+
+| Target level | Minimum normal build duration |
+|---:|---:|
+| 200 | 10 s |
+| 224 | 10 s |
+| 225 | 12 s |
+| 300 | 30 s |
+| 400 | 82 s |
+| 500 | 166 s |
+| 650 | 352 s |
+
+Formula: every full 25 levels above L200 adds one triangular pacing step
+(`10 + 2 × n(n+1)/2` seconds), capped at a **3600-second floor**. This cap is
+only on the minimum: the canonical build formula remains unlimited and can
+produce durations far above one hour. Nodebuster rebuild-time discounts may not
+reduce a mine below this floor.

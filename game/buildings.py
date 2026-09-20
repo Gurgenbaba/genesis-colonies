@@ -25,7 +25,7 @@ from .db import begin_write_transaction, commit, rollback, lock_planet_for_updat
 from .research import RESEARCH_TECHS
 from .effects import EffectResolver, get_effect_resolver
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
-from .time_floors import MIN_PROGRESS_DURATION_SECONDS
+from .time_floors import MIN_PROGRESS_DURATION_SECONDS, building_progress_floor_seconds
 
 # =============================================================================
 #   GC-854 — Shared per-request panel context (SSR / action payloads)
@@ -672,7 +672,7 @@ def recalculate_build_queue_finish_times(
         duration = _scale_bps(
             hotpath.build_time_seconds(btype, target_level),
             _time_bps,
-            minimum=MIN_PROGRESS_DURATION_SECONDS,
+            minimum=building_progress_floor_seconds(btype, target_level),
         )
 
         if idx == 0:
@@ -1788,7 +1788,7 @@ def _make_panel_row(
     time_seconds = _scale_bps(
         time_seconds,
         rebuild_time_bps,
-        minimum=MIN_PROGRESS_DURATION_SECONDS,
+        minimum=building_progress_floor_seconds(building_type, target_level),
     )
 
     req_met = has_building_requirements(buildings, research_levels, building_type)
@@ -2321,7 +2321,7 @@ def summarize_max_queueable_build_jobs(
         total_sec += _scale_bps(
             raw_sec,
             rebuild_time_bps,
-            minimum=MIN_PROGRESS_DURATION_SECONDS,
+            minimum=building_progress_floor_seconds(building_type, target),
         )
     return {
         "jobs": int(jobs),
@@ -2801,7 +2801,7 @@ def queue_build_for_planet(
             duration = _scale_bps(
                 hotpath.build_time_seconds(building_type, target_level),
                 rebuild_time_bps,
-                minimum=MIN_PROGRESS_DURATION_SECONDS,
+                minimum=building_progress_floor_seconds(building_type, target_level),
             )
 
             last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now

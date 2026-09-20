@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..economy_balance import STORAGE_BASE_CAPACITY
 from ..exact_math import bounded_ratio_float, decimal_value, integer_precision, scale_int
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
-from ..time_floors import MIN_PROGRESS_DURATION_SECONDS
+from ..time_floors import MIN_PROGRESS_DURATION_SECONDS, building_progress_floor_seconds
 from ..planet_evolution.repository import get_context_planet
 
 logger = logging.getLogger(__name__)
@@ -1640,21 +1640,23 @@ class EffectResolver:
     def get_build_time_seconds(self, building_type: str, target_level: int) -> int:
         from ..economy_balance import power_build_seconds
 
-        base_seconds = int(power_build_seconds(building_type, int(target_level)))
+        level = int(target_level)
+        base_seconds = int(power_build_seconds(building_type, level))
         effective_speed = self.get_build_time_effective_speed(building_type)
+        floor_seconds = building_progress_floor_seconds(building_type, level)
 
         # Preserve the historical normal-range float path exactly. High-level
         # GC-821 curves can exceed IEEE-754, so divide the integer duration by
         # the bounded speed as Decimal rather than round-tripping through float.
         if base_seconds.bit_length() < 1024:
             seconds = float(base_seconds) / effective_speed
-            return max(int(seconds), BUILD_TIME_MIN_SECONDS)
+            return max(int(seconds), floor_seconds)
 
         speed_dec = max(decimal_value(effective_speed, "1"), Decimal("0.1"))
         with localcontext() as ctx:
             ctx.prec = integer_precision(base_seconds, extra=96)
             duration_factor = Decimal(1) / speed_dec
-        return max(scale_int(base_seconds, duration_factor), BUILD_TIME_MIN_SECONDS)
+        return max(scale_int(base_seconds, duration_factor), floor_seconds)
 
     def get_research_time_seconds(self, tech_key: str, target_level: int) -> int:
         from ..research import RESEARCH_TECHS
