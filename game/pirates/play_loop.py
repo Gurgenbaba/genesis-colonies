@@ -438,13 +438,27 @@ def run_play_loop_tick(
     mission step runs in its own short BEGIN IMMEDIATE so live Timekeeper /
     game-state writers can interleave. Overlapping ticks skip via busy lease.
     """
-    if not is_pirates_ai_enabled(conn=conn):
+    # GC-PERF-PIRATE-PG-TX-031:
+    # Capture caller ownership *before* the first PostgreSQL read. Psycopg opens
+    # an implicit transaction even for SELECTs; checking in_transaction() after
+    # is_pirates_ai_enabled() would therefore mistake that read-only implicit TX
+    # for an outer owner and silently disable the per-bot short-TX path.
+    caller_owned_tx = in_transaction(conn)
+    ai_enabled = is_pirates_ai_enabled(conn=conn)
+    short_tx = not caller_owned_tx
+
+    # When this loop owns transaction boundaries, close the implicit PG read
+    # transaction created by the AI-enabled probe before beginning short writes.
+    # SQLite SELECTs normally leave no transaction open, so this is a no-op.
+    if short_tx and in_transaction(conn):
+        rollback(conn)
+
+    if not ai_enabled:
         return {"ok": False, "error": "ai_disabled", "steps": []}
 
     ts = float(now if now is not None else _now())
     tick_t0 = time.perf_counter()
     write_commits = 0
-    short_tx = not in_transaction(conn)
 
     def _step(fn):
         nonlocal write_commits
