@@ -72,6 +72,7 @@ def test_skill_costs_rise_and_capstone_has_prerequisites():
     assert skill_point_cost("deep_yield", 0) == 2
     assert skill_point_cost("overdrive", 0) == 5
     assert SKILL_CATALOG["overdrive"]["requires"]["deep_yield"] == 5
+    assert SKILL_CATALOG["overdrive"]["requires"]["deep_storage"] == 5
 
 
 def test_ascension_resets_only_selected_mine_and_grants_points(mevo_db):
@@ -158,6 +159,59 @@ def test_output_skill_is_per_mine_and_per_planet(mevo_db):
     assert building_modifier_for(pid, "crystal_mine") == pytest.approx(1.0)
 
 
+def test_deep_storage_is_per_mine_resource_and_planet(mevo_db):
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 300)
+    pid = int(planet["id"])
+
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+
+    from game.db import db
+    from game.effects import get_effect_resolver
+    from game.models import get_research_levels
+
+    conn = db()
+    try:
+        buildings = get_planet_buildings(pid, conn=conn)
+        research = get_research_levels(uid, conn=conn)
+        resolver = get_effect_resolver(
+            uid,
+            buildings=buildings,
+            research=research,
+            conn=conn,
+            planet=dict(get_homeworld(player_id=uid, conn=conn)),
+            force_refresh=True,
+        )
+        before = resolver.get_storage_capacity()
+    finally:
+        conn.close()
+
+    ok, reason, skill = purchase_skill(uid, planet, "metal_mine", "deep_storage")
+    assert ok, reason
+    assert skill["storage_bonus_pct"] == pytest.approx(5.0)
+
+    conn = db()
+    try:
+        buildings = get_planet_buildings(pid, conn=conn)
+        research = get_research_levels(uid, conn=conn)
+        resolver = get_effect_resolver(
+            uid,
+            buildings=buildings,
+            research=research,
+            conn=conn,
+            planet=dict(get_homeworld(player_id=uid, conn=conn)),
+            force_refresh=True,
+        )
+        after = resolver.get_storage_capacity()
+    finally:
+        conn.close()
+
+    assert after["metal"] == (before["metal"] * 10500) // 10000
+    assert after["crystal"] == before["crystal"]
+    assert after["fuel_cells"] == before["fuel_cells"]
+
+
 def test_panel_exposes_nodebuster_server_truth(mevo_db):
     uid = mevo_db
     planet = _set_level(uid, "metal_mine", 225)
@@ -173,7 +227,8 @@ def test_panel_exposes_nodebuster_server_truth(mevo_db):
     assert fields["evolution_can_evolve"] is True
     assert fields["nodebuster_points_gain"] == 2
     assert fields["nodebuster_reset_level"] == 0
-    assert len(fields["nodebuster_skills"]) == 5
+    assert len(fields["nodebuster_skills"]) == 6
+    assert any(row["key"] == "deep_storage" for row in fields["nodebuster_skills"])
     assert any(row["key"] == "overdrive" for row in fields["nodebuster_skills"])
 
 
