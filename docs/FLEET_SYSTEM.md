@@ -155,7 +155,7 @@ Server-authoritativ; Preview und Send verwenden exakt dieselbe Berechnung.
 | Nachbarsystem | 2795 | 2:18:05 |
 | Nachbargalaxie | 20000 | 6:09:06 |
 
-Fuel bleibt ein separater kanonischer Owner: `fuel_efficiency` Research + Schiff-defs. Cargo capacity bleibt pro Schiffstyp.
+Fuel bleibt ein separater kanonischer Owner: `fuel_efficiency` Research + Schiff-defs. Die Fuel-Formel selbst bleibt unverändert, verwendet aber dieselbe kanonische Routendistanz wie der Fleet-Timer. Cargo capacity bleibt pro Schiffstyp.
 
 Preview: `POST /api/fleet/preview` → debounced im Client (~300ms); keine Frontend-Zeitmathematik.
 
