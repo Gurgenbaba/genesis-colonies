@@ -524,12 +524,20 @@
 
           <div class="gc-ascension-tree__viewport">
             <div class="gc-ascension-tree__map" role="group" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
-              <svg class="gc-ascension-tree__edges" viewBox="0 0 700 350" preserveAspectRatio="none" aria-hidden="true">
-                <path d="M70 105 V185 H350 V245" />
-                <path d="M210 105 V185 H350 V245" />
-                <path d="M350 105 V245" />
-                <path d="M490 105 V185 H350 V245" />
-                <path d="M630 105 V185 H350 V245" />
+              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 420" preserveAspectRatio="none" aria-hidden="true">
+                {% for skill in mine.nodebuster_skills %}
+                  {% if skill.key == 'reconstruction' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 108 V252 H300 V304" />
+                  {% elif skill.key == 'frugal_rebuild' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 238 V270 H300 V304" />
+                  {% elif skill.key == 'rapid_rebuild' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 238 V270 H300 V304" />
+                  {% elif skill.key == 'deep_yield' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 108 V304" />
+                  {% elif skill.key == 'deep_storage' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 108 V252 H300 V304" />
+                  {% endif %}
+                {% endfor %}
               </svg>
 
               <div class="gc-ascension-tree__nodes">
@@ -539,27 +547,40 @@
                 {% set is_capstone = skill.key == 'overdrive' %}
                 <button
                   type="button" {# i18n-ok: structural attribute #}
-                  class="gc-ascension-node gc-ascension-node--slot-{{ loop.index }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}" {# i18n-ok: structural attribute #}
+                  class="gc-ascension-node gc-ascension-node--{{ skill.key }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}" {# i18n-ok: structural attribute #}
                   data-ascension-node-select="{{ skill.key }}"
                   data-ascension-building="{{ mine.building_type }}"
-                  aria-selected="{{ 'true' if loop.first else 'false' }}">
-                  <span class="gc-ascension-node__icon" aria-hidden="true">
-                    {% if skill.key == 'reconstruction' %}↺
-                    {% elif skill.key == 'frugal_rebuild' %}¤
-                    {% elif skill.key == 'rapid_rebuild' %}⏱
-                    {% elif skill.key == 'deep_yield' %}▲
-                    {% elif skill.key == 'deep_storage' %}▣
-                    {% else %}Ω{% endif %}
+                  aria-selected="{{ 'true' if loop.first else 'false' }}"
+                  aria-label="{{ T('nodebuster_skill_' ~ skill.key) }}"
+                  title="{{ T('nodebuster_skill_' ~ skill.key) }}">
+                  <span class="gc-ascension-node__art" aria-hidden="true">
+                    {% if skill.key == 'reconstruction' %}
+                    <img src="{{ url_for('static', filename='img/classes/icons/build.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% elif skill.key == 'frugal_rebuild' %}
+                    <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% elif skill.key == 'rapid_rebuild' %}
+                    <img src="{{ url_for('static', filename='img/classes/icons/shipyard.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% elif skill.key == 'deep_yield' %}
+                    <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% elif skill.key == 'deep_storage' %}
+                    <img src="{{ url_for('static', filename='img/classes/icons/storage.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% else %}
+                    <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% endif %}
                   </span>
-                  <span class="gc-ascension-node__name">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
                   <span class="gc-ascension-node__rank gc-mono">{{ skill.rank }}/{{ skill.max_rank }}</span>
-                  <span class="gc-ascension-node__state">
-                    {% if is_max %}{{ T('commander_maxed', 'Max') }}
-                    {% elif is_locked %}{{ T('commander_locked', 'Gesperrt') }}
-                    {% elif skill.affordable %}{{ T('commander_available_label', 'Verfügbar') }}
-                    {% else %}{{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}{% endif %}
+                  <span class="gc-ascension-node__badge gc-mono">
+                    {% if is_max %}
+                      {{ T('commander_maxed', 'Max') }}
+                    {% elif is_locked %}
+                      {{ T('commander_locked', 'Gesperrt') }}
+                    {% else %}
+                      {{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}
+                    {% endif %}
                   </span>
-                  {% if is_capstone %}<span class="gc-ascension-node__cap">{{ T('commander_capstone', 'Capstone') }}</span>{% endif %}
+                  {% if is_capstone %}
+                  <span class="gc-ascension-node__cap">{{ T('commander_capstone', 'Capstone') }}</span>
+                  {% endif %}
                 </button>
                 {% endfor %}
               </div>
@@ -572,12 +593,19 @@
             {% set is_locked = (not skill.available) and (not is_max) %}
             <div class="gc-ascension-inspector__panel" data-ascension-detail="{{ skill.key }}" {% if not loop.first %}hidden{% endif %}>
               <div class="gc-ascension-inspector__mark" aria-hidden="true">
-                {% if skill.key == 'reconstruction' %}↺
-                {% elif skill.key == 'frugal_rebuild' %}¤
-                {% elif skill.key == 'rapid_rebuild' %}⏱
-                {% elif skill.key == 'deep_yield' %}▲
-                {% elif skill.key == 'deep_storage' %}▣
-                {% else %}Ω{% endif %}
+                {% if skill.key == 'reconstruction' %}
+                <img src="{{ url_for('static', filename='img/classes/icons/build.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'frugal_rebuild' %}
+                <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'rapid_rebuild' %}
+                <img src="{{ url_for('static', filename='img/classes/icons/shipyard.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'deep_yield' %}
+                <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'deep_storage' %}
+                <img src="{{ url_for('static', filename='img/classes/icons/storage.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% else %}
+                <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% endif %}
               </div>
               <div class="gc-ascension-inspector__body">
                 <div class="gc-ascension-inspector__title-row">
