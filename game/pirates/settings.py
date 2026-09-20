@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from ..config import is_production
 from ..runtime_state import get_runtime_value, set_runtime_value
 
 AI_ENABLED_RUNTIME_KEY = "pirates_ai_enabled"
+AI_ENABLED_ENV = "GC_PIRATE_AI_ENABLED"
+_FALSEY = {"0", "false", "no", "off"}
 
 
 def is_pirates_ai_enabled(*, conn=None) -> bool:
     """Return True when pirate AI may spawn/spy/raid.
 
-    GC-2611: the admin `runtime_state` Soft-On/Off always wins once set (Soft-Off
-    stays available at any time). Only when no admin choice has ever been made
-    does the default follow `is_production()` instead of a hard `False` — so a
-    freshly deployed production universe ships with a living pirate AI without
-    requiring a manual admin click first.
+    GC_PIRATE_AI_ENABLED=0 is a deployment hard-off and wins over both the
+    runtime admin switch and the production default. This lets a universe ship
+    with pirate AI permanently silent without mutating DB runtime_state.
+
+    When the env hard-off is absent, GC-2611 semantics remain unchanged:
+    runtime_state Soft-On/Off wins once set; otherwise production defaults on.
     """
+    env = os.environ.get(AI_ENABLED_ENV)
+    if env is not None and str(env).strip().lower() in _FALSEY:
+        return False
+
     raw = get_runtime_value(AI_ENABLED_RUNTIME_KEY, conn=conn)
     if raw is None:
         return is_production()

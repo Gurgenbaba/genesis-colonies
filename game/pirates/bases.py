@@ -608,12 +608,9 @@ def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, A
         spawned: List[int] = []
 
         if not is_pirates_ai_enabled(conn=conn):
-            log_pirate_action(
-                conn,
-                kind="ai_disabled",
-                message="tick skipped — AI off",
-                severity="info",
-            )
+            # Hard/soft-off must be quiet: do not emit one "AI disabled" row per
+            # maintenance tick. This also prevents disabled-universe activity
+            # from leaking into any downstream operator/Discord log bridge.
             return {
                 "expired_ids": expired,
                 "escalated_ids": escalated,
