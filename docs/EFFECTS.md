@@ -26,7 +26,7 @@ Prepared modifiers may appear in:
 
 Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). `scan_range` drives the Deep-Space Threat Net (`game/fleet.py` → `build_radar_contacts`). Barracks contributes to `shipyard_time_speed` (+2%/level) and planetary troop capacity; shield generator adds to `shield_bonus` (+2%/level).
 
-Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build_seconds()` before player/admin speed modifiers (GC-850A).
+Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build_seconds()` before player/admin speed modifiers (GC-850A), then enforces the canonical **10-second construction floor** after the full speed stack.
 
 `get_effect_resolver` reuses a **request-scoped** instance when player/planet/buildings/research fingerprints match (**GC-PERF-EFFECT-CACHE-001**). `force_refresh=True` bypasses the cache read; `clear_effect_resolver_cache` clears entries. No process TTL (stale energy risk).
 
@@ -34,7 +34,7 @@ Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build
 
 ```text
 seconds = power_build_seconds(building, level) / effective_speed
-return max(int(seconds), 1)   # 1-second floor (GC-858)
+return max(int(seconds), 10)  # 10-second public-universe construction floor
 ```
 
 **`effective_speed`** stacks multiplicatively:
