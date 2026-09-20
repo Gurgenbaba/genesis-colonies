@@ -75,6 +75,17 @@ UNI 1 launches with human-only activity:
 
 Disabled systems must remain silent in worker/operator logs.
 
+If reserved Pirate faction accounts were created before the hard-off, UNI 1 uses
+`GC_PURGE_PIRATE_AI_ON_BOOT=1` for one maintenance-worker boot while
+`GC_PIRATE_AI_ENABLED=0`. The cleanup is restricted to the exact reserved
+`gc_pirate_*` usernames, removes their FK-less Pirate runtime rows, preserves
+human accounts, and rebuilds ranking positions. The flag is removed again after
+the cleanup has been verified.
+
+Even before the purge completes, public ranking hides reserved Pirate accounts
+whenever the deployment hard-off is active, so a human-only universe cannot
+present stale AI commanders as ranked players.
+
 ## Maintenance
 
 An open UNI 1 requires a live maintenance owner:
