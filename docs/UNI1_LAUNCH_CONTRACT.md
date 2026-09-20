@@ -131,6 +131,43 @@ Merging to `main` does not update UNI 1. A release operator deliberately promote
 the reviewed current `main` SHA with the manual promotion workflow. Normal target
 cadence is a bundled release (for example weekly), not continuous deployment.
 
+## Final prelaunch normalization
+
+UNI 1 remains closed while the final release is deployed. Before public opening,
+the maintenance worker runs a **single tokenized reset** via
+`GC_UNI1_PRELAUNCH_RESET_TOKEN`.
+
+The reset is fail-closed and requires:
+
+- current universe is `uni1`
+- `GC_NETWORK_UNI1_OPEN=0`
+- true x1 profile + active Economy V2 (pivot 120, q4)
+- `ASCENSION_RULESET=nodebuster-v1`
+- Pirate AI and inactive autoplay deployment hard-offs
+
+The one-shot reset:
+
+1. deletes only the exact reserved `gc_pirate_*` AI accounts
+2. clears residual Pirate dynamic state (heat, bases, intel, bot state,
+   infiltrations, smugglers, threat/bounty/log rows) while preserving faction
+   definitions
+3. wipes normal universe gameplay through the canonical account-preserving
+   universe reset
+4. preserves human accounts, Genesis Network links, inventory/meta ownership and
+   legitimate Timekeeper balance
+5. rebuilds a fresh homeworld for every account
+6. normalizes already-linked human UNI 1 accounts to the same x10 starter
+   resources future first-entry players receive
+7. tops existing linked humans up to **at least 72h Timekeeper**; balances already
+   above 72h are never reduced
+8. refreshes their presence timestamp so accidental early entry cannot make them
+   launch-day inactive/farmable
+9. rebuilds ranking and writes a durable completion marker
+
+The same token can never wipe twice: after success, subsequent maintenance-worker
+starts detect the durable marker and skip the reset. Production also refuses to
+boot an **open** UNI 1 unless the durable prelaunch marker exists.
+
 ## Public-open gate
 
 `GC_NETWORK_UNI1_OPEN=1` is fail-closed. Production config validation rejects an
