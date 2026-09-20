@@ -75,3 +75,24 @@ def test_skilltree_ascension_uses_server_readiness_and_inspector_actions():
     assert 'target.closest("[data-ascension-node-select]")' in js
     assert "selectAscensionNode" in js
     assert "activateMineTab" in js
+
+
+def test_ascension_tree_is_visual_and_details_live_in_inspector():
+    template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
+
+    assert "gc-ascension-node__art" in template
+    assert "img/classes/icons/production.webp" in template
+    assert "gc-ascension-tree__edge" in template
+    assert "skill.rank >= 5" in template
+    assert "gc-ascension-node--{{ skill.key }}" in template
+    assert "gc-ascension-node__name" not in template
+    assert "gc-ascension-node__state" not in template
+
+    assert ".gc-ascension-node--reconstruction" in css
+    assert ".gc-ascension-node--deep_yield" in css
+    assert ".gc-ascension-node--deep_storage" in css
+    assert ".gc-ascension-node--frugal_rebuild" in css
+    assert ".gc-ascension-node--rapid_rebuild" in css
+    assert ".gc-ascension-node--overdrive" in css
+    assert ".gc-ascension-tree__edge.is-fed" in css
