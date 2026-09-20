@@ -1,210 +1,369 @@
-# Mine Evolution / Industrial Ascension (EPIC-29)
+# Mine Evolution / Nodebuster Ascension
 
-Planet-scoped Ascension loop for the three production mines. **Phase 1 = Kern-Loop** (GC-2905 feel-fix: no level reset).
+Planet-scoped prestige loop for the three production mines.
 
 **Owner:** `game/mine_evolution/`  
-**Tickets:** GC-2900…GC-2905 · GC-MINE-ASC-NEXUS-001  
-**Status:** Phase 1 🔄
+**Ruleset:** `nodebuster-v1`  
+**Launch target:** UNI 1  
+**Status:** implementation
 
 ---
 
 ## Goal
 
-Give high-level mines a meaningful cyclic decision without a production cliff:
+Mine progression stays unbounded, but high-level play gets a voluntary prestige loop:
 
-1. Raise the mine through the normal **Nexus cap** toward level 200  
-2. At level 200, pay a **Tribute** and complete Ascension I  
-3. Keep the mine level; unlock the next level band for **that mine only** and gain a permanent, saturating production bonus  
-4. Reach the next linear threshold and repeat  
+1. Push one production mine as deep as you want.
+2. From level 200 onward, Ascension becomes available.
+3. Ascending resets **only that selected mine** to its current reconstruction baseline.
+4. Run depth grants permanent Ascension Points (AP).
+5. AP are spent in a permanent, per-mine skill tree.
+6. Rebuild nodes make the climb back to the lifetime best cheaper and faster.
+7. Production nodes provide permanent output.
+8. The next run can push deeper without introducing a permanent max level.
 
-No second production engine. Bonus registers on the existing Ferdi formula via `ProductionContext.building_modifier` **per mine / resource**.
-
----
-
-## Naming
-
-| Context | Term |
-|---------|------|
-| System / rank | **Mine Evolution** / Evolution Rank III |
-| Player action | **Ascension** / Ascension einleiten |
-| Avoid | Rebirth, Prestige Reset, Zurücksetzen |
+Ascension is never a hard build gate. A player may ignore it and continue upgrading beyond
+level 200 indefinitely.
 
 ---
 
-## Phase 1 scope
+## Scope and isolation
 
-| In | Out |
-|----|-----|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | Evolution trees / skill points |
-| Planet-scoped rank **per mine** | Account-wide evolution |
-| Tribute at rank milestone (no level reset) | Industrial Core / PE unlocks |
-| Nexus progression through L200 + linear post-200 Ascension bands | Other buildings (solar, shipyard, …) |
-| Existing server-authoritative Buildings queue | Parallel evolution/build queue |
+Evolvable production mines:
 
-Future (docs only until separate tickets):
+- `metal_mine`
+- `crystal_mine`
+- `fuel_cell_plant`
 
-- **Phase 2:** Evolutionspunkte + Spezialisierungsbäume (after live data)  
-- **Phase 3:** Planetary Industrial Core → PE decisions  
-- **Phase 4:** Other buildings with their own evolution mechanics  
+State is scoped by `(planet_id, building_type)`.
+
+Ascending Ferronit does not reset, buff or unlock Crytite or Brennzellen. Ascending one
+planet never affects the same mine on another planet.
+
+Solar, storages, research lab, Orbital Shipyard and other systems keep their own owners.
+Research-Lab Ascension and Stellar Forge remain separate mechanics.
 
 ---
 
-## Buildings & caps (binding contract)
+## No hard cap
 
-Before the first Ascension, production mines and Solar use the normal Nexus progression:
+The EffectResolver still exposes the structural Nexus progression used by legacy/UI
+systems, but the authoritative Buildings queue owner ignores that mine cap when the
+Nodebuster ruleset is active.
+
+For production mines under `nodebuster-v1`:
 
 ```text
-nexus_production_cap = 50 + planet_core_nexus + 2 × geothermal_nexus
+player-visible max level = none
+internal queue safety sentinel = 2,147,483,647
 ```
 
-Both Nexuses cap at level 50, therefore the normal producer ceiling is **level 200**.
+The sentinel is an implementation guard, not a gameplay cap.
 
-| Building / Rank | Effective build cap |
-|-----------------|---------------------|
-| production mine, Rank 0 | current Nexus cap, maximum L200 |
-| production mine, Rank I | L225 |
-| production mine, Rank II | L250 |
-| production mine, Rank III | L275 |
-| production mine, Rank IV | L300 |
-| further ranks | `required_level(rank+1)` |
-| `solar_plant` | Nexus formula only; no Mine Ascension |
-| Storages / other | existing formulas unchanged |
-
-**Important:** Ascension rank is stored by `(planet_id, building_type)`. Ascending Ferronit does not unlock levels for Crytite or Brennzellen. Each mine has its own progression gate and Tribute.
-
-The resolver owns the structural Nexus cap. `game/buildings.py` owns the rank-aware enqueue cap because only that layer has the selected mine’s persisted Ascension rank. Existing legacy overlevel/catch-up levels are never reduced.
+Solar and non-mine buildings continue using their normal structural limits.
 
 ---
 
-## Balance constants
+## Ascension threshold and AP
 
-Owner: `game/mine_evolution/formulas.py`.
-
-```text
-FIRST_EVOLUTION_LEVEL = 200
-EVOLUTION_LEVEL_STEP = 25
-required_level(n) = 200 + (n - 1) × 25
-# I=200, II=225, III=250, IV=275, V=300, …
-
-TRIBUTE_LOOKBACK_LEVELS = 40
-TRIBUTE_FACTOR = 0.25
-
-bonus(rank) = 0.55 × (1 - exp(-0.246 × rank^0.69))
-building_modifier = 1 + bonus(rank)
-```
-
-Bonus anchors (tests): I ≈11.99 %, II ≈18.02 %, III ≈22.46 %, V ≈28.94 %, X ≈38.51 %, XX ≈47.13 % → 55 %.
-
-### Tribute (milestone-based)
+First voluntary Ascension:
 
 ```text
-M = required_level(next_rank)
-target levels = (M - 40 + 1) … M   # Evo I: 161…200
+ASCENSION_MIN_LEVEL = 200
 ```
 
-Canonical cost = sum of upgrade costs **to reach** each target level (`get_upgrade_cost(building, target - 1)`), then × 25 % (integer `// 4`). Metal + Crytite only.
+Points for one completed run:
 
-Catch-up: a L285 mine buying Evo I pays the **same** Tribute as a L200 milestone purchase. Each further Ascension uses its own higher milestone window.
+```text
+above = level - 200
+AP = 1 + floor(above / 25) + floor(above / 100)
+```
 
-Ascension blocked while the selected mine has pending `build_queue` jobs (after `finish_due_work`).
+Reference values:
 
-### Modifier isolation
+| Run depth | AP |
+|---:|---:|
+| 200 | 1 |
+| 225 | 2 |
+| 250 | 3 |
+| 300 | 6 |
+| 400 | 11 |
+| 500 | 16 |
 
-| Evolution | Buffs |
-|-----------|--------|
-| Ferronit (`metal_mine`) | metal production only |
-| Crytite (`crystal_mine`) | crystal only |
-| Brennzellen (`fuel_cell_plant`) | fuel_cells only |
-
-Forbidden: one shared planet-wide `building_modifier` or one shared mine rank that buffs/unlocks all three resources.
+The curve has no hard upper bound. Deeper pushes grant more AP.
 
 ---
 
-## Catch-up
+## Reset contract
 
-L285 · Evo 0 → I(200)✓ → II(225)✓ → III(250)✓ → IV(275)✓ → V(300)✗ until level rises.
+Ascension is atomic:
 
-- One Ascension per request  
-- Ranks strictly sequential (no skip)  
-- Each Ascension: own milestone Tribute + confirm  
-- Build headroom after an Ascension becomes available immediately on the same mine  
+1. Validate ownership / vacation state.
+2. Lock the selected planet.
+3. Finish due authoritative work.
+4. Require selected mine level >= 200.
+5. Reject while that mine still has pending build jobs.
+6. Compute AP from the current run depth.
+7. Persist lifetime best depth and Ascension counters.
+8. Reset only the selected mine to its reconstruction baseline.
+9. Credit AP.
+10. Commit.
+
+No Tribute is charged in Nodebuster V1.
+
+The initial reset baseline is level 0. Permanent Reconstruction skills can raise it.
+
+A second request with the same `request_id` returns the cached result and cannot perform
+another reset or grant AP twice.
+
+---
+
+## Permanent skill tree
+
+Owner: `game/mine_evolution/nodebuster.py`
+
+### Reconstruction
+
+- Max rank: 10
+- +10 restart levels per rank
+
+### Frugal Rebuild
+
+- Max rank: 10
+- -4% mine upgrade cost per rank
+- Active only while rebuilding at or below the lifetime best depth
+
+### Rapid Rebuild
+
+- Max rank: 10
+- -5% mine build time per rank
+- Active only while rebuilding at or below the lifetime best depth
+
+### Deep Yield
+
+- Max rank: 10
+- +2.5% permanent production per rank for that selected mine
+
+### Overdrive
+
+- Max rank: 3
+- Requires Reconstruction, Frugal Rebuild, Rapid Rebuild and Deep Yield at rank 5
+- Per rank:
+  - +10 restart levels
+  - +5% permanent production
+  - -2% rebuild cost
+  - -2% rebuild time
+
+At the V1 caps the maximum restart baseline is level 130.
+
+Skill costs rise with purchased rank. The browser receives the server-computed cost,
+availability and affordability; it never calculates the tree economy itself.
+
+---
+
+## Rebuild contract
+
+Rebuild discounts apply only when:
+
+- the selected mine has completed at least one Ascension; and
+- the target level is <= that mine's lifetime best depth.
+
+Above the previous best, normal canonical mine costs and build times apply again.
+
+All cost scaling uses exact integer basis-point math. No float conversion is used for
+large resource costs.
+
+The same modifier path is used by:
+
+- single build enqueue
+- MAX queue preview
+- MAX queue cost total
+- queue rescheduling
+- Buildings card cost/time preview
+
+This keeps displayed values and charged values identical.
+
+---
+
+## Production
+
+Nodebuster production bonuses reuse the existing canonical production engine.
+
+`ProductionContext.building_modifier` receives the permanent production multiplier for
+the selected mine only.
+
+No second production engine exists.
+
+Fresh mine with no skill:
+
+```text
+building_modifier = 1.0
+```
+
+Deep Yield / Overdrive increase that multiplier for only the matching
+`(planet_id, building_type)`.
+
+---
+
+## Ranking / lifetime progression
+
+A prestige reset must not destroy earned progression score.
+
+Under Nodebuster, building progression valuation uses:
+
+```text
+scored_level = max(current_level, lifetime_best_depth)
+```
+
+for each evolvable mine.
+
+Example:
+
+```text
+Ferronit reaches L300
+→ Ascension
+→ mine resets to L0/L10/...
+→ ranking still values the mine at L300
+→ score starts growing again only once the new run exceeds L300
+```
+
+This keeps Ascension a transformation of progression rather than a ranking penalty.
 
 ---
 
 ## Data
 
-Table `planet_mine_evolution`:
+Migration: `178_nodebuster_mine_ascension.sql`
+
+### `planet_mine_ascension_state`
 
 | Column | Meaning |
-|--------|---------|
+|---|---|
 | `planet_id` | Colony |
-| `building_type` | `metal_mine` / `crystal_mine` / `fuel_cell_plant` |
-| `evolution_rank` | Completed Ascensions (0 = never) |
-| `updated_at` | Unix time |
+| `building_type` | Selected mine |
+| `ascension_count` | Completed Nodebuster runs |
+| `points_earned` | Lifetime AP earned |
+| `points_unspent` | Available AP |
+| `best_depth` | Lifetime highest completed run depth |
+| `last_depth` | Most recent Ascension depth |
+| `updated_at` | Timestamp |
 
-PK: `(planet_id, building_type)` — this is the independence guarantee.
+PK: `(planet_id, building_type)`
+
+### `planet_mine_ascension_skills`
+
+| Column | Meaning |
+|---|---|
+| `planet_id` | Colony |
+| `building_type` | Selected mine |
+| `skill_key` | Node key |
+| `skill_rank` | Permanent purchased rank |
+| `updated_at` | Timestamp |
+
+PK: `(planet_id, building_type, skill_key)`
+
+The legacy `planet_mine_evolution` table remains for rolling compatibility but is not
+the Nodebuster V1 progression owner.
 
 ---
 
-## API
+## APIs
+
+### Ascend
 
 `POST /api/buildings/mine-evolve`
 
-Body: `{ "building_type": "metal_mine", "request_id"?: "…" }`
+```json
+{
+  "building_type": "metal_mine",
+  "request_id": "uuid"
+}
+```
 
-Atomic flow (single write TX / single DB checkout):
+Successful payload includes:
 
-1. Vacation/safety probe on the mutation connection  
-2. `finish_due_work`  
-3. Re-read selected mine rank + level  
-4. Threshold (`level >= required_level(rank+1)`)  
-5. Compute Tribute at milestone  
-6. Spend resources (`try_spend_resources_conn`)  
-7. Selected mine rank +1 (level unchanged)  
-8. Commit  
+- run depth
+- reset level
+- AP gained
+- AP lifetime / unspent
+- best depth
+- Ascension count
 
-Guarantees:
+### Buy skill
 
-- No Tribute without rank increase and vice versa  
-- No level reset  
-- Other mine ranks are unchanged  
-- Same `request_id` twice → one Tribute, one rank (`get_idempotent_action` / `save_idempotent_action`)  
-- Return `{ ok, state }` → client `applyActionState`  
+`POST /api/buildings/mine-evolution/skill`
+
+```json
+{
+  "building_type": "metal_mine",
+  "skill_key": "rapid_rebuild",
+  "request_id": "uuid"
+}
+```
+
+The server validates rank cap, prerequisites, AP balance and ownership atomically.
 
 ---
 
-## Production wire
+## Buildings UI
 
-`production_context_from_resolver` loads the planet’s evolution rank for the resource’s mine and sets `building_modifier = 1 + bonus(rank)` for **that resource only**.
+Each mine card exposes one compact Nodebuster surface:
 
----
+- current run level
+- AP available
+- AP gained if Ascending now
+- lifetime best depth
+- current restart level
+- Ascension count
+- permanent rebuild / production bonuses
+- five-node permanent skill tree
+- Ascend CTA from level 200 onward
 
-## UI
+The confirm modal explicitly shows:
 
-Building cards (resources tab): current Nexus/Ascension max level, evolution badge, progress `current / required`, Ascension confirm modal with benefit + Tribute (no reset warning). After a successful Ascension the selected card must immediately expose the newly unlocked level band. Server authority only — no client bonus/tribute math.
+- current run depth
+- AP gain
+- reset level
+- lifetime-best preservation
+
+No Tribute copy is shown for Nodebuster.
+
+Client actions use `GC.fetchGameAction` and reconcile from canonical server state.
 
 ---
 
 ## Regression contract
 
-`tests/test_gc_mine_ascension_nexus_001.py` proves the live gameplay chain:
+Primary suites:
 
-1. Max Nexuses → mine cap L200  
-2. Ferronit L200 / Rank 0 cannot queue L201  
-3. Ferronit Ascension I succeeds without level reset  
-4. Ferronit card/queue cap becomes L225 and L201 can be queued  
-5. Crytite remains Rank 0 / cap L200 at the same time  
+- `tests/test_mine_evolution.py`
+- `tests/test_gc_mine_ascension_nexus_001.py`
+- `tests/test_ascension_queue_cap_contract.py`
+- `tests/test_gc_ferro_l388_001.py`
+
+They lock:
+
+1. voluntary Ascension from L200+
+2. no mine hard gate at L200/L225/...
+3. selected-mine-only reset
+4. depth-sensitive AP
+5. exactly-once request behavior
+6. permanent reconstruction baseline
+7. per-mine production skill isolation
+8. rebuild cost/time discounts
+9. big-number-safe cost scaling
+10. lifetime progression score preservation
+11. Nodebuster ruleset identity
 
 ---
 
-## Ticket map
+## UNI 1 launch
 
-| Ticket | Focus |
-|--------|--------|
-| GC-2900 | Master doc + EPICS / CORE §17 / BUILDINGS / PRODUCTION / ROADMAP |
-| GC-2901 | Migration + owner + evolve API |
-| GC-2902 | `building_modifier` wire in `production_context_from_resolver` |
-| GC-2903 | Buildings UI + Confirm + Locales |
-| GC-2904 | Integration tests |
-| GC-2905 | No reset; Tribute@milestone; bonus curve; catch-up; atomic/idempotent |
-| GC-MINE-ASC-NEXUS-001 | Restore Nexus→L200 contract + per-mine post-200 unlock bands |
+UNI 1's production config guard requires:
+
+```text
+ASCENSION_RULESET = nodebuster-v1
+```
+
+The universe must remain closed if the Nodebuster implementation or any other launch
+contract gate is missing. See `docs/UNI1_LAUNCH_CONTRACT.md`.
