@@ -32,12 +32,12 @@ Required at public launch:
 This is the coordinated production/cost/research/progression-score cutover. UNI 1
 must not launch on the old permanent exponential tail.
 
-## Mine Ascension — Nodebuster ruleset
+## Mine Ascension — Ascension Skill Tree
 
 **Launch blocker until implemented and regression-tested.**
 
 The currently implemented `phase1-no-reset` mine Ascension is not the final UNI 1
-ruleset. UNI 1 requires `ASCENSION_RULESET=nodebuster-v1`.
+ruleset. UNI 1 requires `ASCENSION_RULESET=skill-tree-v1`.
 
 Binding gameplay direction:
 
@@ -57,7 +57,7 @@ Binding gameplay direction:
 9. The system must preserve the Genesis rule: no permanent hard max level.
 
 Exact point curves, node costs and capstone numbers are balance-owned and must be
-locked by tests before the ruleset constant changes to `nodebuster-v1`.
+locked by tests before the ruleset constant changes to `skill-tree-v1`.
 
 ## First-entry bundle
 
@@ -108,7 +108,7 @@ cadence is a bundled release (for example weekly), not continuous deployment.
 
 `GC_NETWORK_UNI1_OPEN=1` is fail-closed. Production config validation rejects an
 open UNI 1 if the x1 profile, q4 Economy V2, first-entry bundle, synthetic hard-offs,
-PayPal live configuration, maintenance owner or Nodebuster Ascension ruleset is
+PayPal live configuration, maintenance owner or Mine Ascension ruleset is
 missing.
 
 Until every gate is green, UNI 1 remains `GC_NETWORK_UNI1_OPEN=0`.
