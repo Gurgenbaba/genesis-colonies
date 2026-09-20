@@ -34,7 +34,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-26 | Living Inactives + AI Expeditions | 🔄 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · GC-2600…2620 |
 | EPIC-27 | Commander Classes & Skill Trees | 🔄 | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) · GC-CLASS-000…007 |
 | EPIC-28 | Space Lottery (Chrono Chamber) | 🔄 | [SPACE_LOTTERY.md](SPACE_LOTTERY.md) · GC-2800…2806 |
-| EPIC-29 | Mine Evolution / Industrial Ascension | 🔄 | [MINE_EVOLUTION.md](MINE_EVOLUTION.md) · GC-2900…2905 (Phase 1 Kern-Loop + Ascension feel-fix) |
+| EPIC-29 | Mine Evolution / Nodebuster Ascension | 🔄 | [MINE_EVOLUTION.md](MINE_EVOLUTION.md) · Nodebuster V1: freiwilliger L200+ Reset, Depth→AP, permanenter per-Mine Tree, Rebuild-Boni, kein Hardcap |
 | EPIC-30 | Stellar Forge (Orbital Shipyard Ascension) | 📋 | [STELLAR_FORGE.md](STELLAR_FORGE.md) · GC-3000…3007, 3010 (Phase 1: 4-Pillar Campaign) |
 
 ---
