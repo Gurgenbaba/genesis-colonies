@@ -20,6 +20,7 @@ PRODUCTION_MINE_BUILDING_TYPES = frozenset({
 MINE_ENDGAME_PACING_START_LEVEL = 200
 MINE_ENDGAME_PACING_STEP_LEVELS = 25
 MINE_ENDGAME_PACING_STEP_SECONDS = 2
+MINE_ENDGAME_PACING_MAX_SECONDS = 3600
 
 
 def building_progress_floor_seconds(building_type: str, target_level: int) -> int:
@@ -37,6 +38,7 @@ def building_progress_floor_seconds(building_type: str, target_level: int) -> in
       L400      -> 82 s
       L500      -> 166 s
       L650      -> 352 s
+      extreme    -> capped at 3600 s floor (normal formula may be much longer)
     """
     if str(building_type or "") not in PRODUCTION_MINE_BUILDING_TYPES:
         return MIN_PROGRESS_DURATION_SECONDS
@@ -50,7 +52,8 @@ def building_progress_floor_seconds(building_type: str, target_level: int) -> in
         return MIN_PROGRESS_DURATION_SECONDS
 
     triangular = steps * (steps + 1) // 2
-    return MIN_PROGRESS_DURATION_SECONDS + MINE_ENDGAME_PACING_STEP_SECONDS * triangular
+    floor = MIN_PROGRESS_DURATION_SECONDS + MINE_ENDGAME_PACING_STEP_SECONDS * triangular
+    return min(MINE_ENDGAME_PACING_MAX_SECONDS, floor)
 
 
 def clamp_progress_duration_seconds(value: int | float) -> int:
