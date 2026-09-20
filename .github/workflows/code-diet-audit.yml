@@ -1,0 +1,36 @@
+name: Code Diet Audit
+
+on:
+  pull_request:
+    paths:
+      - "tools/loc_report.py"
+      - "tools/code_diet_audit.py"
+      - "tests/test_code_diet_audit.py"
+      - ".github/workflows/code-diet-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/loc_report.py"
+      - "tools/code_diet_audit.py"
+      - "tests/test_code_diet_audit.py"
+      - ".github/workflows/code-diet-audit.yml"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Audit regression tests
+        run: python -m pytest -q tests/test_code_diet_audit.py
+      - name: LOC/SLOC report
+        run: python tools/loc_report.py
+      - name: Code diet candidate report
+        run: python tools/code_diet_audit.py
