@@ -860,6 +860,8 @@ def _nanofactory_panel_snapshot(
     *,
     research_levels: Optional[Dict[str, int]] = None,
     panel_ctx: Optional[BuildingsPanelContext] = None,
+    planet_id: Optional[int] = None,
+    conn=None,
 ) -> Dict[str, Any]:
     from .technical_data import build_nanofactory_time_preview
 
@@ -2197,6 +2199,9 @@ def preview_max_queueable_build_jobs(
     metal: int,
     crystal: int,
     queue_free_slots: int,
+    planet_id: Optional[int] = None,
+    conn=None,
+    nodebuster_profiles=None,
 ) -> int:
     """How many +1 build jobs can be queued (resources, cap, queue slots)."""
     if building_type not in BASE_COST or int(queue_free_slots) <= 0:
@@ -2210,6 +2215,15 @@ def preview_max_queueable_build_jobs(
         if target > int(max_level):
             break
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
+        rebuild_cost_bps, _time_bps = _nodebuster_rebuild_bps(
+            planet_id,
+            building_type,
+            target,
+            conn=conn,
+            profiles=nodebuster_profiles,
+        )
+        cost_m = _scale_bps(cost_m, rebuild_cost_bps)
+        cost_c = _scale_bps(cost_c, rebuild_cost_bps)
         if m < int(cost_m) or c < int(cost_c):
             break
         m -= int(cost_m)
@@ -2233,6 +2247,16 @@ def summarize_max_queueable_build_jobs(
     panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX queue UX: levels, total cost, cumulative build time."""
+    nodebuster_profiles = None
+    if planet_id is not None:
+        try:
+            from .mine_evolution.ruleset import is_nodebuster_ruleset
+            if is_nodebuster_ruleset():
+                from .mine_evolution.nodebuster import get_profiles_for_planet
+                nodebuster_profiles = get_profiles_for_planet(int(planet_id), conn=conn)
+        except Exception:
+            nodebuster_profiles = None
+
     jobs = preview_max_queueable_build_jobs(
         building_type,
         current_level=current_level,
@@ -2241,6 +2265,9 @@ def summarize_max_queueable_build_jobs(
         metal=metal,
         crystal=crystal,
         queue_free_slots=queue_free_slots,
+        planet_id=planet_id,
+        conn=conn,
+        nodebuster_profiles=nodebuster_profiles,
     )
     if jobs <= 0:
         return {"jobs": 0}
@@ -2251,13 +2278,22 @@ def summarize_max_queueable_build_jobs(
     for i in range(jobs):
         eff = from_level + i
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
-        total_m += float(cost_m)
-        total_c += float(cost_c)
         target = eff + 1
+        rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+            planet_id,
+            building_type,
+            target,
+            conn=conn,
+            profiles=nodebuster_profiles,
+        )
+        cost_m = _scale_bps(cost_m, rebuild_cost_bps)
+        cost_c = _scale_bps(cost_c, rebuild_cost_bps)
+        total_m += int(cost_m)
+        total_c += int(cost_c)
         if panel_ctx is not None:
-            total_sec += panel_ctx.build_time_seconds(building_type, target)
+            raw_sec = panel_ctx.build_time_seconds(building_type, target)
         else:
-            total_sec += int(
+            raw_sec = int(
                 get_build_time(
                     building_type,
                     target,
@@ -2266,12 +2302,13 @@ def summarize_max_queueable_build_jobs(
                     research_levels=research_levels,
                 )
             )
+        total_sec += _scale_bps(raw_sec, rebuild_time_bps, minimum=1)
     return {
         "jobs": int(jobs),
         "from_level": from_level,
         "to_level": from_level + int(jobs),
-        "cost_metal": int(round(total_m)),
-        "cost_crystal": int(round(total_c)),
+        "cost_metal": int(total_m),
+        "cost_crystal": int(total_c),
         "time_seconds": int(total_sec),
     }
 
