@@ -19,6 +19,7 @@ from .fleet_defs import (
     sort_ship_keys_by_role,
 )
 from .models import db, get_planet_buildings, lock_planet_for_update, resource_db_param
+from .time_floors import MIN_PROGRESS_DURATION_SECONDS
 
 BUILD_TIME_LEVEL_FACTOR = 0.975  # GC-863A — −2.5% ship build time per shipyard level above 1
 
@@ -34,13 +35,13 @@ def production_level_cycle_seconds(
     *,
     level_factor: float = BUILD_TIME_LEVEL_FACTOR,
 ) -> int:
-    """ceil(base × factor^(level-1)) with the canonical 1-second floor.
+    """ceil(base × factor^(level-1)) with the canonical 10-second floor.
 
     Normal levels retain the historical float path. For astronomical levels
-    with 0<factor<1, compare the integer exponent to the point where the result
-    is already certainly below the existing one-second floor before pow().
+    with 0<factor<1, avoid huge pow() calls once the result is certainly below
+    the gameplay floor.
     """
-    base = max(1, int(base_seconds))
+    base = max(MIN_PROGRESS_DURATION_SECONDS, int(base_seconds))
     lvl = max(1, int(level or 1))
     exponent = lvl - 1
     if exponent <= 0 or base <= 1:
@@ -48,14 +49,21 @@ def production_level_cycle_seconds(
 
     factor = float(level_factor)
     if factor <= 0.0:
-        return 1
+        return MIN_PROGRESS_DURATION_SECONDS
     if factor < 1.0:
-        floor_exp = int(math.ceil(math.log(1.0 / base) / math.log(factor)))
-        # A small guard keeps all boundary behavior on the legacy float path.
+        floor_exp = int(
+            math.ceil(
+                math.log(MIN_PROGRESS_DURATION_SECONDS / base) / math.log(factor)
+            )
+        )
+        # A small guard keeps all boundary behavior on the normal float path.
         if exponent >= floor_exp + 4:
-            return 1
+            return MIN_PROGRESS_DURATION_SECONDS
 
-    return max(1, int(math.ceil(base * (factor ** exponent))))
+    return max(
+        MIN_PROGRESS_DURATION_SECONDS,
+        int(math.ceil(base * (factor ** exponent))),
+    )
 
 
 def production_level_reduction_pct(
@@ -216,11 +224,11 @@ def production_job_duration_seconds(
     *, unit_seconds: int, amount: int, batch_capacity: int
 ) -> int:
     """Order duration: ceil(amount / capacity) production cycles × unit_seconds."""
-    unit = max(1, int(unit_seconds))
+    unit = max(MIN_PROGRESS_DURATION_SECONDS, int(unit_seconds))
     cap = max(1, int(batch_capacity))
     amt = max(1, int(amount))
     batches = (amt + cap - 1) // cap
-    return max(1, batches * unit)
+    return max(MIN_PROGRESS_DURATION_SECONDS, batches * unit)
 
 
 def production_infer_total_units(
@@ -462,7 +470,7 @@ def _effective_build_seconds(
         else _shipyard_speed_multiplier(conn=conn)
         * _directive_time_speed(planet_id, "shipyard_time_speed", conn=conn)
     )
-    return max(1, int(math.ceil(seconds / speed)))
+    return max(MIN_PROGRESS_DURATION_SECONDS, int(math.ceil(seconds / speed)))
 
 
 def unit_build_seconds(
