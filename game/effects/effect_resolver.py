@@ -1406,6 +1406,52 @@ class EffectResolver:
         ctx = production_context_from_resolver(self, "fuel_cells", energy_ratio=ratio_f)
         return calculate_resource_output("fuel_cells", ctx)
 
+    def _nodebuster_storage_bps(self, resource: str) -> int:
+        """Per-mine permanent storage multiplier in integer basis points."""
+        pid = self.planet_id
+        if pid is None:
+            return 10000
+
+        try:
+            from ..mine_evolution import RESOURCE_TO_MINE
+            from ..mine_evolution.ruleset import is_nodebuster_ruleset
+
+            if not is_nodebuster_ruleset():
+                return 10000
+            mine_key = RESOURCE_TO_MINE.get(str(resource or ""))
+            if not mine_key:
+                return 10000
+
+            from ..mine_evolution.nodebuster import storage_multiplier_bps_for
+
+            def _read() -> int:
+                return int(
+                    storage_multiplier_bps_for(
+                        int(pid),
+                        mine_key,
+                        conn=getattr(self, "_conn", None),
+                    )
+                )
+
+            probe = getattr(self, "_run_optional_conn_probe", None)
+            if callable(probe):
+                return max(10000, int(probe(f"nodebuster_storage:{mine_key}", _read)))
+            return max(10000, _read())
+        except Exception:
+            if EFFECT_DEBUG:
+                logger.exception(
+                    "Nodebuster storage bonus probe failed planet=%s resource=%s",
+                    pid,
+                    resource,
+                )
+            return 10000
+
+    def _apply_nodebuster_storage(self, resource: str, capacity: int) -> int:
+        cap = max(0, int(capacity or 0))
+        bps = self._nodebuster_storage_bps(resource)
+        return (cap * int(bps)) // 10000
+
+
     def fuel_storage_capacity(self) -> int:
         """Planet fuel cell depot capacity (base cap + fuel_storage building + tech/terraformer)."""
         mods = self.get_modifiers()
@@ -1417,7 +1463,8 @@ class EffectResolver:
 
         f_lvl = _bld(b, "fuel_storage")
         f_cap = self._storage_base_cap("fuel_cells", f_lvl)
-        return scale_int(f_cap, storage_factor, terra_factor)
+        base_capacity = scale_int(f_cap, storage_factor, terra_factor)
+        return self._apply_nodebuster_storage("fuel_cells", base_capacity)
 
     def fuel_cells_storage_capacity(self) -> int:
         """Authoritative fuel_cells cap — same base storage as metal/crystal without depot."""
@@ -1483,8 +1530,14 @@ class EffectResolver:
         c_cap = self._metal_crystal_storage_base_cap("crystal", c_lvl)
 
         return {
-            "metal": scale_int(m_cap, storage_factor, terra_factor),
-            "crystal": scale_int(c_cap, storage_factor, terra_factor),
+            "metal": self._apply_nodebuster_storage(
+                "metal",
+                scale_int(m_cap, storage_factor, terra_factor),
+            ),
+            "crystal": self._apply_nodebuster_storage(
+                "crystal",
+                scale_int(c_cap, storage_factor, terra_factor),
+            ),
             "fuel_cells": self.fuel_cells_storage_capacity(),
         }
 
