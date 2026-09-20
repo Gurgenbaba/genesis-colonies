@@ -15,6 +15,7 @@ from ..models import (
     try_spend_resources_conn,
 )
 from ..ranking import invalidate_player_score_cache
+from ..time_floors import MIN_PROGRESS_DURATION_SECONDS
 from .definitions import get_research_def, get_research_defs
 from .discoveries import try_roll_discovery
 from .history import append_history
@@ -107,8 +108,8 @@ def compute_planet_research_time(
     tier = int(cfg.get("tier") or 1)
     tier_mult = 1.45 ** max(0, tier - 1)
     speed = _research_speed_mult(planet_id, conn)
-    # Technical safety floor only (no balance cap). Keep >0 to avoid stuck/0-duration queues.
-    return max(1.0, (base * tier_mult) / speed)
+    # Canonical progression floor after the complete planet-research speed stack.
+    return max(float(MIN_PROGRESS_DURATION_SECONDS), (base * tier_mult) / speed)
 
 
 def finish_planet_research_jobs(conn: sqlite3.Connection, planet_id: int, now: float) -> int:
