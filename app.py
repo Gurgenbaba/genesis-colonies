@@ -5151,16 +5151,15 @@ def api_auction_house_bid():
     from game.planet_evolution.repository import get_context_planet
 
     if not _schema_ready_with_short_conn(auction_schema_ready):
-        state, _ = _build_game_state_payload(
-            include_panel=True,
-            finish_source="api_auction_house_bid",
-            panel_page="auction_house",
-        )
-        return jsonify({"ok": False, "reason": "auction_unavailable", "state": state}), 503
+        return jsonify({"ok": False, "reason": "auction_unavailable"}), 503
 
     conn = db()
+    result: Optional[Dict[str, Any]] = None
+    auction_house: Dict[str, Any] = {}
     try:
         planet = get_context_planet(user_id, conn=conn)
+        if not planet:
+            return jsonify({"ok": False, "reason": "planet_not_found"}), 400
         planet_id = int(planet["id"])
         ok, reason, result = place_bid(
             player_id=user_id,
@@ -5170,56 +5169,37 @@ def api_auction_house_bid():
             currency=currency,
             conn=conn,
         )
-    except Exception:
-        state, _ = _build_game_state_payload(
-            include_panel=True,
-            finish_source="api_auction_house_bid",
-            panel_page="auction_house",
+
+        # GC-PERF-AUCTION-BID-030: place_bid already committed/rolled back.
+        # Rebuild only the Auction projection + exact active-planet balances on
+        # the same checkout. The browser patches the Auction panel directly and
+        # updates resource amounts without rebuilding the entire game-state.
+        row = conn.execute(
+            """
+            SELECT metal, crystal, fuel_cells
+            FROM planets
+            WHERE id = ? AND player_id = ?
+            LIMIT 1;
+            """,
+            (planet_id, user_id),
+        ).fetchone()
+        auction_house = build_auction_house_state(
+            user_id,
+            planet_id,
+            metal=int(row["metal"] or 0) if row else 0,
+            crystal=int(row["crystal"] or 0) if row else 0,
+            fuel_cells=int(row["fuel_cells"] or 0) if row else 0,
+            conn=conn,
         )
-        return jsonify({"ok": False, "reason": "auction_action_failed", "state": state}), 500
+    except Exception:
+        logger.exception("auction-house bid failed user_id=%s listing_id=%s", user_id, listing_id)
+        return jsonify({"ok": False, "reason": "auction_action_failed"}), 500
     finally:
         conn.close()
-
-    state: Dict[str, Any] = {"ok": True, "server_time": time.time()}
-    auction_house: Dict[str, Any] = {}
-    try:
-        state, _ = _build_game_state_payload(
-            include_panel=True,
-            finish_source="api_auction_house_bid",
-            panel_page="auction_house",
-        )
-        auction_house = dict(state.get("auction_house") or {})
-    except Exception:
-        logger.exception("auction-house bid: game-state build failed user_id=%s", user_id)
-        try:
-            from game.auction_house import build_auction_house_state
-            from game.logic import read_player_live_state_for_poll
-            from game.planet_evolution.repository import get_context_planet as _gcp
-
-            conn2 = db()
-            try:
-                planet2 = _gcp(user_id, conn=conn2)
-                player_view, _, _, _, _, _ = read_player_live_state_for_poll(
-                    user_id, conn=conn2
-                )
-                auction_house = build_auction_house_state(
-                    user_id,
-                    int(planet2["id"]),
-                    metal=int(player_view["metal"] or 0),
-                    crystal=int(player_view["crystal"] or 0),
-                    fuel_cells=int(player_view.get("fuel_cells") or 0),
-                    conn=conn2,
-                )
-                state = {"ok": True, "server_time": time.time(), "auction_house": auction_house}
-            finally:
-                conn2.close()
-        except Exception:
-            logger.exception("auction-house bid: fallback state failed user_id=%s", user_id)
 
     resp: Dict[str, Any] = {
         "ok": bool(ok),
         "reason": reason,
-        "state": state,
         "auction_house": auction_house,
     }
     if ok and result:
