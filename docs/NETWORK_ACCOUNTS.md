@@ -35,6 +35,12 @@ For UNI 1 launch the intended values are `10` and `259200` (72h). The bundle is 
 
 The shared auth secret must exist only in deployment secrets and must never be committed.
 
+## UNI 1 launch contract
+
+The binding public-release checklist (true x1, Economy V2, Nodebuster Ascension,
+starter bundle, Shop and open-gate requirements) lives in
+[UNI1_LAUNCH_CONTRACT.md](UNI1_LAUNCH_CONTRACT.md).
+
 ## UNI 1 launch isolation
 
 Fresh public universes may run without synthetic player activity. For UNI 1:
