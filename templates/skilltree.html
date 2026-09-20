@@ -2,7 +2,9 @@
 
 {% block content %}
 {% set cmd = commander if commander is defined else {} %}
+{% set asc = mine_ascension if mine_ascension is defined else {'ready': false, 'mines': []} %}
 {% set active_meta = cmd.class_meta if cmd.class_meta is defined else none %}
+{% set active_skilltree_tab = request.args.get('tab', 'commander') %}
 <div class="gc-page skilltree-page" id="skilltree-page" data-skilltree-page data-page-id="skilltree">
   <script type="application/json" id="skilltree-page-state">{{ cmd | tojson }}</script>
 
@@ -12,6 +14,24 @@
     <p class="section-hint hint">{{ T("commander_staff_hint", "Choose the officer who will lead your empire.") }}</p>
   </header>
 
+  <nav class="gc-page-tabs gc-page-tabs--cols-2 gc-page-tabs--inline skilltree-system-tabs"
+       role="tablist"
+       aria-label="{{ T('skilltree_system_tabs_label', 'Skill Tree Bereiche') }}">
+    <a href="{{ url_for('skilltree_view', tab='commander') }}"
+       class="gc-page-tab{% if active_skilltree_tab != 'ascension' %} is-active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active_skilltree_tab != 'ascension' else 'false' }}">
+      {{ T('skilltree_tab_commander', 'Commander') }}
+    </a>
+    <a href="{{ url_for('skilltree_view', tab='ascension') }}"
+       class="gc-page-tab{% if active_skilltree_tab == 'ascension' %} is-active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active_skilltree_tab == 'ascension' else 'false' }}">
+      {{ T('skilltree_tab_ascension', 'Ascension') }}
+    </a>
+  </nav>
+
+  {% if active_skilltree_tab != 'ascension' %}
   <div class="skilltree-hud gc-panel">
     <div class="skilltree-hud-row">
       <span class="skilltree-hud-label">{{ T("commander_sp_unspent", "Skillpunkte") }}</span>
@@ -332,5 +352,100 @@
     </aside>
   </section>
   {% endif %}
+  {% else %}
+  <section class="gc-panel gc-ascension-skilltree" data-ascension-skilltree>
+    <div class="gc-panel-header">
+      <div>
+        <p class="skilltree-kicker">{{ T('mine_ascension_kicker', 'Langzeit-Progression') }}</p>
+        <h3 class="skilltree-section-title">{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}</h3>
+        <p class="skilltree-section-hint">{{ T('mine_ascension_skilltree_hint', 'Ascension-Punkte werden pro Mine verdient und permanent in deren Skill Tree investiert.') }}</p>
+      </div>
+    </div>
+
+    {% if not asc.ready %}
+    <div class="gc-empty-state">
+      <div class="gc-empty-title">{{ T('mine_ascension_unavailable', 'Ascension ist aktuell nicht verfügbar.') }}</div>
+    </div>
+    {% else %}
+    <div class="gc-building-grid gc-ascension-mine-grid" role="list">
+      {% for mine in (asc.mines or []) %}
+      <article class="gc-prog-card gc-nodebuster gc-ascension-mine-card"
+               id="ascension-{{ mine.building_type }}"
+               data-nodebuster-mine="{{ mine.building_type }}"
+               role="listitem">
+        <div class="gc-nodebuster-head">
+          <div>
+            <div class="gc-bld-evo-progress-label">{{ T('building_' ~ mine.building_type) }}</div>
+            <div class="gc-nodebuster-run gc-mono">
+              {{ T('mine_ascension_level', level=mine.level) }}
+              · {{ T('mine_ascension_count', count=mine.evolution_rank) }}
+            </div>
+          </div>
+          <div class="gc-nodebuster-ap gc-mono"
+               title="{{ T('mine_ascension_points', 'Ascension-Punkte') }}">
+            <strong>{{ mine.nodebuster_points_unspent|fmt_int }}</strong>
+            <span>{{ T('mine_ascension_points_short', 'AP') }}</span>
+          </div>
+        </div>
+
+        <div class="gc-nodebuster-stats">
+          <div class="gc-nodebuster-stat">
+            <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
+            <strong class="gc-mono">L{{ mine.nodebuster_best_depth|fmt_int }}</strong>
+          </div>
+          <div class="gc-nodebuster-stat">
+            <span>{{ T('mine_ascension_restart_level', 'Neustart') }}</span>
+            <strong class="gc-mono">L{{ mine.nodebuster_reset_level|fmt_int }}</strong>
+          </div>
+          <div class="gc-nodebuster-stat">
+            <span>{{ T('mine_ascension_production_bonus', 'Produktion') }}</span>
+            <strong class="gc-mono">+{{ mine.nodebuster_production_bonus_pct }}%</strong>
+          </div>
+          <div class="gc-nodebuster-stat">
+            <span>{{ T('mine_ascension_storage_bonus', 'Lager') }}</span>
+            <strong class="gc-mono">+{{ mine.nodebuster_storage_bonus_pct }}%</strong>
+          </div>
+        </div>
+
+        <div class="gc-nodebuster-bonuses gc-mono">
+          <span>{{ T('mine_ascension_rebuild_cost_bonus', pct=mine.nodebuster_rebuild_cost_pct) }}</span>
+          <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
+        </div>
+
+        <div class="gc-nodebuster-tree"
+             role="list"
+             aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
+          {% for skill in mine.nodebuster_skills %}
+          <button type="button"
+                  class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}"
+                  data-nodebuster-skill="{{ skill.key }}"
+                  data-nodebuster-building="{{ mine.building_type }}"
+                  data-nodebuster-cost="{{ skill.cost }}"
+                  {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %}
+                  role="listitem">
+            <span class="gc-nodebuster-node-title">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
+            <span class="gc-nodebuster-node-desc">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
+            <span class="gc-nodebuster-node-meta gc-mono">
+              {{ skill.rank }}/{{ skill.max_rank }}
+              {% if skill.rank < skill.max_rank %} · {{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}{% endif %}
+            </span>
+          </button>
+          {% endfor %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/nodebuster_ascension.css') }}?v={{ GC_ASSET_VERSION }}">
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/pages/mine_nodebuster.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
