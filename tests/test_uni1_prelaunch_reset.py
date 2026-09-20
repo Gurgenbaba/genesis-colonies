@@ -120,6 +120,9 @@ def test_prelaunch_reset_preserves_humans_removes_ai_and_normalizes_starters(
     assert result["skipped"] is False
     assert result["pirate_cleanup"]["accounts"]["deleted"] == 6
 
+    from game.uni1_prelaunch import prelaunch_requests_frozen
+    assert prelaunch_requests_frozen() is True
+
     conn = db()
     try:
         # Human account and cross-universe identity links survive.
