@@ -90,6 +90,32 @@ def test_score_neutral_metal_to_crystal_trade_preserves_score():
     ) is False
 
 
+def test_neutral_trade_is_not_blocked_by_independent_score_floor_boundaries():
+    # Before: 1600//1500 + 999//1000 = 1.
+    # After a neutral-ish 100F -> 66C trade:
+    # 1500//1500 + 1065//1000 = 2.
+    # The displayed floored wealth score rises by one even though exact
+    # canonical 3:2 value decreases slightly. Trader must allow this.
+    assert exchange_trade_score_delta(
+        metal=1600,
+        crystal=999,
+        fuel_cells=0,
+        give_resource="metal",
+        give_amount=100,
+        receive_resource="crystal",
+        receive_amount=66,
+    ) == 1
+    assert trade_would_increase_score(
+        metal=1600,
+        crystal=999,
+        fuel_cells=0,
+        give_resource="metal",
+        give_amount=100,
+        receive_resource="crystal",
+        receive_amount=66,
+    ) is False
+
+
 def test_cheap_buy_rate_would_increase_score():
     assert trade_would_increase_score(
         metal=10_000,
