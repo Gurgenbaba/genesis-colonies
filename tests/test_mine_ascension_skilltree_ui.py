@@ -55,9 +55,14 @@ def test_skilltree_route_forwards_mine_ascension_context():
     assert "mine_ascension=mine_ascension" in block
 
 
-def test_mine_ascension_handler_is_persistent_for_pjax_navigation():
+def test_mine_ascension_assets_are_shell_owned_for_pjax_navigation():
     base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    skilltree = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
+
     assert "js/pages/mine_nodebuster.js" in base
+    assert "css/nodebuster_ascension.css" in base
+    assert "js/pages/mine_nodebuster.js" not in skilltree
+    assert "css/nodebuster_ascension.css" not in skilltree
 
 
 def test_skilltree_ascension_uses_server_readiness_and_inspector_actions():
