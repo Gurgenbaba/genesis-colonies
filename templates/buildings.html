@@ -283,6 +283,11 @@
                     data-nodebuster-points-gain="{{ b.nodebuster_points_gain }}"
                     data-nodebuster-reset-level="{{ b.nodebuster_reset_level }}"
                     data-nodebuster-best-depth="{{ b.nodebuster_best_depth }}"
+                    data-nodebuster-confirm-lead="{{ T('nodebuster_confirm_lead', name=T('building_' ~ building_type), level=b.level) }}"
+                    data-nodebuster-confirm-gain="{{ T('nodebuster_confirm_gain', points=b.nodebuster_points_gain) }}"
+                    data-nodebuster-confirm-reset="{{ T('nodebuster_confirm_reset', level=b.nodebuster_reset_level) }}"
+                    data-nodebuster-confirm-best="{{ T('nodebuster_confirm_best') }}"
+                    data-nodebuster-confirm-button="{{ T('nodebuster_confirm_button') }}"
                     data-evo-name="{{ T('building_' ~ building_type) }}">
               {{ T('nodebuster_ascend_now', points=b.nodebuster_points_gain) }}
             </button>
