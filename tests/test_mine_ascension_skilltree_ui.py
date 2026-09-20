@@ -96,3 +96,10 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert ".gc-ascension-node--rapid_rebuild" in css
     assert ".gc-ascension-node--overdrive" in css
     assert ".gc-ascension-tree__edge.is-fed" in css
+    assert "grid-template-columns:repeat(6,minmax(0,1fr))" in css
+    assert ".gc-ascension-node--frugal_rebuild{grid-column:2 / span 2;grid-row:2}" in css
+    assert ".gc-ascension-node--rapid_rebuild{grid-column:4 / span 2;grid-row:2}" in css
+    assert ".gc-ascension-node--overdrive{" in css
+    assert 'viewBox="0 0 600 408"' in template
+    assert 'M300 118 C300 128 250 132 200 134' in template
+    assert 'M400 252 C400 263 350 268 300 270' in template
