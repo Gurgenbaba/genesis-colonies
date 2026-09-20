@@ -27,7 +27,7 @@ from game.effects import (
     clear_effect_resolver_cache,
     get_effect_resolver,
 )
-from game.effects.effect_resolver import STORAGE_TECH_PER_LEVEL
+from game.effects.effect_resolver import BUILD_TIME_MIN_SECONDS, STORAGE_TECH_PER_LEVEL
 from game.models import (
     add_build_job,
     create_user,
@@ -689,7 +689,7 @@ class TestResearchEffectRealityAudit:
 
         base_seconds = power_build_seconds("planet_core_nexus", 1)
         actual = er.get_build_time_seconds("planet_core_nexus", 1)
-        expected = max(1, int(base_seconds * mods["build_time_multiplier"] / er.build_speed_setting()))
+        expected = max(BUILD_TIME_MIN_SECONDS, int(base_seconds * mods["build_time_multiplier"] / er.build_speed_setting()))
         assert actual == expected
 
     def test_energy_efficiency_matches_display(self):
