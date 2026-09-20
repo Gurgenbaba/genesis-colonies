@@ -11325,6 +11325,32 @@
     patchResourceBarEnergyWarning(_resourceLive.energyUsed, _resourceLive.energyTotal);
   }
 
+  function syncResourceMutationAmounts(snapshot) {
+    if (!snapshot || !snapshot.planetId) return;
+    const planetId = Number(snapshot.planetId);
+    if (!Number.isFinite(planetId) || planetId <= 0) return;
+
+    // Mutation responses such as Auction bids already carry exact committed
+    // resource amounts, but not production/cap/energy metadata. Update only the
+    // mutable amounts and preserve the current live ticker model.
+    _resourceLive.planetId = planetId;
+    _resourceLive.syncedAt = getApproxServerNow();
+    _resourceLive.metal = gameplayBigInt(snapshot.metal || 0);
+    _resourceLive.crystal = gameplayBigInt(snapshot.crystal || 0);
+    _resourceLive.fuelCells = gameplayBigInt(snapshot.fuelCells || 0);
+    _last.metal = _resourceLive.metal;
+    _last.crystal = _resourceLive.crystal;
+    _last.fuelCells = _resourceLive.fuelCells;
+    patchShellHudLiveResources(
+      _resourceLive.metal,
+      _resourceLive.crystal,
+      _resourceLive.fuelCells
+    );
+    startResourceTicker();
+  }
+
+  GC.syncResourceMutationAmounts = syncResourceMutationAmounts;
+
   function monotonicResourceBaseline(incoming, current, projected, allowRegression) {
     const inc = gameplayBigInt(incoming);
     if (allowRegression) return inc > BigInt(0) ? inc : BigInt(0);
@@ -19108,6 +19134,14 @@
     const page = document.getElementById("auction-house-page");
     if (!page || !ah || typeof ah !== "object") return;
     const tt = (key, fallback) => t(key, fallback);
+    if (ah.balances && ah.planet_id) {
+      syncResourceMutationAmounts({
+        planetId: ah.planet_id,
+        metal: ah.balances.metal,
+        crystal: ah.balances.crystal,
+        fuelCells: ah.balances.fuel_cells,
+      });
+    }
     if (ah.stats) patchAuctionHouseStats(ah.stats);
     const auctions = Array.isArray(ah.auctions) ? ah.auctions : [];
     const activeIds = new Set(auctions.map((a) => String(a.id)).filter(Boolean));
