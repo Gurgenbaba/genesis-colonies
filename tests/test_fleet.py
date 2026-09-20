@@ -207,9 +207,12 @@ def _complete_expedition_to_returning(conn, fleet_id: int, *, player_id: int) ->
     process_fleet_tick(player_id=player_id, conn=conn)
     conn.commit()
 
-def test_calculate_distance_same_system():
-    d = calculate_distance((1, 100, 3), (1, 100, 8))
-    assert d > 0
+def test_calculate_distance_hierarchy():
+    assert calculate_distance((1, 100, 3), (1, 100, 4)) == 1005
+    assert calculate_distance((1, 100, 3), (1, 101, 3)) == 2795
+    assert calculate_distance((1, 100, 3), (2, 100, 3)) == 20000
+    # Lower coordinate tiers must not leak into a higher-tier jump.
+    assert calculate_distance((1, 1, 1), (2, 499, 15)) == 20000
 
 def test_calculate_fleet_speed_slowest():
     speed = calculate_fleet_speed({'veil_probe': 1, 'mule_courier': 10})
@@ -221,9 +224,13 @@ def test_calculate_fuel_and_cargo():
     assert calculate_fuel_cost(ships, 1000, 100) >= 0
 
 def test_speed_percent_validation_range():
-    sec_fast = calculate_flight_seconds(1000, 5000, 100)
-    sec_slow = calculate_flight_seconds(1000, 5000, 10)
-    assert sec_slow >= sec_fast
+    sec_100 = calculate_flight_seconds(1005, 5000, 100)
+    sec_50 = calculate_flight_seconds(1005, 5000, 50)
+    sec_10 = calculate_flight_seconds(1005, 5000, 10)
+    assert sec_100 == 4972
+    assert sec_50 == 9934
+    assert sec_10 == 49631
+    assert sec_100 < sec_50 < sec_10
 
 def test_calculate_flight_seconds_admin_speed_multiplier():
     base = calculate_flight_seconds(1000, 5000, 100)
@@ -276,12 +283,14 @@ def test_expedition_holding_duration_from_hours(fleet_db):
     assert int(row['holding_until']) >= int(before) + 3 * 3600 - 5
     conn.close()
 
-def test_calculate_flight_seconds_ogame_scale():
-    same_system = calculate_flight_seconds(20, 5000, 100)
-    cross_system = calculate_flight_seconds(3815, 5000, 100)
-    assert same_system >= 1
-    assert cross_system > same_system
-    assert cross_system >= 60
+def test_calculate_flight_seconds_coordinate_scale():
+    same_system = calculate_flight_seconds(1005, 5000, 100)
+    cross_system = calculate_flight_seconds(2795, 5000, 100)
+    cross_galaxy = calculate_flight_seconds(20000, 5000, 100)
+    assert same_system == 4972
+    assert cross_system == 8285
+    assert cross_galaxy == 22146
+    assert same_system < cross_system < cross_galaxy
 
 def test_enrich_movement_timing_outbound_returning_and_holding():
     now = 1700000000.0
