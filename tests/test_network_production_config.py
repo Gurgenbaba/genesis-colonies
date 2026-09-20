@@ -34,7 +34,7 @@ def _set_uni1_launch_contract(monkeypatch) -> None:
     monkeypatch.setenv("PAYPAL_CLIENT_ID", "live-client")
     monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "live-secret")
     monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "live-webhook")
-    monkeypatch.setattr("game.mine_evolution.ruleset.ASCENSION_RULESET", "nodebuster-v1")
+    monkeypatch.setattr("game.mine_evolution.ruleset.ASCENSION_RULESET", "skill-tree-v1")
 
 
 def test_network_production_config_accepts_ready_authority(monkeypatch):
@@ -98,7 +98,7 @@ def test_uni1_launch_rejects_old_ascension_ruleset(monkeypatch):
     monkeypatch.setattr("game.mine_evolution.ruleset.ASCENSION_RULESET", "phase1-no-reset")
     monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
     errors = _validate_network_runtime_config()
-    assert any("Nodebuster" in error for error in errors)
+    assert any("Mine Ascension Skill Tree" in error for error in errors)
 
 
 def test_x1_profile_overrides_all_universe_speed_domains(monkeypatch):
