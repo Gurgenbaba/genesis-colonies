@@ -66,22 +66,24 @@ This prevents a Railway environment named “production” from silently running
 
 ## DEV → UNI 1 promotion
 
-`main` is the DEV/canary code line. Railway UNI 1 continues to deploy from
-`u2/staging-runtime`, but that branch is not advanced by hand during normal
-operation.
+`main` is the continuously changing DEV/canary code line. Railway UNI 1 deploys
+only from the separate release branch `u2/staging-runtime`.
 
-`.github/workflows/promote-u2-after-dev.yml` listens for the Railway commit
-status **`Genesis-Colonies - genesis-colonies`**. Only a **successful DEV
-Railway deployment** may promote, and the candidate SHA must still be the
-current `main` HEAD. The workflow then performs a **fast-forward-only** push
-to `u2/staging-runtime`.
+**UNI 1 does not follow DEV automatically.** Changes merged to `main` may deploy
+to DEV immediately, but they remain isolated from UNI 1 until an operator
+explicitly runs `.github/workflows/promote-u2-after-dev.yml` via
+`workflow_dispatch`.
+
+The intended release cadence is a deliberate bundled promotion (for example,
+once per week after DEV validation). The manual workflow promotes the current
+`main` HEAD with a **fast-forward-only** push to `u2/staging-runtime`.
 
 Fail closed:
 
-- failed/pending DEV deployment → no UNI 1 promotion
-- stale SHA that is no longer `main` → reject
+- no scheduled or Railway-status-triggered promotion exists
+- no manual workflow run → UNI 1 stays on its current release SHA
+- stale SHA that is no longer current `main` → reject
 - diverged `u2/staging-runtime` → reject; no force push
-- manual fallback uses the same current-main and fast-forward checks
 
-This makes DEV the runtime canary while keeping both universes on the same
-reviewed code after a successful canary deployment.
+This keeps DEV suitable for daily development while UNI 1 remains a stable,
+operator-controlled release line.
