@@ -51,6 +51,12 @@ SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
         "cost_step_every": 2,
         "kind": "production",
     },
+    "deep_storage": {
+        "max_rank": 10,
+        "base_cost": 1,
+        "cost_step_every": 2,
+        "kind": "storage",
+    },
     "overdrive": {
         "max_rank": 3,
         "base_cost": 5,
@@ -62,6 +68,7 @@ SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
             "frugal_rebuild": 5,
             "rapid_rebuild": 5,
             "deep_yield": 5,
+            "deep_storage": 5,
         },
     },
 }
@@ -270,6 +277,15 @@ def production_bonus_bps(skills: Dict[str, int]) -> int:
     return 250 * yield_rank + 500 * overdrive
 
 
+def storage_bonus_bps(skills: Dict[str, int]) -> int:
+    storage_rank = max(0, int(skills.get("deep_storage", 0) or 0))
+    return 500 * storage_rank
+
+
+def storage_multiplier_bps(skills: Dict[str, int]) -> int:
+    return 10000 + storage_bonus_bps(skills)
+
+
 def rebuild_cost_multiplier(skills: Dict[str, int]) -> float:
     return rebuild_cost_bps(skills) / 10000.0
 
@@ -290,6 +306,18 @@ def production_multiplier_for(
     profiles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> float:
     return production_multiplier(
+        get_skills(int(planet_id), building_type, conn=conn, profiles=profiles)
+    )
+
+
+def storage_multiplier_bps_for(
+    planet_id: int,
+    building_type: str,
+    *,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> int:
+    return storage_multiplier_bps(
         get_skills(int(planet_id), building_type, conn=conn, profiles=profiles)
     )
 
@@ -394,6 +422,7 @@ def panel_fields(
         "nodebuster_rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(skills)) * 100)),
         "nodebuster_rebuild_time_pct": int(round((1.0 - rebuild_time_multiplier(skills)) * 100)),
         "nodebuster_production_bonus_pct": round((production_multiplier(skills) - 1.0) * 100.0, 2),
+        "nodebuster_storage_bonus_pct": storage_bonus_bps(skills) / 100.0,
         "nodebuster_skills": skill_rows,
     }
 
@@ -630,6 +659,7 @@ def purchase_skill(
             "rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(updated_skills)) * 100)),
             "rebuild_time_pct": int(round((1.0 - rebuild_time_multiplier(updated_skills)) * 100)),
             "production_bonus_pct": round((production_multiplier(updated_skills) - 1.0) * 100.0, 2),
+            "storage_bonus_pct": storage_bonus_bps(updated_skills) / 100.0,
         }
     except Exception:
         try:
