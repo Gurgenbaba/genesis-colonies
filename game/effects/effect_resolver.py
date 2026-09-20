@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..economy_balance import STORAGE_BASE_CAPACITY
 from ..exact_math import bounded_ratio_float, decimal_value, integer_precision, scale_int
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
+from ..time_floors import MIN_PROGRESS_DURATION_SECONDS
 from ..planet_evolution.repository import get_context_planet
 
 logger = logging.getLogger(__name__)
@@ -53,9 +54,8 @@ _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 # so avoid coercing astronomical integer levels through Python float pow().
 _BUILDTIME_TECH_EPS_LEVEL = 1829
 
-# Public-universe balance floor: building construction never completes faster
-# than 10 seconds, regardless of research, Nanofactory, directives or events.
-BUILD_TIME_MIN_SECONDS = 10
+# Backward-compatible export for existing building-time tests/docs.
+BUILD_TIME_MIN_SECONDS = MIN_PROGRESS_DURATION_SECONDS
 
 # Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
 
@@ -1627,8 +1627,8 @@ class EffectResolver:
             * research_time_speed,
         )
         raw /= effective_speed
-        # Technical safety floor only (no balance cap). Keep >0 to avoid stuck/0-duration queues.
-        return max(1, int(raw))
+        # Canonical progression floor after the complete research speed stack.
+        return max(MIN_PROGRESS_DURATION_SECONDS, int(raw))
 
 
 def get_effect_resolver(
