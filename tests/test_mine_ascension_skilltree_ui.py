@@ -109,5 +109,8 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert "grid-template-rows:108px 108px 128px" in css
     assert ".gc-ascension-tree__junction" in css
     assert "opacity:.52" in css
+    assert ".gc-ascension-node.is-selected.is-locked" in css
+    assert ".gc-ascension-node.is-selected.is-unaffordable" in css
+    assert ".gc-ascension-node.is-selected.is-available" in css
     assert "animation:gc-ascension-node-pulse" in css
     assert "content:none" in css
