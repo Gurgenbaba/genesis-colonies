@@ -206,3 +206,37 @@ def test_prelaunch_reset_refuses_unsafe_environment(uni1_prelaunch_db, monkeypat
     monkeypatch.setenv("GC_PIRATE_AI_ENABLED", "1")
     with pytest.raises(RuntimeError, match="requires_pirate_ai_hard_off"):
         run_uni1_prelaunch_reset_once("uni1-unsafe-ai")
+
+
+
+def test_hard_off_ranking_is_human_only_even_before_purge(uni1_prelaunch_db):
+    from game.db import db
+    from game.models import create_user, ensure_player_and_homeworld
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.ranking import (
+        get_player_rank_from_snapshot,
+        get_sorted_ranking_entries,
+        recalculate_all_rankings,
+    )
+
+    conn = db()
+    try:
+        ok, err, user = create_user("ranking_human", "test-pass-123")
+        assert ok, err
+        human_id = int(user["id"])
+        ensure_player_and_homeworld(human_id, player_name="Ranking Human", conn=conn)
+        bots = bootstrap_faction_bots(conn=conn)
+        conn.commit()
+
+        recalculate_all_rankings(refresh_scores=True, conn=conn)
+        rows = get_sorted_ranking_entries(limit=100, conn=conn)
+        bot_ids = {int(bot["player_id"]) for bot in bots}
+        visible_ids = {int(row["player_id"]) for row in rows}
+        assert human_id in visible_ids
+        assert not (bot_ids & visible_ids)
+
+        rank, total = get_player_rank_from_snapshot(human_id, conn=conn)
+        assert rank == 1
+        assert total == 1
+    finally:
+        conn.close()
