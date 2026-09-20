@@ -14644,8 +14644,8 @@ def api_buildings_mine_evolve():
 @app.route("/api/buildings/mine-evolution/skill", methods=["POST"])
 @require_login
 def api_buildings_mine_evolution_skill():
-    """Nodebuster V1: spend permanent per-mine Ascension points."""
-    from game.mine_evolution.nodebuster import purchase_skill
+    """Mine Ascension Skill Tree V1: spend permanent per-mine Ascension points."""
+    from game.mine_evolution.ascension_skill_tree import purchase_skill
     from game.planet_evolution.repository import get_context_planet
 
     data = request.get_json(silent=True) or {}
