@@ -9,7 +9,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 
 | System | Backend | UI | API | Tests | Status | Nächster Schritt |
 |--------|---------|----|-----|-------|--------|------------------|
-| **Overview** | `overview_page.py`, `live_state.py` | `/overview`, `GC.modules.overview` | `GET /api/game-state` | `test_game_state_live`, `test_progression_pages` | ✅ | — |
+| **Overview** | `overview_page.py`, `live_state.py` | `/overview`, `GC.modules.overview` | `GET /api/game-state` | `test_game_state_live`, `test_progression_pages`, `test_gc_prod_infinity_load_ab` | ✅ | Incident 2026-08-29: [`incidents/2026-08-29-production-infinity-load.md`](incidents/2026-08-29-production-infinity-load.md) |
 | **Buildings** | `buildings.py`, `queue_engine` | `/buildings`, PJAX | `POST /api/buildings/*` + `state` | `test_race_conditions`, `test_queue_static_contract` | ✅ | — |
 | **Research** | `research.py` | `/research`, PJAX | `POST /api/research/*` + `state` | `test_race_conditions`, `test_research_requirements` | ✅ | — |
 | **Trader Hub** | `exchange.py`, `scrapyard.py`, `fuel_exchange.py` | `/trader-hub` | `POST /api/exchange`, `/api/trader/scrapyard` | `test_trader_hub`, `test_exchange`, `test_scrapyard` | ✅ | — |

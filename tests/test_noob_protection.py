@@ -36,17 +36,29 @@ def noob_db(tmp_path, monkeypatch):
     gdb._DB_PATH = None
 
 
+def _create_user_with_prefix(prefix: str):
+    """Create a user with a randomized suffix; retry only on name_policy_forbidden."""
+    last_err = ""
+    for _ in range(32):
+        uname = f"{prefix}_{uuid.uuid4().int % 100_000_000:08d}"
+        ok, err, user = create_user(uname, "test-pass-123")
+        if ok and user:
+            return user
+        last_err = str(err or "")
+        if last_err != "name_policy_forbidden":
+            break
+    raise AssertionError(last_err or "create_user_failed")
+
+
 def _player():
-    ok, err, user = create_user(f"noob_{uuid.uuid4().hex[:10]}", "test-pass-123")
-    assert ok, err
+    user = _create_user_with_prefix("noob")
     uid = int(user["id"])
     ensure_player_and_homeworld(uid)
     return uid
 
 
 def _foreign_player():
-    ok, err, user = create_user(f"foreign_{uuid.uuid4().hex[:10]}", "test-pass-123")
-    assert ok, err
+    user = _create_user_with_prefix("foreign")
     uid = int(user["id"])
     conn = db()
     from game.db import begin_write_transaction, commit
@@ -62,6 +74,33 @@ def _foreign_player():
     commit(conn)
     conn.close()
     return uid, pid, coords
+
+
+def test_create_user_helper_retries_name_policy_collision(noob_db, monkeypatch):
+    values = iter((1488, 2468))
+
+    class _FakeUuid:
+        def __init__(self, value: int):
+            self.int = value
+
+    monkeypatch.setattr(uuid, "uuid4", lambda: _FakeUuid(next(values)))
+    user = _create_user_with_prefix("noob_helper")
+    assert int(user["id"]) > 0
+
+
+def test_create_user_helper_does_not_swallow_non_policy_errors(noob_db, monkeypatch):
+    import tests.test_noob_protection as noob_mod
+
+    calls = {"n": 0}
+
+    def _boom(username, password, *args, **kwargs):
+        calls["n"] += 1
+        return False, "username_taken", None
+
+    monkeypatch.setattr(noob_mod, "create_user", _boom)
+    with pytest.raises(AssertionError, match="username_taken"):
+        noob_mod._create_user_with_prefix("noob_fail")
+    assert calls["n"] == 1
 
 
 def _set_score(player_id: int, score_total: int, *, conn) -> None:
