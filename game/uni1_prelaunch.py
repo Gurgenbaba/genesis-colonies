@@ -61,14 +61,18 @@ def _validate_prelaunch_environment(token: str) -> None:
 
 
 def _purge_reserved_ai() -> Dict[str, Any]:
-    from .pirates.cleanup import purge_reserved_pirate_accounts
+    from .pirates.cleanup import (
+        purge_pirate_runtime_state,
+        purge_reserved_pirate_accounts,
+    )
 
     conn = db()
     try:
         begin_write_transaction(conn)
-        out = purge_reserved_pirate_accounts(conn=conn)
+        accounts = purge_reserved_pirate_accounts(conn=conn)
+        runtime = purge_pirate_runtime_state(conn=conn)
         commit(conn)
-        return out
+        return {"accounts": accounts, "runtime": runtime}
     except Exception:
         rollback(conn)
         raise
