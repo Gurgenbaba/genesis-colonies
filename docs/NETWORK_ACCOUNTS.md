@@ -49,3 +49,26 @@ Required invariants:
   `GC_MAINTENANCE_WORKER=1` or `GC_EMBEDDED_CRON=1`.
 
 This prevents a Railway environment named “production” from silently running the app with development semantics or opening UNI 1 without fleet/live-ops maintenance.
+
+
+## DEV → UNI 1 promotion
+
+`main` is the DEV/canary code line. Railway UNI 1 continues to deploy from
+`u2/staging-runtime`, but that branch is not advanced by hand during normal
+operation.
+
+`.github/workflows/promote-u2-after-dev.yml` listens for the Railway commit
+status **`Genesis-Colonies - genesis-colonies`**. Only a **successful DEV
+Railway deployment** may promote, and the candidate SHA must still be the
+current `main` HEAD. The workflow then performs a **fast-forward-only** push
+to `u2/staging-runtime`.
+
+Fail closed:
+
+- failed/pending DEV deployment → no UNI 1 promotion
+- stale SHA that is no longer `main` → reject
+- diverged `u2/staging-runtime` → reject; no force push
+- manual fallback uses the same current-main and fast-forward checks
+
+This makes DEV the runtime canary while keeping both universes on the same
+reviewed code after a successful canary deployment.
