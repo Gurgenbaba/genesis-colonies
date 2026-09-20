@@ -252,22 +252,34 @@ def reset_start_level(skills: Dict[str, int]) -> int:
     return min(ASCENSION_MIN_LEVEL - 1, reconstruction * 10 + overdrive * 10)
 
 
-def rebuild_cost_multiplier(skills: Dict[str, int]) -> float:
+def rebuild_cost_bps(skills: Dict[str, int]) -> int:
     frugal = max(0, int(skills.get("frugal_rebuild", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    return max(0.50, 1.0 - 0.04 * frugal - 0.02 * overdrive)
+    return max(5000, 10000 - 400 * frugal - 200 * overdrive)
+
+
+def rebuild_time_bps(skills: Dict[str, int]) -> int:
+    rapid = max(0, int(skills.get("rapid_rebuild", 0) or 0))
+    overdrive = max(0, int(skills.get("overdrive", 0) or 0))
+    return max(4500, 10000 - 500 * rapid - 200 * overdrive)
+
+
+def production_bonus_bps(skills: Dict[str, int]) -> int:
+    yield_rank = max(0, int(skills.get("deep_yield", 0) or 0))
+    overdrive = max(0, int(skills.get("overdrive", 0) or 0))
+    return 250 * yield_rank + 500 * overdrive
+
+
+def rebuild_cost_multiplier(skills: Dict[str, int]) -> float:
+    return rebuild_cost_bps(skills) / 10000.0
 
 
 def rebuild_time_multiplier(skills: Dict[str, int]) -> float:
-    rapid = max(0, int(skills.get("rapid_rebuild", 0) or 0))
-    overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    return max(0.45, 1.0 - 0.05 * rapid - 0.02 * overdrive)
+    return rebuild_time_bps(skills) / 10000.0
 
 
 def production_multiplier(skills: Dict[str, int]) -> float:
-    yield_rank = max(0, int(skills.get("deep_yield", 0) or 0))
-    overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    return 1.0 + 0.025 * yield_rank + 0.05 * overdrive
+    return 1.0 + production_bonus_bps(skills) / 10000.0
 
 
 def production_multiplier_for(
@@ -301,7 +313,7 @@ def rebuild_modifiers_for_target(
     if int(target_level or 0) > int(state.get("best_depth") or 0):
         return 1.0, 1.0
     skills = get_skills(int(planet_id), bt, conn=conn, profiles=data)
-    return rebuild_cost_multiplier(skills), rebuild_time_multiplier(skills)
+    return rebuild_cost_bps(skills) / 10000.0, rebuild_time_bps(skills) / 10000.0
 
 
 def score_level(
