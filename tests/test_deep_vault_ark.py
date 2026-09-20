@@ -100,10 +100,12 @@ def test_deep_vault_ark_fuel_rebalance():
     pre_adj = int(math.ceil(120 * adj_system / 35000.0))
     pre_cross = int(math.ceil(120 * cross_galaxy / 35000.0))
 
+    assert adj_system == 2795
+    assert cross_galaxy == 20000
     assert ark_adj < pre_adj
     assert ark_cross < pre_cross
-    assert pre_adj == 14
-    assert pre_cross == 82
+    assert pre_adj == 10
+    assert pre_cross == 69
 
     mule_small = calculate_fuel_cost({"mule_courier": 1}, adj_system, 100)
     atlas_routine = calculate_fuel_cost({"atlas_hauler": 1}, adj_system, 100)
