@@ -259,13 +259,7 @@
 
             <div class="gc-nodebuster-tree" role="list" aria-label="{{ T('nodebuster_tree_title') }}">
               {% for skill in b.nodebuster_skills %}
-              <button type="button"
-                      class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}"
-                      data-nodebuster-skill="{{ skill.key }}"
-                      data-nodebuster-building="{{ building_type }}"
-                      data-nodebuster-cost="{{ skill.cost }}"
-                      {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %}
-                      role="listitem">
+              <button type="button" class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}" data-nodebuster-skill="{{ skill.key }}" data-nodebuster-building="{{ building_type }}" data-nodebuster-cost="{{ skill.cost }}" {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %} role="listitem">
                 <span class="gc-nodebuster-node-title">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
                 <span class="gc-nodebuster-node-desc">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
                 <span class="gc-nodebuster-node-meta gc-mono">
@@ -277,19 +271,7 @@
             </div>
 
             {% if _evo_ready %}
-            <button type="button"
-                    class="gc-btn gc-bld-evo-btn gc-nodebuster-ascend"
-                    data-mine-evolve="{{ building_type }}"
-                    data-nodebuster-current-level="{{ b.level }}"
-                    data-nodebuster-points-gain="{{ b.nodebuster_points_gain }}"
-                    data-nodebuster-reset-level="{{ b.nodebuster_reset_level }}"
-                    data-nodebuster-best-depth="{{ b.nodebuster_best_depth }}"
-                    data-nodebuster-confirm-lead="{{ T('nodebuster_confirm_lead', name=T('building_' ~ building_type), level=b.level) }}"
-                    data-nodebuster-confirm-gain="{{ T('nodebuster_confirm_gain', points=b.nodebuster_points_gain) }}"
-                    data-nodebuster-confirm-reset="{{ T('nodebuster_confirm_reset', level=b.nodebuster_reset_level) }}"
-                    data-nodebuster-confirm-best="{{ T('nodebuster_confirm_best') }}"
-                    data-nodebuster-confirm-button="{{ T('nodebuster_confirm_button') }}"
-                    data-evo-name="{{ T('building_' ~ building_type) }}">
+            <button type="button" class="gc-btn gc-bld-evo-btn gc-nodebuster-ascend" data-mine-evolve="{{ building_type }}" data-nodebuster-current-level="{{ b.level }}" data-nodebuster-points-gain="{{ b.nodebuster_points_gain }}" data-nodebuster-reset-level="{{ b.nodebuster_reset_level }}" data-nodebuster-best-depth="{{ b.nodebuster_best_depth }}" data-nodebuster-confirm-lead="{{ T('nodebuster_confirm_lead', name=T('building_' ~ building_type), level=b.level) }}" data-nodebuster-confirm-gain="{{ T('nodebuster_confirm_gain', points=b.nodebuster_points_gain) }}" data-nodebuster-confirm-reset="{{ T('nodebuster_confirm_reset', level=b.nodebuster_reset_level) }}" data-nodebuster-confirm-best="{{ T('nodebuster_confirm_best') }}" data-nodebuster-confirm-button="{{ T('nodebuster_confirm_button') }}" data-evo-name="{{ T('building_' ~ building_type) }}">
               {{ T('nodebuster_ascend_now', points=b.nodebuster_points_gain) }}
             </button>
             {% else %}
