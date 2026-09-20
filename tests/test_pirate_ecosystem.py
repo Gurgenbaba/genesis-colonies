@@ -1958,7 +1958,7 @@ def test_hard_off_public_ranking_hides_reserved_pirate_accounts(pirate_db, monke
 
 
 def test_hard_off_purge_deletes_only_reserved_pirates_and_rebuilds_ranking(pirate_db, monkeypatch):
-    from game.db import begin_write_transaction, commit, rollback
+    from game.db import begin_write_transaction, commit, rollback, table_exists
     from game.models import create_user, ensure_player_and_homeworld
     from game.pirates.accounts import bootstrap_faction_bots, PIRATE_BOT_USERNAMES
     from game.pirates.cleanup import purge_reserved_pirate_accounts
