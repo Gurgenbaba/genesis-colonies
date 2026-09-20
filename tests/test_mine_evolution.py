@@ -102,6 +102,26 @@ def test_ascension_resets_only_selected_mine_and_grants_points(mevo_db):
     assert state["last_depth"] == 250
 
 
+def test_ascension_settles_resources_before_reset(mevo_db, monkeypatch):
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 250)
+    pid = int(planet["id"])
+    seen_levels = []
+
+    def _settle(snapshot, *, conn, skip_queue_finish, persist):
+        seen_levels.append(int(get_planet_buildings(pid, conn=conn)["metal_mine"]))
+        assert skip_queue_finish is True
+        assert persist is True
+        return snapshot, get_planet_buildings(pid, conn=conn), 1.0, 0, 0
+
+    monkeypatch.setattr("game.resources.update_planet_resources", _settle)
+
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+    assert seen_levels == [250]
+    assert int(get_planet_buildings(pid)["metal_mine"]) == 0
+
+
 def test_reconstruction_changes_next_reset_baseline(mevo_db):
     uid = mevo_db
     planet = _set_level(uid, "metal_mine", 300)
