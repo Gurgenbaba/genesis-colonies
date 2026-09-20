@@ -148,6 +148,7 @@ The floor is intentionally mine-only and unbounded:
 | 650 | 352 s |
 
 Formula: every full 25 levels above L200 adds one triangular pacing step
-(`10 + 2 × n(n+1)/2` seconds). This is a floor, not the build formula itself:
-normal calculated build time can still be longer. Nodebuster rebuild-time
-discounts may not reduce a mine below this floor.
+(`10 + 2 × n(n+1)/2` seconds), capped at a **3600-second floor**. This cap is
+only on the minimum: the canonical build formula remains unlimited and can
+produce durations far above one hour. Nodebuster rebuild-time discounts may not
+reduce a mine below this floor.
