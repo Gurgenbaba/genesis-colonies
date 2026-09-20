@@ -133,7 +133,7 @@ metal = `800 × 1.5² = 1800`, crystal = `400 × 1.5² = 900`.
 ### Zeit (live)
 
 ```text
-duration_seconds = max(1.0, base_time × 1.45^(tier − 1) ÷ planet_research_speed)
+duration_seconds = max(10.0, base_time × 1.45^(tier − 1) ÷ planet_research_speed)
 ```
 
 Funktion: `compute_planet_research_time(planet_id, tech_key, target_level, conn)`.
@@ -145,7 +145,7 @@ Funktion: `compute_planet_research_time(planet_id, tech_key, target_level, conn)
 | `planet_research_speed` | `game_settings` (Default 1.0) |
 | Bonus | Planet-Flag `planet_research_speed_bonus` (additiv: `× (1 + bonus)`) |
 
-Untergrenze: `1.0` s (technischer Safety-Floor, kein 30s-Balance-Cap — GC-622B).
+Untergrenze: **10.0 s** nach allen Planet-Research-Speedmodifikatoren. Planet-Tech darf durch Skalierung niemals instant oder auf 1 Sekunde kollabieren.
 
 ### Queue
 
