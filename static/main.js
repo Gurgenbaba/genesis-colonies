@@ -17718,7 +17718,10 @@
 
   function canOpenContainerAgain(payload) {
     const key = payload.container_key || payload.item_key;
-    const inv = payload.inventory || payload._deferredInventory || {};
+    // A full /api/inventory/state refresh may finish while the 2.4s loot roll is
+    // still animating. Always prefer that newest authoritative snapshot over the
+    // compact click-response payload.
+    const inv = _inventoryLastState || payload.inventory || payload._deferredInventory || {};
     const row = (inv.containers || []).find((c) => c.item_key === key);
     if (!row) return false;
     if (key === "container_basic") {
@@ -17785,15 +17788,10 @@
       results.hidden = false;
     }
 
-    if (payload._deferredState) {
-      applyActionState({ ok: true, state: payload._deferredState }, "inventory_open");
-    }
-    applyInventoryActionResult({
-      ok: true,
-      inventory: payload.inventory || payload._deferredInventory,
-      item_key: payload.item_key || payload.container_key,
-      consumed: payload.consumed || payload.opened || 1,
-    });
+    // GC-PERF-INVENTORY-OPEN-009: do not replay click-time state here.
+    // The compact server response is clock-only and the full inventory refresh
+    // may already have completed during the animation. Re-applying either stale
+    // snapshot here would clear live queue state or overwrite newly awarded items.
     const page = document.getElementById("inventory-page");
     if (page) {
       page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
@@ -18979,15 +18977,23 @@
           _inventoryLastState = inventoryAfterOpen;
           syncInventoryPageStateScript(_inventoryLastState);
           patchInventoryDom(_inventoryLastState);
+
+          // The successful open route intentionally returns only canonical clock
+          // metadata, not a full game-state. Sync time directly; never feed this
+          // partial object into applyActionState/applyGameStateData because absent
+          // queue fields must not be interpreted as empty queues.
+          if (res.state && typeof syncServerClockFromState === "function") {
+            syncServerClockFromState(res.state);
+          }
+
           // Full vault/case-battle sync overlaps the 2.4s loot animation instead
-          // of blocking the click response.
+          // of blocking the click response. If it wins the race, its newer state
+          // remains authoritative at reveal time.
           void refreshInventoryFromServer();
           showLootOpeningModal({
             ...res,
             item_key: itemKey,
             consumed: res.opened || amount,
-            _deferredState: res.state,
-            _deferredInventory: inventoryAfterOpen,
           });
         }
       );
