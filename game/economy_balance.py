@@ -32,6 +32,11 @@ ROI_BENCHMARK_LEVELS: Tuple[int, ...] = (20, 40, 60, 80, 100, 120)
 NEUTRAL_BALANCE_SLOT = 9
 MINE_PACE_REF_LEVEL = 20
 MINE_ENDGAME_PACE_THRESHOLD = 80
+# GC-UNI1-COST-STABILITY — q4 tail has marginal output ~1/L, so a linear
+# investment horizon keeps fresh record-level affordability roughly stationary
+# instead of making every later mine level cheaper relative to current output.
+# Historical anchors through L120 remain byte-for-byte unchanged.
+MINE_ENDGAME_ROI_EXPONENT = 1.0
 
 # GC-821F — target payback hours (neutral slot, metal mine reference).
 MINE_UPGRADE_ROI_TARGET_HOURS: Dict[int, float] = {
@@ -510,14 +515,23 @@ def _mine_upgrade_cost_total_raw(building_type: str, target_level: int) -> float
 
 
 def mine_roi_anchor_hours(level: int) -> float:
-    """Mine ROI target; V2 rises smoothly after the historical L120 anchor."""
+    """Mine ROI target; active q4 pricing stays sustainable beyond the L120 anchor.
+
+    The q4 production tail is asymptotically polynomial, so its marginal gain as a
+    share of current output falls approximately like 1/L.  A linear live-cost
+    horizon (exponent 1.0) offsets that decay and keeps a fresh record-level mine
+    upgrade in a stable multi-day affordability band instead of becoming
+    progressively cheaper forever.  Levels <=120 keep the historical anchors.
+    """
     lvl = max(1, int(level))
     from .production_formula import ENDGAME_PRODUCTION_PIVOT_LEVEL, endgame_economy_mode
 
     pivot = max(120, int(ENDGAME_PRODUCTION_PIVOT_LEVEL))
     if endgame_economy_mode() == "active" and lvl > pivot:
         pivot_hours = _log_interpolate_anchor_map(pivot, MINE_UPGRADE_ROI_TARGET_HOURS)
-        return float(pivot_hours) * ((float(lvl) / float(pivot)) ** 0.45)
+        return float(pivot_hours) * (
+            (float(lvl) / float(pivot)) ** float(MINE_ENDGAME_ROI_EXPONENT)
+        )
     return _log_interpolate_anchor_map(lvl, MINE_UPGRADE_ROI_TARGET_HOURS)
 
 
