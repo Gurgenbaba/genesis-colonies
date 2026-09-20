@@ -212,6 +212,22 @@ def _normalize_existing_linked_humans(token: str) -> Dict[str, Any]:
         conn.close()
 
 
+def prelaunch_reset_completed() -> bool:
+    """True only after a successful normalization wrote its durable marker."""
+    marker = str(get_runtime_value(PRELAUNCH_TOKEN_KEY) or "").strip()
+    return bool(marker)
+
+
+def require_prelaunch_reset_for_open_uni1() -> None:
+    """Fail closed when Production tries to boot an open UNI1 before reset."""
+    if str(current_universe_key() or "").lower() != "uni1":
+        return
+    if not universe_is_open("uni1"):
+        return
+    if not prelaunch_reset_completed():
+        raise RuntimeError("uni1_open_before_prelaunch_reset")
+
+
 def run_uni1_prelaunch_reset_once(token: str) -> Dict[str, Any]:
     """Execute the final closed-universe reset once for a unique operator token."""
     token_n = str(token or "").strip()
