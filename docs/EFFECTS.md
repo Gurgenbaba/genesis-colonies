@@ -42,7 +42,8 @@ The shared base floor remains **10 seconds**. For production mines only
 (`metal_mine`, `crystal_mine`, `fuel_cell_plant`), GC-MANDO-PACING-001 adds
 a gentle level-aware endgame floor from L225 onward so unlimited mine
 progression does not collapse into permanent 10-second upgrades. Anchors:
-L225=12s, L300=30s, L400=82s, L500=166s, L650=352s. Explicit Timekeeper/admin
+L225=12s, L300=30s, L400=82s, L500=166s, L650=352s; the floor itself
+caps at 3600s so it never replaces the real high-level build curve. Explicit Timekeeper/admin
 skip mutations remain separate and can still finish jobs immediately.
 
 **`effective_speed`** stacks multiplicatively:
