@@ -34,8 +34,16 @@ Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build
 
 ```text
 seconds = power_build_seconds(building, level) / effective_speed
-return max(int(seconds), 10)  # 10-second public-universe construction floor
+floor = building_progress_floor_seconds(building, level)
+return max(int(seconds), floor)
 ```
+
+The shared base floor remains **10 seconds**. For production mines only
+(`metal_mine`, `crystal_mine`, `fuel_cell_plant`), GC-MANDO-PACING-001 adds
+a gentle level-aware endgame floor from L225 onward so unlimited mine
+progression does not collapse into permanent 10-second upgrades. Anchors:
+L225=12s, L300=30s, L400=82s, L500=166s, L650=352s. Explicit Timekeeper/admin
+skip mutations remain separate and can still finish jobs immediately.
 
 **`effective_speed`** stacks multiplicatively:
 
