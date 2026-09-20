@@ -9,7 +9,7 @@
 | Forschungszeit | `EffectResolver.get_research_time_seconds` | `anchor_hours × tier ÷ (build_speed × research_speed × lab_bonus × research_time_speed)` |
 | Bauzeit | `EffectResolver.get_build_time_seconds` | `BUILD_TIME_BASE × factor^(L-1) ÷ build_speed_effective` |
 | Produktion / ROI | `economy_balance.mine_upgrade_roi_hours` | `upgrade_cost ÷ Δprod/h × production_speed` |
-| Flugzeit | `fleet_calc.calculate_flight_seconds` | `(35000/speed) × √(dist/10) ÷ admin_fleet_speed` |
+| Flugzeit | `fleet_calc.calculate_flight_seconds` | `((35000/speed_step) × √(distance×10/fleet_speed) + 10) ÷ admin_fleet_speed` |
 
 **Annahmen Benchmark:** kein `buildtime_tech`, kein Klima/GD, `build_speed=1` in Forschungstabellen, `research_speed=1` in Bautabellen, progressive Lab-Spalte (`LAB_FOR_LEVEL`).
 
@@ -215,21 +215,21 @@ Schiff-Geschwindigkeit 1500 (langsamer Frachter-Tier), 100% Reisegeschwindigkeit
 
 | Distanz | fleet_speed (×) | Flugzeit (speed 1500, 100%) |
 | ---: | ---: | ---: |
-| 500 | 1 | 2:45 |
-| 500 | 2 | 1:23 |
-| 500 | 3 | instant |
-| 500 | 5 | instant |
-| 500 | 10 | instant |
-| 2000 | 1 | 5:30 |
-| 2000 | 2 | 2:45 |
-| 2000 | 3 | 1:50 |
-| 2000 | 5 | 1:06 |
-| 2000 | 10 | instant |
-| 8000 | 1 | 11min |
-| 8000 | 2 | 5:30 |
-| 8000 | 3 | 3:40 |
-| 8000 | 5 | 2:12 |
-| 8000 | 10 | 1:06 |
+| 500 | 1 | 1h 46min |
+| 500 | 2 | 53:20 |
+| 500 | 3 | 35:33 |
+| 500 | 5 | 21:20 |
+| 500 | 10 | 10:40 |
+| 2000 | 1 | 3h 33min |
+| 2000 | 2 | 1h 46min |
+| 2000 | 3 | 1h 11min |
+| 2000 | 5 | 42:38 |
+| 2000 | 10 | 21:19 |
+| 8000 | 1 | 7h 6min |
+| 8000 | 2 | 3h 33min |
+| 8000 | 3 | 2h 22min |
+| 8000 | 5 | 1h 25min |
+| 8000 | 10 | 42:37 |
 
 ## Empfehlung (Alpha)
 
@@ -243,7 +243,7 @@ Berechnet mit kanonischen Formeln (`EffectResolver`, GC-825/821). Referenzplanet
 | Ist `research_speed = 100` zu schnell? | Gleiches Szenario → **0.08 h** | Midgame-Forschung wird Trivialzeit — zu schnell für Progressionsgefühl |
 | Ist `build_speed = 10` sinnvoll? | `metal_mine` L20 → **10:50** | Gute Alpha-Fluidität ohne Instant-Bau |
 | Ist `production_speed = 1` zu langsam? | ROI L20 → **2.1d** | Passt zu GC-821 Mine-Balance — **nicht** anheben ohne Economy-Rebalance |
-| Flotte | siehe Flugtabelle | `fleet_speed` 3 → Distanz 2000 ~1:50 (speed 1500) |
+| Flotte | siehe Flugtabelle | `fleet_speed` 3 → Distanz 2000 ~1h 11min (speed 1500) |
 
 ### Aktuelle Defaults (`DEFAULT_GAME_SETTINGS`)
 
@@ -268,7 +268,7 @@ fleet_speed      = 3   (peaceful / war / holding einheitlich)
 - **production_speed = 1** — GC-821 Mine-ROI ist darauf kalibriert; Erhöhung verkürzt Payback linear und entwertet Upgrades.
 - **build_speed = 8** — `metal_mine` L20 in ~13:33; L30 Gebäude bleiben spürbar, aber nicht frustrierend.
 - **research_speed = 50** — Energie L30 9:55; L10 1:17 — Alpha-taugliches Tempo ohne Instant-Forschung.
-- **fleet_speed = 3** — Distanz 2000 1:50; Distanz 8000 3:40 (Referenzschiff speed 1500).
+- **fleet_speed = 3** — Distanz 2000 1h 11min; Distanz 8000 2h 22min (Referenzschiff speed 1500).
 
 Sweet-Spot-Band (aus Sweeps): `build_speed` 5–10, `research_speed` 25–100, `production_speed` 1, `fleet_speed` 2–5.
 
