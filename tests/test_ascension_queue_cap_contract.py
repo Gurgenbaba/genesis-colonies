@@ -22,12 +22,14 @@ def test_nodebuster_enqueue_cap_is_only_internal_safety_sentinel():
     ) == QUEUE_SAFETY_SENTINEL
 
 
-def test_nodebuster_template_does_not_render_mine_gate_as_max_state():
+def test_mine_template_keeps_ascension_controls_without_skill_tree():
     template = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     assert "data-nodebuster-mine" in template
-    assert "nodebuster_unlock_hint" in template
+    assert "mine_ascension_title" in template
     assert "data-nodebuster-points-gain" in template
-    assert "data-nodebuster-skill" in template
+    assert "data-mine-evolve" in template
+    assert "nodebuster_unlock_hint" not in template
+    assert "data-nodebuster-skill" not in template
 
 
 def test_queue_owner_contains_nodebuster_rebuild_scaling():
