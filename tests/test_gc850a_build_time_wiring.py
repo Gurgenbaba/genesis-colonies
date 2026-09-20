@@ -9,6 +9,7 @@ import pytest
 from game.buildings import BUILDING_ORDER
 from game.economy_balance import power_build_seconds
 from game.effects import EffectResolver
+from game.effects.effect_resolver import BUILD_TIME_MIN_SECONDS
 
 ANCHOR_LEVELS = (10, 20, 30, 40, 60, 80, 100, 120)
 SPEED_ONE = {"production_speed": 1.0, "build_speed": 1.0, "research_speed": 1.0}
@@ -49,9 +50,19 @@ class TestGc850aBuildTimeWiring:
         t_fast = er_fast.get_build_time_seconds("metal_mine", lvl)
         t_slow = er_slow.get_build_time_seconds("metal_mine", lvl)
         base = power_build_seconds("metal_mine", lvl)
-        assert t_fast == max(1, int(base / 2.0))
+        assert t_fast == max(BUILD_TIME_MIN_SECONDS, int(base / 2.0))
         assert t_slow == base
         assert t_fast < t_slow
+
+    def test_build_time_has_hard_ten_second_floor(self):
+        er = EffectResolver(
+            {"nanofactory": 500},
+            {"buildtime_tech": 500},
+            settings={"build_speed": 1_000_000.0},
+        )
+        assert BUILD_TIME_MIN_SECONDS == 10
+        assert er.get_build_time_seconds("metal_mine", 1) == 10
+        assert er.get_build_time_seconds("nanofactory", 1) == 10
 
     def test_buildtime_tech_reduces_duration(self):
         base_er = _resolver_at_speed_one()
