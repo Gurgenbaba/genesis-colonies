@@ -34,11 +34,11 @@ def test_orbital_capacity_handles_huge_level_and_huge_forge_rank_together():
     assert orbital_production_batch_capacity(HUGE, forge_rank=HUGE) == expected
 
 
-def test_unit_cycle_decay_saturates_at_existing_one_second_floor():
-    assert production_level_cycle_seconds(120, HUGE) == 1
-    assert production_level_cycle_seconds(120, HUGE, level_factor=0.90) == 1
-    assert production_level_reduction_pct(HUGE) == 100
-    assert production_level_reduction_pct(HUGE, level_factor=0.90) == 100
+def test_unit_cycle_decay_saturates_at_ten_second_floor():
+    assert production_level_cycle_seconds(120, HUGE) == 10
+    assert production_level_cycle_seconds(120, HUGE, level_factor=0.90) == 10
+    assert production_level_reduction_pct(HUGE) == 1000
+    assert production_level_reduction_pct(HUGE, level_factor=0.90) == 1000
 
 
 def test_normal_shipyard_curve_stays_legacy_compatible():
@@ -56,22 +56,22 @@ def test_normal_shipyard_curve_stays_legacy_compatible():
         assert production_level_reduction_pct(level) == legacy_reduction
 
     assert orbital_production_batch_capacity(1) == 7
-    assert orbital_production_batch_capacity(2) == 15
+    assert orbital_production_batch_capacity(2) == 105
     assert orbital_production_batch_capacity(5) == 66
     assert orbital_production_batch_capacity(10) == 250
 
 
-def test_ship_defense_and_troop_consumers_share_no_max_floor(monkeypatch):
+def test_ship_defense_and_troop_consumers_share_ten_second_floor(monkeypatch):
     assert _effective_build_seconds(
         "mule_courier",
         HUGE,
         build_time_speed=1.0,
-    ) == 1
+    ) == 10
 
     monkeypatch.setattr(defense, "_defense_speed_multiplier", lambda conn=None: 1.0)
-    assert defense.unit_build_seconds("sentinel_turret", HUGE) == 1
+    assert defense.unit_build_seconds("sentinel_turret", HUGE) == 10
 
-    assert unit_train_seconds("militia", HUGE) == 1
+    assert unit_train_seconds("militia", HUGE) == 10
 
 
 def test_unit_production_sources_do_not_reintroduce_huge_level_float_pow():
