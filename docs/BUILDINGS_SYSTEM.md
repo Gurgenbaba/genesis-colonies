@@ -62,7 +62,7 @@ Legacy `BASE_COST × COST_FACTOR^(level-1)` nur noch Audit/Tests — **nicht** d
 
 ### Build-Zeit (live, GC-850A / GC-858)
 
-`EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ multiplicative speed stack; **minimum 1 second** (`max(int(seconds), 1)`).
+`EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ multiplicative speed stack; **minimum 10 seconds** after all speed modifiers (`max(int(seconds), 10)`).
 
 Sources: `build_speed` (universe), `buildtime_tech` (`× 0.985^level`), `nanofactory` (speed `1 + 0.55 × level^0.8`), `command_center` (nanofactory upgrades only, `× 0.75^cc_level`), galactic directives/diplomacy. Details: [EFFECTS.md](EFFECTS.md). Historical profiles: [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md) (nanofactory formula section superseded by GC-NANO-BUILDTIME-AUDIT-001).
 

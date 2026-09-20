@@ -8,6 +8,7 @@ import math
 
 import pytest
 
+from game.time_floors import MIN_PROGRESS_DURATION_SECONDS
 from game.planet_evolution.planet_research import (
     compute_planet_research_cost,
     compute_planet_research_time,
@@ -69,7 +70,7 @@ class TestGc852ShipyardFormula:
         base = base_unit_seconds_for_ship("mule_courier")
         assert base == 120
         for yard_lvl in (1, 2, 5, 10):
-            expected = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (yard_lvl - 1)))))
+            expected = max(MIN_PROGRESS_DURATION_SECONDS, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (yard_lvl - 1)))))
             assert unit_build_seconds("mule_courier", yard_lvl) == expected
 
     def test_order_duration_matches_batch_formula(self):
@@ -120,7 +121,7 @@ class TestGc852PlanetTechFormula:
         cfg = get_research_def("industry_t2_mining_path") or {}
         assert int(cfg.get("tier") or 0) == 2
         base_time = float(cfg.get("base_time") or 0)
-        expected = max(1.0, base_time * (1.45 ** 1))
+        expected = max(float(MIN_PROGRESS_DURATION_SECONDS), base_time * (1.45 ** 1))
         actual = compute_planet_research_time(pid, "industry_t2_mining_path", 1, conn=conn)
         assert actual == expected
 

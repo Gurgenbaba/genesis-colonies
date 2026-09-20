@@ -90,6 +90,32 @@ def test_score_neutral_metal_to_crystal_trade_preserves_score():
     ) is False
 
 
+def test_neutral_trade_is_not_blocked_by_independent_score_floor_boundaries():
+    # Before: 1600//1500 + 999//1000 = 1.
+    # After a neutral-ish 100F -> 66C trade:
+    # 1500//1500 + 1065//1000 = 2.
+    # The displayed floored wealth score rises by one even though exact
+    # canonical 3:2 value decreases slightly. Trader must allow this.
+    assert exchange_trade_score_delta(
+        metal=1600,
+        crystal=999,
+        fuel_cells=0,
+        give_resource="metal",
+        give_amount=100,
+        receive_resource="crystal",
+        receive_amount=66,
+    ) == 1
+    assert trade_would_increase_score(
+        metal=1600,
+        crystal=999,
+        fuel_cells=0,
+        give_resource="metal",
+        give_amount=100,
+        receive_resource="crystal",
+        receive_amount=66,
+    ) is False
+
+
 def test_cheap_buy_rate_would_increase_score():
     assert trade_would_increase_score(
         metal=10_000,
@@ -100,6 +126,39 @@ def test_cheap_buy_rate_would_increase_score():
         receive_resource="crystal",
         receive_amount=1000,
     ) is True
+
+
+def test_execute_allows_neutral_trade_across_display_score_boundary(exchange_db):
+    conn = db()
+    ok, _, user = create_user("score_f_boundary", "test-pass-123")
+    assert ok
+    uid = int(user["id"])
+    ensure_player_and_homeworld(uid, player_name="BoundaryTrader", conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    conn.execute(
+        "UPDATE planets SET metal = 1600, crystal = 999, fuel_cells = 0 WHERE id = ?;",
+        (pid,),
+    )
+    conn.commit()
+
+    ok_trade, reason, result = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        from_resource="metal",
+        to_resource="crystal",
+        amount=100,
+        conn=conn,
+    )
+    assert ok_trade, reason
+    assert result["receive_amount"] == 66
+
+    row = conn.execute(
+        "SELECT metal, crystal FROM planets WHERE id = ?;",
+        (pid,),
+    ).fetchone()
+    assert int(row["metal"]) == 1500
+    assert int(row["crystal"]) == 1065
+    conn.close()
 
 
 def test_execute_blocks_score_exploit_with_misconfigured_buy_rate(exchange_db, monkeypatch):

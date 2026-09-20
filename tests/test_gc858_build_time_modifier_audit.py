@@ -150,8 +150,8 @@ class TestGc858DisplayVsRuntime:
 class TestGc858AuditDoc:
     def test_audit_doc_exists_and_classifies(self):
         text = (ROOT / "docs/GC-858_BUILD_TIME_MODIFIER_AUDIT.md").read_text(encoding="utf-8")
-        assert "max(int(seconds), 1)" in text
-        assert "BALANCE DECISION REQUIRED" in text
+        assert "max(int(seconds), 10)" in text
+        assert "BALANCE DECISION RESOLVED — 10 s floor" in text
         assert "GC-NANO-BUILDTIME-AUDIT-001" in text
         assert "0.55" in text
 

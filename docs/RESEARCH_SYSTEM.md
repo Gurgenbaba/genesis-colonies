@@ -257,6 +257,15 @@ Forschung löst Engpässe imperiumsweit: mehr Lager, schnellere Bauzeiten, effiz
 - **Interstellar Expansion** (Account-Tech) gehört zur Expansion — Gates für neue Welten (siehe Expansion Protocol).
 - Planet-Tech auf `/planet-evolution` ist **Welt-Forschung**, nicht dieses System.
 
+## Zeit-Untergrenze
+
+Account-Forschung nutzt den kanonischen Progression-Floor aus
+`game/time_floors.py`: Nach **allen** Forschungs-/Labor-/Academy-/Universe-/
+Directive-/Event-Speedmodifikatoren beträgt die effektive Dauer eines normalen
+Forschungsjobs mindestens **10 Sekunden**. Forschung darf durch Skalierung niemals
+instant oder auf 1 Sekunde kollabieren. Explizite Skip-Mechaniken wie Timekeeper
+sind separate Aktionen und ändern diese Formel nicht.
+
 ## Related Systems
 
 - buildings

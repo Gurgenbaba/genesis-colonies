@@ -21,6 +21,25 @@ speed domains to exactly `1.0`, regardless of historical values persisted in
 Player progression modifiers (research, Nanofactory, Commander, Galactic
 Directives, etc.) still apply on top of the x1 universe baseline.
 
+### Progression time floor
+
+Normal progression/production queues have a hard **10-second minimum** after the
+complete speed stack. This includes:
+
+- building construction
+- account research
+- Planet Evolution research
+- shipyard production
+- defense production
+- troop training
+
+Research, Nanofactory, laboratories, Commander effects, directives, universe
+settings and timed events may accelerate their domains, but normal calculated
+jobs can never collapse to instant/1-second completion. Explicit skip mechanics
+such as Timekeeper or deliberate admin actions remain separate from this scaling
+floor.
+
+
 ## Economy V2
 
 Required at public launch:
@@ -83,6 +102,14 @@ An open UNI 1 requires a live maintenance owner:
 - `GC_EMBEDDED_CRON=1`
 
 The queue worker remains the dedicated short-cadence queue owner.
+
+## Trader Hub
+
+Public launch requires the unified resource Trader to pass an active-world smoke
+test for Ferronit, Crytite and Brennzellen in both directions. Score-neutral
+trades must not be rejected solely because integer display-score floors cross a
+resource divisor boundary. Anti-arbitrage still compares exact canonical 3:2:1
+resource value server-side.
 
 ## Shop
 

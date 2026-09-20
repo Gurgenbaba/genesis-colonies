@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..economy_balance import STORAGE_BASE_CAPACITY
 from ..exact_math import bounded_ratio_float, decimal_value, integer_precision, scale_int
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
+from ..time_floors import MIN_PROGRESS_DURATION_SECONDS
 from ..planet_evolution.repository import get_context_planet
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,9 @@ _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 # build/research speed consumers clamp the duration factor to the same epsilon,
 # so avoid coercing astronomical integer levels through Python float pow().
 _BUILDTIME_TECH_EPS_LEVEL = 1829
+
+# Backward-compatible export for existing building-time tests/docs.
+BUILD_TIME_MIN_SECONDS = MIN_PROGRESS_DURATION_SECONDS
 
 # Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
 
@@ -1591,13 +1595,13 @@ class EffectResolver:
         # the bounded speed as Decimal rather than round-tripping through float.
         if base_seconds.bit_length() < 1024:
             seconds = float(base_seconds) / effective_speed
-            return max(int(seconds), 1)
+            return max(int(seconds), BUILD_TIME_MIN_SECONDS)
 
         speed_dec = max(decimal_value(effective_speed, "1"), Decimal("0.1"))
         with localcontext() as ctx:
             ctx.prec = integer_precision(base_seconds, extra=96)
             duration_factor = Decimal(1) / speed_dec
-        return max(scale_int(base_seconds, duration_factor), 1)
+        return max(scale_int(base_seconds, duration_factor), BUILD_TIME_MIN_SECONDS)
 
     def get_research_time_seconds(self, tech_key: str, target_level: int) -> int:
         from ..research import RESEARCH_TECHS
@@ -1623,8 +1627,8 @@ class EffectResolver:
             * research_time_speed,
         )
         raw /= effective_speed
-        # Technical safety floor only (no balance cap). Keep >0 to avoid stuck/0-duration queues.
-        return max(1, int(raw))
+        # Canonical progression floor after the complete research speed stack.
+        return max(MIN_PROGRESS_DURATION_SECONDS, int(raw))
 
 
 def get_effect_resolver(

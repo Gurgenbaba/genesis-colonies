@@ -65,7 +65,7 @@ unit_seconds = ceil(
 ```
 
 Konstante: `BUILD_TIME_LEVEL_FACTOR = 0.975` (−2.5 % Schiffbauzeit pro Werft-Stufe über 1, GC-863A).  
-Ergebnis: `max(1, …)` Sekunden — Funktionen `unit_build_seconds()` / `_effective_build_seconds()`.
+Ergebnis: **mindestens 10 Sekunden pro Produktionszyklus** nach Werft-, Universe-, Directive- und sonstigen Speedmodifikatoren — Owner: `game/time_floors.py`, Funktionen `unit_build_seconds()` / `_effective_build_seconds()`.
 
 **Progressive Lieferung (Mehrfachauftrag):**
 
