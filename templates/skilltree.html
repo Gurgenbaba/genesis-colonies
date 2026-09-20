@@ -524,18 +524,19 @@
 
           <div class="gc-ascension-tree__viewport">
             <div class="gc-ascension-tree__map" role="group" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
-              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 420" preserveAspectRatio="none" aria-hidden="true">
+              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 408" preserveAspectRatio="none" aria-hidden="true">
                 {% for skill in mine.nodebuster_skills %}
                   {% if skill.key == 'reconstruction' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 108 V252 H300 V304" />
-                  {% elif skill.key == 'frugal_rebuild' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 238 V270 H300 V304" />
-                  {% elif skill.key == 'rapid_rebuild' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 238 V270 H300 V304" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 118 C100 128 150 132 200 134" />
                   {% elif skill.key == 'deep_yield' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 108 V304" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 118 C300 128 250 132 200 134" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 118 C300 128 350 132 400 134" />
                   {% elif skill.key == 'deep_storage' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 108 V252 H300 V304" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 118 C500 128 450 132 400 134" />
+                  {% elif skill.key == 'frugal_rebuild' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M200 252 C200 263 250 268 300 270" />
+                  {% elif skill.key == 'rapid_rebuild' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M400 252 C400 263 350 268 300 270" />
                   {% endif %}
                 {% endfor %}
               </svg>
