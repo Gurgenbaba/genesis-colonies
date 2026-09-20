@@ -26,6 +26,7 @@ def test_endgame_production_mines_gain_progressive_floor_without_level_cap():
     assert building_progress_floor_seconds("fuel_cell_plant", 400) == 82
     assert building_progress_floor_seconds("metal_mine", 500) == 166
     assert building_progress_floor_seconds("metal_mine", 650) == 352
+    assert building_progress_floor_seconds("metal_mine", 10_000) == 3600
     assert building_progress_floor_seconds("research_lab", 650) == 10
 
 
