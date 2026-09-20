@@ -1732,18 +1732,40 @@ def _make_panel_row(
     uncapped = is_evolvable_mine(building_type)
     evo_ranks = None
     evolution_rank = None
+    nodebuster_profiles = None
+    evo_conn = getattr(panel_ctx.resolver, "_conn", None) if panel_ctx is not None else None
     if pid is not None and uncapped:
-        if panel_ctx is not None:
+        from .mine_evolution.ruleset import is_nodebuster_ruleset
+
+        if is_nodebuster_ruleset():
+            from .mine_evolution.nodebuster import get_profiles_for_planet
+
+            if panel_ctx is not None:
+                nodebuster_profiles = getattr(panel_ctx, "_nodebuster_profiles", None)
+            if nodebuster_profiles is None:
+                nodebuster_profiles = get_profiles_for_planet(pid, conn=evo_conn)
+                if panel_ctx is not None:
+                    try:
+                        panel_ctx._nodebuster_profiles = nodebuster_profiles  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+            evo_ranks = {
+                key: max(
+                    0,
+                    int((nodebuster_profiles.get(key) or {}).get("state", {}).get("ascension_count") or 0),
+                )
+                for key in ("metal_mine", "crystal_mine", "fuel_cell_plant")
+            }
+        elif panel_ctx is not None:
             evo_ranks = getattr(panel_ctx, "_mine_evo_ranks", None)
             if evo_ranks is None:
-                evo_conn = getattr(panel_ctx.resolver, "_conn", None)
                 evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
                 try:
                     panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]
                 except Exception:
                     pass
         else:
-            evo_ranks = get_evolution_ranks_for_planet(pid)
+            evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
         evolution_rank = int((evo_ranks or {}).get(building_type, 0) or 0)
 
     if panel_ctx is not None:
@@ -1832,7 +1854,16 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
-    row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
+    row.update(
+        panel_evolution_fields(
+            pid,
+            building_type,
+            level,
+            ranks=evo_ranks,
+            conn=evo_conn,
+            profiles=nodebuster_profiles,
+        )
+    )
     if pid is not None and building_type == "research_lab":
         from .research_lab_ascension import panel_fields as research_lab_ascension_panel_fields
 
