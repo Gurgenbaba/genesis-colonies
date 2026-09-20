@@ -361,6 +361,64 @@ def test_idempotent_bid_api(auction_db, monkeypatch):
     conn.close()
 
 
+def test_bid_api_committed_success_survives_projection_failure(auction_db, monkeypatch):
+    import game.db as dbmod
+    import game.models as models
+    import game.auction_house as auction_mod
+
+    db_path = os.environ.get("GC_DB_PATH")
+    dbmod.DB_PATH = db_path
+    models.DB_PATH = db_path
+    import app as app_module
+
+    importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    conn.execute("UPDATE planets SET metal = 300000 WHERE id = ?;", (pid,))
+    listing_id = _insert_listing(conn, currency="metal", start_price=50_000)
+    conn.commit()
+    uname = conn.execute("SELECT username FROM users WHERE id = ?;", (uid,)).fetchone()["username"]
+    conn.close()
+
+    def _projection_boom(*args, **kwargs):
+        raise RuntimeError("projection failed after committed bid")
+
+    monkeypatch.setattr(auction_mod, "build_auction_house_state", _projection_boom)
+
+    client = app_module.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    rid = str(uuid.uuid4())
+    res = client.post(
+        "/api/auction-house/bid",
+        json={
+            "listing_id": listing_id,
+            "amount": 50_000,
+            "currency": "metal",
+            "request_id": rid,
+        },
+    )
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["reason"] == "bid_placed"
+    assert payload["auction_house"] == {}
+
+    conn = db()
+    row = conn.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()
+    assert int(row["metal"]) == 250_000
+    count = conn.execute(
+        "SELECT COUNT(*) AS c FROM auction_house_bids WHERE listing_id = ?;",
+        (listing_id,),
+    ).fetchone()
+    assert int(count["c"]) == 1
+    conn.close()
+
+
 def test_auction_house_page_reachable(auction_db, monkeypatch):
     import game.db as dbmod
     import game.models as models
