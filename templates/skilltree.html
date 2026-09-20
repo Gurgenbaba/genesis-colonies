@@ -364,7 +364,7 @@
       {% if asc.ready %}
       <div class="gc-ascension-summary" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
         <div class="gc-ascension-summary__item">
-          <span>{{ T('building_tab_resources', 'Minen') }}</span>
+          <span>{{ T('location_action_mines', 'Minen') }}</span>
           <strong class="gc-mono">{{ (asc.mines or [])|length }}</strong>
         </div>
         <div class="gc-ascension-summary__item">
@@ -487,7 +487,7 @@
           </div>
           <div class="gc-ascension-stat gc-ascension-stat--ap">
             <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
-            <strong class="gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} AP</strong>
+            <strong class="gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</strong>
           </div>
         </section>
 
