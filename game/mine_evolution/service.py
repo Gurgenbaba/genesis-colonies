@@ -49,9 +49,9 @@ def get_evolution_rank(
     if not is_evolvable_mine(building_type):
         return 0
 
-    from .ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .nodebuster import get_state
+    from .ruleset import is_skill_tree_ruleset
+    if is_skill_tree_ruleset():
+        from .ascension_skill_tree import get_state
         state = get_state(int(planet_id), str(building_type), conn=conn)
         return max(0, int(state.get("ascension_count") or 0))
 
@@ -91,9 +91,9 @@ def get_evolution_ranks_for_planet(
     """Return ranks for all evolvable mines (missing → 0)."""
     pid = int(planet_id)
 
-    from .ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .nodebuster import get_profiles_for_planet
+    from .ruleset import is_skill_tree_ruleset
+    if is_skill_tree_ruleset():
+        from .ascension_skill_tree import get_profiles_for_planet
         profiles = get_profiles_for_planet(pid, conn=conn)
         return {
             key: max(0, int((profiles.get(key) or {}).get("state", {}).get("ascension_count") or 0))
@@ -142,9 +142,9 @@ def building_modifier_for(
     if not is_evolvable_mine(building_type):
         return 1.0
 
-    from .ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .nodebuster import production_multiplier_for
+    from .ruleset import is_skill_tree_ruleset
+    if is_skill_tree_ruleset():
+        from .ascension_skill_tree import production_multiplier_for
         return production_multiplier_for(
             int(planet_id),
             str(building_type),
@@ -195,10 +195,10 @@ def panel_evolution_fields(
             "evolution_tribute_crystal": 0,
         }
 
-    from .ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .nodebuster import panel_fields as nodebuster_panel_fields
-        return nodebuster_panel_fields(
+    from .ruleset import is_skill_tree_ruleset
+    if is_skill_tree_ruleset():
+        from .ascension_skill_tree import panel_fields as mine_ascension_panel_fields
+        return mine_ascension_panel_fields(
             int(planet_id),
             str(building_type),
             int(level or 0),
@@ -243,10 +243,10 @@ def evolve_mine(
     Level is kept. Player pays milestone tribute; rank increases by one.
     Returns (ok, reason, payload).
     """
-    from .ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .nodebuster import ascend_mine as nodebuster_ascend_mine
-        return nodebuster_ascend_mine(user_id, planet, building_type)
+    from .ruleset import is_skill_tree_ruleset
+    if is_skill_tree_ruleset():
+        from .ascension_skill_tree import ascend_mine as mine_ascension_ascend_mine
+        return mine_ascension_ascend_mine(user_id, planet, building_type)
 
     bt = str(building_type or "").strip()
     if not is_evolvable_mine(bt):
