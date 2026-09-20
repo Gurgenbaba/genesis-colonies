@@ -85,6 +85,12 @@
   }
 
   function reconcile(reason) {
+    if (document.querySelector("[data-ascension-skilltree]") && typeof GC.reloadCurrentPage === "function") {
+      try {
+        GC.reloadCurrentPage({ reason: reason || "mine_ascension" });
+        return;
+      } catch (_) {}
+    }
     if (typeof GC.forceCanonicalGameStateRefresh === "function") {
       try {
         var pending = GC.forceCanonicalGameStateRefresh(reason || "nodebuster_mine");

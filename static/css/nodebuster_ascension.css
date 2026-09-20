@@ -145,3 +145,30 @@
     grid-column:auto;
   }
 }
+
+/* Ascension surfaces: compact mine summary + dedicated Skill Tree tab. */
+.gc-mine-ascension-compact{
+  gap:8px;
+}
+.gc-mine-ascension-compact .gc-nodebuster-head{
+  align-items:center;
+}
+.gc-ascension-skilltree{
+  display:grid;
+  gap:14px;
+}
+.gc-ascension-mine-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.gc-ascension-mine-card{
+  padding:14px;
+  align-content:start;
+}
+.skilltree-system-tabs{
+  margin-bottom:12px;
+}
+@media (max-width:1100px){
+  .gc-ascension-mine-grid{
+    grid-template-columns:1fr;
+  }
+}
