@@ -1842,7 +1842,15 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
-    row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
+    row.update(
+        panel_evolution_fields(
+            pid,
+            building_type,
+            level,
+            ranks=evo_ranks,
+            conn=evo_conn,
+        )
+    )
     if pid is not None and building_type == "research_lab":
         from .research_lab_ascension import panel_fields as research_lab_ascension_panel_fields
 
