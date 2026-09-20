@@ -1929,3 +1929,94 @@ def test_bot_expedition_dispatch(pirate_db):
         commit(conn)
     finally:
         conn.close()
+
+
+
+def test_hard_off_public_ranking_hides_reserved_pirate_accounts(pirate_db, monkeypatch):
+    from game.models import create_user, ensure_player_and_homeworld
+    from game.pirates.accounts import bootstrap_faction_bots, PIRATE_BOT_USERNAMES
+    from game.ranking_core import get_sorted_ranking_entries
+
+    monkeypatch.setenv("GC_PIRATE_AI_ENABLED", "0")
+    conn = db()
+    try:
+        ok, err, user = create_user("uni1_human", "test-pass-123")
+        assert ok, err
+        human_id = int(user["id"])
+        ensure_player_and_homeworld(human_id, player_name="UNI1 Human", conn=conn)
+
+        bots = bootstrap_faction_bots(conn=conn)
+        conn.commit()
+        assert len(bots) == len(PIRATE_BOT_USERNAMES) == 6
+
+        rows = get_sorted_ranking_entries(limit=100, conn=conn)
+        ids = {int(row["player_id"]) for row in rows}
+        assert human_id in ids
+        assert not ({int(bot["player_id"]) for bot in bots} & ids)
+    finally:
+        conn.close()
+
+
+def test_hard_off_purge_deletes_only_reserved_pirates_and_rebuilds_ranking(pirate_db, monkeypatch):
+    from game.db import begin_write_transaction, commit, rollback
+    from game.models import create_user, ensure_player_and_homeworld
+    from game.pirates.accounts import bootstrap_faction_bots, PIRATE_BOT_USERNAMES
+    from game.pirates.cleanup import purge_reserved_pirate_accounts
+
+    monkeypatch.setenv("GC_PIRATE_AI_ENABLED", "0")
+    conn = db()
+    try:
+        ok, err, user = create_user("uni1_mando_probe", "test-pass-123")
+        assert ok, err
+        human_id = int(user["id"])
+        ensure_player_and_homeworld(human_id, player_name="Mando Probe", conn=conn)
+
+        bots = bootstrap_faction_bots(conn=conn)
+        conn.commit()
+        bot_ids = {int(bot["player_id"]) for bot in bots}
+        assert len(bot_ids) == len(PIRATE_BOT_USERNAMES) == 6
+
+        begin_write_transaction(conn)
+        try:
+            result = purge_reserved_pirate_accounts(conn=conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+
+        assert result["deleted"] == 6
+        assert set(result["player_ids"]) == bot_ids
+
+        human = conn.execute(
+            "SELECT u.id, u.username, p.name FROM users u "
+            "JOIN players p ON p.id = u.id WHERE u.id = ?;",
+            (human_id,),
+        ).fetchone()
+        assert human is not None
+        assert human["username"] == "uni1_mando_probe"
+
+        placeholders = ",".join("?" for _ in PIRATE_BOT_USERNAMES)
+        count = conn.execute(
+            f"SELECT COUNT(*) AS c FROM users WHERE username IN ({placeholders});",
+            tuple(sorted(PIRATE_BOT_USERNAMES)),
+        ).fetchone()
+        assert int(count["c"]) == 0
+
+        if table_exists(conn, "pirate_bot_state"):
+            assert int(conn.execute("SELECT COUNT(*) AS c FROM pirate_bot_state;").fetchone()["c"]) == 0
+        if table_exists(conn, "pirate_intel"):
+            assert int(conn.execute("SELECT COUNT(*) AS c FROM pirate_intel;").fetchone()["c"]) == 0
+    finally:
+        conn.close()
+
+
+def test_purge_refuses_when_deployment_ai_is_not_hard_off(pirate_db, monkeypatch):
+    from game.pirates.cleanup import purge_reserved_pirate_accounts
+
+    monkeypatch.delenv("GC_PIRATE_AI_ENABLED", raising=False)
+    conn = db()
+    try:
+        with pytest.raises(RuntimeError, match="pirate_ai_not_hard_disabled"):
+            purge_reserved_pirate_accounts(conn=conn)
+    finally:
+        conn.close()
