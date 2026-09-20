@@ -49,6 +49,12 @@ def get_evolution_rank(
     if not is_evolvable_mine(building_type):
         return 0
 
+    from .ruleset import is_nodebuster_ruleset
+    if is_nodebuster_ruleset():
+        from .nodebuster import get_state
+        state = get_state(int(planet_id), str(building_type), conn=conn)
+        return max(0, int(state.get("ascension_count") or 0))
+
     # Only collapse point reads into the bulk snapshot on the production PG
     # request path. SQLite/tests/workers retain the existing single-rank query.
     if _request_pg_rank_cache() is not None:
@@ -84,6 +90,16 @@ def get_evolution_ranks_for_planet(
 ) -> Dict[str, int]:
     """Return ranks for all evolvable mines (missing → 0)."""
     pid = int(planet_id)
+
+    from .ruleset import is_nodebuster_ruleset
+    if is_nodebuster_ruleset():
+        from .nodebuster import get_profiles_for_planet
+        profiles = get_profiles_for_planet(pid, conn=conn)
+        return {
+            key: max(0, int((profiles.get(key) or {}).get("state", {}).get("ascension_count") or 0))
+            for key in EVOLVABLE_MINES
+        }
+
     cache = _request_pg_rank_cache()
     if cache is not None and pid in cache:
         return dict(cache[pid])
@@ -125,6 +141,16 @@ def building_modifier_for(
 ) -> float:
     if not is_evolvable_mine(building_type):
         return 1.0
+
+    from .ruleset import is_nodebuster_ruleset
+    if is_nodebuster_ruleset():
+        from .nodebuster import production_multiplier_for
+        return production_multiplier_for(
+            int(planet_id),
+            str(building_type),
+            conn=conn,
+        )
+
     if ranks is not None:
         rank = int(ranks.get(building_type, 0) or 0)
     else:
@@ -168,6 +194,16 @@ def panel_evolution_fields(
             "evolution_tribute_metal": 0,
             "evolution_tribute_crystal": 0,
         }
+
+    from .ruleset import is_nodebuster_ruleset
+    if is_nodebuster_ruleset():
+        from .nodebuster import panel_fields as nodebuster_panel_fields
+        return nodebuster_panel_fields(
+            int(planet_id),
+            str(building_type),
+            int(level or 0),
+        )
+
     if ranks is not None:
         rank = int(ranks.get(building_type, 0) or 0)
     else:
@@ -207,6 +243,11 @@ def evolve_mine(
     Level is kept. Player pays milestone tribute; rank increases by one.
     Returns (ok, reason, payload).
     """
+    from .ruleset import is_nodebuster_ruleset
+    if is_nodebuster_ruleset():
+        from .nodebuster import ascend_mine as nodebuster_ascend_mine
+        return nodebuster_ascend_mine(user_id, planet, building_type)
+
     bt = str(building_type or "").strip()
     if not is_evolvable_mine(bt):
         return False, "invalid_building", {"msg": "Not an evolvable mine"}
