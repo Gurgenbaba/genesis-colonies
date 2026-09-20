@@ -645,6 +645,12 @@
   filter:saturate(.78);
 }
 
+.gc-ascension-node.is-selected.is-locked,
+.gc-ascension-node.is-selected.is-unaffordable{
+  opacity:1;
+  filter:none;
+}
+
 .gc-ascension-node.is-available{
   border-color:color-mix(in srgb,var(--asc-theme) 92%,white 8%);
   background:
@@ -656,6 +662,10 @@
     0 0 0 1px color-mix(in srgb,var(--asc-theme) 24%,transparent),
     0 0 14px color-mix(in srgb,var(--asc-theme) 22%,transparent);
   animation:gc-ascension-node-pulse 2.6s ease-in-out infinite;
+}
+
+.gc-ascension-node.is-selected.is-available{
+  animation:none;
 }
 
 @keyframes gc-ascension-node-pulse{
