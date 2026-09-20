@@ -2245,6 +2245,8 @@ def summarize_max_queueable_build_jobs(
     buildings: Optional[Dict[str, int]] = None,
     research_levels: Optional[Dict[str, int]] = None,
     panel_ctx: Optional[BuildingsPanelContext] = None,
+    planet_id: Optional[int] = None,
+    conn=None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX queue UX: levels, total cost, cumulative build time."""
     nodebuster_profiles = None
@@ -2272,8 +2274,8 @@ def summarize_max_queueable_build_jobs(
     if jobs <= 0:
         return {"jobs": 0}
     from_level = int(current_level) + int(queued_same)
-    total_m = 0.0
-    total_c = 0.0
+    total_m = 0
+    total_c = 0
     total_sec = 0
     for i in range(jobs):
         eff = from_level + i
