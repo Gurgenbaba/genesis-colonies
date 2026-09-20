@@ -1576,6 +1576,7 @@ def execute_instant_attack(
     auto_select: bool = False,
     hit_mult: int = 1,
     lean_response: bool = False,
+    action_response: bool = False,
     _event_snapshot: Optional[Mapping[str, Any]] = None,
     _contribution_snapshot: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -1587,6 +1588,8 @@ def execute_instant_attack(
     the caller. ``hit_mult`` ∈ {1, 5}; ×5 remains five waves / five cooldowns.
     ``lean_response`` keeps all gameplay writes but skips UI-only ranking,
     recognition and second hangar reads for background worker strikes.
+    ``action_response`` preserves the interactive attack payload (attack/boss/player)
+    but omits response-only extras that /api/world-boss/attack never serializes.
     """
     import random
 
@@ -1869,7 +1872,9 @@ def execute_instant_attack(
             "defeated": bool(defeated),
         }
 
-    if updated is None:
+    if updated is None and not action_response:
+        # The interactive action route serializes only attack/boss/player.
+        # Do not re-read the event while its mutation transaction is still open.
         updated = get_event_by_id(eid, conn=conn)
 
     cooldown_until = float(ts + WAVE_COOLDOWN_SEC * int(mult))
@@ -1896,8 +1901,14 @@ def execute_instant_attack(
     except Exception:
         logger.exception("world_boss rank lookup failed")
 
-    hangar_after = get_planet_ships(origin_id, conn=conn)
-    return {
+    hangar_after = None
+    if not action_response:
+        # Direct/domain callers keep the historical verification snapshot.
+        # /api/world-boss/attack discards it, so avoid this second hangar read
+        # while the World Boss write transaction still owns its row locks.
+        hangar_after = get_planet_ships(origin_id, conn=conn)
+
+    response = {
         "ok": True,
         "error": "",
         "attack": {
@@ -1937,14 +1948,20 @@ def execute_instant_attack(
             "alliance_xp_granted": int(alliance_xp_granted),
             "raid": raid_after,
         },
-        "ships_snapshot": dict(selected),
-        "hangar_unchanged": hangar_after == hangar,
-        "event": updated,
-        "raid": raid_after,
-        "recognition": build_world_boss_recognition(eid, conn=conn),
         "damage": int(applied),
         "defeated": bool(defeated),
     }
+    if not action_response:
+        response.update(
+            {
+                "ships_snapshot": dict(selected),
+                "hangar_unchanged": hangar_after == hangar,
+                "event": updated,
+                "raid": raid_after,
+                "recognition": build_world_boss_recognition(eid, conn=conn),
+            }
+        )
+    return response
 
 def compute_world_boss_hp_damage(
     *,

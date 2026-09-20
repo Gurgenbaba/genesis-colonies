@@ -8284,6 +8284,7 @@ def api_world_boss_attack():
                 conn=conn,
                 auto_select=auto_select or not ships,
                 hit_mult=hit_mult,
+                action_response=True,
             )
             if result.get("ok"):
                 commit(conn)
