@@ -863,8 +863,6 @@ def _nanofactory_panel_snapshot(
     *,
     research_levels: Optional[Dict[str, int]] = None,
     panel_ctx: Optional[BuildingsPanelContext] = None,
-    planet_id: Optional[int] = None,
-    conn=None,
 ) -> Dict[str, Any]:
     from .technical_data import build_nanofactory_time_preview
 
@@ -1117,8 +1115,6 @@ def _panel_upgrade_effect_fields(
             target_level,
             research_levels=research_levels,
             panel_ctx=panel_ctx,
-            planet_id=pid,
-            conn=evo_conn,
         )
 
     if building_type == "command_center":
