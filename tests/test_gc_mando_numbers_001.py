@@ -147,23 +147,26 @@ def test_desktop_command_header_is_one_outer_surface_not_detached_cards():
     assert "background-image: none !important" in hardened
     assert "border-inline-start: 0 !important" in hardened
     assert ".gc-score-pill > #hud-score-total" in css
-    score_contract = css.split("GC-MANDO-SCORE-RANK-001", 1)[1].split("/* Desktop command strip", 1)[0]
+    score_contract = css.split("GC-SCORE-RANK-ONLY-001", 1)[1].split("/* Desktop command strip", 1)[0]
     assert "#hud-score-total" in score_contract
     assert "#hud-score-rank" in score_contract
+    assert "display: none !important" in score_contract
     assert "display: inline-flex" in score_contract
-    assert "display: none !important" not in score_contract
 
 
-def test_header_score_and_rank_markup_remain_present_and_score_is_not_css_hidden():
+def test_header_keeps_score_patch_target_but_exposes_rank_only():
     base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     css = (ROOT / "static" / "css" / "mando_exact_numbers.css").read_text(encoding="utf-8")
     assert 'id="hud-score-total"' in base
     assert 'id="hud-score-rank"' in base
-    contract = css.split("GC-MANDO-SCORE-RANK-001", 1)[1].split("/* Desktop command strip", 1)[0]
-    assert "display: inline-flex" in contract
-    assert "#hud-score-total" in contract
-    assert "#hud-score-rank" in contract
-    assert "display: none !important" not in contract
+    contract = css.split("GC-SCORE-RANK-ONLY-001", 1)[1].split("/* Desktop command strip", 1)[0]
+    hidden = contract.split(".gc-score-pill > #hud-score-rank", 1)[0]
+    rank = contract.split(".gc-score-pill > #hud-score-rank", 1)[1]
+    assert "#hud-score-total" in hidden
+    assert ".gc-hud-panel-tag" in hidden
+    assert ".gc-hud-panel-sep" in hidden
+    assert "display: none !important" in hidden
+    assert "display: inline-flex" in rank
 
 
 def test_live_events_popover_can_escape_desktop_shell_clip_only_while_open():
