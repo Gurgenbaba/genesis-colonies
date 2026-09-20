@@ -31,6 +31,34 @@ def _delete_where_player_ids(
     return max(0, int(cur.rowcount or 0))
 
 
+PIRATE_RUNTIME_TABLES_DELETE_ORDER = (
+    "pirate_base_claims",
+    "pirate_base_contributions",
+    "pirate_intel",
+    "pirate_bot_state",
+    "pirate_action_log",
+    "pirate_infiltrations",
+    "smuggler_contacts",
+    "player_bounty",
+    "player_threat",
+    "pirate_bases",
+    "galaxy_heat",
+)
+
+
+def purge_pirate_runtime_state(*, conn) -> Dict[str, int]:
+    """Clear dynamic Pirate/Heat world state while preserving faction definitions."""
+    if not is_pirates_ai_hard_disabled():
+        raise RuntimeError("pirate_ai_not_hard_disabled")
+    deleted: Dict[str, int] = {}
+    for table in PIRATE_RUNTIME_TABLES_DELETE_ORDER:
+        if not table_exists(conn, table):
+            continue
+        cur = conn.execute(f"DELETE FROM {table};")
+        deleted[table] = max(0, int(cur.rowcount or 0))
+    return deleted
+
+
 def purge_reserved_pirate_accounts(*, conn) -> Dict[str, Any]:
     """Delete stale reserved Pirate AI accounts after a deployment hard-off.
 
