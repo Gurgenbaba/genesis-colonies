@@ -16989,6 +16989,15 @@
     return inv;
   }
 
+  function applyInventoryContainerSnapshot(base, containers) {
+    const rows = Array.isArray(containers) ? containers : null;
+    if (!rows) return base || {};
+    return {
+      ...(base || {}),
+      containers: rows.map((row) => ({ ...row })),
+    };
+  }
+
   function resolveInventoryFromAction(res) {
     if (isInventoryPayload(res?.inventory)) return res.inventory;
     const base = _inventoryLastState || parseInventoryPageState();
@@ -17005,6 +17014,10 @@
         _inventoryLastState = res.inventory;
         syncInventoryPageStateScript(_inventoryLastState);
         patchInventoryDom(_inventoryLastState);
+        if (res.case_battles && typeof res.case_battles === "object") {
+          _caseBattlesLastState = res.case_battles;
+          renderCaseBattlesUI(_caseBattlesLastState);
+        }
         return true;
       }
     } catch (_) {}
@@ -17781,8 +17794,6 @@
       item_key: payload.item_key || payload.container_key,
       consumed: payload.consumed || payload.opened || 1,
     });
-    void refreshInventoryFromServer();
-
     const page = document.getElementById("inventory-page");
     if (page) {
       page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
@@ -18963,12 +18974,20 @@
           request_id: `inv-open-${itemKey}-${amount}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         },
         (res) => {
+          const baseInventory = _inventoryLastState || parseInventoryPageState() || {};
+          const inventoryAfterOpen = applyInventoryContainerSnapshot(baseInventory, res.containers);
+          _inventoryLastState = inventoryAfterOpen;
+          syncInventoryPageStateScript(_inventoryLastState);
+          patchInventoryDom(_inventoryLastState);
+          // Full vault/case-battle sync overlaps the 2.4s loot animation instead
+          // of blocking the click response.
+          void refreshInventoryFromServer();
           showLootOpeningModal({
             ...res,
             item_key: itemKey,
             consumed: res.opened || amount,
             _deferredState: res.state,
-            _deferredInventory: res.inventory,
+            _deferredInventory: inventoryAfterOpen,
           });
         }
       );
