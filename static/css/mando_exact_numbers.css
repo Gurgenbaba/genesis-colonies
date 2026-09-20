@@ -79,12 +79,36 @@
   letter-spacing: 0.015em;
 }
 
-/* GC-HUD-SHELL-001 — the ranking shortcut only needs the rank. The full score is
-   available on the ranking page, so keep the global header quiet and compact. */
+/* GC-MANDO-SCORE-RANK-001 — keep both progression score and rank visible.
+   The template already owns exact/compact formatting; this layer only keeps the
+   combined shortcut readable without turning it back into a detached card. */
+.gc-score-pill {
+  gap: 0.34rem;
+  min-width: 0;
+}
+
 .gc-score-pill > .gc-hud-panel-tag,
 .gc-score-pill > #hud-score-total,
+.gc-score-pill > .gc-hud-panel-sep,
+.gc-score-pill > #hud-score-rank {
+  display: inline-flex;
+  align-items: center;
+}
+
+.gc-score-pill > .gc-hud-panel-tag {
+  font-size: 0.58rem;
+  letter-spacing: 0.055em;
+  opacity: 0.72;
+}
+
+.gc-score-pill > #hud-score-total,
+.gc-score-pill > #hud-score-rank {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .gc-score-pill > .gc-hud-panel-sep {
-  display: none !important;
+  opacity: 0.4;
 }
 
 /* Desktop command strip: one continuous shell instead of a row of detached pills.
@@ -178,7 +202,7 @@
   }
 
   .gc-header-row-top .gc-score-pill {
-    min-width: 4.9rem;
+    min-width: 10.2rem;
     justify-content: center;
     padding-inline: 0.72rem;
   }
@@ -434,6 +458,13 @@
 
   .gc-header-timekeeper-value {
     font-size: 0.72rem;
+  }
+
+  /* Mobile keeps the progression number visible and sheds only the secondary
+     rank token if this header variant is rendered at narrow width. */
+  .gc-score-pill > .gc-hud-panel-sep,
+  .gc-score-pill > #hud-score-rank {
+    display: none;
   }
 
   /* GC-166 HOTFIX: Mobile resource bar compact 2x2 grid without overflow.
