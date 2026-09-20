@@ -9145,5 +9145,8 @@
   "nodebuster_error_queue_pending": "Finish or cancel this mine's build jobs first.",
   "nodebuster_error_insufficient_points": "Not enough Ascension Points.",
   "nodebuster_error_skill_prerequisite": "The prerequisite nodes are not high enough yet.",
-  "nodebuster_error_skill_max": "This node is already maxed."
+  "nodebuster_error_skill_max": "This node is already maxed.",
+  "nodebuster_storage_bonus": "Stockage +{pct}%",
+  "nodebuster_skill_deep_storage": "Stockage profond",
+  "nodebuster_skill_deep_storage_desc": "+5% de capacité de stockage permanente par rang pour la ressource de cette mine."
 }
