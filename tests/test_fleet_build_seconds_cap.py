@@ -11,6 +11,7 @@ from game.db import db
 from game.fleet_defs import ACTIVE_SHIP_KEYS, MAX_SHIP_BUILD_SECONDS, SHIPS, get_ship
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.shipyard import unit_build_seconds
+from game.time_floors import MIN_PROGRESS_DURATION_SECONDS
 
 
 @pytest.fixture
@@ -67,9 +68,9 @@ def test_effective_build_seconds_minimum_one(shipyard_db, monkeypatch):
         conn.execute("UPDATE planet_buildings SET orbital_shipyard = 10 WHERE planet_id = ?;", (pid,))
         conn.commit()
         unit = unit_build_seconds("spark_drone", 10, conn=conn, planet_id=pid)
-        assert unit >= 1
+        assert unit >= MIN_PROGRESS_DURATION_SECONDS
         base = int(SHIPS["spark_drone"]["build_seconds"])
         raw = base * (0.975 ** 9) / 1000.0 / 1000.0
-        assert unit == max(1, int(math.ceil(raw)))
+        assert unit == max(MIN_PROGRESS_DURATION_SECONDS, int(math.ceil(raw)))
     finally:
         conn.close()
