@@ -26,6 +26,44 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+
+def _env_truthy(name: str) -> bool:
+    return str(os.environ.get(name, "") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _maybe_purge_pirate_ai_residue() -> None:
+    if not _env_truthy("GC_PURGE_PIRATE_AI_ON_BOOT"):
+        return
+
+    from game.pirates.settings import is_pirates_ai_hard_disabled
+
+    if not is_pirates_ai_hard_disabled():
+        raise RuntimeError(
+            "GC_PURGE_PIRATE_AI_ON_BOOT=1 requires GC_PIRATE_AI_ENABLED=0"
+        )
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.models import db
+    from game.pirates.cleanup import purge_reserved_pirate_accounts
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        result = purge_reserved_pirate_accounts(conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    print(
+        "[maintenance-worker] Pirate AI residue purge: "
+        f"deleted={result.get('deleted', 0)} "
+        f"usernames={result.get('usernames', [])}",
+        file=sys.stderr,
+    )
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Genesis Colonies maintenance worker")
     parser.add_argument(
@@ -44,6 +82,7 @@ def main() -> int:
     from game.internal_cron import run_maintenance_worker_loop
 
     bootstrap_application(skip_migration_check=True)
+    _maybe_purge_pirate_ai_residue()
     run_maintenance_worker_loop(once=bool(args.once))
     return 0
 
