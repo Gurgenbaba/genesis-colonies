@@ -10,7 +10,12 @@ import sys
 import pytest
 
 import game.production_formula as pf
-from game.economy_balance import cumulative_upgrade_resource_totals, mine_roi_anchor_hours
+from game.economy_balance import (
+    cumulative_upgrade_resource_totals,
+    mine_roi_anchor_hours,
+    power_upgrade_cost,
+    reference_production_per_hour,
+)
 from game.progression_valuation import (
     V2_PIVOT_LEVEL,
     building_progression_resources_v2,
@@ -82,9 +87,28 @@ def test_active_mine_cost_horizon_rises_after_l120(monkeypatch):
     assert mine_roi_anchor_hours(120) == pytest.approx(2000.0)
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
     assert mine_roi_anchor_hours(120) == pytest.approx(2000.0)
-    assert mine_roi_anchor_hours(500) / 24.0 == pytest.approx(158.39, rel=0.035)
-    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(178.24, rel=0.035)
-    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(216.37, rel=0.035)
+    assert mine_roi_anchor_hours(200) / 24.0 == pytest.approx(138.89, rel=0.01)
+    assert mine_roi_anchor_hours(300) / 24.0 == pytest.approx(208.33, rel=0.01)
+    assert mine_roi_anchor_hours(500) / 24.0 == pytest.approx(347.22, rel=0.01)
+    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(451.39, rel=0.01)
+    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(694.44, rel=0.01)
+
+
+def test_active_mine_cost_stays_in_stable_current_output_affordability_band(monkeypatch):
+    monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
+    # Live price / current mine output is the practical saving time for a fresh
+    # record-level upgrade before account/planet modifiers.  The old 0.45 tail
+    # collapsed from ~77h at L200 to ~22h at L1000; the linear horizon keeps
+    # high-end levels from getting progressively cheaper forever.
+    affordability_hours = []
+    for level in (200, 300, 400, 500, 650, 1000):
+        metal, crystal = power_upgrade_cost("metal_mine", level)
+        current_output = reference_production_per_hour("metal", level)
+        affordability_hours.append((metal + crystal) / current_output)
+
+    assert min(affordability_hours) >= 65.0
+    assert max(affordability_hours) <= 110.0
+    assert affordability_hours[-1] >= affordability_hours[-2] * 0.90
 
 
 def test_research_effect_tail_is_active_only_and_diminishing(monkeypatch):
