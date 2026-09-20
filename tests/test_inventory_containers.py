@@ -310,6 +310,45 @@ def test_idempotency_prevents_double_open(inventory_db, monkeypatch):
     conn.close()
 
 
+def test_open_container_action_skips_full_inventory_and_case_battle_rebuild(
+    inventory_db, monkeypatch
+):
+    client, uid, app_module = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_rare", 2, conn=conn)
+    conn.commit()
+    conn.close()
+
+    import game.case_battles as case_battles
+    import game.inventory as inventory
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("full post-open snapshot must not run in click path")
+
+    monkeypatch.setattr(inventory, "build_inventory_state", _forbidden)
+    monkeypatch.setattr(case_battles, "build_case_battles_state", _forbidden)
+    monkeypatch.setattr(app_module, "_build_game_state_payload", _forbidden)
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_rare",
+            "amount": 1,
+            "request_id": f"inv-slim-{uuid.uuid4().hex}",
+        },
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert "inventory" not in data
+    assert "case_battles" not in data
+    assert data["state"]["ok"] is True
+    assert int(data["state"]["player_id"]) == uid
+    assert float(data["state"]["server_time"]) > 0
+    rare = next(c for c in data["containers"] if c["item_key"] == "container_rare")
+    assert int(rare["amount"]) == 1
+
+
 def test_api_inventory_state(inventory_db, monkeypatch):
     client, uid, _ = _login_client(inventory_db, monkeypatch)
     conn = db()

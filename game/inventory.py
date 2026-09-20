@@ -272,6 +272,39 @@ def build_container_catalog(
     return catalog
 
 
+def build_container_action_state(user_id: int, *, conn) -> List[Dict[str, Any]]:
+    """Fresh container-only state for latency-sensitive open actions.
+
+    Container opens are meta-only (GC-864): they can debit/grant containers and
+    grant inventory items/boosters, but they do not mutate planet resources,
+    queues or combat state.  The full vault snapshot can therefore refresh
+    asynchronously while this compact authoritative slice updates open-again
+    eligibility immediately.
+    """
+    if not inventory_schema_ready(conn):
+        return []
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT item_key, amount
+        FROM player_inventory_items
+        WHERE user_id = ?
+          AND planet_id IS NULL
+          AND item_type = 'container'
+          AND amount > 0;
+        """,
+        (int(user_id),),
+    )
+    owned = {
+        str(row["item_key"]): {
+            "item_key": str(row["item_key"]),
+            "amount": int(row["amount"] or 0),
+        }
+        for row in cur.fetchall()
+    }
+    return build_container_catalog(owned, user_id=int(user_id), conn=conn)
+
+
 def list_player_inventory(user_id: int, *, conn) -> List[Dict[str, Any]]:
     if not inventory_schema_ready(conn):
         return []
