@@ -691,11 +691,3 @@
 </div>
 {% endblock %}
 
-{% block extra_head %}
-{{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/nodebuster_ascension.css') }}?v={{ GC_ASSET_VERSION }}">
-{% endblock %}
-
-{% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/pages/mine_nodebuster.js') }}?v={{ GC_ASSET_VERSION }}"></script>
-{% endblock %}
