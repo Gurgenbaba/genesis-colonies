@@ -33,9 +33,11 @@ def test_action_response_skips_discarded_reads_but_preserves_default_contract():
     assert '"recognition": build_world_boss_recognition' in block
     assert '"hangar_unchanged": hangar_after == hangar' in block
 
-    # Core interactive fields are built outside the optional extras block.
-    extras = block.split("if not action_response:", 2)[-1]
-    core = block.split("if not action_response:", 2)[0]
+    # Core interactive fields are built before the optional extras update.
+    response_start = block.index("response = {")
+    extras_start = block.index("if not action_response:", response_start)
+    core = block[response_start:extras_start]
+    extras = block[extras_start:]
     assert '"attack": {' in core
     assert '"boss": {' in core
     assert '"player": {' in core
