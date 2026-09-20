@@ -51,8 +51,6 @@ def test_actual_ferro_l388_cost_exceeds_i64_but_api_enqueue_and_refund_stay_exac
         }
     )
     save_planet_buildings(pid, levels)
-    _set_rank(pid, "metal_mine", 8)
-
     # Production resources are REAL/DOUBLE today. Bind a float here deliberately;
     # the regression is that the *upgrade cost* is a Python int > signed i64.
     conn = db()
@@ -117,17 +115,11 @@ def test_actual_ferro_l388_cost_exceeds_i64_but_api_enqueue_and_refund_stay_exac
         assert int(refund.get("cost_metal") or expected_metal) == int(expected_metal)
 
 
-def test_ascension_required_has_specific_client_message_and_next_gate_contract():
-    main_js = Path("static/main.js").read_text(encoding="utf-8")
-    assert 'reason === "ascension_required"' in main_js
-    assert "next_max_level" in main_js
-
+def test_nodebuster_keeps_high_level_mines_unbounded():
     src = Path("game/buildings.py").read_text(encoding="utf-8")
-    block = src.split("def _cap_failure_payload", 1)[1].split(
-        "def _record_mutate_perf", 1
-    )[0]
-    assert '"next_max_level"' in block
-    assert "required_level_for_evolution" in block
+    assert "QUEUE_SAFETY_SENTINEL" in src
+    assert "is_nodebuster_ruleset()" in src
+    assert "return int(QUEUE_SAFETY_SENTINEL)" in src
 
 
 def test_exact_cost_migration_is_additive_and_backfills_legacy_rows():

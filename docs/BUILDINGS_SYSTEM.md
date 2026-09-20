@@ -18,17 +18,18 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 | **military** | `orbital_shipyard`, `defense_factory`, `barracks`, `radar_array` |
 | **infrastructure** | `command_center`, `shield_generator`, `terraformer`, `nanofactory`, `geothermal_nexus`, `planet_core_nexus` |
 
-`MAX_BUILDING_LEVEL = 50` (Basis). Caps (EPIC-29 / GC-2900+):
+`MAX_BUILDING_LEVEL = 50` bleibt die strukturelle Basis des `EffectResolver`. Für den **Nodebuster-Minenpfad** ist dieser Wert jedoch **kein Spieler-Hardcap**:
 
-| Gebäude | Cap-Formel |
-|---------|------------|
-| `metal_mine`, `crystal_mine`, `fuel_cell_plant` (Rank 0) | `50 + planet_core_nexus + 2×geothermal_nexus` — maximal **200** bei Nexus 50/50 |
-| dieselbe Mine nach Ascension I/II/III… | per-mine Gate `225 / 250 / 275 / …` (`required_level(rank+1)`) |
-| `solar_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` (keine Mine-Ascension) |
+| Gebäude | Live-Vertrag |
+|---------|--------------|
+| `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **unbounded** im kanonischen Buildings-Queue-Owner; L200 ist nur die erste freiwillige Nodebuster-Ascension-Schwelle |
+| `solar_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` — maximal 200 bei Nexus 50/50 |
 | `metal_storage`, `crystal_storage`, `fuel_storage` | `50 + 2×geothermal_nexus` (ohne Core) |
-| alle übrigen | `50` |
+| alle übrigen | bestehende eigene Caps / Ascension-Owner |
 
-Die Nexus-Gebäude sind die normale Produktions-Cap-Progression bis Level 200. Ab dort erweitert **nur die Ascension der jeweiligen Mine** deren Baugrenze. Der Rank ist `(planet_id, building_type)`-scoped: Ferronit, Crytite und Brennzellen schalten einander keine Stufen frei. Legacy-Overlevel bleibt erhalten. Mine Ascension: [MINE_EVOLUTION.md](MINE_EVOLUTION.md).
+Der Resolver darf für Produktionsminen weiterhin den Nexus-Strukturwert liefern, weil andere technische Vorschauen ihn nutzen. **`game/buildings.py::_effective_building_queue_cap()` ist die Mutation-Authority:** unter `nodebuster-v1` erhalten Produktionsminen nur einen internen Safety-Sentinel und können ohne Ascension-Zwang über L200/L225/... weitergebaut werden.
+
+Mine Ascension ist stattdessen freiwilliger Prestige-Loop: Tiefe pushen → ausgewählte Mine resetten → AP verdienen → permanenten per-Mine Tree ausbauen → bis zur Lifetime-Besttiefe billiger/schneller reconstruieren. Details: [MINE_EVOLUTION.md](MINE_EVOLUTION.md).
 
 `terraformer`: +5 % Lagerkapazität/Stufe — **kein** Gebäude-Level-Cap. Owner: `EffectResolver.get_max_building_level()`.
 
@@ -110,6 +111,8 @@ Due-Finisher läuft vor jeder Mutation und in `refresh_player_live_state()`.
 | `/upgrade/<building_type>` | GET | Legacy redirect |
 | `/api/buildings/upgrade` | POST | `{ building_type, request_id? }` |
 | `/api/buildings/cancel` | POST | `{ job_id }` |
+| `/api/buildings/mine-evolve` | POST | `{ building_type, request_id? }` — Nodebuster Ascension |
+| `/api/buildings/mine-evolution/skill` | POST | `{ building_type, skill_key, request_id? }` |
 
 Antwort: `{ ok, reason, job?, state }` — immer frischer game-state.
 

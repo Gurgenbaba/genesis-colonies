@@ -218,6 +218,84 @@
           {% endif %}
 
           {% if _evo %}
+          {% if b.nodebuster is defined and b.nodebuster %}
+          <div class="gc-bld-evo-block gc-nodebuster" data-mine-evolution="{{ building_type }}" data-nodebuster-mine="{{ building_type }}">
+            <div class="gc-nodebuster-head">
+              <div>
+                <div class="gc-bld-evo-progress-label">{{ T('nodebuster_title') }}</div>
+                <div class="gc-nodebuster-run gc-mono">{{ T('nodebuster_run_level', level=b.level) }}</div>
+              </div>
+              <div class="gc-nodebuster-ap gc-mono">
+                <strong>{{ b.nodebuster_points_unspent|fmt_int }}</strong>
+                <span>{{ T('nodebuster_ap_short') }}</span>
+              </div>
+            </div>
+
+            <div class="gc-nodebuster-stats">
+              <div class="gc-nodebuster-stat">
+                <span>{{ T('nodebuster_gain_now') }}</span>
+                <strong class="gc-mono">+{{ b.nodebuster_points_gain|fmt_int }} {{ T('nodebuster_ap_short') }}</strong>
+              </div>
+              <div class="gc-nodebuster-stat">
+                <span>{{ T('nodebuster_best_depth') }}</span>
+                <strong class="gc-mono">L{{ b.nodebuster_best_depth|fmt_int }}</strong>
+              </div>
+              <div class="gc-nodebuster-stat">
+                <span>{{ T('nodebuster_reset_level') }}</span>
+                <strong class="gc-mono">L{{ b.nodebuster_reset_level|fmt_int }}</strong>
+              </div>
+              <div class="gc-nodebuster-stat">
+                <span>{{ T('nodebuster_ascensions') }}</span>
+                <strong class="gc-mono">{{ b.evolution_rank|fmt_int }}</strong>
+              </div>
+            </div>
+
+            <div class="gc-nodebuster-bonuses gc-mono">
+              <span>{{ T('nodebuster_rebuild_cost_bonus', pct=b.nodebuster_rebuild_cost_pct) }}</span>
+              <span>{{ T('nodebuster_rebuild_time_bonus', pct=b.nodebuster_rebuild_time_pct) }}</span>
+              <span>{{ T('nodebuster_production_bonus', pct=b.nodebuster_production_bonus_pct) }}</span>
+            </div>
+
+            <div class="gc-nodebuster-tree" role="list" aria-label="{{ T('nodebuster_tree_title') }}">
+              {% for skill in b.nodebuster_skills %}
+              <button type="button"
+                      class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}"
+                      data-nodebuster-skill="{{ skill.key }}"
+                      data-nodebuster-building="{{ building_type }}"
+                      data-nodebuster-cost="{{ skill.cost }}"
+                      {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %}
+                      role="listitem">
+                <span class="gc-nodebuster-node-title">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
+                <span class="gc-nodebuster-node-desc">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
+                <span class="gc-nodebuster-node-meta gc-mono">
+                  {{ skill.rank }}/{{ skill.max_rank }}
+                  {% if skill.rank < skill.max_rank %} · {{ skill.cost }} {{ T('nodebuster_ap_short') }}{% endif %}
+                </span>
+              </button>
+              {% endfor %}
+            </div>
+
+            {% if _evo_ready %}
+            <button type="button"
+                    class="gc-btn gc-bld-evo-btn gc-nodebuster-ascend"
+                    data-mine-evolve="{{ building_type }}"
+                    data-nodebuster-current-level="{{ b.level }}"
+                    data-nodebuster-points-gain="{{ b.nodebuster_points_gain }}"
+                    data-nodebuster-reset-level="{{ b.nodebuster_reset_level }}"
+                    data-nodebuster-best-depth="{{ b.nodebuster_best_depth }}"
+                    data-nodebuster-confirm-lead="{{ T('nodebuster_confirm_lead', name=T('building_' ~ building_type), level=b.level) }}"
+                    data-nodebuster-confirm-gain="{{ T('nodebuster_confirm_gain', points=b.nodebuster_points_gain) }}"
+                    data-nodebuster-confirm-reset="{{ T('nodebuster_confirm_reset', level=b.nodebuster_reset_level) }}"
+                    data-nodebuster-confirm-best="{{ T('nodebuster_confirm_best') }}"
+                    data-nodebuster-confirm-button="{{ T('nodebuster_confirm_button') }}"
+                    data-evo-name="{{ T('building_' ~ building_type) }}">
+              {{ T('nodebuster_ascend_now', points=b.nodebuster_points_gain) }}
+            </button>
+            {% else %}
+            <div class="hint gc-nodebuster-lock-hint">{{ T('nodebuster_unlock_hint', level=_evo_req) }}</div>
+            {% endif %}
+          </div>
+          {% else %}
           <div class="gc-bld-evo-block" data-mine-evolution="{{ building_type }}">
             <div class="gc-bld-evo-progress" role="status">
               <span class="gc-bld-evo-progress-label">{{ T('buildings_mine_evo_progress') }}</span>
@@ -245,6 +323,7 @@
             </button>
             {% endif %}
           </div>
+          {% endif %}
           {% endif %}
 
           {% if b.stellar_forge_unlocked is defined and b.stellar_forge_unlocked %}
@@ -288,6 +367,7 @@
 
 {% block extra_head %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/nodebuster_ascension.css') }}?v={{ GC_ASSET_VERSION }}">
 {# Stage LCP = planet landscape (base preload). Retro cards keep first-card hero preload. #}
 {% if not ui_is_stage and _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
@@ -679,5 +759,6 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/pages/buildings.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/pages/mine_nodebuster.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/research_lab_ascension.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}

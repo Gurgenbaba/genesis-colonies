@@ -582,6 +582,51 @@ def get_build_time(
     return resolver.get_build_time_seconds(building_type, int(target_level))
 
 
+
+def _scale_bps(value: int, bps: int, *, minimum: int = 0) -> int:
+    """Exact integer basis-point scaling, rounded up for positive values."""
+    raw = int(value or 0)
+    if raw <= 0:
+        return max(0, int(minimum))
+    rate = max(0, int(bps or 0))
+    scaled = (raw * rate + 9999) // 10000
+    return max(int(minimum), int(scaled))
+
+
+def _nodebuster_rebuild_bps(
+    planet_id: Optional[int],
+    building_type: str,
+    target_level: int,
+    *,
+    conn=None,
+    profiles=None,
+) -> Tuple[int, int]:
+    if planet_id is None:
+        return 10000, 10000
+    from .mine_evolution import is_evolvable_mine
+    from .mine_evolution.ruleset import is_nodebuster_ruleset
+
+    if not is_nodebuster_ruleset() or not is_evolvable_mine(building_type):
+        return 10000, 10000
+
+    from .mine_evolution.nodebuster import (
+        get_profiles_for_planet,
+        get_skills,
+        get_state,
+        rebuild_cost_bps,
+        rebuild_time_bps,
+    )
+
+    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
+    state = get_state(int(planet_id), building_type, conn=conn, profiles=data)
+    if int(state.get("ascension_count") or 0) <= 0:
+        return 10000, 10000
+    if int(target_level or 0) > int(state.get("best_depth") or 0):
+        return 10000, 10000
+    skills = get_skills(int(planet_id), building_type, conn=conn, profiles=data)
+    return int(rebuild_cost_bps(skills)), int(rebuild_time_bps(skills))
+
+
 def recalculate_build_queue_finish_times(
     planet_id: int,
     user_id: int,
@@ -615,7 +660,17 @@ def recalculate_build_queue_finish_times(
         current = int(buildings.get(btype, 0) or 0)
         queued_same = int(queued_counts.get(btype, 0))
         target_level = current + queued_same + 1
-        duration = hotpath.build_time_seconds(btype, target_level)
+        _cost_bps, _time_bps = _nodebuster_rebuild_bps(
+            planet_id,
+            btype,
+            target_level,
+            conn=conn,
+        )
+        duration = _scale_bps(
+            hotpath.build_time_seconds(btype, target_level),
+            _time_bps,
+            minimum=1,
+        )
 
         if idx == 0:
             start_existing = float(row["start_time"] or 0)
@@ -805,6 +860,8 @@ def _nanofactory_panel_snapshot(
     *,
     research_levels: Optional[Dict[str, int]] = None,
     panel_ctx: Optional[BuildingsPanelContext] = None,
+    planet_id: Optional[int] = None,
+    conn=None,
 ) -> Dict[str, Any]:
     from .technical_data import build_nanofactory_time_preview
 
@@ -1625,6 +1682,11 @@ def _effective_building_queue_cap(
 
     if not is_evolvable_mine(building_type) or planet_id is None:
         return max_level
+
+    from .mine_evolution.ruleset import is_nodebuster_ruleset
+    if is_nodebuster_ruleset():
+        from .mine_evolution.nodebuster import QUEUE_SAFETY_SENTINEL
+        return int(QUEUE_SAFETY_SENTINEL)
     rank = (
         max(0, int(evolution_rank))
         if evolution_rank is not None
@@ -1670,18 +1732,40 @@ def _make_panel_row(
     uncapped = is_evolvable_mine(building_type)
     evo_ranks = None
     evolution_rank = None
+    nodebuster_profiles = None
+    evo_conn = getattr(panel_ctx.resolver, "_conn", None) if panel_ctx is not None else None
     if pid is not None and uncapped:
-        if panel_ctx is not None:
+        from .mine_evolution.ruleset import is_nodebuster_ruleset
+
+        if is_nodebuster_ruleset():
+            from .mine_evolution.nodebuster import get_profiles_for_planet
+
+            if panel_ctx is not None:
+                nodebuster_profiles = getattr(panel_ctx, "_nodebuster_profiles", None)
+            if nodebuster_profiles is None:
+                nodebuster_profiles = get_profiles_for_planet(pid, conn=evo_conn)
+                if panel_ctx is not None:
+                    try:
+                        panel_ctx._nodebuster_profiles = nodebuster_profiles  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+            evo_ranks = {
+                key: max(
+                    0,
+                    int((nodebuster_profiles.get(key) or {}).get("state", {}).get("ascension_count") or 0),
+                )
+                for key in ("metal_mine", "crystal_mine", "fuel_cell_plant")
+            }
+        elif panel_ctx is not None:
             evo_ranks = getattr(panel_ctx, "_mine_evo_ranks", None)
             if evo_ranks is None:
-                evo_conn = getattr(panel_ctx.resolver, "_conn", None)
                 evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
                 try:
                     panel_ctx._mine_evo_ranks = evo_ranks  # type: ignore[attr-defined]
                 except Exception:
                     pass
         else:
-            evo_ranks = get_evolution_ranks_for_planet(pid)
+            evo_ranks = get_evolution_ranks_for_planet(pid, conn=evo_conn)
         evolution_rank = int((evo_ranks or {}).get(building_type, 0) or 0)
 
     if panel_ctx is not None:
@@ -1713,6 +1797,16 @@ def _make_panel_row(
             research_levels=research_levels,
         )
 
+    rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+        pid,
+        building_type,
+        target_level,
+        conn=evo_conn,
+    )
+    cost_metal = _scale_bps(cost_metal, rebuild_cost_bps)
+    cost_crystal = _scale_bps(cost_crystal, rebuild_cost_bps)
+    time_seconds = _scale_bps(time_seconds, rebuild_time_bps, minimum=1)
+
     req_met = has_building_requirements(buildings, research_levels, building_type)
     planet_metal = int(planet.get("metal", 0) or 0)
     planet_crystal = int(planet.get("crystal", 0) or 0)
@@ -1731,6 +1825,8 @@ def _make_panel_row(
             buildings=buildings,
             research_levels=research_levels,
             panel_ctx=panel_ctx,
+            planet_id=pid,
+            conn=evo_conn,
         )
 
     # For evolvable mines, at_queue_max means the next Ascension gate was reached.
@@ -1758,7 +1854,16 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
-    row.update(panel_evolution_fields(pid, building_type, level, ranks=evo_ranks))
+    row.update(
+        panel_evolution_fields(
+            pid,
+            building_type,
+            level,
+            ranks=evo_ranks,
+            conn=evo_conn,
+            profiles=nodebuster_profiles,
+        )
+    )
     if pid is not None and building_type == "research_lab":
         from .research_lab_ascension import panel_fields as research_lab_ascension_panel_fields
 
@@ -2125,6 +2230,9 @@ def preview_max_queueable_build_jobs(
     metal: int,
     crystal: int,
     queue_free_slots: int,
+    planet_id: Optional[int] = None,
+    conn=None,
+    nodebuster_profiles=None,
 ) -> int:
     """How many +1 build jobs can be queued (resources, cap, queue slots)."""
     if building_type not in BASE_COST or int(queue_free_slots) <= 0:
@@ -2138,6 +2246,15 @@ def preview_max_queueable_build_jobs(
         if target > int(max_level):
             break
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
+        rebuild_cost_bps, _time_bps = _nodebuster_rebuild_bps(
+            planet_id,
+            building_type,
+            target,
+            conn=conn,
+            profiles=nodebuster_profiles,
+        )
+        cost_m = _scale_bps(cost_m, rebuild_cost_bps)
+        cost_c = _scale_bps(cost_c, rebuild_cost_bps)
         if m < int(cost_m) or c < int(cost_c):
             break
         m -= int(cost_m)
@@ -2159,8 +2276,20 @@ def summarize_max_queueable_build_jobs(
     buildings: Optional[Dict[str, int]] = None,
     research_levels: Optional[Dict[str, int]] = None,
     panel_ctx: Optional[BuildingsPanelContext] = None,
+    planet_id: Optional[int] = None,
+    conn=None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX queue UX: levels, total cost, cumulative build time."""
+    nodebuster_profiles = None
+    if planet_id is not None:
+        try:
+            from .mine_evolution.ruleset import is_nodebuster_ruleset
+            if is_nodebuster_ruleset():
+                from .mine_evolution.nodebuster import get_profiles_for_planet
+                nodebuster_profiles = get_profiles_for_planet(int(planet_id), conn=conn)
+        except Exception:
+            nodebuster_profiles = None
+
     jobs = preview_max_queueable_build_jobs(
         building_type,
         current_level=current_level,
@@ -2169,23 +2298,35 @@ def summarize_max_queueable_build_jobs(
         metal=metal,
         crystal=crystal,
         queue_free_slots=queue_free_slots,
+        planet_id=planet_id,
+        conn=conn,
+        nodebuster_profiles=nodebuster_profiles,
     )
     if jobs <= 0:
         return {"jobs": 0}
     from_level = int(current_level) + int(queued_same)
-    total_m = 0.0
-    total_c = 0.0
+    total_m = 0
+    total_c = 0
     total_sec = 0
     for i in range(jobs):
         eff = from_level + i
         cost_m, cost_c = get_upgrade_cost(building_type, eff)
-        total_m += float(cost_m)
-        total_c += float(cost_c)
         target = eff + 1
+        rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+            planet_id,
+            building_type,
+            target,
+            conn=conn,
+            profiles=nodebuster_profiles,
+        )
+        cost_m = _scale_bps(cost_m, rebuild_cost_bps)
+        cost_c = _scale_bps(cost_c, rebuild_cost_bps)
+        total_m += int(cost_m)
+        total_c += int(cost_c)
         if panel_ctx is not None:
-            total_sec += panel_ctx.build_time_seconds(building_type, target)
+            raw_sec = panel_ctx.build_time_seconds(building_type, target)
         else:
-            total_sec += int(
+            raw_sec = int(
                 get_build_time(
                     building_type,
                     target,
@@ -2194,12 +2335,13 @@ def summarize_max_queueable_build_jobs(
                     research_levels=research_levels,
                 )
             )
+        total_sec += _scale_bps(raw_sec, rebuild_time_bps, minimum=1)
     return {
         "jobs": int(jobs),
         "from_level": from_level,
         "to_level": from_level + int(jobs),
-        "cost_metal": int(round(total_m)),
-        "cost_crystal": int(round(total_c)),
+        "cost_metal": int(total_m),
+        "cost_crystal": int(total_c),
         "time_seconds": int(total_sec),
     }
 
@@ -2530,6 +2672,12 @@ def queue_build_for_planet(
         )
         rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))
 
+        nodebuster_profiles = None
+        from .mine_evolution.ruleset import is_nodebuster_ruleset
+        if is_nodebuster_ruleset():
+            from .mine_evolution.nodebuster import get_profiles_for_planet
+            nodebuster_profiles = get_profiles_for_planet(planet_id, conn=conn)
+
         from .mine_evolution import (
             get_evolution_rank,
             is_evolvable_mine,
@@ -2635,6 +2783,15 @@ def queue_build_for_planet(
                 break
 
             cost_metal, cost_crystal = get_upgrade_cost(building_type, current_level + queued_same)
+            rebuild_cost_bps, rebuild_time_bps = _nodebuster_rebuild_bps(
+                planet_id,
+                building_type,
+                target_level,
+                conn=conn,
+                profiles=nodebuster_profiles,
+            )
+            cost_metal = _scale_bps(cost_metal, rebuild_cost_bps)
+            cost_crystal = _scale_bps(cost_crystal, rebuild_cost_bps)
 
             if planet_metal < cost_metal or planet_crystal < cost_crystal:
                 last_reason = "resources"
@@ -2654,7 +2811,11 @@ def queue_build_for_planet(
                 last_fail = {"queue_count": len(rows_db), "queue_limit": queue_limit}
                 break
 
-            duration = hotpath.build_time_seconds(building_type, target_level)
+            duration = _scale_bps(
+                hotpath.build_time_seconds(building_type, target_level),
+                rebuild_time_bps,
+                minimum=1,
+            )
 
             last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
             start_time = max(now, last_finish_time)
