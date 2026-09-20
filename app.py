@@ -5961,11 +5961,13 @@ def skilltree_view():
     from game.db import begin_write_transaction, commit, rollback
 
     commander = {"ready": False}
+    mine_ascension = {"ready": False, "planet_id": 0, "mines": []}
     conn = db()
     try:
         begin_write_transaction(conn)
         page = get_skilltree_page_context(int(session["user_id"]), conn=conn)
         commander = page.get("commander") or {}
+        mine_ascension = page.get("mine_ascension") or mine_ascension
         commit(conn)
     except Exception:
         rollback(conn)
@@ -5976,6 +5978,7 @@ def skilltree_view():
     return render_template(
         "skilltree.html",
         commander=commander,
+        mine_ascension=mine_ascension,
         **ctx,
     )
 
