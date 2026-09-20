@@ -249,14 +249,7 @@
                     data-evo-name="{{ T('building_' ~ building_type) }}">
               {{ T('mine_ascension_ascend_now', points=b.nodebuster_points_gain) }}
             </button>
-            {% else %}
-            <div class="hint gc-nodebuster-lock-hint">{{ T('mine_ascension_unlock_hint', level=_evo_req) }}</div>
             {% endif %}
-
-            <a class="gc-btn gc-btn-ghost gc-btn-sm gc-mine-ascension-skill-link"
-               href="{{ url_for('skilltree_view') }}?tab=ascension&mine={{ building_type }}">
-              {{ T('mine_ascension_open_skilltree', 'Skill Tree') }}
-            </a>
           </div>
           {% else %}
           <div class="gc-bld-evo-block" data-mine-evolution="{{ building_type }}">
