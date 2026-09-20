@@ -5161,39 +5161,52 @@ def api_auction_house_bid():
         if not planet:
             return jsonify({"ok": False, "reason": "planet_not_found"}), 400
         planet_id = int(planet["id"])
-        ok, reason, result = place_bid(
-            player_id=user_id,
-            planet_id=planet_id,
-            listing_id=listing_id,
-            amount=amount,
-            currency=currency,
-            conn=conn,
-        )
+        try:
+            ok, reason, result = place_bid(
+                player_id=user_id,
+                planet_id=planet_id,
+                listing_id=listing_id,
+                amount=amount,
+                currency=currency,
+                conn=conn,
+            )
+        except Exception:
+            logger.exception(
+                "auction-house bid mutation failed user_id=%s listing_id=%s",
+                user_id,
+                listing_id,
+            )
+            return jsonify({"ok": False, "reason": "auction_action_failed"}), 500
 
         # GC-PERF-AUCTION-BID-030: place_bid already committed/rolled back.
-        # Rebuild only the Auction projection + exact active-planet balances on
-        # the same checkout. The browser patches the Auction panel directly and
-        # updates resource amounts without rebuilding the entire game-state.
-        row = conn.execute(
-            """
-            SELECT metal, crystal, fuel_cells
-            FROM planets
-            WHERE id = ? AND player_id = ?
-            LIMIT 1;
-            """,
-            (planet_id, user_id),
-        ).fetchone()
-        auction_house = build_auction_house_state(
-            user_id,
-            planet_id,
-            metal=int(row["metal"] or 0) if row else 0,
-            crystal=int(row["crystal"] or 0) if row else 0,
-            fuel_cells=int(row["fuel_cells"] or 0) if row else 0,
-            conn=conn,
-        )
-    except Exception:
-        logger.exception("auction-house bid failed user_id=%s listing_id=%s", user_id, listing_id)
-        return jsonify({"ok": False, "reason": "auction_action_failed"}), 500
+        # Projection failure must never turn a committed successful bid into a
+        # synthetic HTTP 500. The mutation result remains authoritative and the
+        # normal poll will reconcile the panel/HUD if this best-effort read fails.
+        try:
+            row = conn.execute(
+                """
+                SELECT metal, crystal, fuel_cells
+                FROM planets
+                WHERE id = ? AND player_id = ?
+                LIMIT 1;
+                """,
+                (planet_id, user_id),
+            ).fetchone()
+            auction_house = build_auction_house_state(
+                user_id,
+                planet_id,
+                metal=int(row["metal"] or 0) if row else 0,
+                crystal=int(row["crystal"] or 0) if row else 0,
+                fuel_cells=int(row["fuel_cells"] or 0) if row else 0,
+                conn=conn,
+            )
+        except Exception:
+            logger.exception(
+                "auction-house bid projection failed after mutation user_id=%s listing_id=%s",
+                user_id,
+                listing_id,
+            )
+            auction_house = {}
     finally:
         conn.close()
 
