@@ -18,7 +18,8 @@ from .fleet_defs import (
 )
 from .effects.effect_resolver import FUEL_EFFICIENCY_PER_LEVEL, EffectResolver
 
-# OGame-style flight-time divisor (seconds scale with distance and slowest hull speed).
+# Canonical fleet travel-time divisor. Travel scales with distance, the slowest
+# effective hull speed, the selected speed step, and the universe mission speed.
 FLIGHT_TIME_DIVISOR = 35000.0
 FUEL_DISTANCE_DIVISOR = 35000.0
 
@@ -31,19 +32,20 @@ def calculate_distance(
     origin: Tuple[int, int, int],
     target: Tuple[int, int, int],
 ) -> int:
-    """OGame-style simplified distance between two coordinates."""
+    """Hierarchical coordinate distance used by the canonical fleet timer."""
     og, os, op = (int(origin[0]), int(origin[1]), int(origin[2]))
     tg, ts, tp = (int(target[0]), int(target[1]), int(target[2]))
     if (og, os, op) == (tg, ts, tp):
         return 0
 
-    galaxy_dist = abs(og - tg) * 20000
-    system_dist = abs(os - ts) * 95 + 2700
-    position_dist = abs(op - tp) * 5 + 1000
-    if og == tg and os == ts:
-        position_dist = max(5, abs(op - tp) * 5)
-        return max(1, position_dist)
-    return max(1, galaxy_dist + system_dist + position_dist)
+    # Only the highest differing coordinate tier contributes. Mixing lower-tier
+    # offsets into a galaxy/system jump makes route times depend on irrelevant
+    # target slot details and creates discontinuities near coordinate boundaries.
+    if og != tg:
+        return max(1, abs(og - tg) * 20000)
+    if os != ts:
+        return max(1, abs(os - ts) * 95 + 2700)
+    return max(1, abs(op - tp) * 5 + 1000)
 
 
 def calculate_fleet_speed(
@@ -77,16 +79,28 @@ def calculate_flight_seconds(
     *,
     admin_speed_multiplier: float = 1.0,
 ) -> int:
-    """OGame-style leg duration: (35000 / speed) * sqrt(distance / 10) adjusted by speed %."""
+    """Canonical one-leg duration for a fleet movement.
+
+    The selected 10..100 percent maps to a 1..10 speed step. The slowest
+    effective hull speed participates under the square root; universe mission
+    speed divides the complete leg duration. This keeps mixed fleets, research
+    bonuses, and speed selection predictable instead of linearly over-scaling
+    hull speed bonuses.
+    """
     if distance <= 0 or slowest_ship_speed <= 0:
         return 0
     pct = max(10, min(100, int(speed_percent)))
-    speed_factor = pct / 100.0
+    speed_step = pct / 10.0
     dist = max(1.0, float(distance))
-    base = (FLIGHT_TIME_DIVISOR / float(slowest_ship_speed)) * math.sqrt(dist / 10.0)
+    hull_speed = max(1.0, float(slowest_ship_speed))
+    base_seconds = (
+        (FLIGHT_TIME_DIVISOR / speed_step)
+        * math.sqrt((dist * 10.0) / hull_speed)
+        + 10.0
+    )
     admin_mult = max(0.01, float(admin_speed_multiplier or 1.0))
-    seconds = base / speed_factor / admin_mult
-    return max(1, int(math.ceil(seconds)))
+    seconds = base_seconds / admin_mult
+    return max(1, int(round(seconds)))
 
 
 def _movement_return_leg_seconds(movement: Mapping[str, Any]) -> int:

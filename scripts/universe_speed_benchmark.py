@@ -380,7 +380,7 @@ def generate_markdown() -> str:
         "| Forschungszeit | `EffectResolver.get_research_time_seconds` | `anchor_hours × tier ÷ (build_speed × research_speed × lab_bonus × research_time_speed)` |",
         "| Bauzeit | `EffectResolver.get_build_time_seconds` | `BUILD_TIME_BASE × factor^(L-1) ÷ build_speed_effective` |",
         "| Produktion / ROI | `economy_balance.mine_upgrade_roi_hours` | `upgrade_cost ÷ Δprod/h × production_speed` |",
-        "| Flugzeit | `fleet_calc.calculate_flight_seconds` | `(35000/speed) × √(dist/10) ÷ admin_fleet_speed` |",
+        "| Flugzeit | `fleet_calc.calculate_flight_seconds` | `((35000/speed_step) × √(distance×10/fleet_speed) + 10) ÷ admin_fleet_speed` |",
         "",
         "**Annahmen Benchmark:** kein `buildtime_tech`, kein Klima/GD, `build_speed=1` in Forschungstabellen, `research_speed=1` in Bautabellen, progressive Lab-Spalte (`LAB_FOR_LEVEL`).",
         "",

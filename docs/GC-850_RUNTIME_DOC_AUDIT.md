@@ -176,7 +176,7 @@ Für jede Kern-Domäne feststellen:
 
 | Prüfpunkt | Status | Detail |
 |-----------|--------|--------|
-| `calculate_flight_seconds` | **OK** | `(35000/speed) × √(dist/10)` — FLEET_SYSTEM.md |
+| `calculate_flight_seconds` | **HOTFIXED** | `((35000/speed_step) × √(distance×10/fleet_speed) + 10) ÷ mission_speed` — FLEET_SYSTEM.md |
 | `navigation_tech` / `engine_tech` | **OK** | `_fleet_speed_multiplier` → `calculate_fleet_speed` |
 | `fuel_efficiency` | **OK** | `_fuel_efficiency_factor_for_fleet` → `calculate_fuel_cost` |
 | BALANCE_ANCHORS | **DOC GAP** | Keine Flugzeit-Ankertabelle (bewusst außerhalb GC-820/821) |

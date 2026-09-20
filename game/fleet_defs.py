@@ -59,7 +59,7 @@ FLEET_FUEL_RESOURCE = "fuel_cells"
 
 VALID_RESOURCE_KEYS = frozenset({"metal", "crystal", "fuel_cells"})
 
-# Legacy OGame-style keys → canonical Genesis Colonies keys (read-compat only).
+# Legacy pre-canonical ship keys → canonical Genesis Colonies keys (read-compat only).
 LEGACY_SHIP_KEY_MAP: Dict[str, str] = {
     "small_cargo": "mule_courier",
     "large_cargo": "atlas_hauler",
