@@ -345,7 +345,14 @@ def test_idempotent_bid_api(auction_db, monkeypatch):
     r2 = client.post("/api/auction-house/bid", json=body)
     assert r1.status_code == 200
     assert r2.status_code == 200
-    assert r1.get_json() == r2.get_json()
+    payload = r1.get_json()
+    assert payload == r2.get_json()
+    assert "state" not in payload
+    assert payload["reason"] == "bid_placed"
+    assert int(payload["auction_house"]["planet_id"]) == pid
+    assert int(payload["auction_house"]["balances"]["metal"]) == 250_000
+    assert int(payload["auction_house"]["balances"]["crystal"]) >= 0
+    assert int(payload["auction_house"]["balances"]["fuel_cells"]) >= 0
 
     conn = db()
     cur = conn.cursor()
