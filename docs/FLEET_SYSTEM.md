@@ -127,12 +127,37 @@ Spieler-Hauptpfad nutzt **`target_galaxy` / `target_system` / `target_position`*
 
 ## Flight Math (`fleet_calc.py`)
 
-- Distanz aus Galaxy-Koordinaten ([GALAXY_SYSTEM.md](GALAXY_SYSTEM.md))
-- Speed aus langsamstem Schiff + `EffectResolver.fleet_speed_multiplier`
-- Fuel: `fuel_efficiency` Research + Schiff-defs
-- Cargo capacity pro Schiffstyp
+Server-authoritativ; Preview und Send verwenden exakt dieselbe Berechnung.
 
-Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
+**Distanzhierarchie**
+
+- identische Koordinate: `0`
+- andere Galaxie: `abs(Δgalaxy) × 20000`
+- gleiche Galaxie, anderes System: `2700 + abs(Δsystem) × 95`
+- gleiches System, andere Position: `1000 + abs(Δposition) × 5`
+- Nur die höchste abweichende Koordinatenebene zählt; System/Position werden nicht in einen Galaxiesprung hineingemischt.
+
+**Geschwindigkeit und Flugzeit**
+
+- `fleet_speed` = langsamstes effektives Schiff nach `EffectResolver.fleet_speed_multiplier`
+- `speed_step = clamp(speed_percent, 10, 100) / 10`
+- `mission_speed` = `fleet_speed_war`, `fleet_speed_holding` oder `fleet_speed_peaceful`
+- `leg_seconds = round(((35000 / speed_step) × sqrt(distance × 10 / fleet_speed) + 10) / mission_speed)`
+- Mindestwert für eine reale Strecke: 1 Sekunde
+- Forschungs-/Commander-/Directive-Boni erhöhen die effektive Schiffsgeschwindigkeit **unter der Wurzel**; sie verkürzen Flugzeiten dadurch kontrolliert statt linear zu eskalieren.
+- Bereits gestartete Flotten behalten ihre persistierten `flight_seconds`/Ankunftszeiten; die Formel gilt für neue Previews und neue Starts.
+
+**x1-Anker, Mule Courier (Speed 5000), 100 %**
+
+| Route | Distanz | Einfache Flugzeit |
+|---|---:|---:|
+| Nachbarposition | 1005 | 1:22:52 |
+| Nachbarsystem | 2795 | 2:18:05 |
+| Nachbargalaxie | 20000 | 6:09:06 |
+
+Fuel bleibt ein separater kanonischer Owner: `fuel_efficiency` Research + Schiff-defs. Cargo capacity bleibt pro Schiffstyp.
+
+Preview: `POST /api/fleet/preview` → debounced im Client (~300ms); keine Frontend-Zeitmathematik.
 
 ---
 
