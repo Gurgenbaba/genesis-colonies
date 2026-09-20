@@ -183,6 +183,47 @@ def exchange_trade_score_delta(
     return int(after - before)
 
 
+def _exchange_trade_exact_value_delta(
+    *,
+    metal: int,
+    crystal: int,
+    fuel_cells: int,
+    give_resource: str,
+    give_amount: int,
+    receive_resource: str,
+    receive_amount: int,
+) -> int:
+    """Exact 3:2:1 value delta in integer sixth-points.
+
+    Resource score floors each resource independently for display. That makes a
+    neutral trade look like +1 score around divisor boundaries. Trader safety
+    must compare the underlying exact 3:2:1 value instead, otherwise legitimate
+    exchanges are rejected depending on the player's resource remainders.
+    """
+    from .resource_score import (
+        SCORE_CRYSTAL_DIVISOR,
+        SCORE_FUEL_DIVISOR,
+        SCORE_METAL_DIVISOR,
+    )
+
+    # LCM(1500, 1000, 500) = 3000. This keeps the comparison exact and avoids
+    # floats even for Mando-scale resource balances.
+    common = 3000
+    weights = {
+        "metal": common // int(SCORE_METAL_DIVISOR),
+        "crystal": common // int(SCORE_CRYSTAL_DIVISOR),
+        "fuel_cells": common // int(SCORE_FUEL_DIVISOR),
+    }
+    give = str(give_resource)
+    receive = str(receive_resource)
+    if give not in weights or receive not in weights:
+        return 0
+    return (
+        int(receive_amount) * int(weights[receive])
+        - int(give_amount) * int(weights[give])
+    )
+
+
 def trade_would_increase_score(
     *,
     metal: int,
@@ -193,19 +234,22 @@ def trade_would_increase_score(
     receive_resource: str,
     receive_amount: int,
 ) -> bool:
-    """Block trades that raise account score via misaligned rates (GC-SCORE-F)."""
-    return (
-        exchange_trade_score_delta(
-            metal=metal,
-            crystal=crystal,
-            fuel_cells=fuel_cells,
-            give_resource=give_resource,
-            give_amount=give_amount,
-            receive_resource=receive_resource,
-            receive_amount=receive_amount,
-        )
-        > 0
-    )
+    """Block only trades that increase exact canonical 3:2:1 resource value.
+
+    The balance arguments remain part of the public contract for compatibility,
+    but the invariant depends on the traded amounts/rates, not the player's
+    current modulo remainders at score divisors.
+    """
+    _ = (metal, crystal, fuel_cells)
+    return _exchange_trade_exact_value_delta(
+        metal=metal,
+        crystal=crystal,
+        fuel_cells=fuel_cells,
+        give_resource=give_resource,
+        give_amount=give_amount,
+        receive_resource=receive_resource,
+        receive_amount=receive_amount,
+    ) > 0
 
 
 def would_roundtrip_profit(amount: int, buy_cost: float, sell_return: float) -> bool:
