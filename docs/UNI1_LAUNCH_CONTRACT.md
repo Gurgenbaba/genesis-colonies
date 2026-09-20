@@ -164,9 +164,29 @@ The one-shot reset:
    launch-day inactive/farmable
 9. rebuilds ranking and writes a durable completion marker
 
-The same token can never wipe twice: after success, subsequent maintenance-worker
-starts detect the durable marker and skip the reset. Production also refuses to
-boot an **open** UNI 1 unless the durable prelaunch marker exists.
+The reset token is validated against the **exact** launch starter bundle:
+`GC_NETWORK_START_RESOURCE_MULTIPLIER=10` and
+`GC_NETWORK_START_TIMEKEEPER_SECONDS=259200`. A missing/default bundle aborts
+before any destructive reset begins.
+
+The rollout is deliberately two-stage to make Railway rolling replacement safe:
+
+1. deploy this release to closed UNI 1 **without** a reset token
+2. after that release is the currently serving code, add a unique
+   `GC_UNI1_PRELAUNCH_RESET_TOKEN` and redeploy
+
+On the tokenized deploy the entrypoint runs the reset **synchronously after
+migrations and before maintenance worker, queue worker, or Gunicorn**. Before the
+first destructive phase it writes a strict shared DB freeze marker. Any already
+serving closed-UNI1 instance on this release sees that marker and returns 503 for
+gameplay while health probes remain available. The freeze stays active after the
+reset while UNI 1 remains closed; opening UNI 1 releases it.
+
+The same token can never wipe twice: the completion marker is written through a
+strict transaction-owned upsert and read back before commit. Any DB lock/error
+aborts instead of being swallowed. Subsequent starts with the same token skip.
+Production also refuses to boot an **open** UNI 1 unless the durable prelaunch
+completion marker exists.
 
 ## Public-open gate
 
