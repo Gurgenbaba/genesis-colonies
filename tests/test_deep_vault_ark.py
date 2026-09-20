@@ -127,7 +127,9 @@ def test_deep_vault_ark_cargo_and_slow_preview(save_ship_db):
     assert ark < atlas
     slow = calculate_flight_seconds(1000, ark, 100)
     fast = calculate_flight_seconds(1000, atlas, 100)
-    assert slow > fast * 5
+    # Effective hull speed lives under the travel-time square root.
+    assert slow > fast * 3
+    assert slow < fast * 5
 
     uid = _player()
     conn = db()
