@@ -391,9 +391,9 @@
     <nav class="gc-ascension-mine-tabs" role="tablist" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
       {% for mine in (asc.mines or []) %}
       <button
-        type="button"
-        class="gc-ascension-mine-tab{% if loop.first %} is-active{% endif %}"
-        role="tab"
+        type="button" {# i18n-ok: structural attribute #}
+        class="gc-ascension-mine-tab{% if loop.first %} is-active{% endif %}" {# i18n-ok: structural attribute #}
+        role="tab" {# i18n-ok: structural attribute #}
         aria-selected="{{ 'true' if loop.first else 'false' }}"
         aria-controls="ascension-panel-{{ mine.building_type }}"
         data-ascension-mine-tab="{{ mine.building_type }}">
@@ -407,16 +407,16 @@
       {% for mine in (asc.mines or []) %}
       {% set mine_ready = mine.ascension_ready if mine.ascension_ready is defined else mine.evolution_can_evolve %}
       <article
-        class="gc-ascension-mine{% if loop.first %} is-active{% endif %}"
-        id="ascension-panel-{{ mine.building_type }}"
+        class="gc-ascension-mine{% if loop.first %} is-active{% endif %}" {# i18n-ok: structural attribute #}
+        id="ascension-panel-{{ mine.building_type }}" {# i18n-ok: structural attribute #}
         data-ascension-mine-panel="{{ mine.building_type }}"
         data-nodebuster-mine="{{ mine.building_type }}"
-        role="tabpanel"
+        role="tabpanel" {# i18n-ok: structural attribute #}
         {% if not loop.first %}hidden{% endif %}>
         <header class="gc-ascension-mine-hero gc-panel">
           <div class="gc-ascension-mine-hero__identity">
             <div class="gc-ascension-mine-hero__mark" aria-hidden="true">
-              {% if mine.building_type == 'metal_mine' %}Fe{% elif mine.building_type == 'crystal_mine' %}Cr{% else %}Br{% endif %}
+              {% if mine.building_type == 'metal_mine' %}{{ T('resource_metal_short', 'FN') }}{% elif mine.building_type == 'crystal_mine' %}{{ T('resource_crystal_short', 'CT') }}{% else %}{{ T('resource_fuel_cells_short', 'BZ') }}{% endif %}
             </div>
             <div>
               <p class="skilltree-kicker">{{ T('mine_ascension_kicker', 'Langzeit-Progression') }}</p>
@@ -440,8 +440,8 @@
             </div>
             {% if mine_ready %}
             <button
-              type="button"
-              class="gc-btn gc-btn-primary gc-ascension-cta"
+              type="button" {# i18n-ok: structural attribute #}
+              class="gc-btn gc-btn-primary gc-ascension-cta" {# i18n-ok: structural attribute #}
               data-mine-evolve="{{ mine.building_type }}"
               data-nodebuster-current-level="{{ mine.level }}"
               data-nodebuster-points-gain="{{ mine.nodebuster_points_gain }}"
@@ -538,8 +538,8 @@
                 {% set is_locked = (not skill.available) and (not is_max) %}
                 {% set is_capstone = skill.key == 'overdrive' %}
                 <button
-                  type="button"
-                  class="gc-ascension-node gc-ascension-node--slot-{{ loop.index }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}"
+                  type="button" {# i18n-ok: structural attribute #}
+                  class="gc-ascension-node gc-ascension-node--slot-{{ loop.index }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}" {# i18n-ok: structural attribute #}
                   data-ascension-node-select="{{ skill.key }}"
                   data-ascension-building="{{ mine.building_type }}"
                   aria-selected="{{ 'true' if loop.first else 'false' }}">
@@ -605,8 +605,8 @@
                 <span class="gc-ascension-inspector__done">{{ T('commander_maxed', 'Max') }}</span>
                 {% else %}
                 <button
-                  type="button"
-                  class="gc-btn gc-btn-primary gc-btn-sm"
+                  type="button" {# i18n-ok: structural attribute #}
+                  class="gc-btn gc-btn-primary gc-btn-sm" {# i18n-ok: structural attribute #}
                   data-nodebuster-skill="{{ skill.key }}"
                   data-nodebuster-building="{{ mine.building_type }}"
                   data-nodebuster-cost="{{ skill.cost }}"
@@ -625,12 +625,12 @@
     </div>
 
     <div id="gc-mine-evo-confirm-modal"
-         class="gc-player-card-modal gc-bld-evo-confirm-modal"
+         class="gc-player-card-modal gc-bld-evo-confirm-modal" {# i18n-ok: structural attribute #}
          hidden
          aria-hidden="true">
       <div class="gc-player-card-overlay" data-mine-evo-confirm-cancel tabindex="-1"></div>
       <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog"
-           role="dialog"
+           role="dialog" {# i18n-ok: structural attribute #}
            aria-modal="true"
            aria-labelledby="gc-mine-evo-confirm-title">
         <header class="gc-player-card-head">
