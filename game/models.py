@@ -39,6 +39,33 @@ def _now_ts() -> int:
 # DEFAULT GAME SETTINGS
 # ======================================================================
 
+_X1_UNIVERSE_SPEEDS: Dict[str, str] = {
+    "production_speed": "1.0",
+    "build_speed": "1.0",
+    "research_speed": "1.0",
+    "fleet_speed_war": "1.0",
+    "fleet_speed_holding": "1.0",
+    "fleet_speed_peaceful": "1.0",
+    "shipyard_speed": "1.0",
+}
+
+
+def _apply_universe_speed_profile(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply an operator-owned universe speed profile without mutating stored settings."""
+    profile = str(os.environ.get("GC_UNIVERSE_SPEED_PROFILE", "") or "").strip().lower()
+    out = dict(settings)
+    if not profile:
+        return out
+    if profile != "x1":
+        logger.warning("Unknown GC_UNIVERSE_SPEED_PROFILE=%s; ignoring profile", profile)
+        return out
+
+    out.update(_X1_UNIVERSE_SPEEDS)
+    # Historical alias still exists in a few old surfaces; keep it aligned.
+    out["speed"] = "1.0"
+    return out
+
+
 DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "universe_name": "Genesis Colonies",
     "production_speed": "1.0",
@@ -2065,7 +2092,7 @@ def get_game_settings(conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
 
     try:
         cur = conn.cursor()
-        settings = _ensure_game_settings(cur)
+        settings = _apply_universe_speed_profile(_ensure_game_settings(cur))
         _request_game_settings_cache_set(settings)
         return dict(settings)
     finally:
