@@ -345,76 +345,313 @@
   </section>
   {% endif %}
   {% else %}
-  <section class="gc-panel gc-ascension-skilltree" data-ascension-skilltree>
-    <div class="gc-panel-header">
-      <div>
+  {% set asc_stats = namespace(total_ascensions=0, total_ap=0, best_depth=0) %}
+  {% for mine in (asc.mines or []) %}
+    {% set asc_stats.total_ascensions = asc_stats.total_ascensions + (mine.evolution_rank or 0) %}
+    {% set asc_stats.total_ap = asc_stats.total_ap + (mine.nodebuster_points_unspent or 0) %}
+    {% if (mine.nodebuster_best_depth or 0) > asc_stats.best_depth %}
+      {% set asc_stats.best_depth = mine.nodebuster_best_depth or 0 %}
+    {% endif %}
+  {% endfor %}
+
+  <section class="gc-ascension-hub" data-ascension-skilltree>
+    <header class="gc-ascension-hero gc-panel">
+      <div class="gc-ascension-hero__copy">
         <p class="skilltree-kicker">{{ T('mine_ascension_kicker', 'Langzeit-Progression') }}</p>
         <h3 class="skilltree-section-title">{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}</h3>
         <p class="skilltree-section-hint">{{ T('mine_ascension_skilltree_hint', 'Ascension-Punkte werden pro Mine verdient und permanent in deren Skill Tree investiert.') }}</p>
       </div>
-    </div>
+      {% if asc.ready %}
+      <div class="gc-ascension-summary" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
+        <div class="gc-ascension-summary__item">
+          <span>{{ T('location_action_mines', 'Minen') }}</span>
+          <strong class="gc-mono">{{ (asc.mines or [])|length }}</strong>
+        </div>
+        <div class="gc-ascension-summary__item">
+          <span>{{ T('mine_ascension_title', 'Ascension') }}</span>
+          <strong class="gc-mono">{{ asc_stats.total_ascensions|fmt_int }}</strong>
+        </div>
+        <div class="gc-ascension-summary__item">
+          <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
+          <strong class="gc-mono">{{ asc_stats.total_ap|fmt_int }}</strong>
+        </div>
+        <div class="gc-ascension-summary__item">
+          <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
+          <strong class="gc-mono">L{{ asc_stats.best_depth|fmt_int }}</strong>
+        </div>
+      </div>
+      {% endif %}
+    </header>
 
     {% if not asc.ready %}
-    <div class="gc-empty-state">
+    <div class="gc-panel gc-empty-state">
       <div class="gc-empty-title">{{ T('mine_ascension_unavailable', 'Ascension ist aktuell nicht verfügbar.') }}</div>
     </div>
     {% else %}
-    <div class="gc-building-grid gc-ascension-mine-grid" role="list">
+    <nav class="gc-ascension-mine-tabs" role="tablist" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
       {% for mine in (asc.mines or []) %}
-      <article class="gc-prog-card gc-nodebuster gc-ascension-mine-card" id="ascension-{{ mine.building_type }}" data-nodebuster-mine="{{ mine.building_type }}" role="listitem">
-        <div class="gc-nodebuster-head">
-          <div>
-            <div class="gc-bld-evo-progress-label">{{ T('building_' ~ mine.building_type) }}</div>
-            <div class="gc-nodebuster-run gc-mono">
-              {{ T('mine_ascension_level', level=mine.level) }}
-              · {{ T('mine_ascension_count', count=mine.evolution_rank) }}
+      <button
+        type="button" {# i18n-ok: structural attribute #}
+        class="gc-ascension-mine-tab{% if loop.first %} is-active{% endif %}" {# i18n-ok: structural attribute #}
+        role="tab" {# i18n-ok: structural attribute #}
+        aria-selected="{{ 'true' if loop.first else 'false' }}"
+        aria-controls="ascension-panel-{{ mine.building_type }}"
+        data-ascension-mine-tab="{{ mine.building_type }}">
+        <span class="gc-ascension-mine-tab__name">{{ T('building_' ~ mine.building_type) }}</span>
+        <span class="gc-ascension-mine-tab__meta gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</span>
+      </button>
+      {% endfor %}
+    </nav>
+
+    <div class="gc-ascension-mine-panels">
+      {% for mine in (asc.mines or []) %}
+      {% set mine_ready = mine.ascension_ready if mine.ascension_ready is defined else mine.evolution_can_evolve %}
+      <article
+        class="gc-ascension-mine{% if loop.first %} is-active{% endif %}" {# i18n-ok: structural attribute #}
+        id="ascension-panel-{{ mine.building_type }}" {# i18n-ok: structural attribute #}
+        data-ascension-mine-panel="{{ mine.building_type }}"
+        data-nodebuster-mine="{{ mine.building_type }}"
+        role="tabpanel" {# i18n-ok: structural attribute #}
+        {% if not loop.first %}hidden{% endif %}>
+        <header class="gc-ascension-mine-hero gc-panel">
+          <div class="gc-ascension-mine-hero__identity">
+            <div class="gc-ascension-mine-hero__mark" aria-hidden="true">
+              {% if mine.building_type == 'metal_mine' %}{{ T('resource_metal_short', 'FN') }}{% elif mine.building_type == 'crystal_mine' %}{{ T('resource_crystal_short', 'CT') }}{% else %}{{ T('resource_fuel_cells_short', 'BZ') }}{% endif %}
+            </div>
+            <div>
+              <p class="skilltree-kicker">{{ T('mine_ascension_kicker', 'Langzeit-Progression') }}</p>
+              <h3>{{ T('building_' ~ mine.building_type) }}</h3>
+              <p class="gc-ascension-mine-hero__run gc-mono">
+                {{ T('mine_ascension_level', level=mine.level) }} · {{ T('mine_ascension_count', count=mine.evolution_rank) }}
+              </p>
             </div>
           </div>
-          <div class="gc-nodebuster-ap gc-mono"
-               title="{{ T('mine_ascension_points', 'Ascension-Punkte') }}">
-            <strong>{{ mine.nodebuster_points_unspent|fmt_int }}</strong>
-            <span>{{ T('mine_ascension_points_short', 'AP') }}</span>
-          </div>
-        </div>
 
-        <div class="gc-nodebuster-stats">
-          <div class="gc-nodebuster-stat">
+          <div class="gc-ascension-mine-hero__action">
+            <div class="gc-ascension-status{% if mine_ready %} is-ready{% endif %}">
+              <span class="gc-ascension-status__dot" aria-hidden="true"></span>
+              {% if mine_ready %}
+                {{ T('nodebuster_gain_now', 'Ascension jetzt') }}
+              {% elif mine.ascension_blocked_by_queue is defined and mine.ascension_blocked_by_queue %}
+                {{ T('nodebuster_error_queue_pending', 'Bauauftrag aktiv') }}
+              {% else %}
+                {{ T('mine_ascension_unlock_hint', level=mine.evolution_required_level) }}
+              {% endif %}
+            </div>
+            {% if mine_ready %}
+            <button
+              type="button" {# i18n-ok: structural attribute #}
+              class="gc-btn gc-btn-primary gc-ascension-cta" {# i18n-ok: structural attribute #}
+              data-mine-evolve="{{ mine.building_type }}"
+              data-nodebuster-current-level="{{ mine.level }}"
+              data-nodebuster-points-gain="{{ mine.nodebuster_points_gain }}"
+              data-nodebuster-reset-level="{{ mine.nodebuster_reset_level }}"
+              data-nodebuster-best-depth="{{ mine.nodebuster_best_depth }}"
+              data-nodebuster-confirm-lead="{{ T('mine_ascension_confirm_lead', name=T('building_' ~ mine.building_type), level=mine.level) }}"
+              data-nodebuster-confirm-gain="{{ T('mine_ascension_confirm_gain', points=mine.nodebuster_points_gain) }}"
+              data-nodebuster-confirm-reset="{{ T('mine_ascension_confirm_reset', level=mine.nodebuster_reset_level) }}"
+              data-nodebuster-confirm-best="{{ T('mine_ascension_confirm_best') }}"
+              data-nodebuster-confirm-button="{{ T('mine_ascension_confirm_button') }}">
+              {{ T('mine_ascension_ascend_now', points=mine.nodebuster_points_gain) }}
+            </button>
+            {% endif %}
+          </div>
+
+          <div class="gc-ascension-depth">
+            <div class="gc-ascension-depth__labels">
+              <span>{{ T('mine_ascension_level', level=mine.level) }}</span>
+              <span>{{ T('mine_ascension_unlock_hint', level=mine.evolution_required_level) }}</span>
+            </div>
+            <div class="gc-ascension-depth__track" aria-hidden="true">
+              <span style="width: {{ mine.evolution_progress_pct }}%;"></span>
+            </div>
+          </div>
+        </header>
+
+        <section class="gc-ascension-stat-grid" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
+          <div class="gc-ascension-stat">
+            <span>{{ T('mine_ascension_level', level='') }}</span>
+            <strong class="gc-mono">L{{ mine.level|fmt_int }}</strong>
+          </div>
+          <div class="gc-ascension-stat">
             <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
             <strong class="gc-mono">L{{ mine.nodebuster_best_depth|fmt_int }}</strong>
           </div>
-          <div class="gc-nodebuster-stat">
+          <div class="gc-ascension-stat">
             <span>{{ T('mine_ascension_restart_level', 'Neustart') }}</span>
             <strong class="gc-mono">L{{ mine.nodebuster_reset_level|fmt_int }}</strong>
           </div>
-          <div class="gc-nodebuster-stat">
+          <div class="gc-ascension-stat">
+            <span>{{ T('mine_ascension_count', count='') }}</span>
+            <strong class="gc-mono">{{ mine.evolution_rank|fmt_int }}</strong>
+          </div>
+          <div class="gc-ascension-stat gc-ascension-stat--ap">
+            <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
+            <strong class="gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</strong>
+          </div>
+        </section>
+
+        <section class="gc-ascension-bonus-grid">
+          <div class="gc-ascension-bonus">
             <span>{{ T('mine_ascension_production_bonus', 'Produktion') }}</span>
             <strong class="gc-mono">+{{ mine.nodebuster_production_bonus_pct }}%</strong>
           </div>
-          <div class="gc-nodebuster-stat">
+          <div class="gc-ascension-bonus">
             <span>{{ T('mine_ascension_storage_bonus', 'Lager') }}</span>
             <strong class="gc-mono">+{{ mine.nodebuster_storage_bonus_pct }}%</strong>
           </div>
-        </div>
+          <div class="gc-ascension-bonus">
+            <span>{{ T('mine_ascension_rebuild_cost_bonus', pct=mine.nodebuster_rebuild_cost_pct) }}</span>
+            <strong class="gc-mono">-{{ mine.nodebuster_rebuild_cost_pct }}%</strong>
+          </div>
+          <div class="gc-ascension-bonus">
+            <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
+            <strong class="gc-mono">-{{ mine.nodebuster_rebuild_time_pct }}%</strong>
+          </div>
+        </section>
 
-        <div class="gc-nodebuster-bonuses gc-mono">
-          <span>{{ T('mine_ascension_rebuild_cost_bonus', pct=mine.nodebuster_rebuild_cost_pct) }}</span>
-          <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
-        </div>
+        <section class="gc-ascension-tree gc-panel">
+          <div class="gc-ascension-tree__head">
+            <div>
+              <h3 class="skilltree-section-title">{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}</h3>
+              <p class="skilltree-section-hint">{{ T('mine_ascension_skilltree_hint', 'Ascension-Punkte werden pro Mine verdient und permanent in deren Skill Tree investiert.') }}</p>
+            </div>
+            <div class="gc-ascension-tree__ap gc-mono">
+              <strong>{{ mine.nodebuster_points_unspent|fmt_int }}</strong>
+              <span>{{ T('mine_ascension_points_short', 'AP') }}</span>
+            </div>
+          </div>
 
-        <div class="gc-nodebuster-tree" role="list" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
-          {% for skill in mine.nodebuster_skills %}
-          <button type="button" class="gc-nodebuster-node{% if skill.rank >= skill.max_rank %} is-max{% elif skill.affordable %} is-buyable{% elif not skill.available %} is-locked{% endif %}" data-nodebuster-skill="{{ skill.key }}" data-nodebuster-building="{{ mine.building_type }}" data-nodebuster-cost="{{ skill.cost }}" {% if (not skill.affordable) or skill.rank >= skill.max_rank %}disabled aria-disabled="true"{% endif %} role="listitem">
-            <span class="gc-nodebuster-node-title">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
-            <span class="gc-nodebuster-node-desc">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
-            <span class="gc-nodebuster-node-meta gc-mono">
-              {{ skill.rank }}/{{ skill.max_rank }}
-              {% if skill.rank < skill.max_rank %} · {{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}{% endif %}
-            </span>
-          </button>
-          {% endfor %}
-        </div>
+          <div class="gc-ascension-tree__viewport">
+            <div class="gc-ascension-tree__map" role="group" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
+              <svg class="gc-ascension-tree__edges" viewBox="0 0 700 350" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M70 105 V185 H350 V245" />
+                <path d="M210 105 V185 H350 V245" />
+                <path d="M350 105 V245" />
+                <path d="M490 105 V185 H350 V245" />
+                <path d="M630 105 V185 H350 V245" />
+              </svg>
+
+              <div class="gc-ascension-tree__nodes">
+                {% for skill in mine.nodebuster_skills %}
+                {% set is_max = skill.rank >= skill.max_rank %}
+                {% set is_locked = (not skill.available) and (not is_max) %}
+                {% set is_capstone = skill.key == 'overdrive' %}
+                <button
+                  type="button" {# i18n-ok: structural attribute #}
+                  class="gc-ascension-node gc-ascension-node--slot-{{ loop.index }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}" {# i18n-ok: structural attribute #}
+                  data-ascension-node-select="{{ skill.key }}"
+                  data-ascension-building="{{ mine.building_type }}"
+                  aria-selected="{{ 'true' if loop.first else 'false' }}">
+                  <span class="gc-ascension-node__icon" aria-hidden="true">
+                    {% if skill.key == 'reconstruction' %}↺
+                    {% elif skill.key == 'frugal_rebuild' %}¤
+                    {% elif skill.key == 'rapid_rebuild' %}⏱
+                    {% elif skill.key == 'deep_yield' %}▲
+                    {% elif skill.key == 'deep_storage' %}▣
+                    {% else %}Ω{% endif %}
+                  </span>
+                  <span class="gc-ascension-node__name">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
+                  <span class="gc-ascension-node__rank gc-mono">{{ skill.rank }}/{{ skill.max_rank }}</span>
+                  <span class="gc-ascension-node__state">
+                    {% if is_max %}{{ T('commander_maxed', 'Max') }}
+                    {% elif is_locked %}{{ T('commander_locked', 'Gesperrt') }}
+                    {% elif skill.affordable %}{{ T('commander_available_label', 'Verfügbar') }}
+                    {% else %}{{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}{% endif %}
+                  </span>
+                  {% if is_capstone %}<span class="gc-ascension-node__cap">{{ T('commander_capstone', 'Capstone') }}</span>{% endif %}
+                </button>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <aside class="gc-ascension-inspector" data-ascension-inspector="{{ mine.building_type }}">
+            {% for skill in mine.nodebuster_skills %}
+            {% set is_max = skill.rank >= skill.max_rank %}
+            {% set is_locked = (not skill.available) and (not is_max) %}
+            <div class="gc-ascension-inspector__panel" data-ascension-detail="{{ skill.key }}" {% if not loop.first %}hidden{% endif %}>
+              <div class="gc-ascension-inspector__mark" aria-hidden="true">
+                {% if skill.key == 'reconstruction' %}↺
+                {% elif skill.key == 'frugal_rebuild' %}¤
+                {% elif skill.key == 'rapid_rebuild' %}⏱
+                {% elif skill.key == 'deep_yield' %}▲
+                {% elif skill.key == 'deep_storage' %}▣
+                {% else %}Ω{% endif %}
+              </div>
+              <div class="gc-ascension-inspector__body">
+                <div class="gc-ascension-inspector__title-row">
+                  <h4>{{ T('nodebuster_skill_' ~ skill.key) }}</h4>
+                  <span class="gc-mono">{{ skill.rank }}/{{ skill.max_rank }}</span>
+                </div>
+                {% if skill.key == 'overdrive' %}
+                <span class="gc-ascension-inspector__cap">{{ T('commander_capstone', 'Capstone') }}</span>
+                {% endif %}
+                <p>{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</p>
+                <div class="gc-ascension-inspector__meta">
+                  {% if is_max %}
+                    <span class="is-good">{{ T('commander_maxed', 'Max') }}</span>
+                  {% elif is_locked %}
+                    <span>{{ T('nodebuster_error_skill_prerequisite', 'Vorherige Knoten erforderlich.') }}</span>
+                  {% elif not skill.affordable %}
+                    <span>{{ T('nodebuster_error_insufficient_points', 'Nicht genug AP.') }}</span>
+                  {% else %}
+                    <span>{{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="gc-ascension-inspector__actions">
+                {% if is_max %}
+                <span class="gc-ascension-inspector__done">{{ T('commander_maxed', 'Max') }}</span>
+                {% else %}
+                <button
+                  type="button" {# i18n-ok: structural attribute #}
+                  class="gc-btn gc-btn-primary gc-btn-sm" {# i18n-ok: structural attribute #}
+                  data-nodebuster-skill="{{ skill.key }}"
+                  data-nodebuster-building="{{ mine.building_type }}"
+                  data-nodebuster-cost="{{ skill.cost }}"
+                  {% if not skill.affordable %}disabled aria-disabled="true"{% endif %}>
+                  {% if skill.rank > 0 %}{{ T('commander_rank_up', 'Rang erhöhen') }}{% else %}{{ T('commander_unlock', 'Freischalten') }}{% endif %}
+                  · {{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}
+                </button>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </aside>
+        </section>
       </article>
       {% endfor %}
+    </div>
+
+    <div id="gc-mine-evo-confirm-modal"
+         class="gc-player-card-modal gc-bld-evo-confirm-modal" {# i18n-ok: structural attribute #}
+         hidden
+         aria-hidden="true">
+      <div class="gc-player-card-overlay" data-mine-evo-confirm-cancel tabindex="-1"></div>
+      <div class="gc-player-card-dialog gc-bld-evo-confirm-dialog"
+           role="dialog" {# i18n-ok: structural attribute #}
+           aria-modal="true"
+           aria-labelledby="gc-mine-evo-confirm-title">
+        <header class="gc-player-card-head">
+          <h2 id="gc-mine-evo-confirm-title" class="gc-player-card-head-title">{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}</h2>
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close" data-mine-evo-confirm-cancel aria-label="{{ T('close', 'Schließen') }}">×</button>
+        </header>
+        <div class="gc-player-card-body gc-bld-evo-confirm-body">
+          <p class="gc-bld-evo-confirm-lead" id="gc-mine-evo-confirm-lead"></p>
+          <div class="gc-bld-evo-confirm-rank-chip" id="gc-mine-evo-confirm-rank-chip"></div>
+          <section class="gc-bld-evo-confirm-section" aria-labelledby="gc-mine-evo-confirm-benefit-label">
+            <h3 class="gc-bld-evo-confirm-section-title" id="gc-mine-evo-confirm-benefit-label">{{ T('buildings_mine_evo_modal_benefit_label', 'Permanenter Vorteil') }}</h3>
+            <p class="gc-bld-evo-confirm-benefit" id="gc-mine-evo-confirm-benefit"></p>
+          </section>
+          <p class="gc-bld-evo-confirm-note" id="gc-mine-evo-confirm-level-kept"></p>
+          <p class="gc-bld-evo-confirm-note" id="gc-mine-evo-confirm-rank"></p>
+          <div class="gc-bld-evo-confirm-actions">
+            <button type="button" class="gc-btn gc-btn-primary" id="gc-mine-evo-confirm-submit">{{ T('mine_ascension_confirm_button', 'Ascension starten') }}</button>
+            <button type="button" class="gc-btn gc-btn-secondary" data-mine-evo-confirm-cancel>{{ T('buildings_mine_evo_modal_cancel', 'Abbrechen') }}</button>
+          </div>
+        </div>
+      </div>
     </div>
     {% endif %}
   </section>

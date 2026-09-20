@@ -27,8 +27,14 @@ def test_skilltree_has_dedicated_mine_ascension_tab():
     assert "skilltree_tab_commander" in template
     assert "skilltree_tab_ascension" in template
     assert "data-ascension-skilltree" in template
+    assert "data-ascension-mine-tab" in template
+    assert "data-ascension-mine-panel" in template
     assert "mine.nodebuster_skills" in template
+    assert "gc-ascension-tree__edges" in template
+    assert "data-ascension-node-select" in template
+    assert "data-ascension-detail" in template
     assert "data-nodebuster-skill" in template
+    assert "data-mine-evolve" in template
 
 
 def test_player_facing_ascension_title_never_says_nodebuster():
@@ -52,3 +58,20 @@ def test_skilltree_route_forwards_mine_ascension_context():
 def test_mine_ascension_handler_is_persistent_for_pjax_navigation():
     base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     assert "js/pages/mine_nodebuster.js" in base
+
+
+def test_skilltree_ascension_uses_server_readiness_and_inspector_actions():
+    source = (ROOT / "game" / "commander_classes.py").read_text(encoding="utf-8")
+    assert 'row["ascension_blocked_by_queue"]' in source
+    assert 'row["ascension_ready"]' in source
+    assert "get_build_queue_rows" in source
+
+    template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
+    assert "mine.ascension_ready" in template
+    assert "gc-ascension-cta" in template
+
+    js = (ROOT / "static" / "js" / "pages" / "mine_nodebuster.js").read_text(encoding="utf-8")
+    assert 'target.closest("[data-ascension-mine-tab]")' in js
+    assert 'target.closest("[data-ascension-node-select]")' in js
+    assert "selectAscensionNode" in js
+    assert "activateMineTab" in js

@@ -650,19 +650,25 @@ def get_skilltree_page_context(player_id: int, *, conn) -> Dict[str, Any]:
         "mines": [],
     }
     try:
-        from .models import get_planet_buildings
+        from .models import get_build_queue_rows, get_planet_buildings
         from .planet_evolution.repository import get_context_planet
         from .mine_evolution.nodebuster import panel_fields
 
         planet = get_context_planet(uid, conn=conn)
         planet_id = int(planet["id"])
         buildings = get_planet_buildings(planet_id, conn=conn) or {}
+        pending_buildings = {
+            str(row["building_type"])
+            for row in get_build_queue_rows(planet_id, conn=conn)
+        }
         mine_rows = []
         for building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):
             level = int(buildings.get(building_type, 0) or 0)
             row = panel_fields(planet_id, building_type, level, conn=conn)
             row["building_type"] = building_type
             row["level"] = level
+            row["ascension_blocked_by_queue"] = building_type in pending_buildings
+            row["ascension_ready"] = bool(row.get("evolution_can_evolve")) and not row["ascension_blocked_by_queue"]
             mine_rows.append(row)
         mine_ascension = {
             "ready": True,
