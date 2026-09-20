@@ -189,9 +189,63 @@
     }
   }
 
+  function activateMineTab(btn) {
+    if (!btn) return;
+    var root = btn.closest("[data-ascension-skilltree]");
+    if (!root) return;
+    var key = String(btn.dataset.ascensionMineTab || "");
+    if (!key) return;
+
+    root.querySelectorAll("[data-ascension-mine-tab]").forEach(function (tab) {
+      var active = String(tab.dataset.ascensionMineTab || "") === key;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+
+    root.querySelectorAll("[data-ascension-mine-panel]").forEach(function (panel) {
+      var active = String(panel.dataset.ascensionMinePanel || "") === key;
+      panel.hidden = !active;
+      panel.classList.toggle("is-active", active);
+    });
+  }
+
+  function selectAscensionNode(btn) {
+    if (!btn) return;
+    var panel = btn.closest("[data-ascension-mine-panel]");
+    if (!panel) return;
+    var key = String(btn.dataset.ascensionNodeSelect || "");
+    if (!key) return;
+
+    panel.querySelectorAll("[data-ascension-node-select]").forEach(function (node) {
+      var selected = String(node.dataset.ascensionNodeSelect || "") === key;
+      node.classList.toggle("is-selected", selected);
+      node.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+
+    panel.querySelectorAll("[data-ascension-detail]").forEach(function (detail) {
+      detail.hidden = String(detail.dataset.ascensionDetail || "") !== key;
+    });
+  }
+
   function onDocumentClick(event) {
     var target = event.target && event.target.closest ? event.target : null;
     if (!target) return;
+
+    var mineTab = target.closest("[data-ascension-mine-tab]");
+    if (mineTab) {
+      event.preventDefault();
+      event.stopPropagation();
+      activateMineTab(mineTab);
+      return;
+    }
+
+    var ascensionNode = target.closest("[data-ascension-node-select]");
+    if (ascensionNode) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectAscensionNode(ascensionNode);
+      return;
+    }
 
     var skill = target.closest("[data-nodebuster-skill]");
     if (skill) {
