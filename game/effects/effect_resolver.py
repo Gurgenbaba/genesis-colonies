@@ -53,6 +53,10 @@ _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 # so avoid coercing astronomical integer levels through Python float pow().
 _BUILDTIME_TECH_EPS_LEVEL = 1829
 
+# Public-universe balance floor: building construction never completes faster
+# than 10 seconds, regardless of research, Nanofactory, directives or events.
+BUILD_TIME_MIN_SECONDS = 10
+
 # Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
 
 # Combat modifiers — consumed by game.combat (GC-504).
@@ -1591,13 +1595,13 @@ class EffectResolver:
         # the bounded speed as Decimal rather than round-tripping through float.
         if base_seconds.bit_length() < 1024:
             seconds = float(base_seconds) / effective_speed
-            return max(int(seconds), 1)
+            return max(int(seconds), BUILD_TIME_MIN_SECONDS)
 
         speed_dec = max(decimal_value(effective_speed, "1"), Decimal("0.1"))
         with localcontext() as ctx:
             ctx.prec = integer_precision(base_seconds, extra=96)
             duration_factor = Decimal(1) / speed_dec
-        return max(scale_int(base_seconds, duration_factor), 1)
+        return max(scale_int(base_seconds, duration_factor), BUILD_TIME_MIN_SECONDS)
 
     def get_research_time_seconds(self, tech_key: str, target_level: int) -> int:
         from ..research import RESEARCH_TECHS
