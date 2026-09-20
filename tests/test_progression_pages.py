@@ -76,7 +76,7 @@ def test_locale_mechanics_descriptions():
             assert "Grenznutzen" in locale["desc_nanofactory"] and "Bauzeit" in locale["desc_nanofactory"]
             assert "3 %" in locale["desc_mining_tech"] and "Ferronit" in locale["desc_mining_tech"]
             assert "3 %" in locale["desc_crystal_tech"] and "Crytite" in locale["desc_crystal_tech"]
-            assert "15 %" in locale["desc_storage_tech"] and "Lager" in locale["desc_storage_tech"]
+            assert "10 %" in locale["desc_storage_tech"] and "Lager" in locale["desc_storage_tech"]
         else:
             assert "5%" in locale["desc_terraformer"] and "storage" in locale["desc_terraformer"].lower()
             assert "infrastructure" in locale["desc_terraformer"].lower()

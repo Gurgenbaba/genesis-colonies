@@ -73,8 +73,8 @@ def test_storage_v2_applies_storage_research_and_terraformer_after_floor():
         position=4,
     ).get_storage_capacity()["metal"]
 
-    # storage_tech 2 => 2.0x; terraformer 10 => 1.5x.
-    assert boosted == base * 3
+    # storage_tech 2 => 1.2x; terraformer 10 => 1.5x.
+    assert boosted == (base * 18) // 10
 
 
 def test_storage_v2_handles_mando_scale_without_float_capacity_math():
