@@ -170,26 +170,26 @@ def _compute_building_score(player_id: int, conn) -> int:
         planet_id = int(planet["id"])
         buildings = get_planet_buildings(planet_id, conn=conn)
 
-        nodebuster_profiles = None
+        ascension_profiles = None
         try:
-            from .mine_evolution.ruleset import is_nodebuster_ruleset
-            if is_nodebuster_ruleset():
-                from .mine_evolution.nodebuster import get_profiles_for_planet
-                nodebuster_profiles = get_profiles_for_planet(planet_id, conn=conn)
+            from .mine_evolution.ruleset import is_skill_tree_ruleset
+            if is_skill_tree_ruleset():
+                from .mine_evolution.ascension_skill_tree import get_profiles_for_planet
+                ascension_profiles = get_profiles_for_planet(planet_id, conn=conn)
         except Exception:
-            nodebuster_profiles = None
+            ascension_profiles = None
 
         for key in BUILDING_ORDER:
             level = int(buildings.get(key, 0) or 0)
-            if nodebuster_profiles is not None:
+            if ascension_profiles is not None:
                 try:
-                    from .mine_evolution.nodebuster import score_level
+                    from .mine_evolution.ascension_skill_tree import score_level
                     level = score_level(
                         planet_id,
                         str(key),
                         level,
                         conn=conn,
-                        profiles=nodebuster_profiles,
+                        profiles=ascension_profiles,
                     )
                 except Exception:
                     pass
