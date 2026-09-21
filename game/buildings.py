@@ -611,23 +611,15 @@ def _nodebuster_rebuild_bps(
     if not is_nodebuster_ruleset() or not is_evolvable_mine(building_type):
         return 10000, 10000
 
-    from .mine_evolution.nodebuster import (
-        get_profiles_for_planet,
-        get_skills,
-        get_state,
-        rebuild_cost_bps,
-        rebuild_time_bps,
+    from .mine_evolution.nodebuster import rebuild_bps_for_target
+
+    return rebuild_bps_for_target(
+        int(planet_id),
+        str(building_type),
+        int(target_level),
+        conn=conn,
+        profiles=profiles,
     )
-
-    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
-    state = get_state(int(planet_id), building_type, conn=conn, profiles=data)
-    if int(state.get("ascension_count") or 0) <= 0:
-        return 10000, 10000
-    if int(target_level or 0) > int(state.get("best_depth") or 0):
-        return 10000, 10000
-
-    skills = get_skills(int(planet_id), building_type, conn=conn, profiles=data)
-    return int(rebuild_cost_bps(skills)), int(rebuild_time_bps(skills))
 
 
 def recalculate_build_queue_finish_times(
