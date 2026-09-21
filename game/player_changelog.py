@@ -20,8 +20,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from game.config import get_deploy_revision
-
 REPOSITORY = "Gurgenbaba/genesis-colonies"
 API_ROOT = f"https://api.github.com/repos/{REPOSITORY}/commits"
 CACHE_TTL_SECONDS = max(900, int(os.environ.get("GC_PLAYER_CHANGELOG_CACHE_TTL", "21600") or 21600))
@@ -439,7 +437,6 @@ def _fallback_payload() -> dict[str, Any]:
 
 def get_player_changelog(*, force_refresh: bool = False) -> dict[str, Any]:
     now = time.time()
-    current_sha = get_deploy_revision()
     with _CACHE_LOCK:
         payload = _MEMORY_CACHE.get("payload")
         if (
