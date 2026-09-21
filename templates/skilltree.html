@@ -613,8 +613,8 @@
               {% set is_max = skill.rank >= skill.max_rank %}
               {% set is_locked = (not skill.available) and (not is_max) %}
               <button
-                type="button"
-                class="gc-ascension-breakthrough-card{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}"
+                type="button" {# i18n-ok: structural attribute #}
+                class="gc-ascension-breakthrough-card{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}" {# i18n-ok: structural attribute #}
                 data-ascension-node-select="{{ skill.key }}"
                 data-ascension-building="{{ mine.building_type }}"
                 aria-selected="false"
