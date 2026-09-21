@@ -15,7 +15,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
+import sys
 from typing import Dict, Iterable
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from game import production_formula as pf
 from game.economy_balance import power_upgrade_cost
