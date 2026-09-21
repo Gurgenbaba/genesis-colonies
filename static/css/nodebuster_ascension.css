@@ -1428,6 +1428,22 @@
   font-size:.54rem;
 }
 
+.gc-ascension-inspector__requirements{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px 6px;
+  margin:7px 0;
+}
+
+.gc-ascension-inspector__requirements span{
+  padding:3px 6px;
+  border:1px solid rgba(216,174,82,.22);
+  background:rgba(216,174,82,.035);
+  color:#d9bf7b;
+  font-size:.52rem;
+  line-height:1.2;
+}
+
 @media (max-width:700px){
   .gc-ascension-tree__map{
     height:652px;
