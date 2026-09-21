@@ -20,8 +20,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from game.config import get_deploy_revision
-
 REPOSITORY = "Gurgenbaba/genesis-colonies"
 API_ROOT = f"https://api.github.com/repos/{REPOSITORY}/commits"
 CACHE_TTL_SECONDS = max(900, int(os.environ.get("GC_PLAYER_CHANGELOG_CACHE_TTL", "21600") or 21600))
@@ -439,24 +437,27 @@ def _fallback_payload() -> dict[str, Any]:
 
 def get_player_changelog(*, force_refresh: bool = False) -> dict[str, Any]:
     now = time.time()
-    current_sha = get_deploy_revision()
     with _CACHE_LOCK:
         payload = _MEMORY_CACHE.get("payload")
         if (
             not force_refresh
             and isinstance(payload, dict)
             and float(_MEMORY_CACHE.get("expires_at") or 0) > now
-            and (not current_sha or not payload.get("head_sha") or str(payload.get("head_sha")).startswith(current_sha[:8]))
         ):
             return payload
 
         disk = _read_disk_cache()
         if not force_refresh and isinstance(disk, dict):
             fetched_at = int(disk.get("generated_at") or 0)
-            same_head = not current_sha or not disk.get("head_sha") or str(disk.get("head_sha")).startswith(current_sha[:8])
-            if same_head and fetched_at and now - fetched_at < CACHE_TTL_SECONDS:
+            if fetched_at and now - fetched_at < CACHE_TTL_SECONDS:
+                # GC-PERF-LAUNCH-002: a deploy revision is not a changelog-cache
+                # invalidation event. The payload already has a bounded 6h TTL,
+                # and rebuilding up to 20 GitHub API pages synchronously on the
+                # first request after every deploy held a web worker for seconds.
+                # Serve a still-fresh complete cache immediately; force_refresh
+                # remains available when an operator explicitly needs it.
                 _MEMORY_CACHE["payload"] = disk
-                _MEMORY_CACHE["expires_at"] = now + CACHE_TTL_SECONDS
+                _MEMORY_CACHE["expires_at"] = fetched_at + CACHE_TTL_SECONDS
                 return disk
 
         try:
