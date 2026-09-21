@@ -7,6 +7,19 @@
   <title>{{ T("title") }}</title>
   <link rel="icon" href="{{ url_for('static', filename='img/res/Energie.webp') }}" type="image/webp">
 
+  {# GC-PERF-IMG-001: persistent cache-first worker for bundled game art only. #}
+  <script>
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.register(
+        "{{ url_for('gc_image_cache_worker', v=GC_ASSET_VERSION) }}",
+        { scope: "/", updateViaCache: "none" }
+      ).catch(function () {
+        /* Performance layer only: never block game boot. */
+      });
+    })();
+  </script>
+
   {# Fonts before style.css — never @import fonts inside style.css (blocks paint → FOUC). #}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
