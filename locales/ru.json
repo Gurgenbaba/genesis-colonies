@@ -9189,5 +9189,21 @@
   "mine_ascension_breakthrough_hint": "Дорогие одноразовые узлы меняют правила следующего цикла вместо ещё одного небольшого процентного бонуса.",
   "mine_ascension_depth_gate": "Требуется лучшая глубина L{level}",
   "mine_ascension_tail_power": "Кривая",
-  "mine_ascension_rebuild_window": "Окно восстановления"
+  "mine_ascension_rebuild_window": "Окно восстановления",
+  "nodebuster_skill_optimized_energy": "Оптимизированное энергопотребление",
+  "nodebuster_skill_optimized_energy_desc": "Эта шахта потребляет на 2% меньше энергии за ранг. Ранг 10: −20%. Складывается с Энергетической технологией.",
+  "nodebuster_skill_load_balancing": "Адаптивное распределение нагрузки",
+  "nodebuster_skill_load_balancing_desc": "Возвращает этой шахте 2,5% недостающей мощности сети за ранг. При сети 60% ранг 10 работает на 70%.",
+  "mine_ascension_next_restart": "Следующий перезапуск",
+  "mine_ascension_energy_need": "Потребление энергии",
+  "mine_ascension_rebuild_reach": "Бонусы восстановления до",
+  "mine_ascension_preview_more_production": "Больше производства после прорыва",
+  "mine_ascension_preview_technical_curve": "Техническая кривая",
+  "mine_ascension_preview_restart": "Перезапуск этого цикла",
+  "mine_ascension_preview_best_depth": "Расчёт для лучшей глубины L{level}",
+  "mine_ascension_preview_rebuild_reach": "Бонусы восстановления действуют до",
+  "mine_ascension_preview_costs": "стоимость",
+  "mine_ascension_preview_time": "время",
+  "mine_ascension_preview_energy_draw": "Энергопотребление этой шахты",
+  "mine_ascension_preview_shortage": "Пример при мощности сети {grid}%"
 }
