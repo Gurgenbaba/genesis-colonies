@@ -524,24 +524,26 @@
 
           <div class="gc-ascension-tree__viewport">
             <div class="gc-ascension-tree__map" role="group" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
-              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 388" preserveAspectRatio="none" aria-hidden="true">
+              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 488" preserveAspectRatio="none" aria-hidden="true">
                 {% for skill in mine.nodebuster_skills %}
-                  {% if skill.key == 'reconstruction' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 108 V119 H200 V130" />
+                  {% if skill.key == 'optimized_energy' %}
+                  <path class="gc-ascension-tree__edge gc-ascension-tree__edge--utility{% if skill.rank >= 3 %} is-fed{% endif %}" d="M200 45 H400" />
+                  {% elif skill.key == 'reconstruction' %}
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M100 216 V225 H200 V234" />
                   {% elif skill.key == 'deep_yield' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 108 V119 H200 V130" />
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 108 V119 H400 V130" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 216 V225 H200 V234" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M300 216 V225 H400 V234" />
                   {% elif skill.key == 'deep_storage' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 108 V119 H400 V130" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M500 216 V225 H400 V234" />
                   {% elif skill.key == 'frugal_rebuild' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M200 238 V249 H300 V260" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M200 342 V351 H300 V360" />
                   {% elif skill.key == 'rapid_rebuild' %}
-                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M400 238 V249 H300 V260" />
+                  <path class="gc-ascension-tree__edge{% if skill.rank >= 5 %} is-fed{% endif %}" d="M400 342 V351 H300 V360" />
                   {% endif %}
                 {% endfor %}
-                <circle class="gc-ascension-tree__junction" cx="200" cy="119" r="3.5" />
-                <circle class="gc-ascension-tree__junction" cx="400" cy="119" r="3.5" />
-                <circle class="gc-ascension-tree__junction gc-ascension-tree__junction--cap" cx="300" cy="249" r="3.5" />
+                <circle class="gc-ascension-tree__junction" cx="200" cy="225" r="3.5" />
+                <circle class="gc-ascension-tree__junction" cx="400" cy="225" r="3.5" />
+                <circle class="gc-ascension-tree__junction gc-ascension-tree__junction--cap" cx="300" cy="351" r="3.5" />
               </svg>
 
               <div class="gc-ascension-tree__nodes">
@@ -550,9 +552,10 @@
                 {% set is_max = skill.rank >= skill.max_rank %}
                 {% set is_locked = (not skill.available) and (not is_max) %}
                 {% set is_capstone = skill.key == 'overdrive' %}
+                {% set is_utility = skill.utility %}
                 <button
                   type="button" {# i18n-ok: structural attribute #}
-                  class="gc-ascension-node gc-ascension-node--{{ skill.key }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}" {# i18n-ok: structural attribute #}
+                  class="gc-ascension-node gc-ascension-node--{{ skill.key }}{% if is_capstone %} gc-ascension-node--capstone{% endif %}{% if is_utility %} gc-ascension-node--utility{% endif %}{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}{% if loop.first %} is-selected{% endif %}" {# i18n-ok: structural attribute #}
                   data-ascension-node-select="{{ skill.key }}"
                   data-ascension-building="{{ mine.building_type }}"
                   aria-selected="{{ 'true' if loop.first else 'false' }}"
@@ -569,10 +572,17 @@
                     <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
                     {% elif skill.key == 'deep_storage' %}
                     <img src="{{ url_for('static', filename='img/classes/icons/storage.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% elif skill.key == 'optimized_energy' %}
+                    <img src="{{ url_for('static', filename='img/research/energieeffizienz.webp') }}" alt="" width="72" height="72" loading="lazy">
+                    {% elif skill.key == 'load_balancing' %}
+                    <img src="{{ url_for('static', filename='icons/energy.svg') }}" alt="" width="72" height="72" loading="lazy">
                     {% else %}
                     <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
                     {% endif %}
                   </span>
+                  {% if is_utility %}
+                  <span class="gc-ascension-node__utility-name">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
+                  {% endif %}
                   <span class="gc-ascension-node__rank gc-mono">{{ skill.rank }}/{{ skill.max_rank }}</span>
                   <span class="gc-ascension-node__badge gc-mono">
                     {% if is_max %}
@@ -601,10 +611,12 @@
                 <p>{{ T('mine_ascension_breakthrough_hint', 'Teure Einmal-Knoten verändern die Regeln deines nächsten Runs.') }}</p>
               </div>
               <div class="gc-ascension-breakthroughs__live gc-mono">
-                <span>{{ T('mine_ascension_tail_power', 'Tail') }}</span>
-                <strong>q{{ '%.2f'|format(mine.nodebuster_tail_power) }}</strong>
-                <span>{{ T('mine_ascension_rebuild_window', 'Rebuild-Fenster') }}</span>
-                <strong>+{{ mine.nodebuster_rebuild_window_extra_levels|fmt_int }} L</strong>
+                <span>{{ T('mine_ascension_next_restart', 'Nächster Neustart') }}</span>
+                <strong>L{{ mine.nodebuster_reset_level|fmt_int }}</strong>
+                <span>{{ T('mine_ascension_energy_need', 'Energiebedarf') }}</span>
+                <strong>-{{ mine.nodebuster_energy_draw_reduction_pct }}%</strong>
+                <span>{{ T('mine_ascension_rebuild_reach', 'Rebuild-Boni bis') }}</span>
+                <strong>L{{ mine.nodebuster_rebuild_window_level|fmt_int }}</strong>
               </div>
             </div>
             <div class="gc-ascension-breakthroughs__grid">
@@ -626,6 +638,29 @@
                   </span>
                 </span>
                 <span class="gc-ascension-breakthrough-card__effect">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
+                {% if skill.key in ['core_resonance', 'singularity_excavation'] and skill.preview %}
+                <span class="gc-ascension-breakthrough-card__change">
+                  <span>{{ T('mine_ascension_preview_more_production', 'Mehr Produktion nach dem Durchbruch') }}</span>
+                  <span class="gc-ascension-breakthrough-card__numbers gc-mono">
+                    {% for point in skill.preview.levels %}
+                    <strong>L{{ point.level }} +{{ point.pct }}%</strong>
+                    {% endfor %}
+                  </span>
+                  <small>{{ T('mine_ascension_preview_technical_curve', 'Technische Kurve') }}: q{{ '%.2f'|format(skill.preview.tail_from) }} → q{{ '%.2f'|format(skill.preview.tail_to) }}</small>
+                </span>
+                {% elif skill.key == 'legacy_reconstruction' and skill.preview %}
+                <span class="gc-ascension-breakthrough-card__change">
+                  <span>{{ T('mine_ascension_preview_restart', 'Neustart dieses Runs') }}</span>
+                  <strong class="gc-mono">L{{ skill.preview.restart_before|fmt_int }} → L{{ skill.preview.restart_after|fmt_int }}</strong>
+                  <small>{{ T('mine_ascension_preview_best_depth', level=skill.preview.best_depth) }}</small>
+                </span>
+                {% elif skill.key == 'breakthrough_window' and skill.preview %}
+                <span class="gc-ascension-breakthrough-card__change">
+                  <span>{{ T('mine_ascension_preview_rebuild_reach', 'Rebuild-Boni reichen') }}</span>
+                  <strong class="gc-mono">L{{ skill.preview.window_before|fmt_int }} → L{{ skill.preview.window_after|fmt_int }}</strong>
+                  <small>-{{ skill.preview.cost_reduction_pct }}% {{ T('mine_ascension_preview_costs', 'Kosten') }} · -{{ skill.preview.time_reduction_pct }}% {{ T('mine_ascension_preview_time', 'Zeit') }}</small>
+                </span>
+                {% endif %}
                 <span class="gc-ascension-breakthrough-card__gate gc-mono">
                   {% if skill.requires_best_depth %}
                     {{ T('mine_ascension_depth_gate', level=skill.requires_best_depth) }}
@@ -653,6 +688,10 @@
                 <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
                 {% elif skill.key == 'deep_storage' %}
                 <img src="{{ url_for('static', filename='img/classes/icons/storage.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'optimized_energy' %}
+                <img src="{{ url_for('static', filename='img/research/energieeffizienz.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'load_balancing' %}
+                <img src="{{ url_for('static', filename='icons/energy.svg') }}" alt="" width="72" height="72" loading="lazy">
                 {% elif skill.key in ['core_resonance', 'singularity_excavation'] %}
                 <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
                 {% elif skill.key == 'legacy_reconstruction' %}
@@ -670,6 +709,32 @@
                 <span class="gc-ascension-inspector__cap">{{ T('commander_capstone', 'Capstone') }}</span>
                 {% endif %}
                 <p>{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</p>
+                {% if skill.key == 'optimized_energy' and skill.preview %}
+                <div class="gc-ascension-inspector__impact">
+                  <span>{{ T('mine_ascension_preview_energy_draw', 'Energieverbrauch dieser Mine') }}</span>
+                  <strong class="gc-mono">-{{ skill.preview.draw_reduction_now_pct }}% → -{{ skill.preview.draw_reduction_next_pct }}%</strong>
+                </div>
+                {% elif skill.key == 'load_balancing' and skill.preview %}
+                <div class="gc-ascension-inspector__impact">
+                  <span>{{ T('mine_ascension_preview_shortage', grid=skill.preview.grid_example_pct) }}</span>
+                  <strong class="gc-mono">{{ skill.preview.effective_now_pct }}% → {{ skill.preview.effective_next_pct }}%</strong>
+                </div>
+                {% elif skill.key in ['core_resonance', 'singularity_excavation'] and skill.preview %}
+                <div class="gc-ascension-inspector__impact">
+                  <span>{{ T('mine_ascension_preview_more_production', 'Mehr Produktion nach dem Durchbruch') }}</span>
+                  <strong class="gc-mono">{% for point in skill.preview.levels %}L{{ point.level }} +{{ point.pct }}%{% if not loop.last %} · {% endif %}{% endfor %}</strong>
+                </div>
+                {% elif skill.key == 'legacy_reconstruction' and skill.preview %}
+                <div class="gc-ascension-inspector__impact">
+                  <span>{{ T('mine_ascension_preview_restart', 'Neustart dieses Runs') }}</span>
+                  <strong class="gc-mono">L{{ skill.preview.restart_before|fmt_int }} → L{{ skill.preview.restart_after|fmt_int }}</strong>
+                </div>
+                {% elif skill.key == 'breakthrough_window' and skill.preview %}
+                <div class="gc-ascension-inspector__impact">
+                  <span>{{ T('mine_ascension_preview_rebuild_reach', 'Rebuild-Boni reichen') }}</span>
+                  <strong class="gc-mono">L{{ skill.preview.window_before|fmt_int }} → L{{ skill.preview.window_after|fmt_int }}</strong>
+                </div>
+                {% endif %}
                 <div class="gc-ascension-inspector__meta">
                   {% if is_max %}
                     <span class="is-good">{{ T('commander_maxed', 'Max') }}</span>

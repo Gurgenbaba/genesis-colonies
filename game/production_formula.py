@@ -747,12 +747,17 @@ def production_context_from_resolver(
                     )
                 tail_cache[mine_key] = tail_power_bonus_hundredths
 
+    effective_energy_ratio = float(energy_ratio)
+    ratio_hook = getattr(resolver, "mine_energy_ratio_for_resource", None)
+    if callable(ratio_hook):
+        effective_energy_ratio = float(ratio_hook(key, effective_energy_ratio))
+
     return ProductionContext(
         resource_type=key,
         level=int(level),
         slot=resolver.planet_position,
         temperature=temp,
-        energy_ratio=float(energy_ratio),
+        energy_ratio=effective_energy_ratio,
         production_speed=resolver.production_speed_setting(),
         research=dict(resolver.research or {}),
         player=resolver.player_id,

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple
 
 from ..db import (
@@ -64,6 +65,21 @@ SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
         "base_cost": 1,
         "cost_step_every": 2,
         "kind": "storage",
+    },
+    "optimized_energy": {
+        "max_rank": 10,
+        "base_cost": 1,
+        "cost_step_every": 2,
+        "kind": "energy_efficiency",
+        "utility": True,
+    },
+    "load_balancing": {
+        "max_rank": 10,
+        "base_cost": 1,
+        "cost_step_every": 2,
+        "kind": "energy_shortage",
+        "utility": True,
+        "requires": {"optimized_energy": 3},
     },
     "overdrive": {
         "max_rank": 3,
@@ -344,6 +360,25 @@ def rebuild_time_bps(skills: Dict[str, int]) -> int:
     return max(4500, 10000 - 500 * rapid - 200 * overdrive)
 
 
+def energy_draw_bps(skills: Dict[str, int]) -> int:
+    """Per-mine Ascension draw factor. Rank 10 means 80% of normal draw."""
+    rank = max(0, min(10, int(skills.get("optimized_energy", 0) or 0)))
+    return max(8000, 10000 - 200 * rank)
+
+
+def shortage_recovery_bps(skills: Dict[str, int]) -> int:
+    """Share of missing grid efficiency recovered by this mine (max 25%)."""
+    rank = max(0, min(10, int(skills.get("load_balancing", 0) or 0)))
+    return min(2500, 250 * rank)
+
+
+def effective_shortage_ratio_bps(base_ratio_bps: int, skills: Dict[str, int]) -> int:
+    base = max(0, min(10000, int(base_ratio_bps or 0)))
+    missing = 10000 - base
+    recovery = shortage_recovery_bps(skills)
+    return min(10000, base + (missing * recovery) // 10000)
+
+
 def production_bonus_bps(skills: Dict[str, int]) -> int:
     yield_rank = max(0, int(skills.get("deep_yield", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
@@ -393,6 +428,70 @@ def storage_multiplier_bps_for(
     return storage_multiplier_bps(
         get_skills(int(planet_id), building_type, conn=conn, profiles=profiles)
     )
+
+
+def energy_draw_bps_for(
+    planet_id: int,
+    building_type: str,
+    *,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> int:
+    return energy_draw_bps(
+        get_skills(int(planet_id), building_type, conn=conn, profiles=profiles)
+    )
+
+
+def shortage_recovery_bps_for(
+    planet_id: int,
+    building_type: str,
+    *,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> int:
+    return shortage_recovery_bps(
+        get_skills(int(planet_id), building_type, conn=conn, profiles=profiles)
+    )
+
+
+def _tail_power_display(bonus_hundredths: int) -> float:
+    from ..production_formula import ENDGAME_PRODUCTION_TAIL_POWER
+
+    return round(float(ENDGAME_PRODUCTION_TAIL_POWER) + int(bonus_hundredths) / 100.0, 2)
+
+
+def _tail_step_preview(
+    from_bonus_hundredths: int,
+    to_bonus_hundredths: int,
+    *,
+    levels: Tuple[int, ...] = (300, 500, 1000),
+) -> list[Dict[str, Any]]:
+    from ..production_formula import (
+        ENDGAME_PRODUCTION_PIVOT_LEVEL,
+        ENDGAME_PRODUCTION_TAIL_POWER,
+        endgame_tail_mine_output_decimal,
+    )
+
+    base = Decimal(int(ENDGAME_PRODUCTION_TAIL_POWER))
+    before_power = base + Decimal(int(from_bonus_hundredths)) / Decimal(100)
+    after_power = base + Decimal(int(to_bonus_hundredths)) / Decimal(100)
+    out: list[Dict[str, Any]] = []
+    for level in levels:
+        before = endgame_tail_mine_output_decimal(
+            "metal",
+            int(level),
+            pivot_level=ENDGAME_PRODUCTION_PIVOT_LEVEL,
+            tail_power=before_power,
+        )
+        after = endgame_tail_mine_output_decimal(
+            "metal",
+            int(level),
+            pivot_level=ENDGAME_PRODUCTION_PIVOT_LEVEL,
+            tail_power=after_power,
+        )
+        pct = 0.0 if before <= 0 else (float(after / before) - 1.0) * 100.0
+        out.append({"level": int(level), "pct": round(pct, 1)})
+    return out
 
 
 def rebuild_bps_for_target(
@@ -478,20 +577,73 @@ def panel_fields(
         max_rank = int(cfg["max_rank"])
         cost = 0 if rank >= max_rank else skill_point_cost(key, rank)
         available = rank < max_rank and skill_prerequisites_met(key, skills, state)
-        skill_rows.append(
-            {
-                "key": key,
-                "rank": rank,
-                "max_rank": max_rank,
-                "cost": cost,
-                "available": available,
-                "affordable": available and int(state["points_unspent"]) >= int(cost),
-                "requires": dict(cfg.get("requires") or {}),
-                "requires_best_depth": max(0, int(cfg.get("requires_best_depth") or 0)),
-                "breakthrough": bool(cfg.get("breakthrough")),
-                "kind": str(cfg.get("kind") or ""),
+        row: Dict[str, Any] = {
+            "key": key,
+            "rank": rank,
+            "max_rank": max_rank,
+            "cost": cost,
+            "available": available,
+            "affordable": available and int(state["points_unspent"]) >= int(cost),
+            "requires": dict(cfg.get("requires") or {}),
+            "requires_best_depth": max(0, int(cfg.get("requires_best_depth") or 0)),
+            "breakthrough": bool(cfg.get("breakthrough")),
+            "utility": bool(cfg.get("utility")),
+            "kind": str(cfg.get("kind") or ""),
+        }
+
+        preview_skills = dict(skills)
+        preview_skills[key] = min(max_rank, rank + 1)
+        if key == "optimized_energy":
+            row["preview"] = {
+                "draw_reduction_now_pct": round((10000 - energy_draw_bps(skills)) / 100.0, 1),
+                "draw_reduction_next_pct": round((10000 - energy_draw_bps(preview_skills)) / 100.0, 1),
             }
-        )
+        elif key == "load_balancing":
+            example_grid_bps = 6000
+            row["preview"] = {
+                "grid_example_pct": 60,
+                "effective_now_pct": round(effective_shortage_ratio_bps(example_grid_bps, skills) / 100.0, 1),
+                "effective_next_pct": round(effective_shortage_ratio_bps(example_grid_bps, preview_skills) / 100.0, 1),
+            }
+        elif key == "core_resonance":
+            current_tail = tail_power_bonus_hundredths(skills)
+            target_tail = max(current_tail, CORE_RESONANCE_TAIL_POWER_HUNDREDTHS)
+            row["preview"] = {
+                "tail_from": _tail_power_display(current_tail),
+                "tail_to": _tail_power_display(target_tail),
+                "levels": _tail_step_preview(current_tail, target_tail),
+            }
+        elif key == "singularity_excavation":
+            current_tail = max(CORE_RESONANCE_TAIL_POWER_HUNDREDTHS, tail_power_bonus_hundredths(skills))
+            target_tail = max(
+                current_tail,
+                CORE_RESONANCE_TAIL_POWER_HUNDREDTHS + SINGULARITY_TAIL_POWER_HUNDREDTHS,
+            )
+            row["preview"] = {
+                "tail_from": _tail_power_display(current_tail),
+                "tail_to": _tail_power_display(target_tail),
+                "levels": _tail_step_preview(current_tail, target_tail),
+            }
+        elif key == "legacy_reconstruction":
+            best_for_preview = max(int(state["best_depth"]), lvl)
+            without = dict(skills)
+            without["legacy_reconstruction"] = 0
+            with_legacy = dict(skills)
+            with_legacy["legacy_reconstruction"] = 1
+            row["preview"] = {
+                "restart_before": reset_start_level(without, best_for_preview),
+                "restart_after": reset_start_level(with_legacy, best_for_preview),
+                "best_depth": best_for_preview,
+            }
+        elif key == "breakthrough_window":
+            best_depth = int(state["best_depth"])
+            row["preview"] = {
+                "window_before": best_depth,
+                "window_after": best_depth + BREAKTHROUGH_WINDOW_LEVELS,
+                "cost_reduction_pct": int(round((1.0 - rebuild_cost_multiplier(skills)) * 100)),
+                "time_reduction_pct": int(round((1.0 - rebuild_time_multiplier(skills)) * 100)),
+            }
+        skill_rows.append(row)
 
     from ..production_formula import ENDGAME_PRODUCTION_TAIL_POWER
     effective_tail_power = (
@@ -531,6 +683,8 @@ def panel_fields(
         "nodebuster_rebuild_time_pct": int(round((1.0 - rebuild_time_multiplier(skills)) * 100)),
         "nodebuster_production_bonus_pct": round((production_multiplier(skills) - 1.0) * 100.0, 2),
         "nodebuster_storage_bonus_pct": storage_bonus_bps(skills) / 100.0,
+        "nodebuster_energy_draw_reduction_pct": (10000 - energy_draw_bps(skills)) / 100.0,
+        "nodebuster_shortage_recovery_pct": shortage_recovery_bps(skills) / 100.0,
         "nodebuster_skills": skill_rows,
     }
 
@@ -698,6 +852,29 @@ def purchase_skill(
             rollback(conn)
             return False, "schema_missing", {}
 
+        # Settle the entire elapsed production interval with the OLD skill
+        # ranks. Otherwise production/energy nodes would apply retroactively
+        # from last_update through the purchase timestamp.
+        from ..queue_engine import finish_due_work
+
+        now = time.time()
+        finish_due_work(
+            player_id=int(user_id),
+            planet_id=planet_id,
+            now=now,
+            conn=conn,
+            source="action",
+            recalc_ranks=False,
+        )
+        from ..resources import update_planet_resources
+
+        update_planet_resources(
+            dict(planet),
+            conn=conn,
+            skip_queue_finish=True,
+            persist=True,
+        )
+
         profiles = get_profiles_for_planet(planet_id, conn=conn)
         state = get_state(planet_id, bt, conn=conn, profiles=profiles)
         skills = get_skills(planet_id, bt, conn=conn, profiles=profiles)
@@ -726,7 +903,6 @@ def purchase_skill(
 
         new_rank = current + 1
         new_unspent = unspent - cost
-        now = time.time()
         conn.execute(
             """
             INSERT INTO planet_mine_ascension_skills (

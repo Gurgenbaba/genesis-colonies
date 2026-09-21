@@ -9189,5 +9189,21 @@
   "mine_ascension_breakthrough_hint": "Drogie jednorazowe węzły zmieniają zasady następnego cyklu zamiast dodawać kolejny mały procent.",
   "mine_ascension_depth_gate": "Wymagana najlepsza głębokość L{level}",
   "mine_ascension_tail_power": "Krzywa",
-  "mine_ascension_rebuild_window": "Okno odbudowy"
+  "mine_ascension_rebuild_window": "Okno odbudowy",
+  "nodebuster_skill_optimized_energy": "Zoptymalizowane zużycie energii",
+  "nodebuster_skill_optimized_energy_desc": "Ta kopalnia zużywa o 2% mniej energii na rangę. Ranga 10: −20%. Łączy się z Technologią Energetyczną.",
+  "nodebuster_skill_load_balancing": "Adaptacyjne równoważenie obciążenia",
+  "nodebuster_skill_load_balancing_desc": "Odzyskuje 2,5% brakującej mocy sieci na rangę dla tej kopalni. Przy sieci 60% ranga 10 działa z wydajnością 70%.",
+  "mine_ascension_next_restart": "Następny restart",
+  "mine_ascension_energy_need": "Zapotrzebowanie na energię",
+  "mine_ascension_rebuild_reach": "Bonusy odbudowy do",
+  "mine_ascension_preview_more_production": "Większa produkcja po przełomie",
+  "mine_ascension_preview_technical_curve": "Krzywa techniczna",
+  "mine_ascension_preview_restart": "Restart tego cyklu",
+  "mine_ascension_preview_best_depth": "Obliczono dla najlepszej głębokości L{level}",
+  "mine_ascension_preview_rebuild_reach": "Bonusy odbudowy sięgają",
+  "mine_ascension_preview_costs": "koszt",
+  "mine_ascension_preview_time": "czas",
+  "mine_ascension_preview_energy_draw": "Zużycie energii tej kopalni",
+  "mine_ascension_preview_shortage": "Przykład przy mocy sieci {grid}%"
 }

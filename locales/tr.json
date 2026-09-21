@@ -9189,5 +9189,21 @@
   "mine_ascension_breakthrough_hint": "Pahalı, tek seferlik düğümler küçük bir yüzde daha eklemek yerine sonraki döngünün kurallarını değiştirir.",
   "mine_ascension_depth_gate": "En iyi derinlik L{level} gerekli",
   "mine_ascension_tail_power": "Eğri",
-  "mine_ascension_rebuild_window": "Yeniden inşa penceresi"
+  "mine_ascension_rebuild_window": "Yeniden inşa penceresi",
+  "nodebuster_skill_optimized_energy": "Optimize Enerji Kullanımı",
+  "nodebuster_skill_optimized_energy_desc": "Bu maden her rütbede %2 daha az enerji kullanır. Rütbe 10: −%20. Enerji Teknolojisi ile birlikte çalışır.",
+  "nodebuster_skill_load_balancing": "Uyarlanabilir Yük Dengeleme",
+  "nodebuster_skill_load_balancing_desc": "Bu maden için eksik şebeke payının rütbe başına %2,5'ini geri kazanır. Şebeke %60 iken rütbe 10, %70 verimle çalışır.",
+  "mine_ascension_next_restart": "Sonraki yeniden başlatma",
+  "mine_ascension_energy_need": "Enerji ihtiyacı",
+  "mine_ascension_rebuild_reach": "Yeniden inşa bonusları",
+  "mine_ascension_preview_more_production": "Atılımdan sonra daha fazla üretim",
+  "mine_ascension_preview_technical_curve": "Teknik eğri",
+  "mine_ascension_preview_restart": "Bu döngünün yeniden başlatması",
+  "mine_ascension_preview_best_depth": "En iyi derinlik L{level} ile hesaplandı",
+  "mine_ascension_preview_rebuild_reach": "Yeniden inşa bonusları şu seviyeye kadar",
+  "mine_ascension_preview_costs": "maliyet",
+  "mine_ascension_preview_time": "süre",
+  "mine_ascension_preview_energy_draw": "Bu madenin enerji tüketimi",
+  "mine_ascension_preview_shortage": "Şebeke %{grid} iken örnek"
 }

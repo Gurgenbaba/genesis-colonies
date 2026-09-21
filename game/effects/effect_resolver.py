@@ -1287,9 +1287,15 @@ class EffectResolver:
 
         mine_energy_factor = _mod_float(mods, "mine_energy_factor")
         energy_used = (
-            self.apply_mine_energy_draw(energy_metal, mine_energy_factor)
-            + self.apply_mine_energy_draw(energy_crystal, mine_energy_factor)
-            + self.apply_mine_energy_draw(energy_fuel_cell, mine_energy_factor)
+            self._apply_mine_energy_draw_with_ascension(
+                energy_metal, mine_energy_factor, "metal_mine"
+            )
+            + self._apply_mine_energy_draw_with_ascension(
+                energy_crystal, mine_energy_factor, "crystal_mine"
+            )
+            + self._apply_mine_energy_draw_with_ascension(
+                energy_fuel_cell, mine_energy_factor, "fuel_cell_plant"
+            )
         )
 
         return energy_total, energy_used
@@ -1308,7 +1314,24 @@ class EffectResolver:
         else:
             return 0
         factor = _mod_float(self.get_modifiers(), "mine_energy_factor")
-        return self.apply_mine_energy_draw(raw, factor)
+        return self._apply_mine_energy_draw_with_ascension(raw, factor, building_type)
+
+    def _apply_mine_energy_draw_with_ascension(
+        self,
+        raw: int,
+        legacy_factor: float,
+        building_type: str,
+    ) -> int:
+        """Apply legacy/global draw first, then the per-mine Ascension reduction.
+
+        The order is intentional: Energy Tech's historical 1% gameplay floor
+        must not swallow Optimized Energy ranks at high research levels.
+        """
+        legacy_draw = self.apply_mine_energy_draw(raw, legacy_factor)
+        if legacy_draw <= 0:
+            return 0
+        bps = self._nodebuster_energy_draw_bps(building_type)
+        return max(1, (int(legacy_draw) * int(bps)) // 10000)
 
     @staticmethod
     def energy_ratio(energy_total: int, energy_used: int) -> float:
@@ -1405,6 +1428,105 @@ class EffectResolver:
         ratio_f = max(0.0, float(energy_ratio))
         ctx = production_context_from_resolver(self, "fuel_cells", energy_ratio=ratio_f)
         return calculate_resource_output("fuel_cells", ctx)
+
+    def _nodebuster_energy_draw_bps(self, building_type: str) -> int:
+        """Planet/mine-scoped Ascension draw factor; 10000 means unchanged."""
+        pid = self.planet_id
+        if pid is None:
+            return 10000
+        bt = str(building_type or "")
+        if bt not in {"metal_mine", "crystal_mine", "fuel_cell_plant"}:
+            return 10000
+
+        cache = getattr(self, "_nodebuster_energy_draw_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._nodebuster_energy_draw_cache = cache
+        if bt in cache:
+            return int(cache[bt])
+
+        try:
+            from ..mine_evolution.ruleset import is_nodebuster_ruleset
+            if not is_nodebuster_ruleset():
+                cache[bt] = 10000
+                return 10000
+            from ..mine_evolution.nodebuster import energy_draw_bps_for
+
+            value = int(
+                self._run_optional_conn_probe(
+                    f"mine_asc_energy_draw:{bt}",
+                    lambda: energy_draw_bps_for(
+                        int(pid),
+                        bt,
+                        conn=getattr(self, "_conn", None),
+                    ),
+                )
+            )
+        except Exception:
+            value = 10000
+        value = max(100, min(10000, value))
+        cache[bt] = value
+        return value
+
+    def _nodebuster_shortage_recovery_bps(self, building_type: str) -> int:
+        """Share of missing energy ratio recovered by this specific Ascension mine."""
+        pid = self.planet_id
+        if pid is None:
+            return 0
+        bt = str(building_type or "")
+        if bt not in {"metal_mine", "crystal_mine", "fuel_cell_plant"}:
+            return 0
+
+        cache = getattr(self, "_nodebuster_shortage_recovery_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._nodebuster_shortage_recovery_cache = cache
+        if bt in cache:
+            return int(cache[bt])
+
+        try:
+            from ..mine_evolution.ruleset import is_nodebuster_ruleset
+            if not is_nodebuster_ruleset():
+                cache[bt] = 0
+                return 0
+            from ..mine_evolution.nodebuster import shortage_recovery_bps_for
+
+            value = int(
+                self._run_optional_conn_probe(
+                    f"mine_asc_shortage:{bt}",
+                    lambda: shortage_recovery_bps_for(
+                        int(pid),
+                        bt,
+                        conn=getattr(self, "_conn", None),
+                    ),
+                )
+            )
+        except Exception:
+            value = 0
+        value = max(0, min(10000, value))
+        cache[bt] = value
+        return value
+
+    def mine_energy_ratio_for_resource(self, resource_type: str, base_ratio: float) -> float:
+        """Apply per-mine Ascension shortage recovery to a canonical grid ratio."""
+        key = str(resource_type or "").strip().lower()
+        building = {
+            "metal": "metal_mine",
+            "ferronit": "metal_mine",
+            "crystal": "crystal_mine",
+            "crytite": "crystal_mine",
+            "fuel_cells": "fuel_cell_plant",
+            "fuel": "fuel_cell_plant",
+        }.get(key)
+        ratio = max(0.0, min(1.0, float(base_ratio)))
+        if not building or ratio >= 1.0:
+            return ratio
+
+        recovery = self._nodebuster_shortage_recovery_bps(building)
+        if recovery <= 0:
+            return ratio
+        missing = 1.0 - ratio
+        return min(1.0, ratio + missing * recovery / 10000.0)
 
     def _nodebuster_storage_bps(self, resource: str) -> int:
         """Per-mine permanent storage multiplier in integer basis points."""

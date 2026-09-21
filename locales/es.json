@@ -9189,5 +9189,21 @@
   "mine_ascension_breakthrough_hint": "Nodos únicos y costosos que cambian las reglas de tu siguiente ciclo en vez de añadir otro pequeño porcentaje.",
   "mine_ascension_depth_gate": "Se requiere mejor profundidad L{level}",
   "mine_ascension_tail_power": "Curva",
-  "mine_ascension_rebuild_window": "Ventana de reconstrucción"
+  "mine_ascension_rebuild_window": "Ventana de reconstrucción",
+  "nodebuster_skill_optimized_energy": "Uso optimizado de energía",
+  "nodebuster_skill_optimized_energy_desc": "Esta mina consume un 2% menos de energía por rango. Rango 10: −20%. Se acumula con Tecnología de Energía.",
+  "nodebuster_skill_load_balancing": "Balance de carga adaptativo",
+  "nodebuster_skill_load_balancing_desc": "Recupera un 2,5% de la parte de red que falta por rango para esta mina. Con una red al 60%, el rango 10 funciona al 70%.",
+  "mine_ascension_next_restart": "Próximo reinicio",
+  "mine_ascension_energy_need": "Demanda de energía",
+  "mine_ascension_rebuild_reach": "Bonos de reconstrucción hasta",
+  "mine_ascension_preview_more_production": "Más producción tras el avance",
+  "mine_ascension_preview_technical_curve": "Curva técnica",
+  "mine_ascension_preview_restart": "Reinicio de este ciclo",
+  "mine_ascension_preview_best_depth": "Calculado con mejor profundidad L{level}",
+  "mine_ascension_preview_rebuild_reach": "Los bonos de reconstrucción llegan a",
+  "mine_ascension_preview_costs": "coste",
+  "mine_ascension_preview_time": "tiempo",
+  "mine_ascension_preview_energy_draw": "Consumo de energía de esta mina",
+  "mine_ascension_preview_shortage": "Ejemplo con la red al {grid}%"
 }
