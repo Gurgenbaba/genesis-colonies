@@ -89,44 +89,52 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
 
     assert "gc-ascension-node__art" in template
+    assert "gc-ascension-node__name" in template
     assert "img/classes/icons/production.webp" in template
     assert "gc-ascension-tree__edge" in template
-    assert "skill.rank >= 5" in template
+    assert "tree_rank.reconstruction >= 5" in template
+    assert "tree_rank.deep_yield >= 5" in template
     assert "gc-ascension-node--{{ skill.key }}" in template
-    assert "gc-ascension-node__name" not in template
     assert "gc-ascension-node__state" not in template
 
-    assert ".gc-ascension-node--reconstruction" in css
-    assert ".gc-ascension-node--deep_yield" in css
-    assert ".gc-ascension-node--deep_storage" in css
-    assert ".gc-ascension-node--frugal_rebuild" in css
-    assert ".gc-ascension-node--rapid_rebuild" in css
-    assert ".gc-ascension-node--overdrive" in css
-    assert ".gc-ascension-node--optimized_energy" in css
-    assert ".gc-ascension-node--load_balancing" in css
+    for key in (
+        "reconstruction",
+        "deep_yield",
+        "deep_storage",
+        "frugal_rebuild",
+        "rapid_rebuild",
+        "overdrive",
+        "optimized_energy",
+        "load_balancing",
+    ):
+        assert f".gc-ascension-node--{key}" in css
+
     assert ".gc-ascension-node--utility" in css
     assert "skill.key == 'optimized_energy'" in template
     assert "skill.key == 'load_balancing'" in template
     assert "T('nodebuster_skill_' ~ skill.key)" in template
+
     locales_de = (ROOT / "locales" / "de.json").read_text(encoding="utf-8")
     locales_en = (ROOT / "locales" / "en.json").read_text(encoding="utf-8")
     assert "nodebuster_skill_optimized_energy" in locales_de
     assert "nodebuster_skill_optimized_energy" in locales_en
     assert "nodebuster_skill_load_balancing" in locales_de
     assert "nodebuster_skill_load_balancing" in locales_en
+
     assert "mine_ascension_preview_energy_draw" in template
     assert ".gc-ascension-tree__edge.is-fed" in css
     assert "grid-template-columns:repeat(6,minmax(0,1fr))" in css
     assert ".gc-ascension-node--frugal_rebuild{grid-column:2 / span 2;grid-row:3}" in css
     assert ".gc-ascension-node--rapid_rebuild{grid-column:4 / span 2;grid-row:3}" in css
-    assert ".gc-ascension-node--overdrive{" in css
-    assert 'viewBox="0 0 600 488"' in template
-    assert 'M300 216 V225 H200 V234' in template
-    assert 'M400 342 V351 H300 V360' in template
-    assert 'gc-ascension-tree__junction' in template
-    assert ' C' not in template[template.index('gc-ascension-tree__edges'):template.index('gc-ascension-tree__nodes')]
-    assert "--asc-node-size:108px" in css
-    assert "grid-template-rows:90px 108px 108px 128px" in css
+    assert ".gc-ascension-node--overdrive{grid-column:3 / span 2;grid-row:4}" in css
+    assert 'viewBox="0 0 600 712"' in template
+    assert 'M300 138 V190 H200 V204' in template
+    assert 'M200 308 V315 H300 V322' in template
+    assert "gc-ascension-tree__junction" in template
+    edge_block = template[template.index("gc-ascension-tree__edges"):template.index("gc-ascension-tree__nodes")]
+    assert " C" not in edge_block
+    assert "--asc-node-size:100px" in css
+    assert "grid-template-rows:72px 104px 104px 120px 108px 120px" in css
     assert ".gc-ascension-tree__junction" in css
     assert "opacity:.52" in css
     assert ".gc-ascension-node.is-selected.is-locked" in css
@@ -136,30 +144,49 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert "content:none" in css
 
 
-def test_ascension_breakthroughs_are_separate_from_core_tree():
+def test_ascension_breakthroughs_are_integrated_into_the_progression_map():
     template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
     css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
 
-    assert "{% if not skill.breakthrough %}" in template
-    assert "gc-ascension-breakthroughs" in template
-    assert "gc-ascension-breakthrough-card" in template
-    # Player-facing breakthrough cards show concrete before/after values;
-    # q/tail internals remain secondary technical detail.
-    assert "skill.preview.tail_from" in template
-    assert "skill.preview.tail_to" in template
+    assert "{% if not skill.breakthrough %}" not in template
+    assert "gc-ascension-breakthrough-card" not in template
+    assert "gc-ascension-breakthroughs__grid" not in template
+    assert "gc-ascension-node--breakthrough" in template
+    assert "gc-ascension-tree__breakthrough-band" in template
+    assert "gc-ascension-node__keystone" in template
+    assert "skill.breakthrough" in template
+
+    for key, placement in (
+        ("legacy_reconstruction", "grid-column:1 / span 2;grid-row:5"),
+        ("core_resonance", "grid-column:3 / span 2;grid-row:5"),
+        ("breakthrough_window", "grid-column:5 / span 2;grid-row:5"),
+        ("singularity_excavation", "grid-column:3 / span 2;grid-row:6"),
+    ):
+        assert f".gc-ascension-node--{key}" in css
+        assert placement in css
+
+    assert ".gc-ascension-tree__edge--breakthrough" in css
+    assert ".gc-ascension-node--breakthrough" in css
+    assert ".gc-ascension-node--singularity_excavation" in css
+    assert ".gc-ascension-inspector__requirements" in css
     assert "skill.preview.window_before" in template
     assert "skill.preview.window_after" in template
+    assert "skill.preview.levels" in template
+    assert "skill.preview.production_bonus_pct" in template
     assert "mine_ascension_preview_more_production" in template
     assert "mine_ascension_preview_rebuild_production" in template
     assert "mine_ascension_preview_rebuild_surge_reach" in template
     assert "mine_ascension_preview_rebuild_reach" in template
     assert "mine_ascension_purchase_cost" in template
     assert "mine_ascension_node_gate" in template
+    assert "mine_ascension_depth_gate" in template
     assert "mine_ascension_buy_breakthrough" in template
-    assert "skill.preview.levels" in template
-    assert "skill.preview.production_bonus_pct" in template
-    assert "skill.preview.rebuild_reach" in template
     assert "skill.requires_best_depth" in template
+
+    # The player-facing map uses concrete level / production deltas; the
+    # internal q-curve is intentionally not rendered as a second mini-panel.
+    assert "skill.preview.tail_from" not in template
+    assert "skill.preview.tail_to" not in template
 
     for key in (
         "core_resonance",
@@ -169,7 +196,3 @@ def test_ascension_breakthroughs_are_separate_from_core_tree():
     ):
         assert f"nodebuster_skill_{key}" in (ROOT / "locales" / "de.json").read_text(encoding="utf-8")
         assert f"nodebuster_skill_{key}" in (ROOT / "locales" / "en.json").read_text(encoding="utf-8")
-
-    assert ".gc-ascension-breakthroughs__grid" in css
-    assert "grid-template-columns:repeat(4,minmax(0,1fr))" in css
-    assert ".gc-ascension-breakthrough-card.is-maxed" in css
