@@ -1559,9 +1559,16 @@ def build_building_technical_data(
     planet_id = int(planet["id"])
     buildings = get_planet_buildings(planet_id, conn=conn)
     research_levels = get_research_levels(user_id=uid, conn=conn)
-    ratio = _panel_energy_ratio(buildings, research_levels)
     current = int(buildings.get(btype, 0) or 0)
-    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio, conn=conn)
+    panel_ctx = BuildingsPanelContext.for_planet(
+        planet, buildings, research_levels, 1.0, conn=conn
+    )
+    energy_total, energy_used = panel_ctx.resolver.compute_energy()
+    ratio = float(EffectResolver.energy_ratio(energy_total, energy_used))
+    panel_ctx.ratio = ratio
+    panel_ctx.production_per_hour = panel_ctx.resolver.get_building_production_per_hour(
+        ratio
+    )
     base_max_level = panel_ctx.max_level(btype)
     max_level = _effective_building_queue_cap(
         btype,
@@ -2167,8 +2174,15 @@ def get_overview_building_rows(
         return []
 
     research_levels = get_research_levels(user_id=int(user_id))
-    ratio = _panel_energy_ratio(buildings, research_levels)
-    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio)
+    panel_ctx = BuildingsPanelContext.for_planet(
+        planet, buildings, research_levels, 1.0
+    )
+    energy_total, energy_used = panel_ctx.resolver.compute_energy()
+    ratio = float(EffectResolver.energy_ratio(energy_total, energy_used))
+    panel_ctx.ratio = ratio
+    panel_ctx.production_per_hour = panel_ctx.resolver.get_building_production_per_hour(
+        ratio
+    )
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
