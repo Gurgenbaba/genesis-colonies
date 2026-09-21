@@ -519,7 +519,9 @@ def panel_fields(
         "nodebuster_points_earned": int(state["points_earned"]),
         "nodebuster_best_depth": int(state["best_depth"]),
         "nodebuster_last_depth": int(state["last_depth"]),
-        "nodebuster_reset_level": int(reset_start_level(skills, int(state["best_depth"]))),
+        "nodebuster_reset_level": int(
+            reset_start_level(skills, max(int(state["best_depth"]), lvl))
+        ),
         "nodebuster_next_depth": int(next_depth),
         "nodebuster_tail_power_bonus_hundredths": int(tail_power_bonus_hundredths(skills)),
         "nodebuster_tail_power": round(effective_tail_power, 2),
