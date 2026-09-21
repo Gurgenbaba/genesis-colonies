@@ -376,3 +376,50 @@ ASCENSION_RULESET = nodebuster-v1
 
 The universe must remain closed if the Nodebuster implementation or any other launch
 contract gate is missing. See `docs/UNI1_LAUNCH_CONTRACT.md`.
+
+
+---
+
+## Ascension Breakthrough V2
+
+V2 keeps the six V1 core nodes and adds a second class of expensive, one-rank
+**Breakthrough / Keystone** upgrades. Their purpose is to change how a prestige
+run behaves rather than add another small flat percentage.
+
+| Keystone | Cost | Gate | Permanent rule change |
+|---|---:|---|---|
+| Core Resonance | 15 AP | Deep Yield 8+, best depth L300 | Personal mine tail q4.00 -> q4.10 |
+| Legacy Reconstruction | 20 AP | Reconstruction 8+, best depth L400 | Restart at max(normal baseline, 35% lifetime best), capped L199 |
+| Breakthrough Window | 24 AP | Frugal 8+ and Rapid 8+, best depth L400 | Rebuild cost/time discounts remain active through best depth +25 |
+| Singularity Excavation | 36 AP | Core Resonance, Overdrive III, best depth L500 | Personal mine tail q4.10 -> q4.20 |
+
+The q-tail breakthroughs are **not** extra production multipliers. The Mine
+Evolution owner exposes an integer hundredths delta into
+`ProductionContext.mine_tail_power_bonus_hundredths`; the canonical
+`game/production_formula.py` applies that delta only to the active q4 endgame
+tail for the matching planet and mine.
+
+Rollout safety remains unchanged:
+
+- legacy/shadow endgame modes ignore personal q-tail breakthroughs;
+- active mode uses global q4 plus the per-mine delta;
+- levels at/below the endgame pivot remain unchanged;
+- production math stays server-authoritative and no frontend formula exists.
+
+### Long-horizon balance gate
+
+`scripts/sim_ascension_breakthroughs.py` runs the deterministic curve comparison
+used for V2 review. It is deliberately **not a full player forecast**: one
+Ferronit mine, all generated value reinvested into that mine, no other planets,
+research, loot, storage constraints or build-queue duration.
+
+The simulator reports 6-month (182.5 d) and 12-month (365 d) outcomes for:
+
+- baseline q4;
+- the current +40% production stack;
+- q4.10 and q4.20 alone;
+- q4.20 plus the current +40% stack;
+- current max rebuild from L130;
+- full Breakthrough V2 rebuild from L175 with the +25 record window.
+
+Regression owner: `tests/test_ascension_breakthrough_v2.py`.

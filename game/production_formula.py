@@ -221,37 +221,60 @@ def endgame_tail_mine_output_decimal(
     level: int,
     *,
     pivot_level: Optional[int] = None,
-    tail_power: Optional[int] = None,
+    tail_power: Optional[Any] = None,
 ) -> Decimal:
-    """C1-continuous, unbounded polynomial continuation of the legacy mine curve."""
+    """C1-continuous, unbounded polynomial continuation of the legacy mine curve.
+
+    Fractional tail powers are reserved for permanent Ascension breakthroughs.
+    The default integer q path keeps the historical integer exponent operation.
+    """
     key = _normalize_resource_type(resource_type)
     lvl = max(0, int(level or 0))
     if lvl <= 0:
         return Decimal(0)
 
     pivot = max(1, int(pivot_level or ENDGAME_PRODUCTION_PIVOT_LEVEL))
-    power = max(1, int(tail_power or ENDGAME_PRODUCTION_TAIL_POWER))
+    raw_power = ENDGAME_PRODUCTION_TAIL_POWER if tail_power is None else tail_power
+    power = max(Decimal(1), decimal_value(raw_power, str(ENDGAME_PRODUCTION_TAIL_POWER)))
     if lvl <= pivot:
         return legacy_mine_output_decimal(key, lvl)
 
     with localcontext() as ctx:
         pivot_prec = _legacy_production_decimal_precision(pivot)
-        tail_digits = len(str(max(1, lvl))) * (power + 2)
+        power_guard = max(1, int(power) + 3)
+        tail_digits = len(str(max(1, lvl))) * (power_guard + 2)
         ctx.prec = max(128, pivot_prec, tail_digits + 128)
         pivot_out = legacy_mine_output_decimal(key, pivot)
         # d(log(level * growth^level))/dlevel = 1/level + ln(growth)
         slope = (Decimal(1) / Decimal(pivot)) + decimal_value(math.log(LEVEL_GROWTH_RATE), "0")
         x = Decimal(lvl - pivot)
-        q = Decimal(power)
-        factor = (Decimal(1) + (slope * x / q)) ** power
+        factor_base = Decimal(1) + (slope * x / power)
+        if power == power.to_integral_value():
+            factor = factor_base ** int(power)
+        else:
+            factor = ctx.power(factor_base, power)
         return +(pivot_out * factor)
 
 
-def mine_output_decimal(resource_type: str, level: int) -> Decimal:
+def _personal_tail_power(tail_power_bonus_hundredths: int = 0) -> Decimal:
+    bonus = max(0, int(tail_power_bonus_hundredths or 0))
+    return Decimal(int(ENDGAME_PRODUCTION_TAIL_POWER)) + (Decimal(bonus) / Decimal(100))
+
+
+def mine_output_decimal(
+    resource_type: str,
+    level: int,
+    *,
+    tail_power_bonus_hundredths: int = 0,
+) -> Decimal:
     """Mine-only output with no IEEE-754 exponent ceiling."""
     lvl = max(0, int(level or 0))
     if endgame_economy_mode() == "active" and lvl > ENDGAME_PRODUCTION_PIVOT_LEVEL:
-        return endgame_tail_mine_output_decimal(resource_type, lvl)
+        return endgame_tail_mine_output_decimal(
+            resource_type,
+            lvl,
+            tail_power=_personal_tail_power(tail_power_bonus_hundredths),
+        )
     return legacy_mine_output_decimal(resource_type, lvl)
 
 
@@ -261,14 +284,25 @@ def standard_output(resource_type: str) -> float:
     return float(STANDARD_PRODUCTION_PER_HOUR[key])
 
 
-def mine_output(resource_type: str, level: int) -> float:
+def mine_output(
+    resource_type: str,
+    level: int,
+    *,
+    tail_power_bonus_hundredths: int = 0,
+) -> float:
     """Mine-only base curve per hour (before production_speed and gameplay modifiers)."""
     key = _normalize_resource_type(resource_type)
     lvl = max(0, int(level or 0))
     if lvl <= 0:
         return 0.0
     if endgame_economy_mode() == "active" and lvl > ENDGAME_PRODUCTION_PIVOT_LEVEL:
-        return float(endgame_tail_mine_output_decimal(key, lvl))
+        return float(
+            endgame_tail_mine_output_decimal(
+                key,
+                lvl,
+                tail_power=_personal_tail_power(tail_power_bonus_hundredths),
+            )
+        )
     # Preserve the historical float path byte-for-byte outside active tail mode.
     base = float(LEVEL_GROWTH[key]["multiplier"])
     return base * lvl * (LEVEL_GROWTH_RATE ** lvl)
@@ -380,6 +414,8 @@ class ProductionContext:
     planet: Any = None
     empire: Any = None
     building_modifier: float = 1.0
+    # Integer hundredths: 10 means q+0.10, 20 means q+0.20.
+    mine_tail_power_bonus_hundredths: int = 0
     planet_modifier: float = 1.0
     empire_modifier: float = 1.0
     alliance_modifier: float = 1.0
@@ -523,7 +559,11 @@ def calculate_resource_output_decimal(
         mod_with_energy = max(Decimal(0), decimal_value(mods.combined(), "1"))
 
         standard_part = standard_output_decimal(key) * speed * mod_shared
-        mine_base = mine_output_decimal(key, lvl) * speed
+        mine_base = mine_output_decimal(
+            key,
+            lvl,
+            tail_power_bonus_hundredths=context.mine_tail_power_bonus_hundredths,
+        ) * speed
         mine_part = mine_base * mod_with_energy if mine_base > 0 else Decimal(0)
         total = max(Decimal(0), standard_part + mine_part)
 
@@ -563,7 +603,11 @@ def calculate_resource_output(resource_type: str, context: ProductionContext) ->
     mod_shared = mods.combined_without_energy()
 
     standard_part = standard_output(key) * speed * mod_shared
-    mine_base = mine_output(key, lvl) * speed
+    mine_base = mine_output(
+        key,
+        lvl,
+        tail_power_bonus_hundredths=context.mine_tail_power_bonus_hundredths,
+    ) * speed
     mine_part = mine_base * mods.combined() if mine_base > 0 else 0.0
 
     total = max(0.0, standard_part + mine_part)
@@ -625,11 +669,17 @@ def production_context_from_resolver(
         except Exception:
             pass
 
-    # EPIC-29: Mine Evolution → building_modifier (planet-scoped rank).
+    # EPIC-29 / Ascension Breakthrough V2: Mine Evolution feeds the existing
+    # canonical context; there is no parallel production engine.
     building_mod = 1.0
+    tail_power_bonus_hundredths = 0
     pid = resolver.planet_id
     if pid is not None:
-        from .mine_evolution import RESOURCE_TO_MINE, building_modifier_for
+        from .mine_evolution import (
+            RESOURCE_TO_MINE,
+            building_modifier_for,
+            tail_power_bonus_hundredths_for,
+        )
 
         mine_key = RESOURCE_TO_MINE.get(key)
         if mine_key:
@@ -665,6 +715,38 @@ def production_context_from_resolver(
                     )
                 cache[mine_key] = building_mod
 
+            tail_cache = getattr(resolver, "_mine_evo_tail_cache", None)
+            if tail_cache is None:
+                tail_cache = {}
+                try:
+                    resolver._mine_evo_tail_cache = tail_cache
+                except Exception:
+                    pass
+            if mine_key in tail_cache:
+                tail_power_bonus_hundredths = int(tail_cache[mine_key] or 0)
+            else:
+                probe = getattr(resolver, "_run_optional_conn_probe", None)
+                if callable(probe):
+                    tail_power_bonus_hundredths = int(
+                        probe(
+                            f"mine_evolution_tail:{mine_key}",
+                            lambda: tail_power_bonus_hundredths_for(
+                                int(pid),
+                                mine_key,
+                                conn=getattr(resolver, "_conn", None),
+                            ),
+                        )
+                    )
+                else:
+                    tail_power_bonus_hundredths = int(
+                        tail_power_bonus_hundredths_for(
+                            int(pid),
+                            mine_key,
+                            conn=getattr(resolver, "_conn", None),
+                        )
+                    )
+                tail_cache[mine_key] = tail_power_bonus_hundredths
+
     return ProductionContext(
         resource_type=key,
         level=int(level),
@@ -676,6 +758,7 @@ def production_context_from_resolver(
         player=resolver.player_id,
         planet=resolver.planet_id,
         building_modifier=float(building_mod),
+        mine_tail_power_bonus_hundredths=max(0, int(tail_power_bonus_hundredths)),
         directive_modifier=float(overlay),
         event_modifier=max(0.0, event_mod),
     )

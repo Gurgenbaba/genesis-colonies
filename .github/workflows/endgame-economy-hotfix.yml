@@ -13,6 +13,8 @@ on:
       - "tests/test_gc_ferro_l388_001.py"
       - "tests/test_gc_mando_storage_001.py"
       - "tests/test_mine_evolution.py"
+      - "tests/test_ascension_breakthrough_v2.py"
+      - "scripts/sim_ascension_breakthroughs.py"
       - ".github/workflows/endgame-economy-hotfix.yml"
   push:
     branches: [main]
@@ -27,6 +29,8 @@ on:
       - "tests/test_gc_ferro_l388_001.py"
       - "tests/test_gc_mando_storage_001.py"
       - "tests/test_mine_evolution.py"
+      - "tests/test_ascension_breakthrough_v2.py"
+      - "scripts/sim_ascension_breakthroughs.py"
       - ".github/workflows/endgame-economy-hotfix.yml"
 
 concurrency:
@@ -71,6 +75,10 @@ jobs:
         run: |
           python -m pytest -q --tb=line tests/test_gc_ferro_l388_001.py
           python -m pytest -q --tb=line tests/test_gc_mando_storage_001.py
+      - name: Ascension Breakthrough 6/12 month balance gate
+        run: |
+          python scripts/sim_ascension_breakthroughs.py
+          python -m pytest -q --tb=line tests/test_ascension_breakthrough_v2.py
       - name: Nodebuster mine production regression
         run: |
           python -m pytest -q --tb=line \

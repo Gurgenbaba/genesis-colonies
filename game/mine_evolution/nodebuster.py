@@ -26,6 +26,14 @@ from .formulas import EVOLVABLE_MINES, is_evolvable_mine
 ASCENSION_MIN_LEVEL = 200
 QUEUE_SAFETY_SENTINEL = 2_147_483_647
 
+# Breakthrough V2: expensive, one-rank mechanics that change the prestige loop
+# instead of only adding another flat percentage.  Tail deltas are stored as
+# hundredths so q4.00 -> q4.10 -> q4.20 never depends on binary-float state.
+CORE_RESONANCE_TAIL_POWER_HUNDREDTHS = 10
+SINGULARITY_TAIL_POWER_HUNDREDTHS = 10
+LEGACY_RECONSTRUCTION_BEST_BPS = 3500
+BREAKTHROUGH_WINDOW_LEVELS = 25
+
 SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
     "reconstruction": {
         "max_rank": 10,
@@ -70,6 +78,42 @@ SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
             "deep_yield": 5,
             "deep_storage": 5,
         },
+    },
+    "core_resonance": {
+        "max_rank": 1,
+        "base_cost": 15,
+        "cost_step_every": 1,
+        "kind": "breakthrough_tail",
+        "requires": {"deep_yield": 8},
+        "requires_best_depth": 300,
+        "breakthrough": True,
+    },
+    "legacy_reconstruction": {
+        "max_rank": 1,
+        "base_cost": 20,
+        "cost_step_every": 1,
+        "kind": "breakthrough_restart",
+        "requires": {"reconstruction": 8},
+        "requires_best_depth": 400,
+        "breakthrough": True,
+    },
+    "breakthrough_window": {
+        "max_rank": 1,
+        "base_cost": 24,
+        "cost_step_every": 1,
+        "kind": "breakthrough_rebuild",
+        "requires": {"frugal_rebuild": 8, "rapid_rebuild": 8},
+        "requires_best_depth": 400,
+        "breakthrough": True,
+    },
+    "singularity_excavation": {
+        "max_rank": 1,
+        "base_cost": 36,
+        "cost_step_every": 1,
+        "kind": "breakthrough_tail",
+        "requires": {"core_resonance": 1, "overdrive": 3},
+        "requires_best_depth": 500,
+        "breakthrough": True,
     },
 }
 
@@ -244,19 +288,48 @@ def skill_point_cost(skill_key: str, current_rank: int) -> int:
     return base + (rank // every) * step
 
 
-def skill_prerequisites_met(skill_key: str, skills: Dict[str, int]) -> bool:
+def skill_prerequisites_met(
+    skill_key: str,
+    skills: Dict[str, int],
+    state: Optional[Dict[str, int]] = None,
+) -> bool:
     cfg = SKILL_CATALOG.get(str(skill_key or ""))
     if not cfg:
         return False
     req = cfg.get("requires") or {}
-    return all(int(skills.get(key, 0) or 0) >= int(rank) for key, rank in req.items())
+    if not all(int(skills.get(key, 0) or 0) >= int(rank) for key, rank in req.items()):
+        return False
+    required_depth = max(0, int(cfg.get("requires_best_depth") or 0))
+    if required_depth > 0:
+        if state is None or int(state.get("best_depth") or 0) < required_depth:
+            return False
+    return True
 
 
-def reset_start_level(skills: Dict[str, int]) -> int:
+def tail_power_bonus_hundredths(skills: Dict[str, int]) -> int:
+    """Personal q-tail increase for one mine: q4.00 -> q4.10 -> q4.20."""
+    core = 1 if int(skills.get("core_resonance", 0) or 0) > 0 else 0
+    singularity = 1 if int(skills.get("singularity_excavation", 0) or 0) > 0 else 0
+    return (
+        core * CORE_RESONANCE_TAIL_POWER_HUNDREDTHS
+        + singularity * SINGULARITY_TAIL_POWER_HUNDREDTHS
+    )
+
+
+def rebuild_window_extra_levels(skills: Dict[str, int]) -> int:
+    return BREAKTHROUGH_WINDOW_LEVELS if int(skills.get("breakthrough_window", 0) or 0) > 0 else 0
+
+
+def reset_start_level(skills: Dict[str, int], best_depth: int = 0) -> int:
     reconstruction = max(0, int(skills.get("reconstruction", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    # At V1 cap: 100 reconstruction + 30 capstone = L130 restart.
-    return min(ASCENSION_MIN_LEVEL - 1, reconstruction * 10 + overdrive * 10)
+    base = reconstruction * 10 + overdrive * 10
+    if int(skills.get("legacy_reconstruction", 0) or 0) > 0:
+        lifetime_best = max(0, int(best_depth or 0))
+        legacy = (lifetime_best * LEGACY_RECONSTRUCTION_BEST_BPS) // 10000
+        base = max(base, legacy)
+    # Ascension must always restart below the L200 activation threshold.
+    return min(ASCENSION_MIN_LEVEL - 1, base)
 
 
 def rebuild_cost_bps(skills: Dict[str, int]) -> int:
@@ -322,6 +395,29 @@ def storage_multiplier_bps_for(
     )
 
 
+def rebuild_bps_for_target(
+    planet_id: int,
+    building_type: str,
+    target_level: int,
+    *,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Tuple[int, int]:
+    """Exact rebuild cost/time basis points for one target level."""
+    bt = str(building_type or "")
+    if not is_evolvable_mine(bt):
+        return 10000, 10000
+    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
+    state = get_state(int(planet_id), bt, conn=conn, profiles=data)
+    if int(state.get("ascension_count") or 0) <= 0:
+        return 10000, 10000
+    skills = get_skills(int(planet_id), bt, conn=conn, profiles=data)
+    rebuild_limit = int(state.get("best_depth") or 0) + rebuild_window_extra_levels(skills)
+    if int(target_level or 0) > rebuild_limit:
+        return 10000, 10000
+    return int(rebuild_cost_bps(skills)), int(rebuild_time_bps(skills))
+
+
 def rebuild_modifiers_for_target(
     planet_id: int,
     building_type: str,
@@ -330,18 +426,15 @@ def rebuild_modifiers_for_target(
     conn=None,
     profiles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[float, float]:
-    """Cost/time multipliers while rebuilding through the lifetime best depth."""
-    bt = str(building_type or "")
-    if not is_evolvable_mine(bt):
-        return 1.0, 1.0
-    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
-    state = get_state(int(planet_id), bt, conn=conn, profiles=data)
-    if int(state.get("ascension_count") or 0) <= 0:
-        return 1.0, 1.0
-    if int(target_level or 0) > int(state.get("best_depth") or 0):
-        return 1.0, 1.0
-    skills = get_skills(int(planet_id), bt, conn=conn, profiles=data)
-    return rebuild_cost_bps(skills) / 10000.0, rebuild_time_bps(skills) / 10000.0
+    """Float compatibility wrapper around the exact target-aware basis points."""
+    cost_bps, time_bps = rebuild_bps_for_target(
+        int(planet_id),
+        str(building_type),
+        int(target_level),
+        conn=conn,
+        profiles=profiles,
+    )
+    return cost_bps / 10000.0, time_bps / 10000.0
 
 
 def score_level(
@@ -384,7 +477,7 @@ def panel_fields(
         rank = int(skills.get(key, 0) or 0)
         max_rank = int(cfg["max_rank"])
         cost = 0 if rank >= max_rank else skill_point_cost(key, rank)
-        available = rank < max_rank and skill_prerequisites_met(key, skills)
+        available = rank < max_rank and skill_prerequisites_met(key, skills, state)
         skill_rows.append(
             {
                 "key": key,
@@ -394,8 +487,17 @@ def panel_fields(
                 "available": available,
                 "affordable": available and int(state["points_unspent"]) >= int(cost),
                 "requires": dict(cfg.get("requires") or {}),
+                "requires_best_depth": max(0, int(cfg.get("requires_best_depth") or 0)),
+                "breakthrough": bool(cfg.get("breakthrough")),
+                "kind": str(cfg.get("kind") or ""),
             }
         )
+
+    from ..production_formula import ENDGAME_PRODUCTION_TAIL_POWER
+    effective_tail_power = (
+        float(ENDGAME_PRODUCTION_TAIL_POWER)
+        + tail_power_bonus_hundredths(skills) / 100.0
+    )
 
     return {
         "mine_evolution": True,
@@ -417,8 +519,14 @@ def panel_fields(
         "nodebuster_points_earned": int(state["points_earned"]),
         "nodebuster_best_depth": int(state["best_depth"]),
         "nodebuster_last_depth": int(state["last_depth"]),
-        "nodebuster_reset_level": int(reset_start_level(skills)),
+        "nodebuster_reset_level": int(
+            reset_start_level(skills, max(int(state["best_depth"]), lvl))
+        ),
         "nodebuster_next_depth": int(next_depth),
+        "nodebuster_tail_power_bonus_hundredths": int(tail_power_bonus_hundredths(skills)),
+        "nodebuster_tail_power": round(effective_tail_power, 2),
+        "nodebuster_rebuild_window_extra_levels": int(rebuild_window_extra_levels(skills)),
+        "nodebuster_rebuild_window_level": int(state["best_depth"]) + rebuild_window_extra_levels(skills),
         "nodebuster_rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(skills)) * 100)),
         "nodebuster_rebuild_time_pct": int(round((1.0 - rebuild_time_multiplier(skills)) * 100)),
         "nodebuster_production_bonus_pct": round((production_multiplier(skills) - 1.0) * 100.0, 2),
@@ -500,7 +608,8 @@ def ascend_mine(
         state = get_state(planet_id, bt, conn=conn, profiles=profiles)
         skills = get_skills(planet_id, bt, conn=conn, profiles=profiles)
         gain = ascension_points_for_depth(level)
-        restart = reset_start_level(skills)
+        best_depth = max(int(state["best_depth"]), level)
+        restart = reset_start_level(skills, best_depth)
 
         buildings[bt] = int(restart)
         save_planet_buildings(planet_id, buildings, conn=conn)
@@ -508,8 +617,6 @@ def ascend_mine(
         new_count = int(state["ascension_count"]) + 1
         new_earned = int(state["points_earned"]) + int(gain)
         new_unspent = int(state["points_unspent"]) + int(gain)
-        best_depth = max(int(state["best_depth"]), level)
-
         conn.execute(
             """
             INSERT INTO planet_mine_ascension_state (
@@ -600,7 +707,7 @@ def purchase_skill(
             rollback(conn)
             return False, "skill_max", {"skill_key": skill, "rank": current}
 
-        if not skill_prerequisites_met(skill, skills):
+        if not skill_prerequisites_met(skill, skills, state):
             rollback(conn)
             return False, "skill_prerequisite", {
                 "skill_key": skill,
@@ -655,7 +762,11 @@ def purchase_skill(
             "skill_rank": new_rank,
             "skill_cost": cost,
             "points_unspent": new_unspent,
-            "reset_level": reset_start_level(updated_skills),
+            "reset_level": reset_start_level(updated_skills, int(state.get("best_depth") or 0)),
+            "tail_power_bonus_hundredths": tail_power_bonus_hundredths(updated_skills),
+            "tail_power": 4.0 + tail_power_bonus_hundredths(updated_skills) / 100.0,
+            "rebuild_window_extra_levels": rebuild_window_extra_levels(updated_skills),
+            "rebuild_window_level": int(state.get("best_depth") or 0) + rebuild_window_extra_levels(updated_skills),
             "rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(updated_skills)) * 100)),
             "rebuild_time_pct": int(round((1.0 - rebuild_time_multiplier(updated_skills)) * 100)),
             "production_bonus_pct": round((production_multiplier(updated_skills) - 1.0) * 100.0, 2),

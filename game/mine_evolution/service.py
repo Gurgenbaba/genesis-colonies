@@ -158,6 +158,30 @@ def building_modifier_for(
     return building_modifier_from_rank(rank)
 
 
+def tail_power_bonus_hundredths_for(
+    planet_id: int,
+    building_type: str,
+    conn: Optional[sqlite3.Connection] = None,
+) -> int:
+    """Return the server-authoritative personal q-tail delta for one mine.
+
+    Legacy Ascension has no exponent breakthrough. Nodebuster V2 resolves the
+    permanent per-mine skill state and returns an integer hundredths delta so
+    production math never stores a float as progression state.
+    """
+    if not is_evolvable_mine(building_type):
+        return 0
+
+    from .ruleset import is_nodebuster_ruleset
+    if not is_nodebuster_ruleset():
+        return 0
+
+    from .nodebuster import get_skills, tail_power_bonus_hundredths
+
+    skills = get_skills(int(planet_id), str(building_type), conn=conn)
+    return max(0, int(tail_power_bonus_hundredths(skills)))
+
+
 def _progress_percent_exact(value: Any, required: Any) -> int:
     """Round value/required to a bounded 0..100 percent without float conversion."""
     numerator = max(0, int(value or 0)) * 100

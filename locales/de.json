@@ -9175,5 +9175,19 @@
   "mine_ascension_storage_bonus": "Lager",
   "mine_ascension_rebuild_cost_bonus": "Wiederaufbau-Kosten -{pct}%",
   "mine_ascension_rebuild_time_bonus": "Wiederaufbau-Zeit -{pct}%",
-  "mine_ascension_tree_title": "Ascension Skill Tree"
+  "mine_ascension_tree_title": "Ascension Skill Tree",
+  "nodebuster_skill_core_resonance": "Kernresonanz",
+  "nodebuster_skill_core_resonance_desc": "Durchbruch: erhöht den persönlichen Endgame-Tail dieser Mine von q4.00 auf q4.10.",
+  "nodebuster_skill_legacy_reconstruction": "Legacy-Rekonstruktion",
+  "nodebuster_skill_legacy_reconstruction_desc": "Durchbruch: Ascension startet bei 35% deiner Besttiefe, maximal Level 199.",
+  "nodebuster_skill_breakthrough_window": "Durchbruchfenster",
+  "nodebuster_skill_breakthrough_window_desc": "Durchbruch: Rebuild-Kosten- und Zeitboni wirken 25 Level über deine Besttiefe hinaus.",
+  "nodebuster_skill_singularity_excavation": "Singularitätsabbau",
+  "nodebuster_skill_singularity_excavation_desc": "Keystone: erhöht den persönlichen Endgame-Tail von q4.10 auf q4.20.",
+  "mine_ascension_breakthrough_kicker": "Keystone-Protokolle",
+  "mine_ascension_breakthrough_title": "Breakthroughs",
+  "mine_ascension_breakthrough_hint": "Teure Einmal-Knoten verändern die Regeln deines nächsten Runs statt nur eine weitere Prozentzahl zu addieren.",
+  "mine_ascension_depth_gate": "Besttiefe L{level} erforderlich",
+  "mine_ascension_tail_power": "Tail",
+  "mine_ascension_rebuild_window": "Rebuild-Fenster"
 }

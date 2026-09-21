@@ -227,7 +227,7 @@ def test_panel_exposes_nodebuster_server_truth(mevo_db):
     assert fields["evolution_can_evolve"] is True
     assert fields["nodebuster_points_gain"] == 2
     assert fields["nodebuster_reset_level"] == 0
-    assert len(fields["nodebuster_skills"]) == 6
+    assert len(fields["nodebuster_skills"]) == 10
     assert any(row["key"] == "deep_storage" for row in fields["nodebuster_skills"])
     assert any(row["key"] == "overdrive" for row in fields["nodebuster_skills"])
 
@@ -264,3 +264,96 @@ def test_ruleset_is_nodebuster_v1():
     from game.mine_evolution.ruleset import ASCENSION_RULESET
 
     assert ASCENSION_RULESET == "nodebuster-v1"
+
+
+def test_breakthrough_window_reaches_buildings_cost_and_time_consumer(mevo_db):
+    import time
+
+    from game.buildings import _nodebuster_rebuild_bps
+    from game.db import commit, db
+    from game.mine_evolution.nodebuster import rebuild_bps_for_target
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 500)
+    pid = int(planet["id"])
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+
+    conn = db()
+    try:
+        now = time.time()
+        for key, rank in (
+            ("frugal_rebuild", 8),
+            ("rapid_rebuild", 8),
+            ("breakthrough_window", 1),
+        ):
+            conn.execute(
+                """
+                INSERT INTO planet_mine_ascension_skills (
+                    planet_id, building_type, skill_key, skill_rank, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                    skill_rank = excluded.skill_rank,
+                    updated_at = excluded.updated_at;
+                """,
+                (pid, "metal_mine", key, rank, now),
+            )
+        commit(conn)
+
+        assert rebuild_bps_for_target(pid, "metal_mine", 525, conn=conn) == (6800, 6000)
+        assert rebuild_bps_for_target(pid, "metal_mine", 526, conn=conn) == (10000, 10000)
+        assert _nodebuster_rebuild_bps(pid, "metal_mine", 525, conn=conn) == (6800, 6000)
+        assert _nodebuster_rebuild_bps(pid, "metal_mine", 526, conn=conn) == (10000, 10000)
+    finally:
+        conn.close()
+
+
+def test_breakthrough_tail_flows_from_db_into_production_context(mevo_db):
+    import time
+
+    from game.db import commit, db
+    from game.effects import get_effect_resolver
+    from game.mine_evolution.service import tail_power_bonus_hundredths_for
+    from game.models import get_research_levels
+    from game.production_formula import production_context_from_resolver
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 500)
+    pid = int(planet["id"])
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+    _set_level(uid, "metal_mine", 500)
+
+    conn = db()
+    try:
+        now = time.time()
+        for key in ("core_resonance", "singularity_excavation"):
+            conn.execute(
+                """
+                INSERT INTO planet_mine_ascension_skills (
+                    planet_id, building_type, skill_key, skill_rank, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                    skill_rank = excluded.skill_rank,
+                    updated_at = excluded.updated_at;
+                """,
+                (pid, "metal_mine", key, 1, now),
+            )
+        commit(conn)
+
+        assert tail_power_bonus_hundredths_for(pid, "metal_mine", conn=conn) == 20
+
+        buildings = get_planet_buildings(pid, conn=conn)
+        research = get_research_levels(uid, conn=conn)
+        resolver = get_effect_resolver(
+            uid,
+            buildings=buildings,
+            research=research,
+            conn=conn,
+            planet=dict(get_homeworld(player_id=uid, conn=conn)),
+            force_refresh=True,
+        )
+        context = production_context_from_resolver(resolver, "metal")
+        assert context.mine_tail_power_bonus_hundredths == 20
+    finally:
+        conn.close()

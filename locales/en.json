@@ -9175,5 +9175,19 @@
   "mine_ascension_storage_bonus": "Storage",
   "mine_ascension_rebuild_cost_bonus": "Rebuild cost -{pct}%",
   "mine_ascension_rebuild_time_bonus": "Rebuild time -{pct}%",
-  "mine_ascension_tree_title": "Ascension Skill Tree"
+  "mine_ascension_tree_title": "Ascension Skill Tree",
+  "nodebuster_skill_core_resonance": "Core Resonance",
+  "nodebuster_skill_core_resonance_desc": "Breakthrough: raises this mine's personal endgame tail from q4.00 to q4.10.",
+  "nodebuster_skill_legacy_reconstruction": "Legacy Reconstruction",
+  "nodebuster_skill_legacy_reconstruction_desc": "Breakthrough: Ascension restarts at 35% of your best depth, capped at level 199.",
+  "nodebuster_skill_breakthrough_window": "Breakthrough Window",
+  "nodebuster_skill_breakthrough_window_desc": "Breakthrough: rebuild cost and time bonuses remain active for 25 levels beyond your best depth.",
+  "nodebuster_skill_singularity_excavation": "Singularity Excavation",
+  "nodebuster_skill_singularity_excavation_desc": "Keystone: raises the personal endgame tail from q4.10 to q4.20.",
+  "mine_ascension_breakthrough_kicker": "Keystone Protocols",
+  "mine_ascension_breakthrough_title": "Breakthroughs",
+  "mine_ascension_breakthrough_hint": "Expensive one-time nodes change the rules of your next run instead of adding another small percentage.",
+  "mine_ascension_depth_gate": "Best depth L{level} required",
+  "mine_ascension_tail_power": "Tail",
+  "mine_ascension_rebuild_window": "Rebuild window"
 }

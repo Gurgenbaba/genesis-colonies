@@ -119,3 +119,28 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert ".gc-ascension-node.is-selected.is-available" in css
     assert "animation:gc-ascension-node-pulse" in css
     assert "content:none" in css
+
+
+def test_ascension_breakthroughs_are_separate_from_core_tree():
+    template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
+
+    assert "{% if not skill.breakthrough %}" in template
+    assert "gc-ascension-breakthroughs" in template
+    assert "gc-ascension-breakthrough-card" in template
+    assert "mine.nodebuster_tail_power" in template
+    assert "mine.nodebuster_rebuild_window_extra_levels" in template
+    assert "skill.requires_best_depth" in template
+
+    for key in (
+        "core_resonance",
+        "legacy_reconstruction",
+        "breakthrough_window",
+        "singularity_excavation",
+    ):
+        assert f"nodebuster_skill_{key}" in (ROOT / "locales" / "de.json").read_text(encoding="utf-8")
+        assert f"nodebuster_skill_{key}" in (ROOT / "locales" / "en.json").read_text(encoding="utf-8")
+
+    assert ".gc-ascension-breakthroughs__grid" in css
+    assert "grid-template-columns:repeat(4,minmax(0,1fr))" in css
+    assert ".gc-ascension-breakthrough-card.is-maxed" in css
