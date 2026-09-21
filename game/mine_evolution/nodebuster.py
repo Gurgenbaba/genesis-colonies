@@ -474,6 +474,12 @@ def panel_fields(
             }
         )
 
+    from ..production_formula import ENDGAME_PRODUCTION_TAIL_POWER
+    effective_tail_power = (
+        float(ENDGAME_PRODUCTION_TAIL_POWER)
+        + tail_power_bonus_hundredths(skills) / 100.0
+    )
+
     return {
         "mine_evolution": True,
         "evolution_rank": int(state["ascension_count"]),
@@ -497,7 +503,7 @@ def panel_fields(
         "nodebuster_reset_level": int(reset_start_level(skills, int(state["best_depth"]))),
         "nodebuster_next_depth": int(next_depth),
         "nodebuster_tail_power_bonus_hundredths": int(tail_power_bonus_hundredths(skills)),
-        "nodebuster_tail_power": 4.0 + tail_power_bonus_hundredths(skills) / 100.0,
+        "nodebuster_tail_power": round(effective_tail_power, 2),
         "nodebuster_rebuild_window_extra_levels": int(rebuild_window_extra_levels(skills)),
         "nodebuster_rebuild_window_level": int(state["best_depth"]) + rebuild_window_extra_levels(skills),
         "nodebuster_rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(skills)) * 100)),
