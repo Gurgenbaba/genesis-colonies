@@ -158,6 +158,35 @@ def building_modifier_for(
     return building_modifier_from_rank(rank)
 
 
+def rebuild_production_multiplier_for(
+    planet_id: int,
+    building_type: str,
+    current_level: int,
+    conn: Optional[sqlite3.Connection] = None,
+) -> float:
+    """Return the Nodebuster rebuild-only mine output multiplier.
+
+    Legacy Ascension / non-mines stay at 1.0. Nodebuster owns the progression
+    state; Production Formula only consumes the resolved multiplier.
+    """
+    if not is_evolvable_mine(building_type):
+        return 1.0
+
+    from .ruleset import is_nodebuster_ruleset
+    if not is_nodebuster_ruleset():
+        return 1.0
+
+    from .nodebuster import rebuild_production_multiplier_for as nodebuster_rebuild_production_multiplier_for
+
+    return float(
+        nodebuster_rebuild_production_multiplier_for(
+            int(planet_id),
+            str(building_type),
+            int(current_level),
+            conn=conn,
+        )
+    )
+
 def tail_power_bonus_hundredths_for(
     planet_id: int,
     building_type: str,
