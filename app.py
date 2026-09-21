@@ -12072,7 +12072,7 @@ def api_game_state():
 
     # GC-PERF-STATE-004: idle diet short-circuit before expensive payload build.
     if delta_enabled and since_raw.isdigit() and not want_panel and not delta_keys:
-        # GC-PERF-STATE-009: @require_login_api already validated the session and
+        # GC-PERF-LAUNCH-001: @require_login_api already validated the session and
         # populated g.player. Do not open a second auth connection just to recover
         # the same numeric player id before the diet early-exit probe.
         user_id = int(session.get("user_id") or 0)
