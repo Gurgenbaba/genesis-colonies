@@ -4,9 +4,14 @@
 const GC_IMAGE_CACHE_PREFIX = "gc-static-images-";
 const GC_IMAGE_VERSION = new URL(self.location.href).searchParams.get("v") || "dev";
 const GC_IMAGE_CACHE = GC_IMAGE_CACHE_PREFIX + GC_IMAGE_VERSION;
+const GC_IMAGE_SUFFIX_RE = /\\.(?:avif|webp|png|jpe?g|gif|svg)$/i;
 
 function isBundledGameImage(url) {
-  return url.origin === self.location.origin && url.pathname.startsWith("/static/img/");
+  return (
+    url.origin === self.location.origin &&
+    url.pathname.startsWith("/static/img/") &&
+    GC_IMAGE_SUFFIX_RE.test(url.pathname)
+  );
 }
 
 function canonicalImageCacheKey(url) {
