@@ -16,7 +16,9 @@ def test_building_card_keeps_ascension_compact():
     assert "data-mine-evolve" in block
     assert "nodebuster_skills" not in block
     assert "gc-nodebuster-tree" not in block
-    assert "nodebuster_best_depth" not in block
+    # Best depth may be carried as hidden confirmation data, but must not be
+    # rendered as another noisy building-card stat.
+    assert "mine_ascension_best_depth" not in block
     assert "nodebuster_rebuild_cost_pct" not in block
     assert "nodebuster_production_bonus_pct" not in block
 
@@ -103,8 +105,15 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert ".gc-ascension-node--optimized_energy" in css
     assert ".gc-ascension-node--load_balancing" in css
     assert ".gc-ascension-node--utility" in css
-    assert "nodebuster_skill_optimized_energy" in template
-    assert "nodebuster_skill_load_balancing" in template
+    assert "skill.key == 'optimized_energy'" in template
+    assert "skill.key == 'load_balancing'" in template
+    assert "T('nodebuster_skill_' ~ skill.key)" in template
+    locales_de = (ROOT / "locales" / "de.json").read_text(encoding="utf-8")
+    locales_en = (ROOT / "locales" / "en.json").read_text(encoding="utf-8")
+    assert "nodebuster_skill_optimized_energy" in locales_de
+    assert "nodebuster_skill_optimized_energy" in locales_en
+    assert "nodebuster_skill_load_balancing" in locales_de
+    assert "nodebuster_skill_load_balancing" in locales_en
     assert "mine_ascension_preview_energy_draw" in template
     assert ".gc-ascension-tree__edge.is-fed" in css
     assert "grid-template-columns:repeat(6,minmax(0,1fr))" in css
@@ -134,8 +143,12 @@ def test_ascension_breakthroughs_are_separate_from_core_tree():
     assert "{% if not skill.breakthrough %}" in template
     assert "gc-ascension-breakthroughs" in template
     assert "gc-ascension-breakthrough-card" in template
-    assert "mine.nodebuster_tail_power" in template
-    assert "mine.nodebuster_rebuild_window_extra_levels" in template
+    # Player-facing breakthrough cards show concrete before/after values;
+    # q/tail internals remain secondary technical detail.
+    assert "skill.preview.tail_from" in template
+    assert "skill.preview.tail_to" in template
+    assert "skill.preview.window_before" in template
+    assert "skill.preview.window_after" in template
     assert "mine_ascension_preview_more_production" in template
     assert "mine_ascension_preview_restart" in template
     assert "mine_ascension_preview_rebuild_reach" in template
