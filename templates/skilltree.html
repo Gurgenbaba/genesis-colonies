@@ -546,6 +546,7 @@
 
               <div class="gc-ascension-tree__nodes">
                 {% for skill in mine.nodebuster_skills %}
+                {% if not skill.breakthrough %}
                 {% set is_max = skill.rank >= skill.max_rank %}
                 {% set is_locked = (not skill.available) and (not is_max) %}
                 {% set is_capstone = skill.key == 'overdrive' %}
@@ -586,10 +587,55 @@
                   <span class="gc-ascension-node__cap">{{ T('commander_capstone', 'Capstone') }}</span>
                   {% endif %}
                 </button>
+                {% endif %}
                 {% endfor %}
               </div>
             </div>
           </div>
+
+          <section class="gc-ascension-breakthroughs" aria-label="{{ T('mine_ascension_breakthrough_title', 'Breakthroughs') }}">
+            <div class="gc-ascension-breakthroughs__head">
+              <div>
+                <span class="gc-ascension-breakthroughs__eyebrow">{{ T('mine_ascension_breakthrough_kicker', 'Keystone-Protokolle') }}</span>
+                <h4>{{ T('mine_ascension_breakthrough_title', 'Breakthroughs') }}</h4>
+                <p>{{ T('mine_ascension_breakthrough_hint', 'Teure Einmal-Knoten verändern die Regeln deines nächsten Runs.') }}</p>
+              </div>
+              <div class="gc-ascension-breakthroughs__live gc-mono">
+                <span>{{ T('mine_ascension_tail_power', 'Tail') }}</span>
+                <strong>q{{ '%.2f'|format(mine.nodebuster_tail_power) }}</strong>
+                <span>{{ T('mine_ascension_rebuild_window', 'Rebuild-Fenster') }}</span>
+                <strong>+{{ mine.nodebuster_rebuild_window_extra_levels|fmt_int }} L</strong>
+              </div>
+            </div>
+            <div class="gc-ascension-breakthroughs__grid">
+              {% for skill in mine.nodebuster_skills %}
+              {% if skill.breakthrough %}
+              {% set is_max = skill.rank >= skill.max_rank %}
+              {% set is_locked = (not skill.available) and (not is_max) %}
+              <button
+                type="button"
+                class="gc-ascension-breakthrough-card{% if is_max %} is-maxed{% elif is_locked %} is-locked{% elif skill.affordable %} is-available{% else %} is-unaffordable{% endif %}{% if skill.rank > 0 %} is-upgraded{% endif %}"
+                data-ascension-node-select="{{ skill.key }}"
+                data-ascension-building="{{ mine.building_type }}"
+                aria-selected="false"
+                title="{{ T('nodebuster_skill_' ~ skill.key) }}">
+                <span class="gc-ascension-breakthrough-card__top">
+                  <span class="gc-ascension-breakthrough-card__name">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
+                  <span class="gc-ascension-breakthrough-card__cost gc-mono">
+                    {% if is_max %}{{ T('commander_maxed', 'Max') }}{% else %}{{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}{% endif %}
+                  </span>
+                </span>
+                <span class="gc-ascension-breakthrough-card__effect">{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}</span>
+                <span class="gc-ascension-breakthrough-card__gate gc-mono">
+                  {% if skill.requires_best_depth %}
+                    {{ T('mine_ascension_depth_gate', level=skill.requires_best_depth) }}
+                  {% endif %}
+                </span>
+              </button>
+              {% endif %}
+              {% endfor %}
+            </div>
+          </section>
 
           <aside class="gc-ascension-inspector" data-ascension-inspector="{{ mine.building_type }}">
             {% for skill in mine.nodebuster_skills %}
@@ -607,6 +653,10 @@
                 <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
                 {% elif skill.key == 'deep_storage' %}
                 <img src="{{ url_for('static', filename='img/classes/icons/storage.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key in ['core_resonance', 'singularity_excavation'] %}
+                <img src="{{ url_for('static', filename='img/classes/icons/production.webp') }}" alt="" width="72" height="72" loading="lazy">
+                {% elif skill.key == 'legacy_reconstruction' %}
+                <img src="{{ url_for('static', filename='img/classes/icons/build.webp') }}" alt="" width="72" height="72" loading="lazy">
                 {% else %}
                 <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
                 {% endif %}
