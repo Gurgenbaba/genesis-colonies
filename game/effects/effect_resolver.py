@@ -1287,17 +1287,14 @@ class EffectResolver:
 
         mine_energy_factor = _mod_float(mods, "mine_energy_factor")
         energy_used = (
-            self.apply_mine_energy_draw(
-                energy_metal,
-                mine_energy_factor * self._nodebuster_energy_draw_bps("metal_mine") / 10000.0,
+            self._apply_mine_energy_draw_with_ascension(
+                energy_metal, mine_energy_factor, "metal_mine"
             )
-            + self.apply_mine_energy_draw(
-                energy_crystal,
-                mine_energy_factor * self._nodebuster_energy_draw_bps("crystal_mine") / 10000.0,
+            + self._apply_mine_energy_draw_with_ascension(
+                energy_crystal, mine_energy_factor, "crystal_mine"
             )
-            + self.apply_mine_energy_draw(
-                energy_fuel_cell,
-                mine_energy_factor * self._nodebuster_energy_draw_bps("fuel_cell_plant") / 10000.0,
+            + self._apply_mine_energy_draw_with_ascension(
+                energy_fuel_cell, mine_energy_factor, "fuel_cell_plant"
             )
         )
 
@@ -1317,8 +1314,24 @@ class EffectResolver:
         else:
             return 0
         factor = _mod_float(self.get_modifiers(), "mine_energy_factor")
-        factor *= self._nodebuster_energy_draw_bps(building_type) / 10000.0
-        return self.apply_mine_energy_draw(raw, factor)
+        return self._apply_mine_energy_draw_with_ascension(raw, factor, building_type)
+
+    def _apply_mine_energy_draw_with_ascension(
+        self,
+        raw: int,
+        legacy_factor: float,
+        building_type: str,
+    ) -> int:
+        """Apply legacy/global draw first, then the per-mine Ascension reduction.
+
+        The order is intentional: Energy Tech's historical 1% gameplay floor
+        must not swallow Optimized Energy ranks at high research levels.
+        """
+        legacy_draw = self.apply_mine_energy_draw(raw, legacy_factor)
+        if legacy_draw <= 0:
+            return 0
+        bps = self._nodebuster_energy_draw_bps(building_type)
+        return max(1, (int(legacy_draw) * int(bps)) // 10000)
 
     @staticmethod
     def energy_ratio(energy_total: int, energy_used: int) -> float:
