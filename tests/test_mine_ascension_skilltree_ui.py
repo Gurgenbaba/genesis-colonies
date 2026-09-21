@@ -84,18 +84,18 @@ def test_skilltree_ascension_uses_server_readiness_and_inspector_actions():
     assert "activateMineTab" in js
 
 
-def test_ascension_tree_is_visual_and_details_live_in_inspector():
+def test_ascension_tree_is_visual_and_matches_commander_layout_language():
     template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
     css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
 
     assert "gc-ascension-node__art" in template
-    assert "gc-ascension-node__name" in template
+    assert "gc-ascension-node__state" in template
+    assert "gc-ascension-node__name" not in template
     assert "img/classes/icons/production.webp" in template
     assert "gc-ascension-tree__edge" in template
     assert "tree_rank.reconstruction >= 5" in template
     assert "tree_rank.deep_yield >= 5" in template
     assert "gc-ascension-node--{{ skill.key }}" in template
-    assert "gc-ascension-node__state" not in template
 
     for key in (
         "reconstruction",
@@ -109,10 +109,29 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     ):
         assert f".gc-ascension-node--{key}" in css
 
-    assert ".gc-ascension-node--utility" in css
-    assert "skill.key == 'optimized_energy'" in template
-    assert "skill.key == 'load_balancing'" in template
-    assert "T('nodebuster_skill_' ~ skill.key)" in template
+    # Commander parity: same 5-column fork silhouette, ~96px square nodes,
+    # horizontal overflow at narrow widths and a dock-style inspector.
+    assert "grid-template-columns:repeat(5,1fr)" in css
+    assert "max-width:96px" in css
+    assert "min-width:540px" in css
+    assert "overflow-x:auto" in css
+    assert "grid-template-columns:88px minmax(0,1fr) auto" in css
+    assert ".gc-ascension-node--frugal_rebuild{grid-column:2;grid-row:3}" in css
+    assert ".gc-ascension-node--rapid_rebuild{grid-column:4;grid-row:3}" in css
+    assert ".gc-ascension-node--overdrive{grid-column:3;grid-row:4}" in css
+
+    assert 'viewBox="0 0 600 648"' in template
+    assert 'M300 166 V208 H180 V222' in template
+    assert 'M180 322 V344 H300 V356' in template
+    assert "gc-ascension-tree__junction" in template
+    edge_block = template[template.index("gc-ascension-tree__edges"):template.index("gc-ascension-tree__nodes")]
+    assert " C" not in edge_block
+
+    assert ".gc-ascension-node.is-locked" in css
+    assert "opacity:.48" in css
+    assert ".gc-ascension-node.is-selected" in css
+    assert ".gc-ascension-node.is-selected.is-available" in css
+    assert "animation:gc-ascension-node-pulse" in css
 
     locales_de = (ROOT / "locales" / "de.json").read_text(encoding="utf-8")
     locales_en = (ROOT / "locales" / "en.json").read_text(encoding="utf-8")
@@ -120,28 +139,28 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert "nodebuster_skill_optimized_energy" in locales_en
     assert "nodebuster_skill_load_balancing" in locales_de
     assert "nodebuster_skill_load_balancing" in locales_en
-
     assert "mine_ascension_preview_energy_draw" in template
-    assert ".gc-ascension-tree__edge.is-fed" in css
-    assert "grid-template-columns:repeat(6,minmax(0,1fr))" in css
-    assert ".gc-ascension-node--frugal_rebuild{grid-column:2 / span 2;grid-row:3}" in css
-    assert ".gc-ascension-node--rapid_rebuild{grid-column:4 / span 2;grid-row:3}" in css
-    assert ".gc-ascension-node--overdrive{grid-column:3 / span 2;grid-row:4}" in css
-    assert 'viewBox="0 0 600 712"' in template
-    assert 'M300 138 V190 H200 V204' in template
-    assert 'M200 308 V315 H300 V322' in template
-    assert "gc-ascension-tree__junction" in template
-    edge_block = template[template.index("gc-ascension-tree__edges"):template.index("gc-ascension-tree__nodes")]
-    assert " C" not in edge_block
-    assert "--asc-node-size:100px" in css
-    assert "grid-template-rows:72px 104px 104px 120px 108px 120px" in css
-    assert ".gc-ascension-tree__junction" in css
-    assert "opacity:.52" in css
-    assert ".gc-ascension-node.is-selected.is-locked" in css
-    assert ".gc-ascension-node.is-selected.is-unaffordable" in css
-    assert ".gc-ascension-node.is-selected.is-available" in css
-    assert "animation:gc-ascension-node-pulse" in css
-    assert "content:none" in css
+
+
+def test_ascension_header_and_run_hud_are_compact_commander_grade():
+    template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
+
+    assert "gc-ascension-hero" in template
+    assert "gc-ascension-summary" in template
+    assert "gc-ascension-mine-tabs" in template
+    assert "gc-ascension-mine-hero" in template
+    assert "gc-ascension-run-hud" in template
+    assert "gc-ascension-run-hud__group--progress" in template
+    assert "gc-ascension-run-hud__group--effects" in template
+    assert "gc-ascension-stat-grid" not in template
+    assert "gc-ascension-bonus-grid" not in template
+
+    assert ".gc-ascension-run-hud" in css
+    assert "grid-template-columns:minmax(0,1.25fr) 1px minmax(0,1fr)" in css
+    assert ".gc-ascension-mine-tab.is-active::after" in css
+    assert ".gc-ascension-mine-hero" in css
+    assert ".gc-ascension-cta" in css
 
 
 def test_ascension_breakthroughs_are_integrated_into_the_progression_map():
@@ -153,14 +172,14 @@ def test_ascension_breakthroughs_are_integrated_into_the_progression_map():
     assert "gc-ascension-breakthroughs__grid" not in template
     assert "gc-ascension-node--breakthrough" in template
     assert "gc-ascension-tree__breakthrough-band" in template
-    assert "gc-ascension-node__keystone" in template
+    assert "gc-ascension-node__key" in template
     assert "skill.breakthrough" in template
 
     for key, placement in (
-        ("legacy_reconstruction", "grid-column:1 / span 2;grid-row:5"),
-        ("core_resonance", "grid-column:3 / span 2;grid-row:5"),
-        ("breakthrough_window", "grid-column:5 / span 2;grid-row:5"),
-        ("singularity_excavation", "grid-column:3 / span 2;grid-row:6"),
+        ("legacy_reconstruction", "grid-column:1;grid-row:5"),
+        ("core_resonance", "grid-column:3;grid-row:5"),
+        ("breakthrough_window", "grid-column:5;grid-row:5"),
+        ("singularity_excavation", "grid-column:3;grid-row:6"),
     ):
         assert f".gc-ascension-node--{key}" in css
         assert placement in css
@@ -183,8 +202,6 @@ def test_ascension_breakthroughs_are_integrated_into_the_progression_map():
     assert "mine_ascension_buy_breakthrough" in template
     assert "skill.requires_best_depth" in template
 
-    # The player-facing map uses concrete level / production deltas; the
-    # internal q-curve is intentionally not rendered as a second mini-panel.
     assert "skill.preview.tail_from" not in template
     assert "skill.preview.tail_to" not in template
 

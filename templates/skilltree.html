@@ -468,45 +468,47 @@
           </div>
         </header>
 
-        <section class="gc-ascension-stat-grid" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
-          <div class="gc-ascension-stat">
-            <span>{{ T('mine_ascension_level', level='') }}</span>
-            <strong class="gc-mono">L{{ mine.level|fmt_int }}</strong>
+        <section class="gc-ascension-run-hud gc-panel" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
+          <div class="gc-ascension-run-hud__group gc-ascension-run-hud__group--progress">
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_level', level='') }}</span>
+              <strong class="gc-mono">L{{ mine.level|fmt_int }}</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
+              <strong class="gc-mono">L{{ mine.nodebuster_best_depth|fmt_int }}</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_restart_level', 'Neustart') }}</span>
+              <strong class="gc-mono">L{{ mine.nodebuster_reset_level|fmt_int }}</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_count', count='') }}</span>
+              <strong class="gc-mono">{{ mine.evolution_rank|fmt_int }}</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item gc-ascension-run-hud__item--ap">
+              <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
+              <strong class="gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</strong>
+            </div>
           </div>
-          <div class="gc-ascension-stat">
-            <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
-            <strong class="gc-mono">L{{ mine.nodebuster_best_depth|fmt_int }}</strong>
-          </div>
-          <div class="gc-ascension-stat">
-            <span>{{ T('mine_ascension_restart_level', 'Neustart') }}</span>
-            <strong class="gc-mono">L{{ mine.nodebuster_reset_level|fmt_int }}</strong>
-          </div>
-          <div class="gc-ascension-stat">
-            <span>{{ T('mine_ascension_count', count='') }}</span>
-            <strong class="gc-mono">{{ mine.evolution_rank|fmt_int }}</strong>
-          </div>
-          <div class="gc-ascension-stat gc-ascension-stat--ap">
-            <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
-            <strong class="gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</strong>
-          </div>
-        </section>
-
-        <section class="gc-ascension-bonus-grid">
-          <div class="gc-ascension-bonus">
-            <span>{{ T('mine_ascension_production_bonus', 'Produktion') }}</span>
-            <strong class="gc-mono">+{{ mine.nodebuster_production_bonus_pct }}%</strong>
-          </div>
-          <div class="gc-ascension-bonus">
-            <span>{{ T('mine_ascension_storage_bonus', 'Lager') }}</span>
-            <strong class="gc-mono">+{{ mine.nodebuster_storage_bonus_pct }}%</strong>
-          </div>
-          <div class="gc-ascension-bonus">
-            <span>{{ T('mine_ascension_rebuild_cost_bonus', pct=mine.nodebuster_rebuild_cost_pct) }}</span>
-            <strong class="gc-mono">-{{ mine.nodebuster_rebuild_cost_pct }}%</strong>
-          </div>
-          <div class="gc-ascension-bonus">
-            <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
-            <strong class="gc-mono">-{{ mine.nodebuster_rebuild_time_pct }}%</strong>
+          <div class="gc-ascension-run-hud__divider" aria-hidden="true"></div>
+          <div class="gc-ascension-run-hud__group gc-ascension-run-hud__group--effects">
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_production_bonus', 'Produktion') }}</span>
+              <strong class="gc-mono">+{{ mine.nodebuster_production_bonus_pct }}%</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_storage_bonus', 'Lager') }}</span>
+              <strong class="gc-mono">+{{ mine.nodebuster_storage_bonus_pct }}%</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_rebuild_cost_bonus', pct=mine.nodebuster_rebuild_cost_pct) }}</span>
+              <strong class="gc-mono">-{{ mine.nodebuster_rebuild_cost_pct }}%</strong>
+            </div>
+            <div class="gc-ascension-run-hud__item">
+              <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
+              <strong class="gc-mono">-{{ mine.nodebuster_rebuild_time_pct }}%</strong>
+            </div>
           </div>
         </section>
 
@@ -541,27 +543,27 @@
             {% endfor %}
 
             <div class="gc-ascension-tree__map" role="group" aria-label="{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}">
-              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 712" preserveAspectRatio="none" aria-hidden="true">
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--utility{% if tree_rank.optimized_energy >= 3 %} is-fed{% endif %}" d="M200 36 H400" />
+              <svg class="gc-ascension-tree__edges" viewBox="0 0 600 648" preserveAspectRatio="none" aria-hidden="true">
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--utility{% if tree_rank.optimized_energy >= 3 %} is-fed{% endif %}" d="M180 54 H420" />
 
-                <path class="gc-ascension-tree__edge{% if tree_rank.reconstruction >= 5 %} is-fed{% endif %}" d="M100 138 V190 H200 V204" />
-                <path class="gc-ascension-tree__edge{% if tree_rank.deep_yield >= 5 %} is-fed{% endif %}" d="M300 138 V190 H200 V204" />
-                <path class="gc-ascension-tree__edge{% if tree_rank.deep_yield >= 5 %} is-fed{% endif %}" d="M300 138 V190 H400 V204" />
-                <path class="gc-ascension-tree__edge{% if tree_rank.deep_storage >= 5 %} is-fed{% endif %}" d="M500 138 V190 H400 V204" />
-                <path class="gc-ascension-tree__edge{% if tree_rank.frugal_rebuild >= 5 %} is-fed{% endif %}" d="M200 308 V315 H300 V322" />
-                <path class="gc-ascension-tree__edge{% if tree_rank.rapid_rebuild >= 5 %} is-fed{% endif %}" d="M400 308 V315 H300 V322" />
+                <path class="gc-ascension-tree__edge{% if tree_rank.reconstruction >= 5 %} is-fed{% endif %}" d="M60 166 V208 H180 V222" />
+                <path class="gc-ascension-tree__edge{% if tree_rank.deep_yield >= 5 %} is-fed{% endif %}" d="M300 166 V208 H180 V222" />
+                <path class="gc-ascension-tree__edge{% if tree_rank.deep_yield >= 5 %} is-fed{% endif %}" d="M300 166 V208 H420 V222" />
+                <path class="gc-ascension-tree__edge{% if tree_rank.deep_storage >= 5 %} is-fed{% endif %}" d="M540 166 V208 H420 V222" />
+                <path class="gc-ascension-tree__edge{% if tree_rank.frugal_rebuild >= 5 %} is-fed{% endif %}" d="M180 322 V344 H300 V356" />
+                <path class="gc-ascension-tree__edge{% if tree_rank.rapid_rebuild >= 5 %} is-fed{% endif %}" d="M420 322 V344 H300 V356" />
 
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.reconstruction >= 8 %} is-fed{% endif %}" d="M100 190 V456" />
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.deep_yield >= 8 %} is-fed{% endif %}" d="M300 190 V214 H265 V448 H300 V456" />
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.frugal_rebuild >= 8 %} is-fed{% endif %}" d="M200 308 V448 H500 V456" />
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.rapid_rebuild >= 8 %} is-fed{% endif %}" d="M400 308 V448 H500 V456" />
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.core_resonance >= 1 %} is-fed{% endif %}" d="M300 564 V578" />
-                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.overdrive >= 3 %} is-fed{% endif %}" d="M300 442 V448 H400 V571 H300 V578" />
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.reconstruction >= 8 %} is-fed{% endif %}" d="M60 208 V486" />
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.deep_yield >= 8 %} is-fed{% endif %}" d="M300 208 V486" />
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.frugal_rebuild >= 8 %} is-fed{% endif %}" d="M180 322 V458 H540 V486" />
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.rapid_rebuild >= 8 %} is-fed{% endif %}" d="M420 322 V458 H540 V486" />
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.core_resonance >= 1 %} is-fed{% endif %}" d="M300 548 V570" />
+                <path class="gc-ascension-tree__edge gc-ascension-tree__edge--breakthrough{% if tree_rank.overdrive >= 3 %} is-fed{% endif %}" d="M300 432 V570" />
 
-                <circle class="gc-ascension-tree__junction" cx="200" cy="190" r="3.5" />
-                <circle class="gc-ascension-tree__junction" cx="400" cy="190" r="3.5" />
-                <circle class="gc-ascension-tree__junction gc-ascension-tree__junction--cap" cx="300" cy="315" r="3.5" />
-                <circle class="gc-ascension-tree__junction gc-ascension-tree__junction--breakthrough" cx="300" cy="571" r="3.5" />
+                <circle class="gc-ascension-tree__junction" cx="180" cy="208" r="3.5" />
+                <circle class="gc-ascension-tree__junction" cx="420" cy="208" r="3.5" />
+                <circle class="gc-ascension-tree__junction gc-ascension-tree__junction--cap" cx="300" cy="344" r="3.5" />
+                <circle class="gc-ascension-tree__junction gc-ascension-tree__junction--breakthrough" cx="300" cy="570" r="3.5" />
               </svg>
 
               <div class="gc-ascension-tree__breakthrough-band" aria-hidden="true">
@@ -583,7 +585,7 @@
                   aria-label="{{ T('nodebuster_skill_' ~ skill.key) }}"
                   title="{{ T('nodebuster_skill_' ~ skill.key ~ '_desc') }}">
                   {% if skill.breakthrough %}
-                  <span class="gc-ascension-node__keystone" aria-hidden="true">◆</span>
+                  <span class="gc-ascension-node__key" aria-hidden="true">◆</span>
                   {% endif %}
                   <span class="gc-ascension-node__art" aria-hidden="true">
                     {% if skill.key == 'reconstruction' or skill.key == 'legacy_reconstruction' %}
@@ -604,15 +606,14 @@
                     <img src="{{ url_for('static', filename='img/classes/icons/industry.webp') }}" alt="" width="72" height="72" loading="lazy">
                     {% endif %}
                   </span>
-                  <span class="gc-ascension-node__name">{{ T('nodebuster_skill_' ~ skill.key) }}</span>
                   <span class="gc-ascension-node__rank gc-mono">{{ skill.rank }}/{{ skill.max_rank }}</span>
-                  <span class="gc-ascension-node__badge gc-mono">
+                  <span class="gc-ascension-node__state">
                     {% if is_max %}
                       {{ T('commander_maxed', 'Max') }}
                     {% elif is_locked %}
                       {{ T('commander_locked', 'Gesperrt') }}
-                    {% elif skill.breakthrough %}
-                      {{ T('mine_ascension_purchase_cost', cost=skill.cost) }}
+                    {% elif skill.affordable %}
+                      {{ T('commander_available_label', 'Verfügbar') }}
                     {% else %}
                       {{ skill.cost }} {{ T('mine_ascension_points_short', 'AP') }}
                     {% endif %}
