@@ -852,6 +852,29 @@ def purchase_skill(
             rollback(conn)
             return False, "schema_missing", {}
 
+        # Settle the entire elapsed production interval with the OLD skill
+        # ranks. Otherwise production/energy nodes would apply retroactively
+        # from last_update through the purchase timestamp.
+        from ..queue_engine import finish_due_work
+
+        now = time.time()
+        finish_due_work(
+            player_id=int(user_id),
+            planet_id=planet_id,
+            now=now,
+            conn=conn,
+            source="action",
+            recalc_ranks=False,
+        )
+        from ..resources import update_planet_resources
+
+        update_planet_resources(
+            dict(planet),
+            conn=conn,
+            skip_queue_finish=True,
+            persist=True,
+        )
+
         profiles = get_profiles_for_planet(planet_id, conn=conn)
         state = get_state(planet_id, bt, conn=conn, profiles=profiles)
         skills = get_skills(planet_id, bt, conn=conn, profiles=profiles)
@@ -880,7 +903,6 @@ def purchase_skill(
 
         new_rank = current + 1
         new_unspent = unspent - cost
-        now = time.time()
         conn.execute(
             """
             INSERT INTO planet_mine_ascension_skills (
