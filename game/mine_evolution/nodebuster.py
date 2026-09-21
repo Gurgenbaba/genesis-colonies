@@ -32,7 +32,7 @@ QUEUE_SAFETY_SENTINEL = 2_147_483_647
 # hundredths so q4.00 -> q4.10 -> q4.20 never depends on binary-float state.
 CORE_RESONANCE_TAIL_POWER_HUNDREDTHS = 10
 SINGULARITY_TAIL_POWER_HUNDREDTHS = 10
-LEGACY_RECONSTRUCTION_BEST_BPS = 3500
+LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS = 3000
 BREAKTHROUGH_WINDOW_LEVELS = 25
 
 SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
@@ -108,7 +108,7 @@ SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
         "max_rank": 1,
         "base_cost": 20,
         "cost_step_every": 1,
-        "kind": "breakthrough_restart",
+        "kind": "breakthrough_rebuild_production",
         "requires": {"reconstruction": 8},
         "requires_best_depth": 400,
         "breakthrough": True,
@@ -337,13 +337,15 @@ def rebuild_window_extra_levels(skills: Dict[str, int]) -> int:
 
 
 def reset_start_level(skills: Dict[str, int], best_depth: int = 0) -> int:
+    """Return the permanent restart baseline.
+
+    ``best_depth`` remains in the signature for backwards-compatible callers,
+    but the expensive Legacy keystone no longer duplicates Reconstruction.
+    """
+    del best_depth
     reconstruction = max(0, int(skills.get("reconstruction", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
     base = reconstruction * 10 + overdrive * 10
-    if int(skills.get("legacy_reconstruction", 0) or 0) > 0:
-        lifetime_best = max(0, int(best_depth or 0))
-        legacy = (lifetime_best * LEGACY_RECONSTRUCTION_BEST_BPS) // 10000
-        base = max(base, legacy)
     # Ascension must always restart below the L200 activation threshold.
     return min(ASCENSION_MIN_LEVEL - 1, base)
 
@@ -358,6 +360,46 @@ def rebuild_time_bps(skills: Dict[str, int]) -> int:
     rapid = max(0, int(skills.get("rapid_rebuild", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
     return max(4500, 10000 - 500 * rapid - 200 * overdrive)
+
+
+def rebuild_production_bonus_bps(skills: Dict[str, int]) -> int:
+    """Temporary mine-output surge earned by the expensive Legacy keystone."""
+    return (
+        LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS
+        if int(skills.get("legacy_reconstruction", 0) or 0) > 0
+        else 0
+    )
+
+
+def rebuild_production_multiplier_for(
+    planet_id: int,
+    building_type: str,
+    current_level: int,
+    *,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> float:
+    """Mine-only output multiplier while climbing back through the record.
+
+    Legacy Reconstruction is intentionally a rebuild accelerator, not another
+    restart-level mechanic. Breakthrough Window extends this surge together
+    with the existing rebuild cost/time discounts through best depth +25.
+    """
+    bt = str(building_type or "")
+    if not is_evolvable_mine(bt):
+        return 1.0
+    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
+    state = get_state(int(planet_id), bt, conn=conn, profiles=data)
+    if int(state.get("ascension_count") or 0) <= 0:
+        return 1.0
+    skills = get_skills(int(planet_id), bt, conn=conn, profiles=data)
+    bonus_bps = rebuild_production_bonus_bps(skills)
+    if bonus_bps <= 0:
+        return 1.0
+    rebuild_limit = int(state.get("best_depth") or 0) + rebuild_window_extra_levels(skills)
+    if int(current_level or 0) > rebuild_limit:
+        return 1.0
+    return 1.0 + bonus_bps / 10000.0
 
 
 def energy_draw_bps(skills: Dict[str, int]) -> int:
@@ -625,15 +667,11 @@ def panel_fields(
                 "levels": _tail_step_preview(current_tail, target_tail),
             }
         elif key == "legacy_reconstruction":
-            best_for_preview = max(int(state["best_depth"]), lvl)
-            without = dict(skills)
-            without["legacy_reconstruction"] = 0
-            with_legacy = dict(skills)
-            with_legacy["legacy_reconstruction"] = 1
+            rebuild_reach = int(state["best_depth"]) + rebuild_window_extra_levels(skills)
             row["preview"] = {
-                "restart_before": reset_start_level(without, best_for_preview),
-                "restart_after": reset_start_level(with_legacy, best_for_preview),
-                "best_depth": best_for_preview,
+                "production_bonus_pct": LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS / 100.0,
+                "rebuild_reach": rebuild_reach,
+                "window_extra_levels": rebuild_window_extra_levels(skills),
             }
         elif key == "breakthrough_window":
             best_depth = int(state["best_depth"])
@@ -681,6 +719,17 @@ def panel_fields(
         "nodebuster_rebuild_window_level": int(state["best_depth"]) + rebuild_window_extra_levels(skills),
         "nodebuster_rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(skills)) * 100)),
         "nodebuster_rebuild_time_pct": int(round((1.0 - rebuild_time_multiplier(skills)) * 100)),
+        "nodebuster_rebuild_production_bonus_pct": rebuild_production_bonus_bps(skills) / 100.0,
+        "nodebuster_rebuild_production_active": bool(
+            rebuild_production_multiplier_for(
+                int(planet_id),
+                bt,
+                lvl,
+                conn=conn,
+                profiles=data,
+            ) > 1.0
+        ),
+        "nodebuster_rebuild_production_reach": int(state["best_depth"]) + rebuild_window_extra_levels(skills),
         "nodebuster_production_bonus_pct": round((production_multiplier(skills) - 1.0) * 100.0, 2),
         "nodebuster_storage_bonus_pct": storage_bonus_bps(skills) / 100.0,
         "nodebuster_energy_draw_reduction_pct": (10000 - energy_draw_bps(skills)) / 100.0,
