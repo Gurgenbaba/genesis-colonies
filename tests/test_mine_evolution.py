@@ -227,7 +227,7 @@ def test_panel_exposes_nodebuster_server_truth(mevo_db):
     assert fields["evolution_can_evolve"] is True
     assert fields["nodebuster_points_gain"] == 2
     assert fields["nodebuster_reset_level"] == 0
-    assert len(fields["nodebuster_skills"]) == 6
+    assert len(fields["nodebuster_skills"]) == 10
     assert any(row["key"] == "deep_storage" for row in fields["nodebuster_skills"])
     assert any(row["key"] == "overdrive" for row in fields["nodebuster_skills"])
 
