@@ -100,18 +100,24 @@ def test_ascension_tree_is_visual_and_details_live_in_inspector():
     assert ".gc-ascension-node--frugal_rebuild" in css
     assert ".gc-ascension-node--rapid_rebuild" in css
     assert ".gc-ascension-node--overdrive" in css
+    assert ".gc-ascension-node--optimized_energy" in css
+    assert ".gc-ascension-node--load_balancing" in css
+    assert ".gc-ascension-node--utility" in css
+    assert "nodebuster_skill_optimized_energy" in template
+    assert "nodebuster_skill_load_balancing" in template
+    assert "mine_ascension_preview_energy_draw" in template
     assert ".gc-ascension-tree__edge.is-fed" in css
     assert "grid-template-columns:repeat(6,minmax(0,1fr))" in css
     assert ".gc-ascension-node--frugal_rebuild{grid-column:2 / span 2;grid-row:2}" in css
     assert ".gc-ascension-node--rapid_rebuild{grid-column:4 / span 2;grid-row:2}" in css
     assert ".gc-ascension-node--overdrive{" in css
-    assert 'viewBox="0 0 600 388"' in template
-    assert 'M300 108 V119 H200 V130' in template
-    assert 'M400 238 V249 H300 V260' in template
+    assert 'viewBox="0 0 600 488"' in template
+    assert 'M300 216 V225 H200 V234' in template
+    assert 'M400 342 V351 H300 V360' in template
     assert 'gc-ascension-tree__junction' in template
     assert ' C' not in template[template.index('gc-ascension-tree__edges'):template.index('gc-ascension-tree__nodes')]
     assert "--asc-node-size:108px" in css
-    assert "grid-template-rows:108px 108px 128px" in css
+    assert "grid-template-rows:90px 108px 108px 128px" in css
     assert ".gc-ascension-tree__junction" in css
     assert "opacity:.52" in css
     assert ".gc-ascension-node.is-selected.is-locked" in css
@@ -130,6 +136,10 @@ def test_ascension_breakthroughs_are_separate_from_core_tree():
     assert "gc-ascension-breakthrough-card" in template
     assert "mine.nodebuster_tail_power" in template
     assert "mine.nodebuster_rebuild_window_extra_levels" in template
+    assert "mine_ascension_preview_more_production" in template
+    assert "mine_ascension_preview_restart" in template
+    assert "mine_ascension_preview_rebuild_reach" in template
+    assert "skill.preview.levels" in template
     assert "skill.requires_best_depth" in template
 
     for key in (
