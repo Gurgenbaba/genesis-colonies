@@ -1070,3 +1070,153 @@
     animation:none!important;
   }
 }
+
+
+/* Ascension Breakthrough V2 — expensive rule-changing keystones. */
+.gc-ascension-breakthroughs{
+  margin-top:10px;
+  padding:12px;
+  border:1px solid color-mix(in srgb,#d8ae52 42%,var(--gc-border-soft,rgba(255,255,255,.09)));
+  background:
+    radial-gradient(circle at 85% 0%,rgba(216,174,82,.09),transparent 30%),
+    linear-gradient(180deg,rgba(216,174,82,.035),transparent 60%),
+    rgba(4,8,12,.72);
+  box-shadow:inset 0 0 24px rgba(216,174,82,.025);
+}
+.gc-ascension-breakthroughs__head{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:flex-end;
+  margin-bottom:9px;
+}
+.gc-ascension-breakthroughs__eyebrow{
+  display:block;
+  margin-bottom:3px;
+  color:#e3bc67;
+  font-size:.58rem;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.gc-ascension-breakthroughs__head h4{
+  margin:0;
+  font-size:.92rem;
+}
+.gc-ascension-breakthroughs__head p{
+  margin:3px 0 0;
+  max-width:680px;
+  font-size:.67rem;
+  line-height:1.35;
+  opacity:.67;
+}
+.gc-ascension-breakthroughs__live{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns:auto auto;
+  gap:3px 9px;
+  align-items:baseline;
+  padding:7px 9px;
+  border:1px solid rgba(216,174,82,.24);
+  background:rgba(0,0,0,.24);
+  font-size:.62rem;
+}
+.gc-ascension-breakthroughs__live span{opacity:.58}
+.gc-ascension-breakthroughs__live strong{color:#edcb7b;text-align:right}
+.gc-ascension-breakthroughs__grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:7px;
+}
+.gc-ascension-breakthrough-card{
+  appearance:none;
+  position:relative;
+  min-width:0;
+  min-height:116px;
+  display:grid;
+  align-content:start;
+  gap:8px;
+  padding:10px;
+  border:1px solid rgba(216,174,82,.26);
+  background:
+    linear-gradient(145deg,rgba(216,174,82,.055),transparent 48%),
+    rgba(5,9,13,.94);
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+  transition:border-color 140ms ease,box-shadow 140ms ease,transform 140ms ease,opacity 140ms ease;
+}
+.gc-ascension-breakthrough-card::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:2px;
+  background:#d8ae52;
+  opacity:.42;
+}
+.gc-ascension-breakthrough-card:hover:not(.is-locked),
+.gc-ascension-breakthrough-card:focus-visible,
+.gc-ascension-breakthrough-card.is-selected{
+  outline:none;
+  transform:translateY(-1px);
+  border-color:rgba(229,189,97,.86);
+  box-shadow:inset 0 0 18px rgba(216,174,82,.055),0 0 15px rgba(216,174,82,.10);
+}
+.gc-ascension-breakthrough-card.is-locked{
+  opacity:.48;
+  filter:saturate(.4);
+  cursor:default;
+}
+.gc-ascension-breakthrough-card.is-unaffordable{opacity:.72}
+.gc-ascension-breakthrough-card.is-selected.is-locked,
+.gc-ascension-breakthrough-card.is-selected.is-unaffordable{
+  opacity:1;
+  filter:none;
+}
+.gc-ascension-breakthrough-card.is-available{
+  border-color:rgba(229,189,97,.74);
+  box-shadow:inset 0 0 17px rgba(216,174,82,.05),0 0 12px rgba(216,174,82,.08);
+}
+.gc-ascension-breakthrough-card.is-maxed{
+  border-color:rgba(118,211,154,.72);
+  background:
+    linear-gradient(145deg,rgba(118,211,154,.07),transparent 48%),
+    rgba(5,9,13,.94);
+}
+.gc-ascension-breakthrough-card__top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:7px;
+}
+.gc-ascension-breakthrough-card__name{
+  font-size:.72rem;
+  font-weight:850;
+  letter-spacing:.015em;
+}
+.gc-ascension-breakthrough-card__cost{
+  flex:0 0 auto;
+  padding:2px 5px;
+  border:1px solid rgba(216,174,82,.34);
+  color:#edcb7b;
+  font-size:.54rem;
+}
+.gc-ascension-breakthrough-card__effect{
+  font-size:.61rem;
+  line-height:1.35;
+  opacity:.72;
+}
+.gc-ascension-breakthrough-card__gate{
+  margin-top:auto;
+  color:#d6b86e;
+  font-size:.56rem;
+  opacity:.76;
+}
+@media (max-width:1100px){
+  .gc-ascension-breakthroughs__grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:700px){
+  .gc-ascension-breakthroughs__head{align-items:stretch;flex-direction:column}
+  .gc-ascension-breakthroughs__live{align-self:stretch}
+  .gc-ascension-breakthroughs__grid{grid-template-columns:1fr}
+}
