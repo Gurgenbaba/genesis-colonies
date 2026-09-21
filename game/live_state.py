@@ -1882,11 +1882,13 @@ def try_diet_poll_early_unchanged(
 # Tuple: (poll_version, unread, remembered_at). The old 3s TTL expired before the
 # normal Production cadence (5s active / 12s idle, plus jitter), which meant the
 # supposedly cheap unchanged path rebuilt the heavy HUD fingerprint on nearly
-# every request. 15s covers one complete idle cadence while the one-roundtrip
-# due-work/unread guard still runs on every poll; nav-only badges may lag by at
-# most this bounded window.
+# every request. Live Railway evidence after LAUNCH-001 showed real client gaps
+# of roughly 20–30s (hidden/idle tabs and scheduling drift); 15s therefore still
+# missed most repeats. 45s spans the configured hidden cadence plus jitter while
+# the one-roundtrip due-work/unread guard still runs on every poll. Only nav-only
+# badge/score fingerprints may lag by this bounded window; mutations clear it.
 _DIET_POLL_FP_CACHE: Dict[int, tuple] = {}
-_DIET_PROBE_SKIP_TTL_SEC = 15.0
+_DIET_PROBE_SKIP_TTL_SEC = 45.0
 
 
 def remember_diet_poll_fingerprint(player_id: int, *, version: int, unread: int) -> None:
