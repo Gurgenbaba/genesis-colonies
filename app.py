@@ -12072,13 +12072,16 @@ def api_game_state():
 
     # GC-PERF-STATE-004: idle diet short-circuit before expensive payload build.
     if delta_enabled and since_raw.isdigit() and not want_panel and not delta_keys:
-        user = get_current_user()
-        if user:
+        # GC-PERF-LAUNCH-001: @require_login_api already validated the session and
+        # populated g.player. Do not open a second auth connection just to recover
+        # the same numeric player id before the diet early-exit probe.
+        user_id = int(session.get("user_id") or 0)
+        if user_id:
             from game.live_state import set_request_perf_meta, try_diet_poll_early_unchanged
 
             since_val = int(since_raw)
             set_request_perf_meta("delta_since", since_val)
-            early = try_diet_poll_early_unchanged(int(user["id"]), since_val)
+            early = try_diet_poll_early_unchanged(user_id, since_val)
             if early is not None:
                 return jsonify(early)
 

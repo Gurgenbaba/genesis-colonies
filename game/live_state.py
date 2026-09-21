@@ -1878,10 +1878,15 @@ def try_diet_poll_early_unchanged(
             conn.close()
 
 
-# GC-PERF-STATE-005: process-local diet fingerprint (safe for single-worker SQLite default).
-# Tuple: (poll_version, unread, remembered_at). TTL forces periodic nav-badge probe.
+# GC-PERF-STATE-005 / LAUNCH-001: process-local diet fingerprint.
+# Tuple: (poll_version, unread, remembered_at). The old 3s TTL expired before the
+# normal Production cadence (5s active / 12s idle, plus jitter), which meant the
+# supposedly cheap unchanged path rebuilt the heavy HUD fingerprint on nearly
+# every request. 15s covers one complete idle cadence while the one-roundtrip
+# due-work/unread guard still runs on every poll; nav-only badges may lag by at
+# most this bounded window.
 _DIET_POLL_FP_CACHE: Dict[int, tuple] = {}
-_DIET_PROBE_SKIP_TTL_SEC = 3.0
+_DIET_PROBE_SKIP_TTL_SEC = 15.0
 
 
 def remember_diet_poll_fingerprint(player_id: int, *, version: int, unread: int) -> None:
