@@ -24,8 +24,10 @@ SOLAR_COEFF = 18.0
 METAL_DRAW_COEFF = 10.0
 CRYSTAL_DRAW_COEFF = 6.0
 FUEL_DRAW_COEFF = 8.0
-GEOTHERMAL_COEFF = 10.0
-GEOTHERMAL_ENERGY_TECH_PER_LEVEL = 0.04
+GEOTHERMAL_COEFF = 4.0
+GEOTHERMAL_EXPONENT = 2.0
+GEOTHERMAL_ENERGY_TECH_PER_EFFECTIVE_LEVEL = 0.04
+ENERGY_TECH_EFFECTIVE_SCALE = 60.0
 
 
 def energy_curve(level: int) -> float:
@@ -38,14 +40,23 @@ def solar_output(level: int) -> int:
     return int(SOLAR_COEFF * energy_curve(level))
 
 
-def geothermal_output(level: int, energy_tech: int) -> int:
-    """Fusion-role source: later power strongly amplified by Energy Technology."""
+def effective_energy_tech_level(level: int) -> float:
+    """Unbounded but diminishing research tail for power-generation scaling."""
     lvl = max(0, int(level or 0))
-    tech = max(0, int(energy_tech or 0))
+    if lvl <= 0:
+        return 0.0
+    scale = float(ENERGY_TECH_EFFECTIVE_SCALE)
+    return scale * math.log1p(lvl / scale)
+
+
+def geothermal_output(level: int, energy_tech: int) -> int:
+    """Fusion-role source: strong mid/endgame power amplified by Energy Technology."""
+    lvl = max(0, int(level or 0))
     if lvl <= 0:
         return 0
-    tech_factor = 1.0 + GEOTHERMAL_ENERGY_TECH_PER_LEVEL * tech
-    return int(GEOTHERMAL_COEFF * energy_curve(lvl) * tech_factor)
+    effective_tech = effective_energy_tech_level(energy_tech)
+    tech_factor = 1.0 + GEOTHERMAL_ENERGY_TECH_PER_EFFECTIVE_LEVEL * effective_tech
+    return int(GEOTHERMAL_COEFF * (lvl ** GEOTHERMAL_EXPONENT) * tech_factor)
 
 
 def mine_demand(
