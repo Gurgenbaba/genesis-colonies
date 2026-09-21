@@ -454,6 +454,12 @@ def shortage_recovery_bps_for(
     )
 
 
+def _tail_power_display(bonus_hundredths: int) -> float:
+    from ..production_formula import ENDGAME_PRODUCTION_TAIL_POWER
+
+    return round(float(ENDGAME_PRODUCTION_TAIL_POWER) + int(bonus_hundredths) / 100.0, 2)
+
+
 def _tail_step_preview(
     from_bonus_hundredths: int,
     to_bonus_hundredths: int,
@@ -603,8 +609,8 @@ def panel_fields(
             current_tail = tail_power_bonus_hundredths(skills)
             target_tail = max(current_tail, CORE_RESONANCE_TAIL_POWER_HUNDREDTHS)
             row["preview"] = {
-                "tail_from": round(4.0 + current_tail / 100.0, 2),
-                "tail_to": round(4.0 + target_tail / 100.0, 2),
+                "tail_from": _tail_power_display(current_tail),
+                "tail_to": _tail_power_display(target_tail),
                 "levels": _tail_step_preview(current_tail, target_tail),
             }
         elif key == "singularity_excavation":
@@ -614,8 +620,8 @@ def panel_fields(
                 CORE_RESONANCE_TAIL_POWER_HUNDREDTHS + SINGULARITY_TAIL_POWER_HUNDREDTHS,
             )
             row["preview"] = {
-                "tail_from": round(4.0 + current_tail / 100.0, 2),
-                "tail_to": round(4.0 + target_tail / 100.0, 2),
+                "tail_from": _tail_power_display(current_tail),
+                "tail_to": _tail_power_display(target_tail),
                 "levels": _tail_step_preview(current_tail, target_tail),
             }
         elif key == "legacy_reconstruction":
