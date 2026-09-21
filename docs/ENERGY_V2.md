@@ -63,11 +63,24 @@ production. That cap change is not active yet.
 
 Candidate direct output:
 
-`10 × level^1.25 × (1 + 0.04 × Energy Technology)`
+`4 × level² × (1 + 0.04 × effective Energy Technology)`
 
-This converts Energy Technology from a universal demand eraser into a meaningful
-late-source amplifier. A future active version may add Brennzellen upkeep after
-the fuel-economy simulation is complete.
+with:
+
+`effective Energy Technology = 60 × ln(1 + level / 60)`
+
+Geothermal is intentionally a **stronger second source**, not another tiny
+percentage modifier. Energy Technology therefore stays valuable after L50 while
+its contribution grows with diminishing returns instead of running away
+linearly.
+
+The live tech tree currently caps `energy_tech` at **L50**. Keep that cap while
+the legacy `−1 % mine draw/level` behavior is active. Once Energy V2 replaces
+that behavior, the protective cap can be removed in a separate migration/UI
+slice.
+
+A future active version may add Brennzellen upkeep after the fuel-economy
+simulation is complete.
 
 ### Orbital Collectors — Satellite role (future content)
 
@@ -99,10 +112,12 @@ Before changing the global live curve:
 1. Run `python scripts/sim_energy_v2.py`.
 2. Review L50/L100/L200/L300/L500/L650/L1000.
 3. Review hot/mid/cold slots (1/8/15).
-4. Review Energy Technology 0/20/50.
-5. Add live shadow telemetry comparing current supply/demand with Candidate A.
-6. Only then add an explicit `GC_ENERGY_V2_MODE=active` operator switch.
-7. Add per-producer 0–100% allocation and orbital collectors as separate slices.
+4. Review Energy Technology 0/20/50/100 candidate behavior.
+5. Verify Geo L50 remains meaningful at mine depths L300–L1000.
+6. Add live shadow telemetry comparing current supply/demand with Candidate A.
+7. Only then add an explicit `GC_ENERGY_V2_MODE=active` operator switch.
+8. After activation, remove the temporary Energy-Tech L50 protection cap.
+9. Add per-producer 0–100% allocation and orbital collectors as separate slices.
 
 The current global energy behavior remains the fallback until those gates are
 closed.
