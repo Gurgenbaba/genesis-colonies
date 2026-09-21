@@ -36,6 +36,12 @@ BENCHMARK_LEVELS = (50, 100, 200, 300, 500, 650, 1000)
 BENCHMARK_SLOTS = (1, 8, 15)
 BENCHMARK_TECHS = (0, 20, 50)
 
+def candidate_orbital_output_per_unit(slot: int) -> int:
+    """Slot wrapper around the canonical temperature-based candidate helper."""
+    temp = temperature_range_for_position(int(slot))
+    return orbital_output_per_unit(int(temp["max_c"]))
+
+
 
 
 def candidate_ratio(
@@ -135,7 +141,7 @@ def run_matrix(
                             energy_tech=tech,
                             slot=slot,
                         ),
-                        "orbital_energy_each": orbital_output_per_unit(int(temperature_range_for_position(int(slot))["max_c"])),
+                        "orbital_energy_each": candidate_orbital_output_per_unit(slot),
                     }
                 )
     return rows
