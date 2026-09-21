@@ -1878,7 +1878,7 @@ def try_diet_poll_early_unchanged(
             conn.close()
 
 
-# GC-PERF-STATE-005 / STATE-009: process-local diet fingerprint.
+# GC-PERF-STATE-005 / LAUNCH-001: process-local diet fingerprint.
 # Tuple: (poll_version, unread, remembered_at). The old 3s TTL expired before the
 # normal Production cadence (5s active / 12s idle, plus jitter), which meant the
 # supposedly cheap unchanged path rebuilt the heavy HUD fingerprint on nearly
