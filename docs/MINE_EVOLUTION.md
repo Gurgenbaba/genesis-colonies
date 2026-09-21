@@ -211,6 +211,15 @@ building_modifier = 1.0
 Deep Yield / Overdrive increase that multiplier for only the matching
 `(planet_id, building_type)`.
 
+Reconstruction Surge is intentionally separate from the permanent multiplier:
+
+- `ProductionContext.mine_rebuild_modifier = 1.30` only while the current mine
+  level is inside the authoritative rebuild window;
+- it multiplies the **mine part only**, never the planet's standard income;
+- without Breakthrough Window it ends at lifetime best depth;
+- with Breakthrough Window it ends at lifetime best depth +25;
+- outside that window the modifier returns exactly to `1.0`.
+
 ---
 
 ## Ranking / lifetime progression
@@ -380,17 +389,18 @@ contract gate is missing. See `docs/UNI1_LAUNCH_CONTRACT.md`.
 
 ---
 
-## Ascension Breakthrough V2
+## Ascension Breakthrough V3
 
-V2 keeps the six V1 core nodes and adds a second class of expensive, one-rank
-**Breakthrough / Keystone** upgrades. Their purpose is to change how a prestige
-run behaves rather than add another small flat percentage.
+V3 keeps the V2 q-tail breakthroughs, but removes the duplicated restart mechanic
+from the expensive Legacy keystone. The expensive nodes now change four different
+parts of the prestige loop: endgame scaling, rebuild production, rebuild reach and
+the second endgame scaling jump.
 
 | Keystone | Cost | Gate | Permanent rule change |
 |---|---:|---|---|
 | Core Resonance | 15 AP | Deep Yield 8+, best depth L300 | Personal mine tail q4.00 -> q4.10 |
-| Legacy Reconstruction | 20 AP | Reconstruction 8+, best depth L400 | Restart at max(normal baseline, 35% lifetime best), capped L199 |
-| Breakthrough Window | 24 AP | Frugal 8+ and Rapid 8+, best depth L400 | Rebuild cost/time discounts remain active through best depth +25 |
+| Reconstruction Surge | 20 AP | Reconstruction 8+, best depth L400 | +30% **mine-only** production while rebuilding through the lifetime best |
+| Breakthrough Window | 24 AP | Frugal 8+ and Rapid 8+, best depth L400 | Rebuild cost/time discounts **and Reconstruction Surge** remain active through best depth +25 |
 | Singularity Excavation | 36 AP | Core Resonance, Overdrive III, best depth L500 | Personal mine tail q4.10 -> q4.20 |
 
 The q-tail breakthroughs are **not** extra production multipliers. The Mine
@@ -420,6 +430,6 @@ The simulator reports 6-month (182.5 d) and 12-month (365 d) outcomes for:
 - q4.10 and q4.20 alone;
 - q4.20 plus the current +40% stack;
 - current max rebuild from L130;
-- full Breakthrough V2 rebuild from L175 with the +25 record window.
+- full Breakthrough V3 rebuild from the normal L130 cap with +30% rebuild production and the +25 record window.
 
 Regression owner: `tests/test_ascension_breakthrough_v2.py`.
