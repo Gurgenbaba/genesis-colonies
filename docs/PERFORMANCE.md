@@ -459,3 +459,20 @@ Production spike evidence showed `api_world_boss_auto_attack` at ~4.1s and `api_
 ## GC-PERF-WB-HOT-012 — World Boss action fastlane
 
 World Boss mutation responses (`attack`, `auto-attack`, `claim`, `catch`, companion mission) return their authoritative mutation payload immediately and no longer gate the click on a generic `_build_game_state_payload` rebuild. The existing World Boss live poll and normal game-state poll remain the reconciliation owners; no second client state model or gameplay math is introduced. The x5 strike remains one server-authoritative request with `hit_mult=5`. World Boss cards do not expose a redundant Galaxy CTA.
+
+
+### GC-PERF-LAUNCH-001 — Real-cadence diet early exit
+
+Production evidence on 2026-09-21 showed `/api/game-state` around p50 451 ms / p95 905 ms even though most delta responses were tiny unchanged envelopes. Two structural misses kept the nominal fast path expensive:
+
+- `api_game_state` called `get_current_user()` after `@require_login_api` had already authenticated the request, causing a redundant PostgreSQL checkout/query before the diet probe.
+- The process-local fingerprint TTL was 3 seconds while Production polls at 5 seconds active and 12 seconds idle (plus stable jitter), so the cache normally expired before the next request and `probe_poll_version()` rebuilt energy, queues, Fleet fingerprint, score/rank and nav attention again.
+
+Fix:
+
+- Diet early-exit uses the already validated session player id; no second auth lookup.
+- Fingerprint TTL is 15 seconds, covering one full idle cadence including jitter.
+- The one-roundtrip `player_poll_guard_snapshot` still executes on every request, so due queue/Fleet work and unread-message changes immediately force the authoritative path.
+- Nav-only badge changes can be delayed by at most the bounded 15-second window; mutations still clear the fingerprint.
+
+Regression: `tests/test_gc_perf_launch_001.py`.
