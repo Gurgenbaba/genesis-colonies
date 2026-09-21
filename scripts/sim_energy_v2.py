@@ -99,12 +99,18 @@ def required_solar_level(
     raise RuntimeError(f"solar search exceeded candidate guardrail for L{mine}")
 
 
-def legacy_ratio(level: int, *, energy_tech: int, slot: int) -> float:
+def legacy_ratio(
+    level: int,
+    *,
+    energy_tech: int,
+    slot: int,
+    solar_level: int | None = None,
+) -> float:
     buildings = {
         "metal_mine": int(level),
         "crystal_mine": int(level),
         "fuel_cell_plant": int(level),
-        "solar_plant": int(level),
+        "solar_plant": int(level if solar_level is None else solar_level),
     }
     er = EffectResolver(
         buildings,
