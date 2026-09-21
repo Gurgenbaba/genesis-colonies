@@ -147,11 +147,12 @@ def test_energy_v2_orbital_source_is_temperature_sensitive():
 
 
 def test_simulator_exposes_current_energy_tech_erasure_problem():
-    # Current Genesis Energy Tech reduces demand globally, so the same matched
-    # setup becomes materially easier as tech rises.
-    low = legacy_ratio(100, energy_tech=0, slot=8)
-    high = legacy_ratio(100, energy_tech=50, slot=8)
-    assert high > low
+    # Equal-level Solar already auto-solves the legacy grid, so use an
+    # intentionally underpowered Solar plant to expose Energy Tech's current
+    # universal demand reduction.
+    low = legacy_ratio(100, solar_level=70, energy_tech=0, slot=8)
+    high = legacy_ratio(100, solar_level=70, energy_tech=50, slot=8)
+    assert 0 < low < high
     assert high == pytest.approx(1.0)
 
 
