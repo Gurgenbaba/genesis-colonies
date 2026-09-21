@@ -25,11 +25,9 @@ if str(ROOT) not in sys.path:
 from game.effects import EffectResolver
 from game.planet_visuals import temperature_range_for_position
 
-
 from game.energy_v2 import (
     candidate_snapshot,
     geothermal_output as candidate_geothermal_output,
-    mine_demand,
     orbital_output_per_unit,
     solar_output as candidate_solar_output,
 )
@@ -137,7 +135,7 @@ def run_matrix(
                             energy_tech=tech,
                             slot=slot,
                         ),
-                        "orbital_energy_each": candidate_orbital_output_per_unit(slot),
+                        "orbital_energy_each": orbital_output_per_unit(int(temperature_range_for_position(int(slot))["max_c"])),
                     }
                 )
     return rows
