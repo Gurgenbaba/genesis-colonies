@@ -310,7 +310,7 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
             steps.append(
                 {
                     "label_key": "technical_formula_mine_after_mods",
-                    "detail": "mine × modifiers (incl. energy/rebuild)",
+                    "detail": "mine × modifiers (incl. energy)",
                     "value_per_hour": mine_part,
                 }
             )
