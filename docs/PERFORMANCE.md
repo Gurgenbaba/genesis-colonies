@@ -476,3 +476,17 @@ Fix:
 - Nav-only badge changes can be delayed by at most the bounded 15-second window; mutations still clear the fingerprint.
 
 Regression: `tests/test_gc_perf_launch_001.py`.
+
+
+### GC-PERF-LAUNCH-003 — Span the real Production poll cadence
+
+First DEV-canary samples after GC-PERF-LAUNCH-001 proved the cached path itself is fast: a true `diet_probe_skip` hit completed in ~29 ms and returned only the tiny unchanged envelope. Most unchanged requests still rebuilt the fingerprint because real browser gaps were roughly 20–30 seconds, longer than the initial 15-second TTL.
+
+Fix:
+
+- Raise the process-local fingerprint TTL to 45 seconds so active, idle and hidden Production cadence (30s hidden + jitter + browser scheduling drift) can reuse it.
+- Keep `player_poll_guard_snapshot` on every request: due queues, due Fleet phases and unread-message changes still bypass the cache immediately.
+- Mutation invalidation remains unchanged.
+- The bounded stale surface is limited to the fingerprint-only score/nav-badge view; authoritative gameplay state, queue completion and Fleet arrivals are not delayed.
+
+Regression extends `tests/test_gc_perf_launch_001.py` to require coverage of the hidden cadence.
