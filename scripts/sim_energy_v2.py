@@ -1,0 +1,211 @@
+"""Energy V2 research simulator.
+
+Candidate only — zero live gameplay changes.
+
+The goal is to preserve Genesis' long-level power-law energy scale while
+copying the *decision structure* that makes OGame-style energy interesting:
+a stable ground source, a research-scaling secondary source, and a
+temperature-sensitive orbital source.
+
+Legacy values are read from EffectResolver so this tool stays honest about the
+currently shipped game.
+"""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+import sys
+from typing import Dict, Iterable
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from game.effects import EffectResolver
+from game.planet_visuals import temperature_range_for_position
+
+
+ENERGY_EXPONENT = 1.25
+SOLAR_COEFF = 18.0
+METAL_DRAW_COEFF = 10.0
+CRYSTAL_DRAW_COEFF = 6.0
+FUEL_DRAW_COEFF = 8.0
+GEOTHERMAL_COEFF = 10.0
+GEOTHERMAL_ENERGY_TECH_PER_LEVEL = 0.04
+
+BENCHMARK_LEVELS = (50, 100, 200, 300, 500, 650, 1000)
+BENCHMARK_SLOTS = (1, 8, 15)
+BENCHMARK_TECHS = (0, 20, 50)
+
+
+def _curve(level: int) -> float:
+    lvl = max(0, int(level or 0))
+    return float(lvl ** ENERGY_EXPONENT) if lvl > 0 else 0.0
+
+
+def candidate_solar_output(level: int) -> int:
+    """Stable ground power; intentionally not temperature-dependent."""
+    return int(SOLAR_COEFF * _curve(level))
+
+
+def candidate_geothermal_output(level: int, energy_tech: int) -> int:
+    """Fusion-role source: direct power improved by Energy Technology."""
+    lvl = max(0, int(level or 0))
+    tech = max(0, int(energy_tech or 0))
+    if lvl <= 0:
+        return 0
+    tech_factor = 1.0 + GEOTHERMAL_ENERGY_TECH_PER_LEVEL * tech
+    return int(GEOTHERMAL_COEFF * _curve(lvl) * tech_factor)
+
+
+def candidate_orbital_output_per_unit(slot: int) -> int:
+    """OGame-inspired temperature-sensitive orbital collector output."""
+    temp = temperature_range_for_position(int(slot))
+    max_temp = int(temp["max_c"])
+    return max(1, int(math.floor((max_temp + 160) / 6)))
+
+
+def candidate_demand(
+    mine_level: int,
+    *,
+    ascension_draw_bps: int = 10000,
+) -> int:
+    """Three equal-depth producers; Energy Tech no longer erases demand."""
+    units = _curve(mine_level)
+    raw = int(
+        (METAL_DRAW_COEFF + CRYSTAL_DRAW_COEFF + FUEL_DRAW_COEFF) * units
+    )
+    bps = max(100, min(10000, int(ascension_draw_bps or 10000)))
+    return max(0, (raw * bps) // 10000)
+
+
+def candidate_ratio(
+    mine_level: int,
+    *,
+    solar_level: int,
+    geothermal_level: int = 0,
+    energy_tech: int = 0,
+    orbital_units: int = 0,
+    slot: int = 8,
+    ascension_draw_bps: int = 10000,
+) -> float:
+    supply = (
+        candidate_solar_output(solar_level)
+        + candidate_geothermal_output(geothermal_level, energy_tech)
+        + max(0, int(orbital_units)) * candidate_orbital_output_per_unit(slot)
+    )
+    demand = candidate_demand(mine_level, ascension_draw_bps=ascension_draw_bps)
+    if demand <= 0:
+        return 1.0
+    return max(0.0, min(1.0, supply / demand))
+
+
+def required_solar_level(
+    mine_level: int,
+    *,
+    geothermal_level: int = 0,
+    energy_tech: int = 0,
+    orbital_units: int = 0,
+    slot: int = 8,
+    ascension_draw_bps: int = 10000,
+) -> int:
+    """Small deterministic search; candidate Solar is monotonic and unbounded."""
+    mine = max(0, int(mine_level or 0))
+    if mine <= 0:
+        return 0
+    limit = max(mine + 100, int(math.ceil(mine * 1.6)) + 10)
+    for solar in range(0, limit + 1):
+        if candidate_ratio(
+            mine,
+            solar_level=solar,
+            geothermal_level=geothermal_level,
+            energy_tech=energy_tech,
+            orbital_units=orbital_units,
+            slot=slot,
+            ascension_draw_bps=ascension_draw_bps,
+        ) >= 1.0:
+            return solar
+    raise RuntimeError(f"solar search exceeded candidate guardrail for L{mine}")
+
+
+def legacy_ratio(level: int, *, energy_tech: int, slot: int) -> float:
+    buildings = {
+        "metal_mine": int(level),
+        "crystal_mine": int(level),
+        "fuel_cell_plant": int(level),
+        "solar_plant": int(level),
+    }
+    er = EffectResolver(
+        buildings,
+        {"energy_tech": int(energy_tech)},
+        planet_position=int(slot),
+    )
+    total, used = er.compute_energy()
+    return er.energy_ratio(total, used)
+
+
+def run_matrix(
+    levels: Iterable[int] = BENCHMARK_LEVELS,
+    slots: Iterable[int] = BENCHMARK_SLOTS,
+    techs: Iterable[int] = BENCHMARK_TECHS,
+) -> list[Dict[str, float | int]]:
+    rows: list[Dict[str, float | int]] = []
+    for level in levels:
+        for tech in techs:
+            for slot in slots:
+                rows.append(
+                    {
+                        "level": int(level),
+                        "energy_tech": int(tech),
+                        "slot": int(slot),
+                        "legacy_same_level_ratio": round(
+                            legacy_ratio(level, energy_tech=tech, slot=slot), 4
+                        ),
+                        "v2_same_level_ratio": round(
+                            candidate_ratio(level, solar_level=level, energy_tech=tech, slot=slot),
+                            4,
+                        ),
+                        "v2_required_solar": required_solar_level(
+                            level,
+                            energy_tech=tech,
+                            slot=slot,
+                        ),
+                        "orbital_energy_each": candidate_orbital_output_per_unit(slot),
+                    }
+                )
+    return rows
+
+
+def main() -> None:
+    rows = run_matrix()
+    print(
+        "Level | E-Tech | Slot | Legacy same-level | V2 same-level | "
+        "V2 Solar for 100% | Orbital/unit"
+    )
+    print("---: | ---: | ---: | ---: | ---: | ---: | ---:")
+    for row in rows:
+        print(
+            f"L{row['level']} | {row['energy_tech']} | {row['slot']} | "
+            f"{row['legacy_same_level_ratio']:.3f} | "
+            f"{row['v2_same_level_ratio']:.3f} | "
+            f"L{row['v2_required_solar']} | {row['orbital_energy_each']}"
+        )
+
+    print("\nEnergy-Tech / Geothermal role example (mine L300, solar L300, geo L50):")
+    for tech in BENCHMARK_TECHS:
+        ratio = candidate_ratio(
+            300,
+            solar_level=300,
+            geothermal_level=50,
+            energy_tech=tech,
+            slot=8,
+        )
+        print(
+            f"E-Tech {tech}: geo={candidate_geothermal_output(50, tech):,} "
+            f"grid={ratio*100:.1f}%"
+        )
+
+
+if __name__ == "__main__":
+    main()
