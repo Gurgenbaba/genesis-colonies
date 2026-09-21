@@ -10,9 +10,10 @@ from game import live_state
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_diet_probe_skip_ttl_covers_production_idle_cadence():
-    # Production idle default is 12s with ±12.5% stable jitter => <=13.5s.
-    assert live_state.diet_probe_skip_ttl_sec() >= 13.5
+def test_diet_probe_skip_ttl_covers_production_hidden_cadence():
+    # Production hidden default is 30s with ±12.5% stable jitter => <=33.75s.
+    # Keep margin for browser timer throttling / Railway scheduling drift.
+    assert live_state.diet_probe_skip_ttl_sec() >= 40.0
 
 
 def test_game_state_early_exit_reuses_authenticated_session_id():
