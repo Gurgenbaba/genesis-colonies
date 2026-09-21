@@ -115,8 +115,8 @@ def test_breakthrough_panel_contains_player_readable_concrete_numbers():
     assert core["levels"][1]["pct"] > 10
 
     legacy = rows["legacy_reconstruction"]["preview"]
-    assert legacy["restart_before"] == 110
-    assert legacy["restart_after"] == 175
+    assert legacy["production_bonus_pct"] == pytest.approx(30.0)
+    assert legacy["rebuild_reach"] == 500
 
     window = rows["breakthrough_window"]["preview"]
     assert window["window_before"] == 500
