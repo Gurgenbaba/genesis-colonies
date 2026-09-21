@@ -163,6 +163,8 @@ def rebuild_production_multiplier_for(
     building_type: str,
     current_level: int,
     conn: Optional[sqlite3.Connection] = None,
+    *,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> float:
     """Return the Nodebuster rebuild-only mine output multiplier.
 
@@ -184,6 +186,7 @@ def rebuild_production_multiplier_for(
             str(building_type),
             int(current_level),
             conn=conn,
+            profiles=profiles,
         )
     )
 

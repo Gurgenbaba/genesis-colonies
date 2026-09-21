@@ -529,17 +529,39 @@ def test_queue_finish_settles_rebuild_surge_before_crossing_record_boundary(
             """,
             (pid, "metal_mine", now),
         )
-        finish_at = now - 5.0
+        # Start one level below the record and finish two overdue jobs. Both
+        # completion boundaries are still inside the purchased surge window.
+        levels = get_planet_buildings(pid, conn=conn)
+        levels["metal_mine"] = 499
+        save_planet_buildings(pid, levels, conn=conn)
+        first_finish = now - 8.0
+        second_finish = now - 5.0
         add_build_job(
             pid,
             "metal_mine",
             now - 10.0,
-            finish_at,
+            first_finish,
+            conn=conn,
+        )
+        add_build_job(
+            pid,
+            "metal_mine",
+            first_finish,
+            second_finish,
             conn=conn,
         )
         commit(conn)
 
         seen = []
+        profile_reads = 0
+        from game.mine_evolution import nodebuster as nodebuster_mod
+
+        real_get_profiles = nodebuster_mod.get_profiles_for_planet
+
+        def _profiles(*args, **kwargs):
+            nonlocal profile_reads
+            profile_reads += 1
+            return real_get_profiles(*args, **kwargs)
 
         def _settle(snapshot, *, conn, skip_queue_finish, persist, as_of=None):
             seen.append(
@@ -552,18 +574,18 @@ def test_queue_finish_settles_rebuild_surge_before_crossing_record_boundary(
             )
             return snapshot
 
+        monkeypatch.setattr(nodebuster_mod, "get_profiles_for_planet", _profiles)
         monkeypatch.setattr("game.resources.update_planet_resources", _settle)
 
         completed = finish_planet_build_jobs(conn, pid, uid, now)
-        assert completed == 1
-        assert seen == [
-            {
-                "level": 500,
-                "as_of": pytest.approx(finish_at),
-                "skip_queue_finish": True,
-                "persist": True,
-            }
-        ]
+        assert completed == 2
+        assert profile_reads == 1
+        assert [row["level"] for row in seen] == [499, 500]
+        assert [row["as_of"] for row in seen] == pytest.approx(
+            [first_finish, second_finish]
+        )
+        assert all(row["skip_queue_finish"] is True for row in seen)
+        assert all(row["persist"] is True for row in seen)
         assert int(get_planet_buildings(pid, conn=conn)["metal_mine"]) == 501
     finally:
         conn.close()
