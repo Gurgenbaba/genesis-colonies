@@ -429,3 +429,37 @@ def test_ascension_energy_skills_reach_live_energy_and_production_context(mevo_d
         assert crystal_ctx.energy_ratio == pytest.approx(0.60)
     finally:
         conn.close()
+
+
+def test_skill_purchase_settles_old_rank_before_energy_mutation(mevo_db, monkeypatch):
+    from game.mine_evolution.nodebuster import get_skills
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 300)
+    pid = int(planet["id"])
+
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+
+    seen_ranks = []
+
+    def _settle(snapshot, *, conn, skip_queue_finish, persist):
+        seen_ranks.append(
+            int(get_skills(pid, "metal_mine", conn=conn).get("optimized_energy", 0))
+        )
+        assert skip_queue_finish is True
+        assert persist is True
+        return snapshot
+
+    monkeypatch.setattr("game.resources.update_planet_resources", _settle)
+
+    ok, reason, payload = purchase_skill(
+        uid,
+        planet,
+        "metal_mine",
+        "optimized_energy",
+    )
+    assert ok, reason
+    assert seen_ranks == [0]
+    assert payload["skill_rank"] == 1
+    assert get_skills(pid, "metal_mine")["optimized_energy"] == 1
