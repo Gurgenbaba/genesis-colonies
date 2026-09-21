@@ -264,3 +264,45 @@ def test_ruleset_is_nodebuster_v1():
     from game.mine_evolution.ruleset import ASCENSION_RULESET
 
     assert ASCENSION_RULESET == "nodebuster-v1"
+
+
+def test_breakthrough_window_reaches_buildings_cost_and_time_consumer(mevo_db):
+    import time
+
+    from game.buildings import _nodebuster_rebuild_bps
+    from game.db import commit, db
+    from game.mine_evolution.nodebuster import rebuild_bps_for_target
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 500)
+    pid = int(planet["id"])
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+
+    conn = db()
+    try:
+        now = time.time()
+        for key, rank in (
+            ("frugal_rebuild", 8),
+            ("rapid_rebuild", 8),
+            ("breakthrough_window", 1),
+        ):
+            conn.execute(
+                """
+                INSERT INTO planet_mine_ascension_skills (
+                    planet_id, building_type, skill_key, skill_rank, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                    skill_rank = excluded.skill_rank,
+                    updated_at = excluded.updated_at;
+                """,
+                (pid, "metal_mine", key, rank, now),
+            )
+        commit(conn)
+
+        assert rebuild_bps_for_target(pid, "metal_mine", 525, conn=conn) == (6800, 6000)
+        assert rebuild_bps_for_target(pid, "metal_mine", 526, conn=conn) == (10000, 10000)
+        assert _nodebuster_rebuild_bps(pid, "metal_mine", 525, conn=conn) == (6800, 6000)
+        assert _nodebuster_rebuild_bps(pid, "metal_mine", 526, conn=conn) == (10000, 10000)
+    finally:
+        conn.close()
