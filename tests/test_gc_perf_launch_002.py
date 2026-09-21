@@ -23,8 +23,8 @@ def test_fresh_disk_cache_does_not_refetch_on_new_deploy(monkeypatch):
         "_fetch_github_history",
         lambda: (_ for _ in ()).throw(AssertionError("fresh cache must not refetch")),
     )
-    changelog._MEMORY_CACHE["payload"] = None
-    changelog._MEMORY_CACHE["expires_at"] = 0.0
+    monkeypatch.setitem(changelog._MEMORY_CACHE, "payload", None)
+    monkeypatch.setitem(changelog._MEMORY_CACHE, "expires_at", 0.0)
 
     payload = changelog.get_player_changelog()
 
