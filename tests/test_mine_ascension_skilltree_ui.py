@@ -150,9 +150,15 @@ def test_ascension_breakthroughs_are_separate_from_core_tree():
     assert "skill.preview.window_before" in template
     assert "skill.preview.window_after" in template
     assert "mine_ascension_preview_more_production" in template
-    assert "mine_ascension_preview_restart" in template
+    assert "mine_ascension_preview_rebuild_production" in template
+    assert "mine_ascension_preview_rebuild_surge_reach" in template
     assert "mine_ascension_preview_rebuild_reach" in template
+    assert "mine_ascension_purchase_cost" in template
+    assert "mine_ascension_node_gate" in template
+    assert "mine_ascension_buy_breakthrough" in template
     assert "skill.preview.levels" in template
+    assert "skill.preview.production_bonus_pct" in template
+    assert "skill.preview.rebuild_reach" in template
     assert "skill.requires_best_depth" in template
 
     for key in (

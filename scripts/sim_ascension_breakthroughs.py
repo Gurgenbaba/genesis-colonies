@@ -37,6 +37,7 @@ class Scenario:
     rebuild_best_depth: int = 0
     rebuild_window_levels: int = 0
     rebuild_cost_multiplier: Decimal = Decimal("1")
+    rebuild_production_multiplier: Decimal = Decimal("1")
 
 
 SCENARIOS = (
@@ -60,13 +61,14 @@ SCENARIOS = (
     ),
     Scenario(
         "breakthrough_full",
-        "Full Breakthrough V2 from L175",
-        start_level=175,
+        "Full Breakthrough V3 from L130 +30% rebuild surge",
+        start_level=130,
         tail_bonus_hundredths=20,
         production_multiplier=Decimal("1.40"),
         rebuild_best_depth=500,
         rebuild_window_levels=25,
         rebuild_cost_multiplier=Decimal("0.54"),
+        rebuild_production_multiplier=Decimal("1.30"),
     ),
 )
 
@@ -98,7 +100,11 @@ def production_value_per_hour(level: int, scenario: Scenario) -> Decimal:
         tail_power_bonus_hundredths=int(scenario.tail_bonus_hundredths),
     )
     standard = pf.standard_output_decimal("metal")
-    return (standard + mine) * Decimal(scenario.production_multiplier)
+    rebuild_limit = int(scenario.rebuild_best_depth) + int(scenario.rebuild_window_levels)
+    rebuild_prod = Decimal("1")
+    if rebuild_limit > 0 and int(level) <= rebuild_limit:
+        rebuild_prod = Decimal(scenario.rebuild_production_multiplier)
+    return (standard + mine * rebuild_prod) * Decimal(scenario.production_multiplier)
 
 
 def upgrade_value_cost(target_level: int, scenario: Scenario) -> Decimal:

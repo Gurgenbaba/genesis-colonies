@@ -7,10 +7,13 @@ import pytest
 from game import production_formula as pf
 from game.mine_evolution.nodebuster import (
     BREAKTHROUGH_WINDOW_LEVELS,
+    LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS,
     SKILL_CATALOG,
     effective_shortage_ratio_bps,
     energy_draw_bps,
     panel_fields,
+    rebuild_production_bonus_bps,
+    rebuild_production_multiplier_for,
     rebuild_window_extra_levels,
     reset_start_level,
     skill_point_cost,
@@ -81,15 +84,63 @@ def test_breakthrough_depth_and_tree_requirements():
     ) is True
 
 
-def test_legacy_reconstruction_changes_the_prestige_loop():
-    skills = {
-        "reconstruction": 8,
-        "overdrive": 0,
-        "legacy_reconstruction": 1,
+def test_reconstruction_surge_is_strong_without_duplicating_restart_level():
+    base = {"reconstruction": 8, "overdrive": 3}
+    with_surge = {**base, "legacy_reconstruction": 1}
+
+    assert LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS == 3000
+    assert rebuild_production_bonus_bps(base) == 0
+    assert rebuild_production_bonus_bps(with_surge) == 3000
+    assert reset_start_level(base, 1000) == 110
+    assert reset_start_level(with_surge, 1000) == 110
+
+
+def test_reconstruction_surge_runs_to_record_and_window_extends_it():
+    profiles = {
+        "metal_mine": {
+            "state": {
+                "ascension_count": 2,
+                "points_earned": 80,
+                "points_unspent": 0,
+                "best_depth": 500,
+                "last_depth": 500,
+            },
+            "skills": {
+                "legacy_reconstruction": 1,
+                "breakthrough_window": 0,
+            },
+        }
     }
-    assert reset_start_level(skills, 400) == 140
-    assert reset_start_level(skills, 500) == 175
-    assert reset_start_level(skills, 1000) == 199
+    assert rebuild_production_multiplier_for(
+        1, "metal_mine", 500, profiles=profiles
+    ) == pytest.approx(1.30)
+    assert rebuild_production_multiplier_for(
+        1, "metal_mine", 501, profiles=profiles
+    ) == pytest.approx(1.0)
+
+    profiles["metal_mine"]["skills"]["breakthrough_window"] = 1
+    assert rebuild_production_multiplier_for(
+        1, "metal_mine", 525, profiles=profiles
+    ) == pytest.approx(1.30)
+    assert rebuild_production_multiplier_for(
+        1, "metal_mine", 526, profiles=profiles
+    ) == pytest.approx(1.0)
+
+
+def test_rebuild_surge_boosts_mine_output_not_standard_income():
+    base = pf.ProductionContext(resource_type="metal", level=50)
+    surged = pf.ProductionContext(
+        resource_type="metal",
+        level=50,
+        mine_rebuild_modifier=1.30,
+    )
+    base_total = pf.calculate_resource_output("metal", base)
+    surged_total = pf.calculate_resource_output("metal", surged)
+    standard = pf.standard_output("metal")
+    mine = pf.mine_output("metal", 50)
+
+    assert base_total == pytest.approx(standard + mine)
+    assert surged_total == pytest.approx(standard + mine * 1.30)
 
 
 def test_breakthrough_window_extends_rebuild_discount_exactly_25_levels():
@@ -220,13 +271,14 @@ def test_panel_fields_expose_concrete_energy_and_breakthrough_previews():
     assert core["levels"][1]["pct"] > 0
 
     legacy = rows["legacy_reconstruction"]["preview"]
-    assert legacy["restart_after"] > legacy["restart_before"]
+    assert legacy["production_bonus_pct"] == pytest.approx(30.0)
+    assert legacy["rebuild_reach"] == 500
 
     window = rows["breakthrough_window"]["preview"]
     assert window["window_after"] - window["window_before"] == 25
 
 
-def test_panel_preview_uses_current_record_depth_for_legacy_reconstruction():
+def test_panel_legacy_keystone_keeps_restart_baseline_and_reports_surge():
     profiles = {
         "metal_mine": {
             "state": {
@@ -249,4 +301,7 @@ def test_panel_preview_uses_current_record_depth_for_legacy_reconstruction():
         profiles=profiles,
     )
     assert fields["nodebuster_best_depth"] == 400
-    assert fields["nodebuster_reset_level"] == 175
+    assert fields["nodebuster_reset_level"] == 80
+    assert fields["nodebuster_rebuild_production_bonus_pct"] == pytest.approx(30.0)
+    assert fields["nodebuster_rebuild_production_active"] is False
+    assert fields["nodebuster_rebuild_production_reach"] == 400

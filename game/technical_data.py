@@ -265,6 +265,7 @@ def _active_production_bonuses(
         ("technical_bonus_event", mods.event_modifier()),
         ("technical_bonus_planet", mods.planet_modifier()),
         ("technical_bonus_building", mods.building_modifier()),
+        ("technical_bonus_rebuild_surge", mods.mine_rebuild_modifier()),
     ):
         if abs(factor - 1.0) > 0.0005:
             rows.append({"label_key": label_key, "display": _pct_display(factor)})
@@ -282,8 +283,9 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
 
     standard_part = int(standard_output(key) * speed * mod_shared)
     mine_part = 0
+    rebuild_f = mods.mine_rebuild_modifier()
     if lvl > 0:
-        mine_part = int(mine_output(key, lvl) * speed * mods.combined())
+        mine_part = int(mine_output(key, lvl) * speed * mods.combined() * rebuild_f)
 
     steps: List[Dict[str, Any]] = [
         {
@@ -300,7 +302,11 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
                 "value_per_hour": int(mine_output(key, lvl) * speed),
             }
         )
-        if abs(mods.energy_modifier() - 1.0) > 0.0005 or abs(mod_shared - 1.0) > 0.0005:
+        if (
+            abs(mods.energy_modifier() - 1.0) > 0.0005
+            or abs(mod_shared - 1.0) > 0.0005
+            or abs(rebuild_f - 1.0) > 0.0005
+        ):
             steps.append(
                 {
                     "label_key": "technical_formula_mine_after_mods",

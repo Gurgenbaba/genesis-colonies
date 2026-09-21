@@ -439,6 +439,11 @@ def finish_planet_build_jobs(
     due_cutoff = _due_cutoff(now)
     completed = 0
     build_completions: list[dict] = []
+    # Nodebuster profile state/skills are immutable throughout build-queue
+    # completion. Load them at most once so a long offline mine queue does not
+    # add one Ascension DB read bundle per completed level.
+    rebuild_profiles = None
+    rebuild_profiles_loaded = False
 
     while True:
         rows = get_build_queue_rows(int(planet_id), conn=conn)
@@ -448,9 +453,57 @@ def finish_planet_build_jobs(
         if float(head["finish_time"]) > due_cutoff:
             break
 
-        buildings = get_planet_buildings(int(planet_id), conn=conn)
         btype = str(head["building_type"])
         job_id = int(head["id"])
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+
+        # Reconstruction Surge is a level-window effect. Settle production at
+        # this job's exact completion boundary while the PRE-upgrade level is
+        # still authoritative; otherwise an offline finish that crosses
+        # best_depth(+25) would apply the post-upgrade 1.0x state retroactively
+        # to time that was earned inside the purchased 1.30x window.
+        from .mine_evolution.formulas import is_evolvable_mine
+        from .mine_evolution.service import rebuild_production_multiplier_for
+
+        pre_level = int(buildings.get(btype, 0) or 0)
+        if is_evolvable_mine(btype):
+            if not rebuild_profiles_loaded:
+                from .mine_evolution.nodebuster import get_profiles_for_planet
+                from .mine_evolution.ruleset import is_nodebuster_ruleset
+
+                rebuild_profiles = (
+                    get_profiles_for_planet(int(planet_id), conn=conn)
+                    if is_nodebuster_ruleset()
+                    else None
+                )
+                rebuild_profiles_loaded = True
+            rebuild_prod = rebuild_production_multiplier_for(
+                int(planet_id),
+                btype,
+                pre_level,
+                conn=conn,
+                profiles=rebuild_profiles,
+            )
+        else:
+            rebuild_prod = 1.0
+        if rebuild_prod > 1.0005:
+            boundary = min(float(head["finish_time"]), float(now))
+            cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+            planet_row = cur.fetchone()
+            if planet_row:
+                from .resources import update_planet_resources
+
+                update_planet_resources(
+                    dict(planet_row),
+                    conn=conn,
+                    skip_queue_finish=True,
+                    persist=True,
+                    as_of=boundary,
+                )
+                # Keep the mutation based on the canonical row after the
+                # settlement hook (evolution/resource hooks may share this TX).
+                buildings = get_planet_buildings(int(planet_id), conn=conn)
+
         if btype in buildings:
             buildings[btype] = int(buildings.get(btype, 0)) + 1
         delete_build_job(job_id, conn=conn)

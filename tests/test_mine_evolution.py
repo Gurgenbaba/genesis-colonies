@@ -431,6 +431,174 @@ def test_ascension_energy_skills_reach_live_energy_and_production_context(mevo_d
         conn.close()
 
 
+
+def test_rebuild_surge_flows_from_db_into_canonical_production_context(mevo_db):
+    import time
+
+    from game.db import commit, db
+    from game.effects import get_effect_resolver
+    from game.models import get_research_levels
+    from game.production_formula import production_context_from_resolver
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 500)
+    pid = int(planet["id"])
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+
+    conn = db()
+    try:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO planet_mine_ascension_skills (
+                planet_id, building_type, skill_key, skill_rank, updated_at
+            ) VALUES (?, ?, 'legacy_reconstruction', 1, ?)
+            ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                skill_rank = excluded.skill_rank,
+                updated_at = excluded.updated_at;
+            """,
+            (pid, "metal_mine", now),
+        )
+        commit(conn)
+
+        def _context_at(level: int):
+            levels = get_planet_buildings(pid, conn=conn)
+            levels["metal_mine"] = int(level)
+            save_planet_buildings(pid, levels, conn=conn)
+            research = get_research_levels(uid, conn=conn)
+            resolver = get_effect_resolver(
+                uid,
+                buildings=get_planet_buildings(pid, conn=conn),
+                research=research,
+                conn=conn,
+                planet=dict(get_homeworld(player_id=uid, conn=conn)),
+                force_refresh=True,
+            )
+            return production_context_from_resolver(resolver, "metal")
+
+        assert _context_at(500).mine_rebuild_modifier == pytest.approx(1.30)
+        assert _context_at(501).mine_rebuild_modifier == pytest.approx(1.0)
+
+        conn.execute(
+            """
+            INSERT INTO planet_mine_ascension_skills (
+                planet_id, building_type, skill_key, skill_rank, updated_at
+            ) VALUES (?, ?, 'breakthrough_window', 1, ?)
+            ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                skill_rank = excluded.skill_rank,
+                updated_at = excluded.updated_at;
+            """,
+            (pid, "metal_mine", now),
+        )
+        commit(conn)
+
+        assert _context_at(525).mine_rebuild_modifier == pytest.approx(1.30)
+        assert _context_at(526).mine_rebuild_modifier == pytest.approx(1.0)
+    finally:
+        conn.close()
+
+
+def test_queue_finish_settles_rebuild_surge_before_crossing_record_boundary(
+    mevo_db, monkeypatch
+):
+    import time
+
+    from game.db import commit, db
+    from game.models import add_build_job
+    from game.queue_engine import finish_planet_build_jobs
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 500)
+    pid = int(planet["id"])
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+    _set_level(uid, "metal_mine", 500)
+
+    conn = db()
+    try:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO planet_mine_ascension_skills (
+                planet_id, building_type, skill_key, skill_rank, updated_at
+            ) VALUES (?, ?, 'legacy_reconstruction', 1, ?)
+            ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                skill_rank = excluded.skill_rank,
+                updated_at = excluded.updated_at;
+            """,
+            (pid, "metal_mine", now),
+        )
+        # Start one level below the record and finish two overdue jobs. Both
+        # completion boundaries are still inside the purchased surge window.
+        levels = get_planet_buildings(pid, conn=conn)
+        levels["metal_mine"] = 499
+        save_planet_buildings(pid, levels, conn=conn)
+        first_finish = now - 8.0
+        second_finish = now - 5.0
+        add_build_job(
+            pid,
+            "metal_mine",
+            now - 10.0,
+            first_finish,
+            conn=conn,
+        )
+        add_build_job(
+            pid,
+            "metal_mine",
+            first_finish,
+            second_finish,
+            conn=conn,
+        )
+        commit(conn)
+
+        seen = []
+        profile_snapshots = []
+        from game.mine_evolution import service as mine_evolution_service
+
+        real_rebuild_multiplier = mine_evolution_service.rebuild_production_multiplier_for
+
+        def _rebuild_multiplier(*args, profiles=None, **kwargs):
+            current_level = int(args[2]) if len(args) >= 3 else int(kwargs["current_level"])
+            if current_level in (499, 500):
+                profile_snapshots.append(profiles)
+            return real_rebuild_multiplier(*args, profiles=profiles, **kwargs)
+
+        def _settle(snapshot, *, conn, skip_queue_finish, persist, as_of=None):
+            seen.append(
+                {
+                    "level": int(get_planet_buildings(pid, conn=conn)["metal_mine"]),
+                    "as_of": float(as_of),
+                    "skip_queue_finish": bool(skip_queue_finish),
+                    "persist": bool(persist),
+                }
+            )
+            return snapshot
+
+        monkeypatch.setattr(
+            mine_evolution_service,
+            "rebuild_production_multiplier_for",
+            _rebuild_multiplier,
+        )
+        monkeypatch.setattr("game.resources.update_planet_resources", _settle)
+
+        completed = finish_planet_build_jobs(conn, pid, uid, now)
+        assert completed == 2
+        assert len(profile_snapshots) == 2
+        assert profile_snapshots[0] is not None
+        assert profile_snapshots[0] is profile_snapshots[1]
+        assert [row["level"] for row in seen] == [499, 500]
+        assert [row["as_of"] for row in seen] == pytest.approx(
+            [first_finish, second_finish]
+        )
+        assert all(row["skip_queue_finish"] is True for row in seen)
+        assert all(row["persist"] is True for row in seen)
+        assert int(get_planet_buildings(pid, conn=conn)["metal_mine"]) == 501
+    finally:
+        conn.close()
+
+
+
 def test_skill_purchase_settles_old_rank_before_energy_mutation(mevo_db, monkeypatch):
     from game.mine_evolution.nodebuster import get_skills
 
