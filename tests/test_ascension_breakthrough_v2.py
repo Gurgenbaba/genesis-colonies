@@ -8,6 +8,7 @@ from game import production_formula as pf
 from game.mine_evolution.nodebuster import (
     BREAKTHROUGH_WINDOW_LEVELS,
     SKILL_CATALOG,
+    panel_fields,
     rebuild_window_extra_levels,
     reset_start_level,
     skill_point_cost,
@@ -147,3 +148,29 @@ def test_reinvestment_benchmarks_match_balance_review():
     assert float(current_days) == pytest.approx(282.0, abs=2.0)
     assert float(q420_days) == pytest.approx(355.0, abs=2.0)
     assert float(q420_stack_days) == pytest.approx(254.0, abs=2.0)
+
+
+def test_panel_preview_uses_current_record_depth_for_legacy_reconstruction():
+    profiles = {
+        "metal_mine": {
+            "state": {
+                "ascension_count": 2,
+                "points_earned": 80,
+                "points_unspent": 0,
+                "best_depth": 400,
+                "last_depth": 400,
+            },
+            "skills": {
+                "reconstruction": 8,
+                "legacy_reconstruction": 1,
+            },
+        }
+    }
+    fields = panel_fields(
+        1,
+        "metal_mine",
+        500,
+        profiles=profiles,
+    )
+    assert fields["nodebuster_best_depth"] == 400
+    assert fields["nodebuster_reset_level"] == 175
