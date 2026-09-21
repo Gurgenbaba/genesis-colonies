@@ -9175,5 +9175,19 @@
   "mine_ascension_storage_bonus": "Depolama",
   "mine_ascension_rebuild_cost_bonus": "Yeniden kurulum maliyeti -{pct}%",
   "mine_ascension_rebuild_time_bonus": "Yeniden kurulum süresi -{pct}%",
-  "mine_ascension_tree_title": "Yükseliş Yetenek Ağacı"
+  "mine_ascension_tree_title": "Yükseliş Yetenek Ağacı",
+  "nodebuster_skill_core_resonance": "Çekirdek Rezonansı",
+  "nodebuster_skill_core_resonance_desc": "Atılım: bu madenin kişisel endgame eğrisini q4.00'dan q4.10'a yükseltir.",
+  "nodebuster_skill_legacy_reconstruction": "Miras Yeniden İnşası",
+  "nodebuster_skill_legacy_reconstruction_desc": "Atılım: Ascension en iyi derinliğinin %35'inden başlar; üst sınır seviye 199'dur.",
+  "nodebuster_skill_breakthrough_window": "Atılım Penceresi",
+  "nodebuster_skill_breakthrough_window_desc": "Atılım: yeniden inşa maliyet ve süre bonusları en iyi derinliğinin 25 seviye ötesine kadar etkin kalır.",
+  "nodebuster_skill_singularity_excavation": "Tekillik Kazısı",
+  "nodebuster_skill_singularity_excavation_desc": "Keystone: kişisel endgame eğrisini q4.10'dan q4.20'ye yükseltir.",
+  "mine_ascension_breakthrough_kicker": "Kilit Taşı Protokolleri",
+  "mine_ascension_breakthrough_title": "Atılımlar",
+  "mine_ascension_breakthrough_hint": "Pahalı, tek seferlik düğümler küçük bir yüzde daha eklemek yerine sonraki döngünün kurallarını değiştirir.",
+  "mine_ascension_depth_gate": "En iyi derinlik L{level} gerekli",
+  "mine_ascension_tail_power": "Eğri",
+  "mine_ascension_rebuild_window": "Yeniden inşa penceresi"
 }
