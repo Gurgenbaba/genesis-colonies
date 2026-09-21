@@ -1,14 +1,15 @@
-"""Energy V2 candidate model — shadow/simulation only.
+"""Energy V2 candidate formulas — simulation/shadow only.
 
-This module deliberately does NOT own live gameplay yet. It exists so the
-Solar/Research/secondary-source rebalance can be simulated against current
-universes before EffectResolver switches away from the GC-863 legacy anchor.
+This module is the single source for the proposed power-economy curve. It does
+not replace EffectResolver's live GC-863 energy contract yet.
 
-Design goals:
-- equal Solar and mine levels should no longer be an automatic 100% solution;
-- Energy Technology stays valuable forever but can never reduce mine draw to 0;
-- a secondary generator gives cold/high-output worlds a real alternative;
-- orbital collectors can later provide a cheap/fragile temperature-sensitive path.
+The candidate copies the useful OGame-style *decision structure* without
+copying its scale:
+- Solar is the stable baseline but equal mine/Solar levels are only ~75% grid.
+- Energy Technology no longer erases universal mine demand.
+- Geothermal Nexus takes the fusion-reactor role and scales strongly with
+  Energy Technology.
+- Orbital collectors are a future temperature-sensitive, combat-exposed source.
 """
 
 from __future__ import annotations
@@ -18,73 +19,65 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-SOLAR_BASE_SHARE = 0.75
-ENERGY_TECH_DRAW_COEFF = 0.025
-GEOTHERMAL_BASE = 8.0
-GEOTHERMAL_TECH_COEFF = 0.02
-ENERGY_TECH_EFFECTIVE_SCALE = 60.0
+ENERGY_EXPONENT = 1.25
+SOLAR_COEFF = 18.0
+METAL_DRAW_COEFF = 10.0
+CRYSTAL_DRAW_COEFF = 6.0
+FUEL_DRAW_COEFF = 8.0
+GEOTHERMAL_COEFF = 10.0
+GEOTHERMAL_ENERGY_TECH_PER_LEVEL = 0.04
 
 
-def mine_raw_draw(level: int, coefficient: int) -> int:
+def energy_curve(level: int) -> float:
     lvl = max(0, int(level or 0))
+    return float(lvl ** ENERGY_EXPONENT) if lvl > 0 else 0.0
+
+
+def solar_output(level: int) -> int:
+    """Stable ground source. Equal producer/Solar levels cover ~75% raw demand."""
+    return int(SOLAR_COEFF * energy_curve(level))
+
+
+def geothermal_output(level: int, energy_tech: int) -> int:
+    """Fusion-role source: later power strongly amplified by Energy Technology."""
+    lvl = max(0, int(level or 0))
+    tech = max(0, int(energy_tech or 0))
     if lvl <= 0:
         return 0
-    return int(int(coefficient) * (lvl ** 1.25))
+    tech_factor = 1.0 + GEOTHERMAL_ENERGY_TECH_PER_LEVEL * tech
+    return int(GEOTHERMAL_COEFF * energy_curve(lvl) * tech_factor)
 
 
-def combined_raw_mine_draw(
+def mine_demand(
     metal_level: int,
     crystal_level: int,
     fuel_level: int,
+    *,
+    metal_draw_bps: int = 10000,
+    crystal_draw_bps: int = 10000,
+    fuel_draw_bps: int = 10000,
 ) -> int:
-    return (
-        mine_raw_draw(metal_level, 10)
-        + mine_raw_draw(crystal_level, 6)
-        + mine_raw_draw(fuel_level, 8)
+    """Candidate mine demand. Energy Tech does not globally reduce this value."""
+    draws = (
+        (METAL_DRAW_COEFF, metal_level, metal_draw_bps),
+        (CRYSTAL_DRAW_COEFF, crystal_level, crystal_draw_bps),
+        (FUEL_DRAW_COEFF, fuel_level, fuel_draw_bps),
     )
+    total = 0
+    for coeff, level, bps in draws:
+        raw = int(coeff * energy_curve(level))
+        factor_bps = max(100, min(10000, int(bps or 10000)))
+        total += (raw * factor_bps) // 10000
+    return max(0, total)
 
 
-def energy_tech_draw_factor(level: int) -> float:
-    """Diminishing, unbounded research value without ever deleting demand."""
-    lvl = max(0, int(level or 0))
-    return 1.0 / (1.0 + ENERGY_TECH_DRAW_COEFF * lvl)
+def orbital_output_per_unit(max_temperature_c: float) -> int:
+    """Future OGame-inspired orbital source; temperature-sensitive by design."""
+    return max(1, int(math.floor((float(max_temperature_c) + 160.0) / 6.0)))
 
 
-def effective_energy_tech_level(level: int) -> float:
-    """Logarithmic tail for secondary-generator research scaling."""
-    lvl = max(0, int(level or 0))
-    if lvl <= 0:
-        return 0.0
-    scale = float(ENERGY_TECH_EFFECTIVE_SCALE)
-    return scale * math.log1p(lvl / scale)
-
-
-def solar_supply_base(level: int) -> int:
-    """Stable source: 75% of the old equal-level auto-solve anchor."""
-    lvl = max(0, int(level or 0))
-    if lvl <= 0:
-        return 0
-    legacy_anchor = combined_raw_mine_draw(lvl, lvl, lvl) + 1
-    return max(1, int(round(legacy_anchor * SOLAR_BASE_SHARE)))
-
-
-def geothermal_supply(level: int, energy_tech_level: int) -> int:
-    """Secondary generator; research makes it the strong mid/endgame option."""
-    lvl = max(0, int(level or 0))
-    if lvl <= 0:
-        return 0
-    tech = effective_energy_tech_level(energy_tech_level)
-    factor = 1.0 + GEOTHERMAL_TECH_COEFF * tech
-    return max(0, int(round(GEOTHERMAL_BASE * (lvl ** 2) * factor)))
-
-
-def orbital_collector_output_per_unit(max_temperature_c: float) -> int:
-    """OGame-like temperature-sensitive orbital source for future integration."""
-    return max(1, int((float(max_temperature_c) + 140.0) / 6.0))
-
-
-def orbital_collector_supply(count: int, max_temperature_c: float) -> int:
-    return max(0, int(count or 0)) * orbital_collector_output_per_unit(max_temperature_c)
+def orbital_output(count: int, max_temperature_c: float) -> int:
+    return max(0, int(count or 0)) * orbital_output_per_unit(max_temperature_c)
 
 
 @dataclass(frozen=True)
@@ -92,11 +85,9 @@ class EnergyV2Snapshot:
     solar: int
     geothermal: int
     orbital: int
-    total: int
-    raw_demand: int
-    effective_demand: int
+    total_supply: int
+    demand: int
     ratio: float
-    tech_draw_factor: float
 
 
 def candidate_snapshot(
@@ -106,33 +97,38 @@ def candidate_snapshot(
     fuel_level: int,
     solar_level: int,
     geothermal_level: int = 0,
-    energy_tech_level: int = 0,
+    energy_tech: int = 0,
     solar_output_factor: float = 1.0,
-    orbital_collectors: int = 0,
+    orbital_units: int = 0,
     max_temperature_c: Optional[float] = None,
+    metal_draw_bps: int = 10000,
+    crystal_draw_bps: int = 10000,
+    fuel_draw_bps: int = 10000,
 ) -> EnergyV2Snapshot:
-    raw = combined_raw_mine_draw(metal_level, crystal_level, fuel_level)
-    tech_factor = energy_tech_draw_factor(energy_tech_level)
-    demand = 0 if raw <= 0 else max(1, int(round(raw * tech_factor)))
-
     solar = max(
         0,
-        int(round(solar_supply_base(solar_level) * max(0.0, float(solar_output_factor)))),
+        int(round(solar_output(solar_level) * max(0.0, float(solar_output_factor)))),
     )
-    geo = geothermal_supply(geothermal_level, energy_tech_level)
+    geo = geothermal_output(geothermal_level, energy_tech)
     orbital = 0
-    if orbital_collectors > 0 and max_temperature_c is not None:
-        orbital = orbital_collector_supply(orbital_collectors, max_temperature_c)
+    if orbital_units > 0 and max_temperature_c is not None:
+        orbital = orbital_output(orbital_units, max_temperature_c)
 
-    total = solar + geo + orbital
-    ratio = 1.0 if demand <= 0 else min(1.0, total / demand)
+    demand = mine_demand(
+        metal_level,
+        crystal_level,
+        fuel_level,
+        metal_draw_bps=metal_draw_bps,
+        crystal_draw_bps=crystal_draw_bps,
+        fuel_draw_bps=fuel_draw_bps,
+    )
+    supply = solar + geo + orbital
+    ratio = 1.0 if demand <= 0 else max(0.0, min(1.0, supply / demand))
     return EnergyV2Snapshot(
         solar=solar,
         geothermal=geo,
         orbital=orbital,
-        total=total,
-        raw_demand=raw,
-        effective_demand=demand,
+        total_supply=supply,
+        demand=demand,
         ratio=ratio,
-        tech_draw_factor=tech_factor,
     )
