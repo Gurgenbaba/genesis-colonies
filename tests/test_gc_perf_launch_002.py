@@ -17,7 +17,6 @@ def test_fresh_disk_cache_does_not_refetch_on_new_deploy(monkeypatch):
         "groups": [{"date": "2026-09-21", "entries": []}],
     }
 
-    monkeypatch.setattr(changelog, "get_deploy_revision", lambda: "new-deploy-sha")
     monkeypatch.setattr(changelog, "_read_disk_cache", lambda: dict(cached))
     monkeypatch.setattr(
         changelog,
