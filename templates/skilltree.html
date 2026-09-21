@@ -523,20 +523,7 @@
           </div>
 
           <div class="gc-ascension-tree__viewport">
-            {% set tree_rank = namespace(
-              reconstruction=0,
-              deep_yield=0,
-              deep_storage=0,
-              frugal_rebuild=0,
-              rapid_rebuild=0,
-              optimized_energy=0,
-              load_balancing=0,
-              overdrive=0,
-              core_resonance=0,
-              legacy_reconstruction=0,
-              breakthrough_window=0,
-              singularity_excavation=0
-            ) %}
+            {% set tree_rank = namespace(reconstruction=0, deep_yield=0, deep_storage=0, frugal_rebuild=0, rapid_rebuild=0, optimized_energy=0, load_balancing=0, overdrive=0, core_resonance=0, legacy_reconstruction=0, breakthrough_window=0, singularity_excavation=0) %}
             {% for skill in mine.nodebuster_skills %}
               {% if skill.key == 'reconstruction' %}{% set tree_rank.reconstruction = skill.rank %}
               {% elif skill.key == 'deep_yield' %}{% set tree_rank.deep_yield = skill.rank %}
