@@ -405,6 +405,7 @@ def update_planet_resources(
     *,
     skip_queue_finish: bool = False,
     persist: bool = True,
+    as_of: float | None = None,
 ):
     """
     Conn-safe Update:
@@ -415,6 +416,11 @@ def update_planet_resources(
       Must stay True there — otherwise finish_due_work → sync → update_planet_resources would
       call finish_due_work_once again (double queue processing). sync never sets skip_queue_finish=False.
       Re-reads metal/crystal/fuel from DB first so fleet/combat credits are not overwritten.
+
+    as_of: optional authoritative tick boundary. Queue completion uses the exact
+      pre-upgrade finish timestamp so time spent inside a rebuild-production
+      window is settled before the mine level changes. The timestamp is clamped
+      to persisted last_update and can therefore never move production time backwards.
 
     persist=False: in-memory production projection only (fleet preview). No FOR UPDATE,
       save_planet, evolution tick, or progress emits — avoids lock contention on hot planets.
@@ -458,7 +464,10 @@ def update_planet_resources(
             for_update=persist,
         )
 
-        now, delta = _production_elapsed_seconds(planet)
+        requested_now = float(time.time() if as_of is None else as_of)
+        persisted_last = float(planet.get("last_update") or requested_now)
+        tick_now = max(requested_now, persisted_last)
+        now, delta = _production_elapsed_seconds(planet, now=tick_now)
 
         buildings = get_planet_buildings(planet_id, conn=conn)
         research = get_research_levels(user_id=player_id, conn=conn)
