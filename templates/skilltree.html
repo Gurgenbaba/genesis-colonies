@@ -650,15 +650,15 @@
                 </span>
                 {% elif skill.key == 'legacy_reconstruction' and skill.preview %}
                 <span class="gc-ascension-breakthrough-card__change">
-                  <span>{{ T('mine_ascension_preview_restart', 'Neustart dieses Runs') }}</span>
-                  <strong class="gc-mono">L{{ skill.preview.restart_before|fmt_int }} → L{{ skill.preview.restart_after|fmt_int }}</strong>
-                  <small>{{ T('mine_ascension_preview_best_depth', level=skill.preview.best_depth) }}</small>
+                  <span>{{ T('mine_ascension_preview_rebuild_production', 'Rebuild-Produktion') }}</span>
+                  <strong class="gc-mono">+{{ skill.preview.production_bonus_pct }}%</strong>
+                  <small>{{ T('mine_ascension_preview_rebuild_surge_reach', level=skill.preview.rebuild_reach) }}</small>
                 </span>
                 {% elif skill.key == 'breakthrough_window' and skill.preview %}
                 <span class="gc-ascension-breakthrough-card__change">
                   <span>{{ T('mine_ascension_preview_rebuild_reach', 'Rebuild-Boni reichen') }}</span>
                   <strong class="gc-mono">L{{ skill.preview.window_before|fmt_int }} → L{{ skill.preview.window_after|fmt_int }}</strong>
-                  <small>-{{ skill.preview.cost_reduction_pct }}% {{ T('mine_ascension_preview_costs', 'Kosten') }} · -{{ skill.preview.time_reduction_pct }}% {{ T('mine_ascension_preview_time', 'Zeit') }}</small>
+                  <small>-{{ skill.preview.cost_reduction_pct }}% {{ T('mine_ascension_preview_costs', 'Kosten') }} · -{{ skill.preview.time_reduction_pct }}% {{ T('mine_ascension_preview_time', 'Zeit') }}{% if mine.nodebuster_rebuild_production_bonus_pct > 0 %} · +{{ mine.nodebuster_rebuild_production_bonus_pct }}% {{ T('mine_ascension_preview_rebuild_production', 'Rebuild-Produktion') }}{% endif %}</small>
                 </span>
                 {% endif %}
                 <span class="gc-ascension-breakthrough-card__gate gc-mono">
