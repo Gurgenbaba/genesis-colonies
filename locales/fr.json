@@ -9175,5 +9175,19 @@
   "mine_ascension_storage_bonus": "Stockage",
   "mine_ascension_rebuild_cost_bonus": "Coût de reconstruction -{pct}%",
   "mine_ascension_rebuild_time_bonus": "Temps de reconstruction -{pct}%",
-  "mine_ascension_tree_title": "Arbre d'Ascension"
+  "mine_ascension_tree_title": "Arbre d'Ascension",
+  "nodebuster_skill_core_resonance": "Résonance du noyau",
+  "nodebuster_skill_core_resonance_desc": "Percée : fait passer la courbe endgame personnelle de cette mine de q4.00 à q4.10.",
+  "nodebuster_skill_legacy_reconstruction": "Reconstruction héritée",
+  "nodebuster_skill_legacy_reconstruction_desc": "Percée : l'Ascension redémarre à 35 % de votre meilleure profondeur, avec un plafond au niveau 199.",
+  "nodebuster_skill_breakthrough_window": "Fenêtre de percée",
+  "nodebuster_skill_breakthrough_window_desc": "Percée : les bonus de coût et de temps de reconstruction restent actifs 25 niveaux au-delà de votre meilleure profondeur.",
+  "nodebuster_skill_singularity_excavation": "Excavation de singularité",
+  "nodebuster_skill_singularity_excavation_desc": "Keystone : fait passer la courbe endgame personnelle de q4.10 à q4.20.",
+  "mine_ascension_breakthrough_kicker": "Protocoles clés",
+  "mine_ascension_breakthrough_title": "Percées",
+  "mine_ascension_breakthrough_hint": "Des nœuds uniques et coûteux qui changent les règles de votre prochain cycle au lieu d'ajouter un petit pourcentage.",
+  "mine_ascension_depth_gate": "Meilleure profondeur L{level} requise",
+  "mine_ascension_tail_power": "Courbe",
+  "mine_ascension_rebuild_window": "Fenêtre de reconstruction"
 }
