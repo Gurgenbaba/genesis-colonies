@@ -29,6 +29,7 @@ from .service import (
     get_evolution_ranks_for_planet,
     panel_evolution_fields,
     schema_ready,
+    tail_power_bonus_hundredths_for,
 )
 
 __all__ = [
@@ -51,5 +52,6 @@ __all__ = [
     "required_level_for_evolution",
     "roman_numeral",
     "schema_ready",
+    "tail_power_bonus_hundredths_for",
     "tribute_cost_for_next_rank",
 ]
