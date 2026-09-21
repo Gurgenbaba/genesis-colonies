@@ -9187,7 +9187,7 @@
   "nodebuster_skill_singularity_excavation_desc": "Keystone: повышает персональную endgame-кривую с q4.10 до q4.20.",
   "mine_ascension_breakthrough_kicker": "Ключевые протоколы",
   "mine_ascension_breakthrough_title": "Прорывы",
-  "mine_ascension_breakthrough_hint": "Дорогие одноразовые узлы. Указанные AP — это цена покупки: ничего не активируется автоматически. Выполните условия и купите прорыв.",
+  "mine_ascension_breakthrough_hint": "Постоянные одноразовые покупки: условия открывают возможность покупки, а число AP — это цена.",
   "mine_ascension_depth_gate": "Требуется лучшая глубина L{level}",
   "mine_ascension_tail_power": "Кривая",
   "mine_ascension_rebuild_window": "Окно восстановления",
