@@ -40,6 +40,9 @@ def test_image_worker_is_root_scoped_and_revalidated():
 def test_worker_only_intercepts_bundled_images_and_dedupes_query_versions():
     worker = _read("static/js/gc_image_cache_sw.js")
     assert 'url.pathname.startsWith("/static/img/")' in worker
+    assert "GC_IMAGE_SUFFIX_RE" in worker
+    assert "mp4" not in worker
+    assert "mp3" not in worker
     assert 'url.origin + url.pathname' in worker
     assert 'GC_IMAGE_CACHE_PREFIX' in worker
     assert 'caches.delete(name)' in worker
