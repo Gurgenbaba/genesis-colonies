@@ -701,6 +701,17 @@
                 <div class="gc-ascension-inspector__impact">
                   <span>{{ T('mine_ascension_preview_rebuild_reach', 'Rebuild-Boni reichen') }}</span>
                   <strong class="gc-mono">L{{ skill.preview.window_before|fmt_int }} → L{{ skill.preview.window_after|fmt_int }}</strong>
+                  <small>-{{ skill.preview.cost_reduction_pct }}% {{ T('mine_ascension_preview_costs', 'Kosten') }} · -{{ skill.preview.time_reduction_pct }}% {{ T('mine_ascension_preview_time', 'Zeit') }}{% if mine.nodebuster_rebuild_production_bonus_pct > 0 %} · +{{ mine.nodebuster_rebuild_production_bonus_pct }}% {{ T('mine_ascension_preview_rebuild_production', 'Rebuild-Produktion') }}{% endif %}</small>
+                </div>
+                {% endif %}
+                {% if skill.breakthrough %}
+                <div class="gc-ascension-inspector__requirements gc-mono">
+                  {% for req_key, req_rank in skill.requires.items() %}
+                  <span>{{ T('mine_ascension_node_gate', name=T('nodebuster_skill_' ~ req_key), rank=req_rank) }}</span>
+                  {% endfor %}
+                  {% if skill.requires_best_depth %}
+                  <span>{{ T('mine_ascension_depth_gate', level=skill.requires_best_depth) }}</span>
+                  {% endif %}
                 </div>
                 {% endif %}
                 <div class="gc-ascension-inspector__meta">
