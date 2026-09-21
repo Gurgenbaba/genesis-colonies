@@ -190,6 +190,35 @@ def versioned_static_url(endpoint: str, **values):
 
 GC_ASSET_VERSION = get_asset_version()
 
+
+def template_url_for(endpoint: str, **values):
+    """Canonical Jinja URL builder for immutable bundled game images.
+
+    GC-PERF-IMG-001: every bundled static/img URL emitted by templates gets
+    the stable asset version automatically. Mutable static/uploads content is
+    intentionally excluded.
+    """
+    if endpoint == "static" and "v" not in values:
+        filename = str(values.get("filename") or "").replace("\\", "/").lstrip("/")
+        if filename.startswith("img/"):
+            values["v"] = GC_ASSET_VERSION
+    return url_for(endpoint, **values)
+
+
+# Keep Python callers on Flask url_for; only Jinja gets canonical image URLs.
+app.jinja_env.globals["url_for"] = template_url_for
+
+
+@app.get("/gc-image-cache-sw.js")
+def gc_image_cache_worker():
+    """Root-scoped cache-first worker for bundled game art only."""
+    worker = BASE_DIR / "static" / "js" / "gc_image_cache_sw.js"
+    response = Response(worker.read_text(encoding="utf-8"), mimetype="application/javascript")
+    response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
+
+
 # GC-861B — moderate cache for unversioned raster static assets (7 days)
 GC_STATIC_IMAGE_CACHE_MAX_AGE = 604800
 GC_STATIC_IMAGE_SUFFIXES = frozenset({".webp", ".png", ".jpg", ".jpeg", ".gif", ".svg"})
