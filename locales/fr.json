@@ -9189,5 +9189,21 @@
   "mine_ascension_breakthrough_hint": "Des nœuds uniques et coûteux qui changent les règles de votre prochain cycle au lieu d'ajouter un petit pourcentage.",
   "mine_ascension_depth_gate": "Meilleure profondeur L{level} requise",
   "mine_ascension_tail_power": "Courbe",
-  "mine_ascension_rebuild_window": "Fenêtre de reconstruction"
+  "mine_ascension_rebuild_window": "Fenêtre de reconstruction",
+  "nodebuster_skill_optimized_energy": "Utilisation optimisée de l’énergie",
+  "nodebuster_skill_optimized_energy_desc": "Cette mine consomme 2 % d’énergie en moins par rang. Rang 10 : −20 %. Se cumule avec la Technologie Énergétique.",
+  "nodebuster_skill_load_balancing": "Répartition adaptative de charge",
+  "nodebuster_skill_load_balancing_desc": "Récupère 2,5 % de la part de réseau manquante par rang pour cette mine. Avec un réseau à 60 %, le rang 10 fonctionne à 70 %.",
+  "mine_ascension_next_restart": "Prochain redémarrage",
+  "mine_ascension_energy_need": "Besoin énergétique",
+  "mine_ascension_rebuild_reach": "Bonus de reconstruction jusqu’à",
+  "mine_ascension_preview_more_production": "Production supplémentaire après la percée",
+  "mine_ascension_preview_technical_curve": "Courbe technique",
+  "mine_ascension_preview_restart": "Redémarrage de ce cycle",
+  "mine_ascension_preview_best_depth": "Calculé avec la meilleure profondeur L{level}",
+  "mine_ascension_preview_rebuild_reach": "Les bonus de reconstruction vont jusqu’à",
+  "mine_ascension_preview_costs": "coût",
+  "mine_ascension_preview_time": "temps",
+  "mine_ascension_preview_energy_draw": "Consommation énergétique de cette mine",
+  "mine_ascension_preview_shortage": "Exemple avec un réseau à {grid} %"
 }
