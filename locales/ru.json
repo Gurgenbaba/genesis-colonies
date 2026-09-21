@@ -9175,5 +9175,19 @@
   "mine_ascension_storage_bonus": "Хранилище",
   "mine_ascension_rebuild_cost_bonus": "Стоимость восстановления -{pct}%",
   "mine_ascension_rebuild_time_bonus": "Время восстановления -{pct}%",
-  "mine_ascension_tree_title": "Дерево Вознесения"
+  "mine_ascension_tree_title": "Дерево Вознесения",
+  "nodebuster_skill_core_resonance": "Резонанс ядра",
+  "nodebuster_skill_core_resonance_desc": "Прорыв: повышает персональную endgame-кривую этой шахты с q4.00 до q4.10.",
+  "nodebuster_skill_legacy_reconstruction": "Реконструкция наследия",
+  "nodebuster_skill_legacy_reconstruction_desc": "Прорыв: после Ascension шахта стартует с 35% лучшей глубины, максимум с уровня 199.",
+  "nodebuster_skill_breakthrough_window": "Окно прорыва",
+  "nodebuster_skill_breakthrough_window_desc": "Прорыв: бонусы стоимости и времени восстановления действуют ещё 25 уровней после лучшей глубины.",
+  "nodebuster_skill_singularity_excavation": "Добыча сингулярности",
+  "nodebuster_skill_singularity_excavation_desc": "Keystone: повышает персональную endgame-кривую с q4.10 до q4.20.",
+  "mine_ascension_breakthrough_kicker": "Ключевые протоколы",
+  "mine_ascension_breakthrough_title": "Прорывы",
+  "mine_ascension_breakthrough_hint": "Дорогие одноразовые узлы меняют правила следующего цикла вместо ещё одного небольшого процентного бонуса.",
+  "mine_ascension_depth_gate": "Требуется лучшая глубина L{level}",
+  "mine_ascension_tail_power": "Кривая",
+  "mine_ascension_rebuild_window": "Окно восстановления"
 }
