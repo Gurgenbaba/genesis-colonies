@@ -553,15 +553,16 @@ def test_queue_finish_settles_rebuild_surge_before_crossing_record_boundary(
         commit(conn)
 
         seen = []
-        profile_reads = 0
-        from game.mine_evolution import nodebuster as nodebuster_mod
+        profile_snapshots = []
+        from game.mine_evolution import service as mine_evolution_service
 
-        real_get_profiles = nodebuster_mod.get_profiles_for_planet
+        real_rebuild_multiplier = mine_evolution_service.rebuild_production_multiplier_for
 
-        def _profiles(*args, **kwargs):
-            nonlocal profile_reads
-            profile_reads += 1
-            return real_get_profiles(*args, **kwargs)
+        def _rebuild_multiplier(*args, profiles=None, **kwargs):
+            current_level = int(args[2]) if len(args) >= 3 else int(kwargs["current_level"])
+            if current_level in (499, 500):
+                profile_snapshots.append(profiles)
+            return real_rebuild_multiplier(*args, profiles=profiles, **kwargs)
 
         def _settle(snapshot, *, conn, skip_queue_finish, persist, as_of=None):
             seen.append(
@@ -574,12 +575,18 @@ def test_queue_finish_settles_rebuild_surge_before_crossing_record_boundary(
             )
             return snapshot
 
-        monkeypatch.setattr(nodebuster_mod, "get_profiles_for_planet", _profiles)
+        monkeypatch.setattr(
+            mine_evolution_service,
+            "rebuild_production_multiplier_for",
+            _rebuild_multiplier,
+        )
         monkeypatch.setattr("game.resources.update_planet_resources", _settle)
 
         completed = finish_planet_build_jobs(conn, pid, uid, now)
         assert completed == 2
-        assert profile_reads == 1
+        assert len(profile_snapshots) == 2
+        assert profile_snapshots[0] is not None
+        assert profile_snapshots[0] is profile_snapshots[1]
         assert [row["level"] for row in seen] == [499, 500]
         assert [row["as_of"] for row in seen] == pytest.approx(
             [first_finish, second_finish]
