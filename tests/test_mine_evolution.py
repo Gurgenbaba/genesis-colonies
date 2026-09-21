@@ -227,7 +227,7 @@ def test_panel_exposes_nodebuster_server_truth(mevo_db):
     assert fields["evolution_can_evolve"] is True
     assert fields["nodebuster_points_gain"] == 2
     assert fields["nodebuster_reset_level"] == 0
-    assert len(fields["nodebuster_skills"]) == 10
+    assert len(fields["nodebuster_skills"]) == 12
     assert any(row["key"] == "deep_storage" for row in fields["nodebuster_skills"])
     assert any(row["key"] == "overdrive" for row in fields["nodebuster_skills"])
 
@@ -355,5 +355,77 @@ def test_breakthrough_tail_flows_from_db_into_production_context(mevo_db):
         )
         context = production_context_from_resolver(resolver, "metal")
         assert context.mine_tail_power_bonus_hundredths == 20
+    finally:
+        conn.close()
+
+
+def test_ascension_energy_skills_reach_live_energy_and_production_context(mevo_db):
+    import time
+
+    from game.db import commit, db
+    from game.effects import EffectResolver, get_effect_resolver
+    from game.models import get_research_levels
+    from game.production_formula import production_context_from_resolver
+
+    uid = mevo_db
+    planet = _set_level(uid, "metal_mine", 300)
+    pid = int(planet["id"])
+    ok, reason, _ = evolve_mine(uid, planet, "metal_mine")
+    assert ok, reason
+
+    levels = get_planet_buildings(pid)
+    levels["metal_mine"] = 100
+    levels["crystal_mine"] = 100
+    levels["solar_plant"] = 100
+    save_planet_buildings(pid, levels)
+
+    conn = db()
+    try:
+        now = time.time()
+        for key, rank in (
+            ("optimized_energy", 10),
+            ("load_balancing", 10),
+        ):
+            conn.execute(
+                """
+                INSERT INTO planet_mine_ascension_skills (
+                    planet_id, building_type, skill_key, skill_rank, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(planet_id, building_type, skill_key) DO UPDATE SET
+                    skill_rank = excluded.skill_rank,
+                    updated_at = excluded.updated_at;
+                """,
+                (pid, "metal_mine", key, rank, now),
+            )
+        commit(conn)
+
+        buildings = get_planet_buildings(pid, conn=conn)
+        research = get_research_levels(uid, conn=conn)
+        resolver = get_effect_resolver(
+            uid,
+            buildings=buildings,
+            research=research,
+            conn=conn,
+            planet=dict(get_homeworld(player_id=uid, conn=conn)),
+            force_refresh=True,
+        )
+
+        raw_metal = int(10 * (100 ** 1.25))
+        assert resolver.building_energy_draw("metal_mine") == EffectResolver.apply_mine_energy_draw(
+            raw_metal, 0.8
+        )
+
+        metal_ctx = production_context_from_resolver(
+            resolver,
+            "metal",
+            energy_ratio=0.60,
+        )
+        crystal_ctx = production_context_from_resolver(
+            resolver,
+            "crystal",
+            energy_ratio=0.60,
+        )
+        assert metal_ctx.energy_ratio == pytest.approx(0.70)
+        assert crystal_ctx.energy_ratio == pytest.approx(0.60)
     finally:
         conn.close()
