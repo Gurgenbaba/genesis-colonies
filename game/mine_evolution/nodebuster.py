@@ -300,8 +300,8 @@ def skill_prerequisites_met(
     if not all(int(skills.get(key, 0) or 0) >= int(rank) for key, rank in req.items()):
         return False
     required_depth = max(0, int(cfg.get("requires_best_depth") or 0))
-    if required_depth > 0 and state is not None:
-        if int(state.get("best_depth") or 0) < required_depth:
+    if required_depth > 0:
+        if state is None or int(state.get("best_depth") or 0) < required_depth:
             return False
     return True
 
@@ -395,6 +395,29 @@ def storage_multiplier_bps_for(
     )
 
 
+def rebuild_bps_for_target(
+    planet_id: int,
+    building_type: str,
+    target_level: int,
+    *,
+    conn=None,
+    profiles: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Tuple[int, int]:
+    """Exact rebuild cost/time basis points for one target level."""
+    bt = str(building_type or "")
+    if not is_evolvable_mine(bt):
+        return 10000, 10000
+    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
+    state = get_state(int(planet_id), bt, conn=conn, profiles=data)
+    if int(state.get("ascension_count") or 0) <= 0:
+        return 10000, 10000
+    skills = get_skills(int(planet_id), bt, conn=conn, profiles=data)
+    rebuild_limit = int(state.get("best_depth") or 0) + rebuild_window_extra_levels(skills)
+    if int(target_level or 0) > rebuild_limit:
+        return 10000, 10000
+    return int(rebuild_cost_bps(skills)), int(rebuild_time_bps(skills))
+
+
 def rebuild_modifiers_for_target(
     planet_id: int,
     building_type: str,
@@ -403,19 +426,15 @@ def rebuild_modifiers_for_target(
     conn=None,
     profiles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[float, float]:
-    """Cost/time multipliers while rebuilding through the lifetime best depth."""
-    bt = str(building_type or "")
-    if not is_evolvable_mine(bt):
-        return 1.0, 1.0
-    data = profiles if profiles is not None else get_profiles_for_planet(int(planet_id), conn=conn)
-    state = get_state(int(planet_id), bt, conn=conn, profiles=data)
-    if int(state.get("ascension_count") or 0) <= 0:
-        return 1.0, 1.0
-    skills = get_skills(int(planet_id), bt, conn=conn, profiles=data)
-    rebuild_limit = int(state.get("best_depth") or 0) + rebuild_window_extra_levels(skills)
-    if int(target_level or 0) > rebuild_limit:
-        return 1.0, 1.0
-    return rebuild_cost_bps(skills) / 10000.0, rebuild_time_bps(skills) / 10000.0
+    """Float compatibility wrapper around the exact target-aware basis points."""
+    cost_bps, time_bps = rebuild_bps_for_target(
+        int(planet_id),
+        str(building_type),
+        int(target_level),
+        conn=conn,
+        profiles=profiles,
+    )
+    return cost_bps / 10000.0, time_bps / 10000.0
 
 
 def score_level(
