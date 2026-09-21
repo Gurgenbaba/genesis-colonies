@@ -153,3 +153,45 @@ def test_simulator_exposes_current_energy_tech_erasure_problem():
     high = legacy_ratio(100, energy_tech=50, slot=8)
     assert high > low
     assert high == pytest.approx(1.0)
+
+
+def test_optimized_energy_applies_after_legacy_energy_floor():
+    from game.effects import EffectResolver
+
+    er = EffectResolver(
+        {"metal_mine": 100},
+        {"energy_tech": 100},
+    )
+    # Isolate ordering without a DB-backed Ascension profile.
+    er._nodebuster_energy_draw_bps = lambda _building: 8000
+
+    raw = int(10 * (100 ** 1.25))
+    legacy = EffectResolver.apply_mine_energy_draw(
+        raw,
+        EffectResolver.mine_energy_factor_for_level(100),
+    )
+    expected = max(1, (legacy * 8000) // 10000)
+
+    assert legacy > 1
+    assert er.building_energy_draw("metal_mine") == expected
+    assert expected < legacy
+
+
+def test_building_preview_paths_do_not_fall_back_to_planetless_energy_ratio():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parent.parent / "game" / "buildings.py").read_text(
+        encoding="utf-8"
+    )
+
+    tech_start = source.index("def build_building_technical_data(")
+    tech_end = source.index("\ndef _mine_bulk_upgrade_meta(", tech_start)
+    tech_block = source[tech_start:tech_end]
+    assert "_panel_energy_ratio(" not in tech_block
+    assert "panel_ctx.resolver.compute_energy()" in tech_block
+
+    overview_start = source.index("def get_overview_building_rows(")
+    overview_end = source.index("\n\n# ", overview_start)
+    overview_block = source[overview_start:overview_end]
+    assert "_panel_energy_ratio(" not in overview_block
+    assert "panel_ctx.resolver.compute_energy()" in overview_block
