@@ -4,6 +4,7 @@ import pytest
 
 from game.energy_v2 import (
     candidate_snapshot,
+    effective_energy_tech_level,
     geothermal_output,
     mine_demand,
     orbital_output_per_unit,
@@ -46,9 +47,19 @@ def test_energy_tech_does_not_delete_global_mine_demand():
 
 
 def test_geothermal_energy_tech_scaling_is_strong_and_monotone():
-    assert geothermal_output(50, 0) > 0
+    assert geothermal_output(50, 0) == 10_000
     assert geothermal_output(50, 20) > geothermal_output(50, 0)
     assert geothermal_output(50, 50) > geothermal_output(50, 20)
+    assert geothermal_output(50, 100) > geothermal_output(50, 50)
+
+
+def test_energy_tech_candidate_tail_is_unbounded_but_diminishing():
+    e50 = effective_energy_tech_level(50)
+    e100 = effective_energy_tech_level(100)
+    e200 = effective_energy_tech_level(200)
+    assert 0 < e50 < e100 < e200
+    assert (e100 - e50) > (e200 - e100) / 2
+    assert effective_energy_tech_level(10_000) > e200
 
 
 def test_ascension_draw_bps_apply_per_mine_without_zeroing_demand():
