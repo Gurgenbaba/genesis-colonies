@@ -8,10 +8,13 @@ from game import production_formula as pf
 from game.mine_evolution.nodebuster import (
     BREAKTHROUGH_WINDOW_LEVELS,
     SKILL_CATALOG,
+    effective_shortage_ratio_bps,
+    energy_draw_bps,
     panel_fields,
     rebuild_window_extra_levels,
     reset_start_level,
     skill_point_cost,
+    shortage_recovery_bps,
     skill_prerequisites_met,
     tail_power_bonus_hundredths,
 )
@@ -20,6 +23,28 @@ from scripts.sim_ascension_breakthroughs import SCENARIOS, hours_to_target, run_
 
 def _scenario(key: str):
     return next(row for row in SCENARIOS if row.key == key)
+
+
+def test_energy_utility_nodes_are_bounded_and_progressive():
+    assert energy_draw_bps({}) == 10000
+    assert energy_draw_bps({"optimized_energy": 1}) == 9800
+    assert energy_draw_bps({"optimized_energy": 10}) == 8000
+    assert energy_draw_bps({"optimized_energy": 999}) == 8000
+
+    assert shortage_recovery_bps({}) == 0
+    assert shortage_recovery_bps({"load_balancing": 1}) == 250
+    assert shortage_recovery_bps({"load_balancing": 10}) == 2500
+    assert shortage_recovery_bps({"load_balancing": 999}) == 2500
+
+    # At 60% grid power rank 10 recovers 25% of the missing 40pp => 70%.
+    assert effective_shortage_ratio_bps(6000, {"load_balancing": 10}) == 7000
+    assert effective_shortage_ratio_bps(10000, {"load_balancing": 10}) == 10000
+
+
+def test_load_balancing_requires_energy_optimization_rank_three():
+    state = {"best_depth": 500}
+    assert skill_prerequisites_met("load_balancing", {"optimized_energy": 2}, state) is False
+    assert skill_prerequisites_met("load_balancing", {"optimized_energy": 3}, state) is True
 
 
 def test_breakthrough_catalog_has_expensive_keystones():
@@ -148,6 +173,57 @@ def test_reinvestment_benchmarks_match_balance_review():
     assert float(current_days) == pytest.approx(282.0, abs=2.0)
     assert float(q420_days) == pytest.approx(355.0, abs=2.0)
     assert float(q420_stack_days) == pytest.approx(254.0, abs=2.0)
+
+
+def test_panel_fields_expose_concrete_energy_and_breakthrough_previews():
+    profiles = {
+        "metal_mine": {
+            "state": {
+                "ascension_count": 3,
+                "points_earned": 200,
+                "points_unspent": 100,
+                "best_depth": 500,
+                "last_depth": 500,
+            },
+            "skills": {
+                "optimized_energy": 3,
+                "load_balancing": 2,
+                "deep_yield": 8,
+                "reconstruction": 8,
+                "frugal_rebuild": 8,
+                "rapid_rebuild": 8,
+                "overdrive": 3,
+                "core_resonance": 0,
+                "legacy_reconstruction": 0,
+                "breakthrough_window": 0,
+                "singularity_excavation": 0,
+            },
+        }
+    }
+    fields = panel_fields(1, "metal_mine", 500, profiles=profiles)
+    rows = {row["key"]: row for row in fields["nodebuster_skills"]}
+
+    assert fields["nodebuster_energy_draw_reduction_pct"] == pytest.approx(6.0)
+    assert fields["nodebuster_shortage_recovery_pct"] == pytest.approx(5.0)
+
+    energy = rows["optimized_energy"]["preview"]
+    assert energy["draw_reduction_now_pct"] == pytest.approx(6.0)
+    assert energy["draw_reduction_next_pct"] == pytest.approx(8.0)
+
+    load = rows["load_balancing"]["preview"]
+    assert load["grid_example_pct"] == 60
+    assert load["effective_next_pct"] > load["effective_now_pct"]
+
+    core = rows["core_resonance"]["preview"]
+    assert core["tail_to"] > core["tail_from"]
+    assert [point["level"] for point in core["levels"]] == [300, 500, 1000]
+    assert core["levels"][1]["pct"] > 0
+
+    legacy = rows["legacy_reconstruction"]["preview"]
+    assert legacy["restart_after"] > legacy["restart_before"]
+
+    window = rows["breakthrough_window"]["preview"]
+    assert window["window_after"] - window["window_before"] == 25
 
 
 def test_panel_preview_uses_current_record_depth_for_legacy_reconstruction():
