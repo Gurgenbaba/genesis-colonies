@@ -26,58 +26,18 @@ from game.effects import EffectResolver
 from game.planet_visuals import temperature_range_for_position
 
 
-ENERGY_EXPONENT = 1.25
-SOLAR_COEFF = 18.0
-METAL_DRAW_COEFF = 10.0
-CRYSTAL_DRAW_COEFF = 6.0
-FUEL_DRAW_COEFF = 8.0
-GEOTHERMAL_COEFF = 10.0
-GEOTHERMAL_ENERGY_TECH_PER_LEVEL = 0.04
+from game.energy_v2 import (
+    candidate_snapshot,
+    geothermal_output as candidate_geothermal_output,
+    mine_demand,
+    orbital_output_per_unit,
+    solar_output as candidate_solar_output,
+)
 
 BENCHMARK_LEVELS = (50, 100, 200, 300, 500, 650, 1000)
 BENCHMARK_SLOTS = (1, 8, 15)
 BENCHMARK_TECHS = (0, 20, 50)
 
-
-def _curve(level: int) -> float:
-    lvl = max(0, int(level or 0))
-    return float(lvl ** ENERGY_EXPONENT) if lvl > 0 else 0.0
-
-
-def candidate_solar_output(level: int) -> int:
-    """Stable ground power; intentionally not temperature-dependent."""
-    return int(SOLAR_COEFF * _curve(level))
-
-
-def candidate_geothermal_output(level: int, energy_tech: int) -> int:
-    """Fusion-role source: direct power improved by Energy Technology."""
-    lvl = max(0, int(level or 0))
-    tech = max(0, int(energy_tech or 0))
-    if lvl <= 0:
-        return 0
-    tech_factor = 1.0 + GEOTHERMAL_ENERGY_TECH_PER_LEVEL * tech
-    return int(GEOTHERMAL_COEFF * _curve(lvl) * tech_factor)
-
-
-def candidate_orbital_output_per_unit(slot: int) -> int:
-    """OGame-inspired temperature-sensitive orbital collector output."""
-    temp = temperature_range_for_position(int(slot))
-    max_temp = int(temp["max_c"])
-    return max(1, int(math.floor((max_temp + 160) / 6)))
-
-
-def candidate_demand(
-    mine_level: int,
-    *,
-    ascension_draw_bps: int = 10000,
-) -> int:
-    """Three equal-depth producers; Energy Tech no longer erases demand."""
-    units = _curve(mine_level)
-    raw = int(
-        (METAL_DRAW_COEFF + CRYSTAL_DRAW_COEFF + FUEL_DRAW_COEFF) * units
-    )
-    bps = max(100, min(10000, int(ascension_draw_bps or 10000)))
-    return max(0, (raw * bps) // 10000)
 
 
 def candidate_ratio(
@@ -90,15 +50,21 @@ def candidate_ratio(
     slot: int = 8,
     ascension_draw_bps: int = 10000,
 ) -> float:
-    supply = (
-        candidate_solar_output(solar_level)
-        + candidate_geothermal_output(geothermal_level, energy_tech)
-        + max(0, int(orbital_units)) * candidate_orbital_output_per_unit(slot)
+    temp = temperature_range_for_position(int(slot))
+    snap = candidate_snapshot(
+        metal_level=mine_level,
+        crystal_level=mine_level,
+        fuel_level=mine_level,
+        solar_level=solar_level,
+        geothermal_level=geothermal_level,
+        energy_tech=energy_tech,
+        orbital_units=orbital_units,
+        max_temperature_c=int(temp["max_c"]),
+        metal_draw_bps=ascension_draw_bps,
+        crystal_draw_bps=ascension_draw_bps,
+        fuel_draw_bps=ascension_draw_bps,
     )
-    demand = candidate_demand(mine_level, ascension_draw_bps=ascension_draw_bps)
-    if demand <= 0:
-        return 1.0
-    return max(0.0, min(1.0, supply / demand))
+    return snap.ratio
 
 
 def required_solar_level(
