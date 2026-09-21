@@ -414,6 +414,8 @@ class ProductionContext:
     planet: Any = None
     empire: Any = None
     building_modifier: float = 1.0
+    # Rebuild-only mine output surge. Does not boost standard planet income.
+    mine_rebuild_modifier: float = 1.0
     # Integer hundredths: 10 means q+0.10, 20 means q+0.20.
     mine_tail_power_bonus_hundredths: int = 0
     planet_modifier: float = 1.0
@@ -451,6 +453,9 @@ class ProductionModifiers:
 
     def building_modifier(self) -> float:
         return max(0.0, float(self.context.building_modifier or 1.0))
+
+    def mine_rebuild_modifier(self) -> float:
+        return max(0.0, float(self.context.mine_rebuild_modifier or 1.0))
 
     def planet_modifier(self) -> float:
         return max(0.0, float(self.context.planet_modifier or 1.0))
@@ -557,6 +562,7 @@ def calculate_resource_output_decimal(
         mods = ProductionModifiers(context)
         mod_shared = max(Decimal(0), decimal_value(mods.combined_without_energy(), "1"))
         mod_with_energy = max(Decimal(0), decimal_value(mods.combined(), "1"))
+        mine_rebuild_mod = max(Decimal(0), decimal_value(mods.mine_rebuild_modifier(), "1"))
 
         standard_part = standard_output_decimal(key) * speed * mod_shared
         mine_base = mine_output_decimal(
@@ -564,7 +570,7 @@ def calculate_resource_output_decimal(
             lvl,
             tail_power_bonus_hundredths=context.mine_tail_power_bonus_hundredths,
         ) * speed
-        mine_part = mine_base * mod_with_energy if mine_base > 0 else Decimal(0)
+        mine_part = mine_base * mod_with_energy * mine_rebuild_mod if mine_base > 0 else Decimal(0)
         total = max(Decimal(0), standard_part + mine_part)
 
         if endgame_economy_mode() == "shadow" and lvl >= ENDGAME_SHADOW_MIN_LEVEL:
@@ -572,11 +578,11 @@ def calculate_resource_output_decimal(
             candidate_base = endgame_tail_mine_output_decimal(key, lvl) * speed
             legacy_total = max(
                 Decimal(0),
-                standard_part + (legacy_base * mod_with_energy if legacy_base > 0 else Decimal(0)),
+                standard_part + (legacy_base * mod_with_energy * mine_rebuild_mod if legacy_base > 0 else Decimal(0)),
             )
             candidate_total = max(
                 Decimal(0),
-                standard_part + (candidate_base * mod_with_energy if candidate_base > 0 else Decimal(0)),
+                standard_part + (candidate_base * mod_with_energy * mine_rebuild_mod if candidate_base > 0 else Decimal(0)),
             )
             _maybe_log_endgame_shadow(
                 key=key,
@@ -601,6 +607,7 @@ def calculate_resource_output(resource_type: str, context: ProductionContext) ->
     speed = max(0.0, float(context.production_speed or 1.0))
     mods = ProductionModifiers(context)
     mod_shared = mods.combined_without_energy()
+    mine_rebuild_mod = mods.mine_rebuild_modifier()
 
     standard_part = standard_output(key) * speed * mod_shared
     mine_base = mine_output(
@@ -608,7 +615,7 @@ def calculate_resource_output(resource_type: str, context: ProductionContext) ->
         lvl,
         tail_power_bonus_hundredths=context.mine_tail_power_bonus_hundredths,
     ) * speed
-    mine_part = mine_base * mods.combined() if mine_base > 0 else 0.0
+    mine_part = mine_base * mods.combined() * mine_rebuild_mod if mine_base > 0 else 0.0
 
     total = max(0.0, standard_part + mine_part)
     if endgame_economy_mode() == "shadow" and lvl >= ENDGAME_SHADOW_MIN_LEVEL:
@@ -623,8 +630,9 @@ def calculate_resource_output(resource_type: str, context: ProductionContext) ->
             standard_dec = standard_output_decimal(key) * dec_speed * mod_shared_dec
             legacy_base = legacy_mine_output_decimal(key, lvl) * dec_speed
             candidate_base = endgame_tail_mine_output_decimal(key, lvl) * dec_speed
-            legacy_total = max(Decimal(0), standard_dec + legacy_base * mod_energy_dec)
-            candidate_total = max(Decimal(0), standard_dec + candidate_base * mod_energy_dec)
+            rebuild_dec = max(Decimal(0), decimal_value(mine_rebuild_mod, "1"))
+            legacy_total = max(Decimal(0), standard_dec + legacy_base * mod_energy_dec * rebuild_dec)
+            candidate_total = max(Decimal(0), standard_dec + candidate_base * mod_energy_dec * rebuild_dec)
             _maybe_log_endgame_shadow(
                 key=key,
                 context=context,
@@ -672,6 +680,7 @@ def production_context_from_resolver(
     # EPIC-29 / Ascension Breakthrough V2: Mine Evolution feeds the existing
     # canonical context; there is no parallel production engine.
     building_mod = 1.0
+    rebuild_production_mod = 1.0
     tail_power_bonus_hundredths = 0
     pid = resolver.planet_id
     if pid is not None:
@@ -680,6 +689,7 @@ def production_context_from_resolver(
             building_modifier_for,
             tail_power_bonus_hundredths_for,
         )
+        from .mine_evolution.service import rebuild_production_multiplier_for
 
         mine_key = RESOURCE_TO_MINE.get(key)
         if mine_key:
@@ -714,6 +724,41 @@ def production_context_from_resolver(
                         )
                     )
                 cache[mine_key] = building_mod
+
+            rebuild_cache = getattr(resolver, "_mine_evo_rebuild_prod_cache", None)
+            if rebuild_cache is None:
+                rebuild_cache = {}
+                try:
+                    resolver._mine_evo_rebuild_prod_cache = rebuild_cache  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            rebuild_key = (mine_key, int(level))
+            if rebuild_key in rebuild_cache:
+                rebuild_production_mod = float(rebuild_cache[rebuild_key])
+            else:
+                probe = getattr(resolver, "_run_optional_conn_probe", None)
+                if callable(probe):
+                    rebuild_production_mod = float(
+                        probe(
+                            f"mine_evolution_rebuild_prod:{mine_key}:{int(level)}",
+                            lambda: rebuild_production_multiplier_for(
+                                int(pid),
+                                mine_key,
+                                int(level),
+                                conn=getattr(resolver, "_conn", None),
+                            ),
+                        )
+                    )
+                else:
+                    rebuild_production_mod = float(
+                        rebuild_production_multiplier_for(
+                            int(pid),
+                            mine_key,
+                            int(level),
+                            conn=getattr(resolver, "_conn", None),
+                        )
+                    )
+                rebuild_cache[rebuild_key] = rebuild_production_mod
 
             tail_cache = getattr(resolver, "_mine_evo_tail_cache", None)
             if tail_cache is None:
@@ -763,6 +808,7 @@ def production_context_from_resolver(
         player=resolver.player_id,
         planet=resolver.planet_id,
         building_modifier=float(building_mod),
+        mine_rebuild_modifier=max(0.0, float(rebuild_production_mod)),
         mine_tail_power_bonus_hundredths=max(0, int(tail_power_bonus_hundredths)),
         directive_modifier=float(overlay),
         event_modifier=max(0.0, event_mod),
