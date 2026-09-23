@@ -581,7 +581,7 @@ def try_enqueue_research(
     )
     from .research import (
         RESEARCH_TECHS,
-        get_research_cost,
+        get_research_payment_cost,
         get_research_time,
         has_research_requirements,
         resolve_buildings_for_research,
@@ -617,7 +617,12 @@ def try_enqueue_research(
         return {"ok": False, "error": "requirements"}
 
     target = current + 1
-    cost_m, cost_c = get_research_cost(tech_key, target)
+    cost_m, cost_c = get_research_payment_cost(
+        tech_key,
+        target,
+        user_id=player_id,
+        conn=conn,
+    )
     if not try_spend_resources_conn(conn, planet_id, int(cost_m), int(cost_c)):
         return {"ok": False, "error": "resources"}
 
