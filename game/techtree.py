@@ -26,7 +26,7 @@ from .models import (
     get_research_levels,
 )
 from .fleet import get_planet_ships
-from .planet_evolution.constants import SPECIALIZATION_UNLOCK_LEVEL
+from .planet_evolution.constants import ASCENSION_UNLOCK_LEVEL, SPECIALIZATION_UNLOCK_LEVEL
 from .planet_evolution.repository import get_context_planet, get_planet_row
 from .research import RESEARCH_TECHS, resolve_buildings_for_research
 from .ship_requirements import check_ship_requirements
@@ -138,7 +138,7 @@ PE_TRACK_DEFS: Tuple[Dict[str, Any], ...] = (
         "key": "ascension",
         "label_key": "techtree_pe_ascension",
         "description_key": "techtree_pe_ascension_desc",
-        "unlock_level": 25,
+        "unlock_level": ASCENSION_UNLOCK_LEVEL,
     },
 )
 
