@@ -108,6 +108,11 @@ FEATURES: dict[str, tuple[str, str, list[str]]] = {
         "Texte und Bilder ändern ohne Code, Vorschau vor dem Veröffentlichen",
         "Kurze Anleitung und Einweisung bei der Übergabe",
     ]),
+    "google_profile": ("Google-Unternehmensprofil", "Der Betrieb wird bei Google Maps und in der Google-Suche gefunden.", [
+        "Profil angelegt oder übernommen, Inhaberschaft bei Google bestätigt",
+        "Leistungen, Öffnungszeiten, Fotos und Link zur Website gepflegt",
+        "Kunde weiß, wie er Bewertungen beantwortet und Öffnungszeiten ändert",
+    ]),
     "seo": ("SEO & schnelle Ladezeit", "Die Seite wird gefunden und lädt schnell, auch mobil.", [
         "Lighthouse mobil ≥ 90 in Performance und SEO, LCP unter 2,5 s",
         "Titel und Beschreibung pro Seite, sitemap.xml, robots.txt, strukturierte Daten",
@@ -242,12 +247,12 @@ BUDGETS: dict[str, tuple[str, str]] = {
 # Starting prices from the public price list on gurgenbaba.github.io (#preise).
 # Keep in sync with the pricing section of index.html and en/index.html.
 PACKAGES: dict[str, tuple[str, int]] = {
-    "other": ("Kleinauftrag", 49),
-    "landing": ("Landingpage", 490),
-    "website": ("Website", 1190),
-    "shop": ("Online-Shop", 1890),
-    "app": ("Web-App", 2900),
-    "game": ("Browsergame", 2900),
+    "other": ("Kleinauftrag", 39),
+    "landing": ("Online-Visitenkarte", 390),
+    "website": ("Website", 890),
+    "shop": ("Online-Shop", 1490),
+    "app": ("Web-App", 2400),
+    "game": ("Browsergame", 2400),
 }
 BUDGET_CEILINGS = {"lt500": 500, "500-2k": 2000, "2k-5k": 5000}
 
@@ -264,6 +269,7 @@ QUESTIONS: list[tuple[str, str]] = [
     ("booking", "Gibt es schon einen Kalender (Google, Outlook), der genutzt werden soll?"),
     ("ingame_shop", "Echtgeld oder nur Spielwährung?"),
     ("multiplayer", "Wie viele Spieler sollen gleichzeitig zusammen spielen?"),
+    ("google_profile", "Gibt es schon einen Eintrag bei Google Maps, und wer hat Zugriff darauf?"),
     ("web_basics", "Gibt es schon eine Domain, ein Logo und Farben?"),
     ("content", "Wer liefert Texte und Bilder?"),
     ("examples", "Gibt es Beispiele oder Vorlagen, die gefallen?"),

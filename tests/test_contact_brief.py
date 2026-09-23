@@ -81,15 +81,15 @@ def test_english_request_still_gives_german_order_with_reply_language():
 
 def test_budget_below_the_price_list_is_flagged():
     order = _order(budget="lt500")
-    assert "- Preisliste: Online-Shop ab 1.890 €" in order.markdown
-    assert "Budget liegt unter dem Einstiegspreis (Online-Shop ab 1.890 €)" in order.markdown
+    assert "- Preisliste: Online-Shop ab 1.490 €" in order.markdown
+    assert "Budget liegt unter dem Einstiegspreis (Online-Shop ab 1.490 €)" in order.markdown
     assert any(f["name"] == "⚠️ Hinweis" for f in order.embed["fields"])
     assert "prüfen" in order.labels
 
 
 def test_small_website_budget_fits_the_landing_page_package():
     order = _order(type="web", features=["contact_form"], budget="lt500")
-    assert "- Preisliste: Landingpage ab 490 €" in order.markdown
+    assert "- Preisliste: Online-Visitenkarte ab 390 €" in order.markdown
     assert "Einstiegspreis" not in order.markdown and "prüfen" not in order.labels
 
 
@@ -216,3 +216,11 @@ def test_without_brief_the_plain_letter_is_sent_as_before(client):
     payload, _ = _discord(client.discord_calls[0])
     assert payload["embeds"][0]["title"] == "Projektanfrage: Online-Shop"
     assert FakeSMTP.sent[0]["Subject"] == "Projektanfrage: Online-Shop"
+
+
+def test_google_profile_for_local_businesses():
+    order = _order(type="web", features=["google_profile"], budget="lt500")
+    assert "### A1 Google-Unternehmensprofil" in order.markdown
+    assert "- [ ] Profil angelegt oder übernommen, Inhaberschaft bei Google bestätigt" in order.markdown
+    assert "Gibt es schon einen Eintrag bei Google Maps" in order.markdown
+    assert "- Preisliste: Online-Visitenkarte ab 390 €" in order.markdown
