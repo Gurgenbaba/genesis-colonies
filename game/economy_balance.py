@@ -213,6 +213,15 @@ RESEARCH_COST_AFFORD_HOURS: Dict[int, float] = {
 _RESEARCH_L1_AFFORD_HOURS = 3.0
 _RESEARCH_COST_RAMP_LEVEL = 10
 
+# GC-RESEARCH-EMPIRE-PACING — dynamic account-research price pressure.
+# Early research stays on the historical anchors. From L20→L60 the dynamic
+# component ramps in, then follows the square root of effective empire income.
+# World maturity is normalized against the canonical expansion gate (PE 15).
+RESEARCH_EMPIRE_SCALE_START_LEVEL = 20
+RESEARCH_EMPIRE_SCALE_FULL_LEVEL = 60
+RESEARCH_EMPIRE_SCALE_MAX_EXPONENT = 0.50
+RESEARCH_EMPIRE_MATURITY_LEVEL = 15
+
 # Above this level the Ferdi 1.075^level production reference approaches/exceeds
 # binary-float range. Normal gameplay levels intentionally retain the historical
 # float path byte-for-byte; high-level pricing switches arithmetic only.
@@ -347,6 +356,71 @@ def research_cost_anchor_total(level: int) -> float | Decimal:
     with localcontext() as ctx:
         ctx.prec = _decimal_digits(income) + 96
         return max(Decimal(1), income * decimal_value(research_cost_afford_hours(lvl), "1"))
+
+
+def research_empire_maturity_index(world_levels: List[int]) -> float:
+    """0..1 maturity weight using PE 15 as the fully mature world contract."""
+    levels = [max(0, int(level or 0)) for level in (world_levels or [])]
+    if not levels:
+        return 0.0
+    required = float(RESEARCH_EMPIRE_MATURITY_LEVEL)
+    weighted = sum(min(1.0, level / required) for level in levels)
+    return max(0.0, min(1.0, weighted / float(len(levels))))
+
+
+def research_empire_cost_multiplier(
+    target_level: int,
+    *,
+    empire_combined_per_hour: int | float,
+    maturity_index: float,
+) -> float:
+    """Soft dynamic research price scaling from effective empire production.
+
+    - <= L20: no dynamic surcharge.
+    - L20..L60: progressively ramps to the full exponent.
+    - >= L60: square-root pressure, so an empire producing 100x the one-world
+      reference pays 10x rather than 100x.
+    - Immature worlds contribute proportionally until PE 15.
+
+    This intentionally has no hard cap: the scaling remains smooth at every size.
+    """
+    lvl = max(1, int(target_level))
+    if lvl <= RESEARCH_EMPIRE_SCALE_START_LEVEL:
+        return 1.0
+
+    maturity = max(0.0, min(1.0, float(maturity_index or 0.0)))
+    if maturity <= 0.0:
+        return 1.0
+
+    reference = max(1.0, float(_research_income_reference(lvl)))
+    empire_income = max(0.0, float(empire_combined_per_hour or 0.0))
+    income_ratio = max(1.0, empire_income / reference)
+    if income_ratio <= 1.0:
+        return 1.0
+
+    span = max(1, RESEARCH_EMPIRE_SCALE_FULL_LEVEL - RESEARCH_EMPIRE_SCALE_START_LEVEL)
+    ramp = min(
+        1.0,
+        max(0.0, (lvl - RESEARCH_EMPIRE_SCALE_START_LEVEL) / float(span)),
+    )
+    exponent = RESEARCH_EMPIRE_SCALE_MAX_EXPONENT * ramp
+    pressure_ratio = 1.0 + (income_ratio - 1.0) * maturity
+    return max(1.0, pressure_ratio ** exponent)
+
+
+def scale_research_cost_for_empire(
+    metal: int,
+    crystal: int,
+    multiplier: float,
+) -> Tuple[int, int]:
+    """Apply dynamic research pacing while preserving Genesis round-number costs."""
+    base_m = max(0, int(metal))
+    base_c = max(0, int(crystal))
+    mult = max(1.0, float(multiplier or 1.0))
+    if mult <= 1.0000001:
+        return base_m, base_c
+    total = _research_cost_round_total(max(1.0, (base_m + base_c) * mult))
+    return _split_research_cost_round(total, base_m, base_c)
 
 
 def research_time_tier(base_time: float) -> float:
