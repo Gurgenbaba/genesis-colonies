@@ -102,7 +102,7 @@ def building_progress_floor_seconds(building_type: str, target_level: int) -> in
             + MINE_DEEP_PACING_LINEAR_STEP_SECONDS
             * (deep_steps - cubic_end_steps)
         )
-    return max(gentle_floor, deep_floor)
+    return deep_floor
 
 
 def clamp_progress_duration_seconds(value: int | float) -> int:
