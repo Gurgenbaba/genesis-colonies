@@ -1,9 +1,13 @@
 """Contact form backend for the developer portfolio (gurgenbaba.github.io).
 
 The portfolio is a static site, so it posts the finished project request here.
-The request is forwarded, attachments included, and nothing is stored. Two
-channels, used together when both are configured:
+The request is forwarded, attachments included; this server stores nothing.
+Channels, used together when configured:
 
+- Ticket in a private GitHub repository (``CONTACT_GITHUB_TOKEN`` and
+  ``CONTACT_GITHUB_REPO``, see game.contact_tickets): an issue plus a job
+  folder with AUFTRAG.md and the attachments. Filed first, so Discord and mail
+  can link to it.
 - Discord webhook (``CONTACT_DISCORD_WEBHOOK``): an embed plus the files in a
   private channel. No spam filter involved, push notification on the phone.
 - Mail through the owner's own mailbox (``CONTACT_SMTP_USER``, Gmail by
@@ -25,6 +29,8 @@ Environment:
     CONTACT_SMTP_HOST      default smtp.gmail.com
     CONTACT_SMTP_PORT      default 587 (STARTTLS)
     CONTACT_MAIL_TO        recipient, default CONTACT_SMTP_USER
+    CONTACT_GITHUB_TOKEN   fine-grained token, Issues + Contents read/write on that repo only
+    CONTACT_GITHUB_REPO    owner/name of the private ticket repo
 
 Abuse protection: per-IP rate limit (memory only), a honeypot field, a minimum
 fill time, size caps and an attachment type allowlist. Bot hits get a normal
@@ -45,7 +51,8 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Any
 
-from game.contact_brief import WorkOrder, build_work_order, parse_brief
+from game.contact_brief import WorkOrder, build_plain_order, build_work_order, parse_brief
+from game.contact_tickets import Ticket, file_ticket, github_config
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +99,7 @@ def discord_webhook_url() -> str:
 
 
 def contact_configured() -> bool:
-    return mail_configured() or bool(discord_webhook_url())
+    return mail_configured() or bool(discord_webhook_url()) or bool(github_config())
 
 
 def _one_line(value: Any, limit: int) -> str:
@@ -152,7 +159,8 @@ def read_attachments(files: list) -> list[tuple[str, bytes, str]]:
 
 
 def build_message(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
-                  *, sender: str, recipient: str, order: WorkOrder | None = None) -> EmailMessage:
+                  *, sender: str, recipient: str, order: WorkOrder | None = None,
+                  ticket: Ticket | None = None) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = order.subject if order else fields["subject"]
     msg["From"] = formataddr(("Portfolio-Anfrage", sender))
@@ -162,7 +170,8 @@ def build_message(fields: dict[str, str], attachments: list[tuple[str, bytes, st
         "\n\n--\n"
         f"Absender: {fields['name'] or '(ohne Namen)'} <{fields['email']}>\n"
         f"Anhänge: {len(attachments)}\n"
-        "Gesendet über das Kontaktformular auf gurgenbaba.github.io. "
+        + (f"Ticket: #{ticket.number} {ticket.url}\n" if ticket else "")
+        + "Gesendet über das Kontaktformular auf gurgenbaba.github.io. "
         "\"Antworten\" geht direkt an den Absender."
     )
     msg.set_content((order.markdown if order else fields["message"]) + footer)
@@ -193,9 +202,29 @@ def send_contact_mail(msg: EmailMessage) -> bool:
 DISCORD_DESCRIPTION_LIMIT = 3900
 
 
+def _with_ticket(embed: dict, ticket: Ticket | None) -> dict:
+    if not ticket:
+        return embed
+    embed = dict(embed, url=ticket.url)
+    embed["fields"] = list(embed.get("fields", [])) + [{
+        "name": "🎫 Ticket",
+        "value": f"[#{ticket.number} auf GitHub]({ticket.url}) · [Ordner]({ticket.folder_url})",
+        "inline": False,
+    }]
+    return embed
+
+
 def build_discord_payload(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
-                          order: WorkOrder | None = None) -> tuple[dict, list[tuple[str, bytes, str]]]:
+                          order: WorkOrder | None = None,
+                          ticket: Ticket | None = None) -> tuple[dict, list[tuple[str, bytes, str]]]:
     """Embed JSON plus the files to upload. Long letters go along as a .txt file."""
+    payload, files = _discord_payload(fields, attachments, order)
+    payload["embeds"] = [_with_ticket(e, ticket) for e in payload["embeds"]]
+    return payload, files
+
+
+def _discord_payload(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
+                     order: WorkOrder | None) -> tuple[dict, list[tuple[str, bytes, str]]]:
     files = list(attachments)
     if order:
         embed = dict(order.embed)
@@ -245,11 +274,11 @@ def _multipart(payload: dict, files: list[tuple[str, bytes, str]]) -> tuple[byte
 
 
 def send_discord(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
-                 order: WorkOrder | None = None) -> bool:
+                 order: WorkOrder | None = None, ticket: Ticket | None = None) -> bool:
     url = discord_webhook_url()
     if not url:
         return False
-    payload, files = build_discord_payload(fields, attachments, order)
+    payload, files = build_discord_payload(fields, attachments, order, ticket)
     body, content_type = _multipart(payload, files)
     req = Request(url, data=body, method="POST", headers={
         "Content-Type": content_type,
@@ -302,14 +331,19 @@ def register_contact_routes(app) -> None:
         except ContactError as err:
             return _reply({"ok": False, "error": err.code}, err.status)
         brief = parse_brief(form.get("brief"))
-        order = build_work_order(brief, fields, [name for name, _, _ in attachments]) if brief else None
+        names = [name for name, _, _ in attachments]
+        order = build_work_order(brief, fields, names) if brief else None
         delivered = []
-        if discord_webhook_url() and send_discord(fields, attachments, order):
+        ticket = file_ticket(order or build_plain_order(fields, names), attachments) if github_config() else None
+        if ticket:
+            delivered.append("github")
+        if discord_webhook_url() and send_discord(fields, attachments, order, ticket):
             delivered.append("discord")
         if mail_configured():
             sender = _env("CONTACT_SMTP_USER")
             recipient = _env("CONTACT_MAIL_TO") or sender
-            if send_contact_mail(build_message(fields, attachments, sender=sender, recipient=recipient, order=order)):
+            msg = build_message(fields, attachments, sender=sender, recipient=recipient, order=order, ticket=ticket)
+            if send_contact_mail(msg):
                 delivered.append("mail")
         if not delivered:
             return _reply({"ok": False, "error": "send_failed"}, 502)
