@@ -51,7 +51,7 @@ def test_valid_run_is_accepted_and_normalized():
         ({"score": 0}, "implausible"),
         ({"duration_ms": 2_000}, "implausible"),    # too short to count
         ({"duration_ms": 600_000}, "implausible"),  # longer than the token has existed
-        ({"score": 60 * 120 + 210}, "implausible"), # faster than the game can award
+        ({"score": 60 * arcade.MAX_POINTS_PER_SECOND + 210}, "implausible"),  # faster than the game can award
         ({"wave": 40}, "implausible"),
         ({"score": "lots"}, "bad_request"),
     ],

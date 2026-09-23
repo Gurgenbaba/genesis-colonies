@@ -29,7 +29,7 @@ from typing import Any
 TOKEN_MAX_AGE_SECONDS = 2 * 3600
 DURATION_SLACK_SECONDS = 5
 MIN_RUN_SECONDS = 5
-MAX_POINTS_PER_SECOND = 120
+MAX_POINTS_PER_SECOND = 200  # late waves peak near 200 pts/s; averaged over a run it stays well below
 MAX_SCORE = 1_000_000
 BOARD_SIZE = 10
 BOARD_CACHE_TTL_SECONDS = 30
