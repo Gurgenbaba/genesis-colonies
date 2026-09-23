@@ -28,6 +28,8 @@ MINE_ENDGAME_PACING_STEP_SECONDS = 2
 MINE_DEEP_PACING_START_LEVEL = 400
 MINE_DEEP_PACING_BASE_SECONDS = 82
 MINE_DEEP_PACING_CUBIC_STEP_SECONDS = 60
+MINE_DEEP_PACING_CUBIC_END_LEVEL = 1000
+MINE_DEEP_PACING_LINEAR_STEP_SECONDS = 50_000
 
 
 def building_progress_floor_seconds(building_type: str, target_level: int) -> int:
@@ -35,10 +37,13 @@ def building_progress_floor_seconds(building_type: str, target_level: int) -> in
 
     Non-mine buildings keep the shared 10-second floor. Production mines keep
     that floor through L224, then gain the existing gentle triangular pacing
-    through L400. Above L400 an unbounded cubic 25-level step becomes the
-    dominant minimum. The deep tail is intentionally account-income agnostic:
-    pooling production from many worlds can pay the resource bill, but cannot
-    turn record pushing into thousands of near-instant queue completions.
+    through L400. Above L400 a cubic 25-level step becomes the dominant minimum
+    through L1000; beyond that point it continues linearly without a cap. The
+    linear continuation preserves the no-max big-number contract because the
+    canonical L^1.35 base build curve eventually remains dominant. The deep tail
+    is intentionally account-income agnostic: pooling production from many
+    worlds can pay the resource bill, but cannot turn record pushing into
+    thousands of near-instant queue completions.
 
     Anchors:
       L200/L224 -> 10 s
@@ -50,6 +55,7 @@ def building_progress_floor_seconds(building_type: str, target_level: int) -> in
       L650      -> 60082 s (~16h 41m)
       L800      -> 245842 s (~2d 20h)
       L1000     -> 829522 s (~9d 14h)
+      L2000     -> 2829522 s (~32d 18h)
 
     There is no pacing cap and no mine level cap.
     """
@@ -76,10 +82,26 @@ def building_progress_floor_seconds(building_type: str, target_level: int) -> in
         0,
         (level - MINE_DEEP_PACING_START_LEVEL) // MINE_ENDGAME_PACING_STEP_LEVELS,
     )
-    deep_floor = (
-        MINE_DEEP_PACING_BASE_SECONDS
-        + MINE_DEEP_PACING_CUBIC_STEP_SECONDS * (deep_steps ** 3)
+    cubic_end_steps = max(
+        0,
+        (MINE_DEEP_PACING_CUBIC_END_LEVEL - MINE_DEEP_PACING_START_LEVEL)
+        // MINE_ENDGAME_PACING_STEP_LEVELS,
     )
+    if deep_steps <= cubic_end_steps:
+        deep_floor = (
+            MINE_DEEP_PACING_BASE_SECONDS
+            + MINE_DEEP_PACING_CUBIC_STEP_SECONDS * (deep_steps ** 3)
+        )
+    else:
+        cubic_end_floor = (
+            MINE_DEEP_PACING_BASE_SECONDS
+            + MINE_DEEP_PACING_CUBIC_STEP_SECONDS * (cubic_end_steps ** 3)
+        )
+        deep_floor = (
+            cubic_end_floor
+            + MINE_DEEP_PACING_LINEAR_STEP_SECONDS
+            * (deep_steps - cubic_end_steps)
+        )
     return max(gentle_floor, deep_floor)
 
 
