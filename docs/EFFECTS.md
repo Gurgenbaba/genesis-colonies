@@ -41,10 +41,12 @@ return max(int(seconds), floor)
 The shared base floor remains **10 seconds**. For production mines only
 (`metal_mine`, `crystal_mine`, `fuel_cell_plant`), the existing gentle floor
 still runs from L225 through L400. **GC-FERDI-DEEP-PACING-002** then switches to
-an unbounded cubic 25-level pacing tail so mature multi-world empires cannot turn
-resource pooling into thousands of near-instant record levels. Anchors:
-L225=12s, L300=30s, L400/L424=82s, L425=142s, L500=3922s (~1h05),
-L650=60082s (~16h41), L800=245842s (~2d20h), L1000=829522s (~9d14h).
+a cubic 25-level pacing tail through L1000 so mature multi-world empires cannot
+turn resource pooling into thousands of near-instant record levels. Above L1000,
+the minimum continues linearly without a cap; this keeps the canonical L^1.35
+base build curve dominant at astronomical levels. Anchors: L225=12s, L300=30s,
+L400/L424=82s, L425=142s, L500=3922s (~1h05), L650=60082s (~16h41),
+L800=245842s (~2d20h), L1000=829522s (~9d14h), L2000=2829522s (~32d18h).
 There is **no pacing cap and no mine level cap**; canonical build time may still
 be higher. Explicit Timekeeper/admin skip mutations remain separate and can still
 finish jobs immediately.
