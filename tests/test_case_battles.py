@@ -48,8 +48,26 @@ def cb_db(tmp_path, monkeypatch):
 
 
 def _player(name: str = "CBTester") -> int:
-    ok, err, user = create_user(f"cb_{uuid.uuid4().hex[:10]}", "test-pass-123")
-    assert ok, err
+    last_err = ""
+    user = None
+    for _ in range(32):
+        # Numeric suffix keeps randomized test identities while avoiding accidental
+        # leetspeak fragments from raw UUID hex. Name-policy matches are still
+        # retried explicitly, mirroring the hardened ranking-test helper.
+        uname = f"casebattle_{uuid.uuid4().int % 100_000_000:08d}"
+        ok, err, user = create_user(uname, "test-pass-123")
+        if ok and user:
+            break
+        last_err = str(err or "")
+        try:
+            db().close()
+        except Exception:
+            pass
+        if last_err != "name_policy_forbidden":
+            break
+    if not user:
+        raise AssertionError(last_err or "create_user_failed")
+
     uid = int(user["id"])
     conn = db()
     try:
@@ -68,6 +86,17 @@ def _grant_cases(user_id: int, cases) -> None:
 
     ok, reason, _ = run_inventory_mutation(_mut)
     assert ok, reason
+
+
+def test_player_helper_retries_name_policy_collision(cb_db, monkeypatch):
+    values = iter((1488, 2468))
+
+    class _FakeUuid:
+        def __init__(self, value: int):
+            self.int = value
+
+    monkeypatch.setattr(uuid, "uuid4", lambda: _FakeUuid(next(values)))
+    assert _player("PolicyRetry") > 0
 
 
 def test_schema_and_battle_values(cb_db):
