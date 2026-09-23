@@ -32,7 +32,7 @@ MIN_RUN_SECONDS = 5
 MAX_POINTS_PER_SECOND = 200  # late waves peak near 200 pts/s; averaged over a run it stays well below
 MAX_SCORE = 1_000_000
 BOARD_SIZE = 10
-BOARD_CACHE_TTL_SECONDS = 30
+BOARD_CACHE_TTL_SECONDS = 5  # per-process cache; with 2+ Gunicorn workers a stale board must not linger
 RUN_RATE = (30, 600.0)      # 30 run tokens per 10 minutes per IP
 SUBMIT_RATE = (10, 600.0)   # 10 submissions per 10 minutes per IP
 
