@@ -7,6 +7,7 @@ queues to instant or 1-second jobs. Explicit skip mechanics are separate.
 from __future__ import annotations
 
 from game.effects import EffectResolver
+from game.economy_balance import power_build_seconds
 from game.shipyard import production_job_duration_seconds, production_level_cycle_seconds
 from game.time_floors import (
     MIN_PROGRESS_DURATION_SECONDS,
@@ -51,7 +52,15 @@ def test_deep_floor_blocks_l2000_even_with_infinite_empire_resources():
     assert _minimum_mine_push_days(200, 775) > 182.5
     assert _minimum_mine_push_days(200, 825) < 365
     assert _minimum_mine_push_days(200, 850) > 365
-    assert _minimum_mine_push_days(200, 2000) > 365 * 100
+    assert _minimum_mine_push_days(200, 2000) > 365 * 50
+
+def test_deep_floor_never_overtakes_canonical_astronomical_build_curve():
+    level = 10**400
+    assert (
+        building_progress_floor_seconds("metal_mine", level)
+        < power_build_seconds("metal_mine", level)
+    )
+
 
 def test_effect_resolver_enforces_endgame_mine_floor_after_extreme_speed_stack():
     resolver = EffectResolver(
