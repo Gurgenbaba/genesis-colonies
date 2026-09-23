@@ -483,6 +483,61 @@ def get_research_cost(tech_key: str, level: int) -> Tuple[int, int]:
     )
 
 
+def build_research_cost_context(user_id: int, *, conn=None) -> Dict[str, Any]:
+    """Snapshot the effective empire economy used by dynamic research pricing."""
+    uid = int(user_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    try:
+        from .economy_balance import research_empire_maturity_index
+        from .empire_page import get_empire_production_aggregate
+        from .models import get_planets_by_player
+
+        production = get_empire_production_aggregate(uid, conn=conn)
+        planets = get_planets_by_player(uid, conn=conn) or []
+        world_levels = [int(p.get("planet_level") or 0) for p in planets]
+        return {
+            "empire_combined_per_hour": int(production.get("metal_per_hour") or 0)
+            + int(production.get("crystal_per_hour") or 0),
+            "maturity_index": float(research_empire_maturity_index(world_levels)),
+            "world_count": len(planets),
+        }
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
+def get_research_payment_cost(
+    tech_key: str,
+    level: int,
+    *,
+    user_id: Optional[int] = None,
+    conn=None,
+    cost_context: Optional[Dict[str, Any]] = None,
+) -> Tuple[int, int]:
+    """Player-facing research payment after progressive empire pacing."""
+    base_m, base_c = get_research_cost(tech_key, level)
+    if user_id is None and not cost_context:
+        return base_m, base_c
+
+    ctx = dict(cost_context or {})
+    if not ctx:
+        ctx = build_research_cost_context(int(user_id), conn=conn)
+
+    from .economy_balance import (
+        research_empire_cost_multiplier,
+        scale_research_cost_for_empire,
+    )
+
+    multiplier = research_empire_cost_multiplier(
+        max(1, int(level)),
+        empire_combined_per_hour=int(ctx.get("empire_combined_per_hour") or 0),
+        maturity_index=float(ctx.get("maturity_index") or 0.0),
+    )
+    return scale_research_cost_for_empire(base_m, base_c, multiplier)
+
+
 def cumulative_research_resource_totals(tech_key: str, level: int) -> Dict[str, int]:
     """GC-SCORE-D — cumulative metal/crystal/fuel invested for research levels 1..level."""
     lvl = max(0, int(level or 0))
@@ -856,6 +911,9 @@ def preview_max_queueable_research_jobs(
     metal: int,
     crystal: int,
     queue_free_slots: int,
+    user_id: Optional[int] = None,
+    conn=None,
+    cost_context: Optional[Dict[str, Any]] = None,
 ) -> int:
     """How many +1 research jobs can be queued for one tech."""
     if tech_key not in RESEARCH_TECHS or int(queue_free_slots) <= 0:
@@ -865,7 +923,13 @@ def preview_max_queueable_research_jobs(
     c = int(crystal or 0)
     while count < int(queue_free_slots):
         target = int(current_level) + int(queued_same) + count + 1
-        cost_m, cost_c = get_research_cost(tech_key, target)
+        cost_m, cost_c = get_research_payment_cost(
+            tech_key,
+            target,
+            user_id=user_id,
+            conn=conn,
+            cost_context=cost_context,
+        )
         if m < int(cost_m) or c < int(cost_c):
             break
         m -= int(cost_m)
@@ -887,8 +951,10 @@ def summarize_max_queueable_research_jobs(
     levels: Optional[Dict[str, int]] = None,
     conn=None,
     resolver=None,
+    cost_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX research queue UX: levels, total cost, cumulative time."""
+    cost_context = build_research_cost_context(int(user_id), conn=conn) if cost_context is None else cost_context
     jobs = preview_max_queueable_research_jobs(
         tech_key,
         current_level=current_level,
@@ -896,6 +962,9 @@ def summarize_max_queueable_research_jobs(
         metal=metal,
         crystal=crystal,
         queue_free_slots=queue_free_slots,
+        user_id=int(user_id),
+        conn=conn,
+        cost_context=cost_context,
     )
     if jobs <= 0:
         return {"jobs": 0}
@@ -905,7 +974,13 @@ def summarize_max_queueable_research_jobs(
     total_sec = 0
     for i in range(jobs):
         target = from_level + i + 1
-        cost_m, cost_c = get_research_cost(tech_key, target)
+        cost_m, cost_c = get_research_payment_cost(
+            tech_key,
+            target,
+            user_id=int(user_id),
+            conn=conn,
+            cost_context=cost_context,
+        )
         total_m += float(cost_m)
         total_c += float(cost_c)
         total_sec += int(
@@ -984,6 +1059,7 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
         recalculate_research_queue_finish_times(uid, conn=conn, now=now)
 
         research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
+        research_cost_context = build_research_cost_context(uid, conn=conn)
         jobs_queued = 0
         job_ids: List[int] = []
         queued_research: List[tuple[int, str, int, int]] = []
@@ -1038,7 +1114,13 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
             current = int(levels.get(tech_key, 0) or 0)
             target = current + queued_same + 1
 
-            cost_m, cost_c = get_research_cost(tech_key, target)
+            cost_m, cost_c = get_research_payment_cost(
+                tech_key,
+                target,
+                user_id=uid,
+                conn=conn,
+                cost_context=research_cost_context,
+            )
 
             if planet_metal < int(cost_m) or planet_crystal < int(cost_c):
                 last_reason = "not_enough_resources"
@@ -1435,6 +1517,9 @@ def get_research_status(
     queue_free_slots = max(0, research_queue_limit - len(queue_list))
 
     techs: List[Dict[str, Any]] = []
+    # Dynamic research pricing is expensive because it resolves effective production
+    # for every world. Build it once only for full research panels, never diet/HUD polls.
+    research_cost_context = build_research_cost_context(uid, conn=conn) if include_techs else None
     # Diet/HUD/probe: queue timers only — full catalog is SSR / include_panel (GC-PERF live).
     if include_techs:
         for tech, cfg in RESEARCH_TECHS.items():
@@ -1442,7 +1527,16 @@ def get_research_status(
             q_count = int(queue_keys.get(tech, 0) or 0)
             targ = curr + q_count + 1
 
-            cost_m, cost_c = get_research_cost(tech, targ)
+            base_cost_m, base_cost_c = get_research_cost(tech, targ)
+            cost_m, cost_c = get_research_payment_cost(
+                tech,
+                targ,
+                user_id=uid,
+                conn=conn,
+                cost_context=research_cost_context,
+            )
+            base_total = max(1, int(base_cost_m) + int(base_cost_c))
+            empire_cost_multiplier = (int(cost_m) + int(cost_c)) / float(base_total)
             t_sec = get_research_time(
                 tech,
                 targ,
@@ -1470,6 +1564,7 @@ def get_research_status(
                     levels=levels,
                     conn=conn,
                     resolver=time_resolver,
+                    cost_context=research_cost_context,
                 )
 
             is_active = bool(active and str(active.get("tech_key")) == tech)
@@ -1488,6 +1583,9 @@ def get_research_status(
                 "target_level": targ,
                 "cost_metal": int(cost_m),
                 "cost_crystal": int(cost_c),
+                "base_cost_metal": int(base_cost_m),
+                "base_cost_crystal": int(base_cost_c),
+                "empire_cost_multiplier": round(float(empire_cost_multiplier), 4),
                 "time_seconds": int(t_sec),
                 "requirements_met": bool(req_met),
                 "can_afford": bool(can_afford),
@@ -1561,10 +1659,17 @@ def _research_technical_level_row(
     levels: Optional[Dict[str, int]] = None,
     conn=None,
     resolver=None,
+    cost_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     lvl = max(0, int(level))
     cost_level = max(1, lvl) if lvl > 0 else 1
-    cost_m, cost_c = get_research_cost(tech_key, cost_level)
+    cost_m, cost_c = get_research_payment_cost(
+        tech_key,
+        cost_level,
+        user_id=int(user_id),
+        conn=conn,
+        cost_context=cost_context,
+    )
     time_s = int(
         get_research_time(
             tech_key,
@@ -1651,6 +1756,7 @@ def build_research_technical_data(
         buildings, levels, player_id=uid, conn=conn
     )
 
+    cost_context = build_research_cost_context(uid, conn=conn)
     preview = technical_preview_levels(current)
     level_rows: List[Dict[str, Any]] = []
     for lvl in preview:
@@ -1663,6 +1769,7 @@ def build_research_technical_data(
             levels=levels,
             conn=conn,
             resolver=time_resolver,
+            cost_context=cost_context,
         )
         row["row_role"] = technical_row_role(lvl, current)
         level_rows.append(row)
