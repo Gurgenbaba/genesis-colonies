@@ -120,7 +120,7 @@ INSERT OR IGNORE INTO pe_discovery_definitions VALUES
 
 -- Ascension
 INSERT OR IGNORE INTO pe_ascension_definitions VALUES
-('machine_ascension','{"planet_level_min":25,"specialization_tier_min":3,"cost":{"metal":5000000,"crystal":3000000}}','{"auto_conversion":2,"loyalty_mechanic_bypass":true,"export_penalty":-0.15}','7','ascension_machine'),
-('quantum_ascension','{"planet_level_min":25,"specialization_tier_min":3,"discoveries_any":["quantum_rift","dark_core"]}','{"experimental_slot":2,"quantum_instability":true,"discovery_roll_mult":2.0}','7','ascension_quantum'),
-('industrial_ascension','{"planet_level_min":25,"specialization":"forge_world","specialization_tier_min":3}','{"export_slots":2,"chain_output_mult":1.4,"depletion_risk_mult":2.0}','7','ascension_industrial'),
-('ancient_ascension','{"planet_level_min":25,"discoveries_any":["alien_vault","ancient_ai"],"traits_any":["ancient_ruins"]}','{"ancient_t6_unlock":true,"high_value_target":true}','7','ascension_ancient');
+('machine_ascension','{"planet_level_min":15,"specialization_tier_min":3,"cost":{"metal":5000000,"crystal":3000000}}','{"auto_conversion":2,"loyalty_mechanic_bypass":true,"export_penalty":-0.15}','7','ascension_machine'),
+('quantum_ascension','{"planet_level_min":15,"specialization_tier_min":3,"discoveries_any":["quantum_rift","dark_core"]}','{"experimental_slot":2,"quantum_instability":true,"discovery_roll_mult":2.0}','7','ascension_quantum'),
+('industrial_ascension','{"planet_level_min":15,"specialization":"forge_world","specialization_tier_min":3}','{"export_slots":2,"chain_output_mult":1.4,"depletion_risk_mult":2.0}','7','ascension_industrial'),
+('ancient_ascension','{"planet_level_min":15,"discoveries_any":["alien_vault","ancient_ai"],"traits_any":["ancient_ruins"]}','{"ancient_t6_unlock":true,"high_value_target":true}','7','ascension_ancient');

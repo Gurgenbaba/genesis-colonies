@@ -7,10 +7,30 @@ from decimal import Decimal
 from pathlib import Path
 
 from game.exact_math import decimal_text, decimal_value
+from game.planet_evolution.constants import ASCENSION_UNLOCK_LEVEL
 from tests.pg_fixtures import close_pg_pool, requires_postgres
 
 ROOT = Path(__file__).resolve().parents[1]
 HUGE = 10**400
+
+
+def test_planet_evolution_ascension_unlock_contract_is_level_15():
+    assert ASCENSION_UNLOCK_LEVEL == 15
+
+    from game.techtree import PE_TRACK_DEFS
+
+    ascension_track = next(row for row in PE_TRACK_DEFS if row["key"] == "ascension")
+    assert int(ascension_track["unlock_level"]) == 15
+
+    seed = (ROOT / "migrations" / "017_planet_evolution_definitions_seed.sql").read_text(
+        encoding="utf-8"
+    )
+    migration = (
+        ROOT / "migrations" / "181_planet_evolution_ascension_level15.sql"
+    ).read_text(encoding="utf-8")
+    assert seed.count('"planet_level_min":15') >= 4
+    assert '"planet_level_min":25' not in seed
+    assert migration.count('"planet_level_min":15') == 4
 
 
 def test_decimal_text_keeps_values_beyond_ieee754_range():
@@ -65,8 +85,8 @@ def test_live_postgres_pe_ascension_and_event_amounts_are_exact(pg_parity_db, mo
     try:
         begin_write_transaction(conn)
         conn.execute(
-            "UPDATE planets SET planet_level = 25 WHERE id = ?;",
-            (planet_id,),
+            "UPDATE planets SET planet_level = ? WHERE id = ?;",
+            (ASCENSION_UNLOCK_LEVEL, planet_id),
         )
         ensure_special_resource_row(planet_id, "quantum_data", conn)
         conn.execute(

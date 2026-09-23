@@ -25,7 +25,7 @@ Modul: `game/planet_evolution/` — Schema ab Migration `016`–`018`.
 | **Specialization** | Pfad ab Level 8, Tiers, Import/Export |
 | **Culture** | Archetype, Stability, Loyalty — Drift im Tick |
 | **Events** | Narrative Choices mit Auswirkungen |
-| **Ascension** | Langzeit-Fortschritt (Queue) |
+| **Ascension** | Langzeit-Fortschritt (Queue), freigeschaltet ab **Planet Level 15** |
 
 ---
 
