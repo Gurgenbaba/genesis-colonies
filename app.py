@@ -1140,6 +1140,9 @@ register_empire_relay_routes(app)
 from game.public_stats import register_public_stats_routes
 register_public_stats_routes(app)
 
+from game.arcade_scores import register_arcade_score_routes
+register_arcade_score_routes(app)
+
 try:
     from game.internal_cron import start_embedded_cron_if_enabled
 
