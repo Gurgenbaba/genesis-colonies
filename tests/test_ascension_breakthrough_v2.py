@@ -21,7 +21,14 @@ from game.mine_evolution.nodebuster import (
     skill_prerequisites_met,
     tail_power_bonus_hundredths,
 )
-from scripts.sim_ascension_breakthroughs import SCENARIOS, hours_to_target, run_horizons, uni1_q4_curve
+from scripts.sim_ascension_breakthroughs import (
+    SCENARIOS,
+    hours_to_target,
+    pooled_empire_level_after_days,
+    queue_floor_level_after_days,
+    run_horizons,
+    uni1_q4_curve,
+)
 
 
 def _scenario(key: str):
@@ -211,6 +218,24 @@ def test_six_and_twelve_month_simulation_stays_progressive_without_runaway():
     assert stacked["365d"] > singularity["365d"]
     assert full["182.5d"] < 350
     assert full["365d"] < 500
+
+
+def test_eleven_world_pooling_cannot_turn_one_year_into_l2000():
+    stress = _scenario("singularity_stack")
+    with uni1_q4_curve():
+        six_month_pool = pooled_empire_level_after_days(
+            stress, Decimal("182.5"), feeder_worlds=11
+        )
+        twelve_month_pool = pooled_empire_level_after_days(
+            stress, Decimal("365"), feeder_worlds=11
+        )
+
+    six_month_ceiling = queue_floor_level_after_days(Decimal("182.5"))
+    twelve_month_ceiling = queue_floor_level_after_days(Decimal("365"))
+
+    assert six_month_pool <= six_month_ceiling < 775
+    assert twelve_month_pool <= twelve_month_ceiling < 850
+    assert twelve_month_pool < 1000
 
 
 def test_reinvestment_benchmarks_match_balance_review():
