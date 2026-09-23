@@ -79,10 +79,27 @@ def test_english_request_still_gives_german_order_with_reply_language():
     assert "(auf Englisch)" in order.markdown
 
 
-def test_small_budget_for_big_scope_is_flagged():
+def test_budget_below_the_price_list_is_flagged():
     order = _order(budget="lt500")
-    assert "Budget knapp" in order.markdown
+    assert "- Preisliste: Online-Shop ab 1.890 €" in order.markdown
+    assert "Budget liegt unter dem Einstiegspreis (Online-Shop ab 1.890 €)" in order.markdown
     assert any(f["name"] == "⚠️ Hinweis" for f in order.embed["fields"])
+    assert "prüfen" in order.labels
+
+
+def test_small_website_budget_fits_the_landing_page_package():
+    order = _order(type="web", features=["contact_form"], budget="lt500")
+    assert "- Preisliste: Landingpage ab 490 €" in order.markdown
+    assert "Einstiegspreis" not in order.markdown and "prüfen" not in order.labels
+
+
+def test_intro_call_request_shows_up_everywhere():
+    order = _order(call=True)
+    assert "| Erstgespräch | gewünscht (15 Min., Telefon oder Video) |" in order.markdown
+    assert "1. Zwei, drei Termine für das kostenlose Erstgespräch" in order.markdown
+    assert "erstgespräch" in order.labels
+    assert any(f["name"] == "📞 Erstgespräch" for f in order.embed["fields"])
+    assert "| Erstgespräch | nicht angefragt |" in _order().markdown
 
 
 def test_missing_note_asks_what_it_is_about():
