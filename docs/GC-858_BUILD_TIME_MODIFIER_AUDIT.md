@@ -154,8 +154,10 @@ The floor is intentionally mine-only and the deep tail is unbounded:
 Through L400 the original triangular 25-level pacing remains unchanged. From
 L425 through L1000, `deep_steps = floor((level - 400) / 25)` and the deep
 minimum is `82 + 60 × deep_steps³` seconds. Beyond L1000 it continues from
-that value at +50000 seconds per additional full 25-level step. The runtime
-takes the larger of the gentle and deep floors.
+that value at +50000 seconds per additional full 25-level step. The legacy
+triangular schedule stops at L400; above L400 the deep schedule is authoritative.
+This prevents the old O(level²) floor from overtaking the canonical base-time
+curve at astronomical no-max levels.
 
 There is **no 3600-second cap anymore and still no maximum mine level**. The
 post-L1000 linear continuation intentionally grows slower than canonical
