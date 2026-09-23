@@ -418,18 +418,26 @@ Rollout safety remains unchanged:
 
 ### Long-horizon balance gate
 
-`scripts/sim_ascension_breakthroughs.py` runs the deterministic curve comparison
-used for V2 review. It is deliberately **not a full player forecast**: one
-Ferronit mine, all generated value reinvested into that mine, no other planets,
-research, loot, storage constraints or build-queue duration.
+`scripts/sim_ascension_breakthroughs.py` owns two deterministic long-horizon checks.
 
-The simulator reports 6-month (182.5 d) and 12-month (365 d) outcomes for:
+The primary comparison remains the self-funded one-mine curve: one Ferronit mine,
+all generated value reinvested into itself. It reports 6-month (182.5 d) and
+12-month (365 d) outcomes for baseline q4, the current +40% stack, q4.10/q4.20,
+the combined stack, current max rebuild and full Breakthrough V3.
 
-- baseline q4;
-- the current +40% production stack;
-- q4.10 and q4.20 alone;
-- q4.20 plus the current +40% stack;
-- current max rebuild from L130;
-- full Breakthrough V3 rebuild from the normal L130 cap with +30% rebuild production and the +25 record window.
+The second path is deliberately hostile: **11 mature feeder worlds** are assumed
+to mirror the record mine's output and pool 100% of that value into one target
+mine. No spending on research, fleet, storage or feeder development is deducted.
+The only non-resource constraint is the real `building_progress_floor_seconds`
+queue floor. This makes it an upper-bound stress case rather than a player forecast.
 
-Regression owner: `tests/test_ascension_breakthrough_v2.py`.
+GC-FERDI-DEEP-PACING-002 keeps the old queue floor unchanged through L400,
+adds cubic record-pressure through L1000, then continues linearly without a cap
+so the canonical big-number base-time curve remains dominant. A separate
+zero-cost queue check
+assumes upgrades cost nothing at all; from L200 it remains below roughly L775
+after six months and L850 after twelve months. Therefore an 11-world pooled
+account cannot approach L2000 in one year through normal queue completion.
+
+Regression owners: `tests/test_ascension_breakthrough_v2.py` and
+`tests/test_progression_time_floor.py`.

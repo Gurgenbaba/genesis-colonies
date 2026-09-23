@@ -142,26 +142,40 @@ def test_ascension_tree_is_visual_and_matches_commander_layout_language():
     assert "mine_ascension_preview_energy_draw" in template
 
 
-def test_ascension_header_and_run_hud_are_compact_commander_grade():
+def test_ascension_uses_progressive_disclosure_instead_of_repeated_hud_stats():
     template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")
     css = (ROOT / "static" / "css" / "nodebuster_ascension.css").read_text(encoding="utf-8")
 
     assert "gc-ascension-hero" in template
+    assert "gc-ascension-overview-details" in template
     assert "gc-ascension-summary" in template
     assert "gc-ascension-mine-tabs" in template
     assert "gc-ascension-mine-hero" in template
-    assert "gc-ascension-run-hud" in template
-    assert "gc-ascension-run-hud__group--progress" in template
-    assert "gc-ascension-run-hud__group--effects" in template
+    assert "gc-ascension-run-details" in template
+    assert "gc-ascension-run-details__grid" in template
+    assert "gc-ascension-run-hud" not in template
+    assert "gc-ascension-mine-tab__meta" not in template
+    assert "gc-ascension-depth__labels" not in template
     assert "gc-ascension-stat-grid" not in template
     assert "gc-ascension-bonus-grid" not in template
 
-    assert ".gc-ascension-run-hud" in css
-    assert "grid-template-columns:minmax(0,1.25fr) 1px minmax(0,1fr)" in css
-    assert ".gc-ascension-mine-tab.is-active::after" in css
-    assert ".gc-ascension-mine-hero" in css
-    assert ".gc-ascension-cta" in css
+    # AP remains visible where it is actionable: in the active tree header.
+    assert "gc-ascension-tree__ap" in template
+    assert template.count("mine.nodebuster_points_unspent|fmt_int") == 1
 
+    # Secondary run numbers exist, but are collapsed behind native <details>.
+    details_start = template.index('<details class="gc-ascension-run-details gc-panel">')
+    details_end = template.index("</details>", details_start)
+    details_block = template[details_start:details_end]
+    assert "mine_ascension_best_depth" in details_block
+    assert "mine_ascension_restart_level" in details_block
+    assert "mine_ascension_production_bonus" in details_block
+    assert "mine_ascension_storage_bonus" in details_block
+
+    assert ".gc-ascension-overview-details > summary" in css
+    assert ".gc-ascension-run-details > summary" in css
+    assert ".gc-ascension-run-details__grid" in css
+    assert "grid-template-columns:repeat(4,minmax(0,1fr))" in css
 
 def test_ascension_breakthroughs_are_integrated_into_the_progression_map():
     template = (ROOT / "templates" / "skilltree.html").read_text(encoding="utf-8")

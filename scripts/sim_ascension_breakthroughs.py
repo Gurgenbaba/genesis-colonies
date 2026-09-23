@@ -1,11 +1,15 @@
 """Ascension Breakthrough V2 long-horizon balance simulator.
 
-This is intentionally a curve comparison, not a player forecast:
+The primary table is intentionally a curve comparison, not a player forecast:
 - one Ferronit mine
 - all generated value is reinvested into that same mine
 - neutral modifiers except the selected Ascension production multiplier
 - upgrade cost uses the live power_upgrade_cost owner
-- build queue duration, other planets, research, loot and storage are excluded
+
+A second stress path models the exact Ferdi concern: up to 11 mature feeder worlds
+pooling their full value production into one record mine. That path also applies
+the canonical mine queue floor, so it provides an aggressive upper bound rather
+than a casual-player forecast.
 
 The simulator pins the UNI1 q4 rollout locally and restores process globals afterwards.
 """
@@ -25,6 +29,7 @@ if str(ROOT) not in sys.path:
 
 from game import production_formula as pf
 from game.economy_balance import power_upgrade_cost
+from game.time_floors import building_progress_floor_seconds
 
 
 @dataclass(frozen=True)
@@ -145,6 +150,58 @@ def level_after_days(scenario: Scenario, days: Decimal | int | float) -> int:
         level += 1
 
 
+def pooled_empire_level_after_days(
+    scenario: Scenario,
+    days: Decimal | int | float,
+    *,
+    feeder_worlds: int = 11,
+) -> int:
+    """Aggressive record-push ceiling with all mature worlds funding one mine.
+
+    Every feeder is assumed to magically keep the record mine's current output,
+    and every unit of generated value is spendable on the target upgrade. The
+    only non-resource constraint is the canonical server queue floor. Real
+    accounts lose value to other buildings, research, fleet, storage and feeder
+    progression, so they can only be slower than this stress path.
+    """
+    worlds = max(1, int(feeder_worlds))
+    budget_hours = Decimal(str(days)) * Decimal(24)
+    elapsed = Decimal(0)
+    level = int(scenario.start_level)
+    while True:
+        hourly = production_value_per_hour(level, scenario) * Decimal(worlds)
+        if hourly <= 0:
+            return level
+        target = level + 1
+        resource_hours = upgrade_value_cost(target, scenario) / hourly
+        queue_hours = Decimal(
+            building_progress_floor_seconds("metal_mine", target)
+        ) / Decimal(3600)
+        step = max(resource_hours, queue_hours)
+        if elapsed + step > budget_hours:
+            return level
+        elapsed += step
+        level = target
+
+
+def queue_floor_level_after_days(
+    days: Decimal | int | float,
+    *,
+    start_level: int = 200,
+) -> int:
+    """Absolute mine ceiling for the period if upgrades cost zero resources."""
+    budget_seconds = Decimal(str(days)) * Decimal(86400)
+    elapsed = Decimal(0)
+    level = max(0, int(start_level))
+    while True:
+        target = level + 1
+        step = Decimal(building_progress_floor_seconds("metal_mine", target))
+        if elapsed + step > budget_seconds:
+            return level
+        elapsed += step
+        level = target
+
+
 def run_horizons(
     scenarios: Iterable[Scenario] = SCENARIOS,
     *,
@@ -174,6 +231,20 @@ def main() -> None:
                 f"L{row['182.5d']} | L{row['365d']} | "
                 f"{to300:.1f} | {to500:.1f}"
             )
+
+        stress = next(row for row in SCENARIOS if row.key == "singularity_stack")
+        print()
+        print("Empire-pooling stress (11 mature feeder worlds → one record mine)")
+        print(
+            "6 months: "
+            f"L{pooled_empire_level_after_days(stress, Decimal('182.5'), feeder_worlds=11)} "
+            f"(zero-cost queue ceiling L{queue_floor_level_after_days(Decimal('182.5'))})"
+        )
+        print(
+            "12 months: "
+            f"L{pooled_empire_level_after_days(stress, Decimal('365'), feeder_worlds=11)} "
+            f"(zero-cost queue ceiling L{queue_floor_level_after_days(Decimal('365'))})"
+        )
 
 
 if __name__ == "__main__":

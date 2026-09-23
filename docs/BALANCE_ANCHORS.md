@@ -46,6 +46,7 @@ Vollständige Tabellen: **[GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)**
 6. **Klima-Prod-Faktoren:** zusätzlich zu Slot/Temperatur in `production_formula.py` via `directive_modifier` (Klima + Galactic Directives + Diplomacy).
 7. **Produktions-Basis (Ferdi-Rebase):** `Standard + MineBasis × level × 1.075^level` — Standard 15k/10k/5k; Energie nur auf Minen-Anteil — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 8. **Forschung Kosten (GC-RESEARCH-COST-REBALANCE):** `research_cost_afford_hours × Referenzproduktion (Fe+Cr)` — steile Afford-Kurve (L10=8h … L120=8640h); Zeiten unverändert (GC-825).
+9. **Deep-Endgame-Minenzeit:** normaler 10-s-Floor; L225–L400 sanfte Mine-only-Rampe; L425–L1000 kubischer 25-Level-Floor (`82 + 60 × steps³`), danach unbeschränkte lineare Fortsetzung als 11-Welten-Pooling-Guardrail — kein Max-Level.
 
 ---
 

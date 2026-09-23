@@ -362,24 +362,27 @@
         <p class="skilltree-section-hint">{{ T('mine_ascension_skilltree_hint', 'Ascension-Punkte werden pro Mine verdient und permanent in deren Skill Tree investiert.') }}</p>
       </div>
       {% if asc.ready %}
-      <div class="gc-ascension-summary" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
-        <div class="gc-ascension-summary__item">
-          <span>{{ T('location_action_mines', 'Minen') }}</span>
-          <strong class="gc-mono">{{ (asc.mines or [])|length }}</strong>
+      <details class="gc-ascension-overview-details">
+        <summary>{{ T('ui_info_show_details', 'Details anzeigen') }}</summary>
+        <div class="gc-ascension-summary" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
+          <div class="gc-ascension-summary__item">
+            <span>{{ T('location_action_mines', 'Minen') }}</span>
+            <strong class="gc-mono">{{ (asc.mines or [])|length }}</strong>
+          </div>
+          <div class="gc-ascension-summary__item">
+            <span>{{ T('mine_ascension_title', 'Ascension') }}</span>
+            <strong class="gc-mono">{{ asc_stats.total_ascensions|fmt_int }}</strong>
+          </div>
+          <div class="gc-ascension-summary__item">
+            <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
+            <strong class="gc-mono">{{ asc_stats.total_ap|fmt_int }}</strong>
+          </div>
+          <div class="gc-ascension-summary__item">
+            <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
+            <strong class="gc-mono">L{{ asc_stats.best_depth|fmt_int }}</strong>
+          </div>
         </div>
-        <div class="gc-ascension-summary__item">
-          <span>{{ T('mine_ascension_title', 'Ascension') }}</span>
-          <strong class="gc-mono">{{ asc_stats.total_ascensions|fmt_int }}</strong>
-        </div>
-        <div class="gc-ascension-summary__item">
-          <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
-          <strong class="gc-mono">{{ asc_stats.total_ap|fmt_int }}</strong>
-        </div>
-        <div class="gc-ascension-summary__item">
-          <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
-          <strong class="gc-mono">L{{ asc_stats.best_depth|fmt_int }}</strong>
-        </div>
-      </div>
+      </details>
       {% endif %}
     </header>
 
@@ -398,7 +401,6 @@
         aria-controls="ascension-panel-{{ mine.building_type }}"
         data-ascension-mine-tab="{{ mine.building_type }}">
         <span class="gc-ascension-mine-tab__name">{{ T('building_' ~ mine.building_type) }}</span>
-        <span class="gc-ascension-mine-tab__meta gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</span>
       </button>
       {% endfor %}
     </nav>
@@ -422,7 +424,7 @@
               <p class="skilltree-kicker">{{ T('mine_ascension_kicker', 'Langzeit-Progression') }}</p>
               <h3>{{ T('building_' ~ mine.building_type) }}</h3>
               <p class="gc-ascension-mine-hero__run gc-mono">
-                {{ T('mine_ascension_level', level=mine.level) }} · {{ T('mine_ascension_count', count=mine.evolution_rank) }}
+                {{ T('mine_ascension_level', level=mine.level) }}
               </p>
             </div>
           </div>
@@ -457,66 +459,49 @@
             {% endif %}
           </div>
 
-          <div class="gc-ascension-depth">
-            <div class="gc-ascension-depth__labels">
-              <span>{{ T('mine_ascension_level', level=mine.level) }}</span>
-              <span>{{ T('mine_ascension_unlock_hint', level=mine.evolution_required_level) }}</span>
-            </div>
-            <div class="gc-ascension-depth__track" aria-hidden="true">
-              <span style="width: {{ mine.evolution_progress_pct }}%;"></span>
-            </div>
-          </div>
         </header>
 
-        <section class="gc-ascension-run-hud gc-panel" aria-label="{{ T('mine_ascension_skilltree_title', 'Mine Ascension') }}">
-          <div class="gc-ascension-run-hud__group gc-ascension-run-hud__group--progress">
-            <div class="gc-ascension-run-hud__item">
-              <span>{{ T('mine_ascension_level', level='') }}</span>
-              <strong class="gc-mono">L{{ mine.level|fmt_int }}</strong>
-            </div>
-            <div class="gc-ascension-run-hud__item">
+        <details class="gc-ascension-run-details gc-panel">
+          <summary>
+            <span>{{ T('mine_ascension_title', 'Ascension') }}</span>
+            <strong>{{ T('ui_info_show_details', 'Details anzeigen') }}</strong>
+          </summary>
+          <div class="gc-ascension-run-details__grid">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_best_depth', 'Besttiefe') }}</span>
               <strong class="gc-mono">L{{ mine.nodebuster_best_depth|fmt_int }}</strong>
             </div>
-            <div class="gc-ascension-run-hud__item">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_restart_level', 'Neustart') }}</span>
               <strong class="gc-mono">L{{ mine.nodebuster_reset_level|fmt_int }}</strong>
             </div>
-            <div class="gc-ascension-run-hud__item">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_count', count='') }}</span>
               <strong class="gc-mono">{{ mine.evolution_rank|fmt_int }}</strong>
             </div>
-            <div class="gc-ascension-run-hud__item gc-ascension-run-hud__item--ap">
-              <span>{{ T('mine_ascension_points', 'Ascension-Punkte') }}</span>
-              <strong class="gc-mono">{{ mine.nodebuster_points_unspent|fmt_int }} {{ T('mine_ascension_points_short', 'AP') }}</strong>
-            </div>
-          </div>
-          <div class="gc-ascension-run-hud__divider" aria-hidden="true"></div>
-          <div class="gc-ascension-run-hud__group gc-ascension-run-hud__group--effects">
-            <div class="gc-ascension-run-hud__item">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_production_bonus', 'Produktion') }}</span>
               <strong class="gc-mono">+{{ mine.nodebuster_production_bonus_pct }}%</strong>
             </div>
-            <div class="gc-ascension-run-hud__item">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_storage_bonus', 'Lager') }}</span>
               <strong class="gc-mono">+{{ mine.nodebuster_storage_bonus_pct }}%</strong>
             </div>
-            <div class="gc-ascension-run-hud__item">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_rebuild_cost_bonus', pct=mine.nodebuster_rebuild_cost_pct) }}</span>
               <strong class="gc-mono">-{{ mine.nodebuster_rebuild_cost_pct }}%</strong>
             </div>
-            <div class="gc-ascension-run-hud__item">
+            <div class="gc-ascension-run-details__item">
               <span>{{ T('mine_ascension_rebuild_time_bonus', pct=mine.nodebuster_rebuild_time_pct) }}</span>
               <strong class="gc-mono">-{{ mine.nodebuster_rebuild_time_pct }}%</strong>
             </div>
           </div>
-        </section>
+        </details>
 
         <section class="gc-ascension-tree gc-panel">
           <div class="gc-ascension-tree__head">
             <div>
               <h3 class="skilltree-section-title">{{ T('mine_ascension_tree_title', 'Ascension Skill Tree') }}</h3>
-              <p class="skilltree-section-hint">{{ T('mine_ascension_skilltree_hint', 'Ascension-Punkte werden pro Mine verdient und permanent in deren Skill Tree investiert.') }}</p>
             </div>
             <div class="gc-ascension-tree__ap gc-mono">
               <strong>{{ mine.nodebuster_points_unspent|fmt_int }}</strong>
