@@ -39,12 +39,15 @@ return max(int(seconds), floor)
 ```
 
 The shared base floor remains **10 seconds**. For production mines only
-(`metal_mine`, `crystal_mine`, `fuel_cell_plant`), GC-MANDO-PACING-001 adds
-a gentle level-aware endgame floor from L225 onward so unlimited mine
-progression does not collapse into permanent 10-second upgrades. Anchors:
-L225=12s, L300=30s, L400=82s, L500=166s, L650=352s; the floor itself
-caps at 3600s so it never replaces the real high-level build curve. Explicit Timekeeper/admin
-skip mutations remain separate and can still finish jobs immediately.
+(`metal_mine`, `crystal_mine`, `fuel_cell_plant`), the existing gentle floor
+still runs from L225 through L400. **GC-FERDI-DEEP-PACING-002** then switches to
+an unbounded cubic 25-level pacing tail so mature multi-world empires cannot turn
+resource pooling into thousands of near-instant record levels. Anchors:
+L225=12s, L300=30s, L400/L424=82s, L425=142s, L500=3922s (~1h05),
+L650=60082s (~16h41), L800=245842s (~2d20h), L1000=829522s (~9d14h).
+There is **no pacing cap and no mine level cap**; canonical build time may still
+be higher. Explicit Timekeeper/admin skip mutations remain separate and can still
+finish jobs immediately.
 
 **`effective_speed`** stacks multiplicatively:
 
