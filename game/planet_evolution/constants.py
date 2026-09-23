@@ -37,6 +37,7 @@ CULTURE_ARCHETYPES = (
 
 MAX_PLANET_LEVEL = 30
 SPECIALIZATION_UNLOCK_LEVEL = 8
+ASCENSION_UNLOCK_LEVEL = 15
 IDENTITY_TEASER_MIN_LEVEL = 3
 MAX_SPECIALIZATION_TIER = 3
 MAX_ASCENSION_RANK = 3
@@ -53,7 +54,6 @@ LEVEL_UNLOCKS = {
     15: ("dna_reveal", 2),
     18: ("policy_slot", 2),
     22: ("experimental_gate",),
-    25: ("ascension",),
     30: ("policy_slot", 3),
 }
 
