@@ -24,11 +24,33 @@ def test_endgame_production_mines_gain_progressive_floor_without_level_cap():
     assert building_progress_floor_seconds("metal_mine", 225) == 12
     assert building_progress_floor_seconds("crystal_mine", 300) == 30
     assert building_progress_floor_seconds("fuel_cell_plant", 400) == 82
-    assert building_progress_floor_seconds("metal_mine", 500) == 166
-    assert building_progress_floor_seconds("metal_mine", 650) == 352
-    assert building_progress_floor_seconds("metal_mine", 10_000) == 3600
+    assert building_progress_floor_seconds("metal_mine", 424) == 82
+    assert building_progress_floor_seconds("metal_mine", 425) == 142
+    assert building_progress_floor_seconds("metal_mine", 500) == 3922
+    assert building_progress_floor_seconds("metal_mine", 650) == 60082
+    assert building_progress_floor_seconds("metal_mine", 800) == 245842
+    assert building_progress_floor_seconds("metal_mine", 1000) == 829522
+    assert building_progress_floor_seconds("metal_mine", 10_000) > building_progress_floor_seconds("metal_mine", 1000)
     assert building_progress_floor_seconds("research_lab", 650) == 10
 
+
+
+def _minimum_mine_push_days(start_level: int, target_level: int) -> float:
+    seconds = sum(
+        building_progress_floor_seconds("metal_mine", level)
+        for level in range(int(start_level) + 1, int(target_level) + 1)
+    )
+    return seconds / 86400.0
+
+
+def test_deep_floor_blocks_l2000_even_with_infinite_empire_resources():
+    # Absolute speed ceiling: this assumes every upgrade is fully funded before
+    # its queue slot starts. Real 11-world accounts can only be slower.
+    assert _minimum_mine_push_days(200, 750) < 182.5
+    assert _minimum_mine_push_days(200, 775) > 182.5
+    assert _minimum_mine_push_days(200, 825) < 365
+    assert _minimum_mine_push_days(200, 850) > 365
+    assert _minimum_mine_push_days(200, 2000) > 365 * 100
 
 def test_effect_resolver_enforces_endgame_mine_floor_after_extreme_speed_stack():
     resolver = EffectResolver(
@@ -37,7 +59,7 @@ def test_effect_resolver_enforces_endgame_mine_floor_after_extreme_speed_stack()
         settings={"build_speed": 1_000_000_000.0},
     )
     assert resolver.get_build_time_seconds("metal_mine", 400) == 82
-    assert resolver.get_build_time_seconds("metal_mine", 650) == 352
+    assert resolver.get_build_time_seconds("metal_mine", 650) == 60082
     assert resolver.get_build_time_seconds("research_lab", 400) == 10
 
 
