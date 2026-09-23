@@ -64,7 +64,7 @@ Manuelle QA über alle Queue-Seiten. Kein großes Queue-Panel mehr.
 | Q3b | `/defense` | Verteidigung bauen | **Nur** zentrale Mini-Bauschleife oben; Defense-Card ohne Queue-UI | - klappt
 | Q3c | `/shipyard` oder `/defense` | Timekeeper ⚡ | ⚡ nur in der oberen Bauschleife (aktiver Job); nach Apply sofort ohne Reload | - klappt
 | Q4 | `/planet_evolution` | Planet-Tech starten | Live nur in `#pe-planet-tech-queue-list`; Tech-Card ohne `data-gc-card-queue` | - klappt
-| Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Live in `#pe-ascension-queue-list`; Ascension-Card ohne Queue-Block; Kompaktstatus | - klappt
+| Q5 | `/planet_evolution` | Ascension (Stufe ≥15) | Live in `#pe-ascension-queue-list`; Ascension-Card ohne Queue-Block; Kompaktstatus | - klappt
 | Q6 | PJAX | Buildings → Research → Shipyard | Keine doppelte Unit-Queue in Cards nach Navigation | - klappt
 | Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Mini-Strip / Cards umbrechen sauber | - klappt
 | Q8 | Cancel | Job in Mini-Strip / PE-Liste abbrechen | Nächster Job wird aktiv ohne Reload; Item-Cards bleiben queue-frei | - klappt
