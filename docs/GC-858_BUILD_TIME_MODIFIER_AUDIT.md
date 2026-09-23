@@ -25,7 +25,7 @@ The sections below retain historical endgame / 10 s floor findings; treat any `0
 
 ## Root Cause (original audit)
 
-Historically, endgame mines could sit permanently at **~10 s** because multiplicative speed stacks divided `power_build_seconds()` down to the global floor. **GC-MANDO-PACING-001** introduced a gentle mine-only floor from L225. **GC-FERDI-DEEP-PACING-002** preserves that curve through L400 and adds an unbounded cubic deep tail above L400, specifically to stop mature multi-world resource pooling from collapsing calendar-time progression.
+Historically, endgame mines could sit permanently at **~10 s** because multiplicative speed stacks divided `power_build_seconds()` down to the global floor. **GC-MANDO-PACING-001** introduced a gentle mine-only floor from L225. **GC-FERDI-DEEP-PACING-002** preserves that curve through L400, adds cubic deep pacing through L1000, and then continues linearly without a cap, specifically to stop mature multi-world resource pooling from collapsing calendar-time progression while preserving the astronomical no-max base-time contract.
 
 Player confusion (updated):
 
@@ -149,13 +149,17 @@ The floor is intentionally mine-only and the deep tail is unbounded:
 | 650 | 60082 s (~16h 41m) |
 | 800 | 245842 s (~2d 20h) |
 | 1000 | 829522 s (~9d 14h) |
+| 2000 | 2829522 s (~32d 18h) |
 
-Through L400 the original triangular 25-level pacing remains unchanged. Above
-L400, `deep_steps = floor((level - 400) / 25)` and the deep minimum is
-`82 + 60 × deep_steps³` seconds. The runtime takes the larger of the gentle
-and deep floors.
+Through L400 the original triangular 25-level pacing remains unchanged. From
+L425 through L1000, `deep_steps = floor((level - 400) / 25)` and the deep
+minimum is `82 + 60 × deep_steps³` seconds. Beyond L1000 it continues from
+that value at +50000 seconds per additional full 25-level step. The runtime
+takes the larger of the gentle and deep floors.
 
-There is **no 3600-second cap anymore and still no maximum mine level**. This is
+There is **no 3600-second cap anymore and still no maximum mine level**. The
+post-L1000 linear continuation intentionally grows slower than canonical
+`power_build_seconds ~ level^1.35`, preserving the big-number invariant. This is
 a calendar-time guardrail, not a resource-price rewrite. Nodebuster rebuild-time
 discounts may not reduce a mine below this floor. Even with every upgrade funded
 in advance, the queue ceiling stays below roughly L775 at six months and L850 at
