@@ -1,15 +1,20 @@
 """Contact form backend for the developer portfolio (gurgenbaba.github.io).
 
 The portfolio is a static site, so it posts the finished project request here.
-The request is forwarded by mail, attachments included, and nothing is stored.
+The request is forwarded, attachments included, and nothing is stored. Two
+channels, used together when both are configured:
 
-Deliverability: the mail is sent through the owner's own mailbox
-(``CONTACT_SMTP_USER``, Gmail by default) to that same mailbox, with the
-customer as Reply-To. A message a mailbox sends to itself through its own
-authenticated SMTP does not get flagged as spam, unlike mail from an unknown
-customer address or a fresh sender domain.
+- Discord webhook (``CONTACT_DISCORD_WEBHOOK``): an embed plus the files in a
+  private channel. No spam filter involved, push notification on the phone.
+- Mail through the owner's own mailbox (``CONTACT_SMTP_USER``, Gmail by
+  default) to that same mailbox, with the customer as Reply-To. A message a
+  mailbox sends to itself through its own authenticated SMTP does not get
+  flagged as spam.
+
+The request counts as delivered when at least one channel accepted it.
 
 Environment:
+    CONTACT_DISCORD_WEBHOOK  https://discord.com/api/webhooks/<id>/<token>
     CONTACT_SMTP_USER      mailbox that sends and (by default) receives
     CONTACT_SMTP_PASSWORD  app password for that mailbox
     CONTACT_SMTP_HOST      default smtp.gmail.com
@@ -23,11 +28,14 @@ fill time, size caps and an attachment type allowlist. Bot hits get a normal
 
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 import os
 import re
 import smtplib
+import uuid
+from urllib.request import Request, urlopen
 from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Any
@@ -36,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 MAX_FILES = 5
 MAX_FILE_BYTES = 8 * 1024 * 1024
-MAX_TOTAL_BYTES = 20 * 1024 * 1024
+MAX_TOTAL_BYTES = 10 * 1024 * 1024  # Discord's upload cap for webhooks without boosts
 MAX_REQUEST_BYTES = MAX_TOTAL_BYTES + 256 * 1024
 MIN_FILL_MS = 4000
 SUBMIT_RATE = (5, 3600.0)  # 5 requests per hour per IP
@@ -66,8 +74,18 @@ def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
 
-def contact_configured() -> bool:
+def mail_configured() -> bool:
     return bool(_env("CONTACT_SMTP_USER") and _env("CONTACT_SMTP_PASSWORD"))
+
+
+def discord_webhook_url() -> str:
+    url = _env("CONTACT_DISCORD_WEBHOOK")
+    ok = url.startswith(("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/"))
+    return url if ok else ""
+
+
+def contact_configured() -> bool:
+    return mail_configured() or bool(discord_webhook_url())
 
 
 def _one_line(value: Any, limit: int) -> str:
@@ -163,6 +181,71 @@ def send_contact_mail(msg: EmailMessage) -> bool:
         return False
 
 
+DISCORD_DESCRIPTION_LIMIT = 3900
+
+
+def build_discord_payload(fields: dict[str, str], attachments: list[tuple[str, bytes, str]]) -> tuple[dict, list[tuple[str, bytes, str]]]:
+    """Embed JSON plus the files to upload. Long letters go along as a .txt file."""
+    files = list(attachments)
+    text = fields["message"]
+    if len(text) > DISCORD_DESCRIPTION_LIMIT:
+        files.append(("anfrage.txt", text.encode("utf-8"), "text/plain"))
+        text = text[:DISCORD_DESCRIPTION_LIMIT] + "\n\n… (vollständig in anfrage.txt)"
+    names = ", ".join(name for name, _, _ in attachments) or "keine"
+    payload = {
+        "username": "Portfolio-Anfrage",
+        # Customer text must never ping anyone in the channel.
+        "allowed_mentions": {"parse": []},
+        "embeds": [{
+            "title": fields["subject"][:256],
+            "description": text,
+            "color": 0xC6F04A,
+            "fields": [
+                {"name": "Name", "value": (fields["name"] or "–")[:1024], "inline": True},
+                {"name": "E-Mail", "value": fields["email"][:1024], "inline": True},
+                {"name": "Anhänge", "value": names[:1024], "inline": False},
+            ],
+            "footer": {"text": "gurgenbaba.github.io · Antwort per E-Mail an den Absender"},
+        }],
+    }
+    return payload, files
+
+
+def _multipart(payload: dict, files: list[tuple[str, bytes, str]]) -> tuple[bytes, str]:
+    boundary = uuid.uuid4().hex
+    parts = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n"
+        "Content-Type: application/json\r\n\r\n".encode() + json.dumps(payload).encode("utf-8") + b"\r\n"
+    ]
+    for i, (name, data, mime) in enumerate(files):
+        safe = re.sub(r'[\r\n"]+', "_", name)
+        head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[{i}]\"; filename=\"{safe}\"\r\n"
+                f"Content-Type: {mime}\r\n\r\n").encode("utf-8")
+        parts.append(head + data + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def send_discord(fields: dict[str, str], attachments: list[tuple[str, bytes, str]]) -> bool:
+    url = discord_webhook_url()
+    if not url:
+        return False
+    payload, files = build_discord_payload(fields, attachments)
+    body, content_type = _multipart(payload, files)
+    req = Request(url, data=body, method="POST", headers={
+        "Content-Type": content_type,
+        # Discord's edge rejects the default Python user agent.
+        "User-Agent": "GenesisColoniesContact/1.0 (+https://genesis-colonies.com)",
+    })
+    try:
+        with urlopen(req, timeout=20) as res:
+            return 200 <= res.status < 300
+    except Exception as exc:
+        # Never log the URL: it contains the webhook token.
+        logger.warning("contact discord webhook failed: %s", type(exc).__name__)
+        return False
+
+
 def register_contact_routes(app) -> None:
     from flask import jsonify, request
 
@@ -199,10 +282,15 @@ def register_contact_routes(app) -> None:
             attachments = read_attachments(request.files.getlist("files"))
         except ContactError as err:
             return _reply({"ok": False, "error": err.code}, err.status)
-        sender = _env("CONTACT_SMTP_USER")
-        recipient = _env("CONTACT_MAIL_TO") or sender
-        msg = build_message(fields, attachments, sender=sender, recipient=recipient)
-        if not send_contact_mail(msg):
+        delivered = []
+        if discord_webhook_url() and send_discord(fields, attachments):
+            delivered.append("discord")
+        if mail_configured():
+            sender = _env("CONTACT_SMTP_USER")
+            recipient = _env("CONTACT_MAIL_TO") or sender
+            if send_contact_mail(build_message(fields, attachments, sender=sender, recipient=recipient)):
+                delivered.append("mail")
+        if not delivered:
             return _reply({"ok": False, "error": "send_failed"}, 502)
-        logger.info("contact mail sent attachments=%s", len(attachments))
+        logger.info("contact request delivered via=%s attachments=%s", ",".join(delivered), len(attachments))
         return _reply({"ok": True})
