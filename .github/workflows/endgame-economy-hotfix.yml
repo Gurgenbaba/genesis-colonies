@@ -75,6 +75,10 @@ jobs:
         run: |
           python -m pytest -q --tb=line tests/test_gc_ferro_l388_001.py
           python -m pytest -q --tb=line tests/test_gc_mando_storage_001.py
+      - name: Empire research pacing + level 15 maturity contract
+        run: |
+          python -m pytest -q --tb=line tests/test_gc863b_research_cost_rebalance.py
+          python -m pytest -q --tb=line tests/test_imperial_mandates.py::test_colony_maturity_contract_is_level_15
       - name: Ascension Breakthrough 6/12 month balance gate
         run: |
           python scripts/sim_ascension_breakthroughs.py
