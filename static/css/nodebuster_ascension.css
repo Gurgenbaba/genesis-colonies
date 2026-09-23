@@ -328,12 +328,6 @@
   letter-spacing:.015em;
 }
 
-.gc-ascension-mine-tab__meta{
-  flex:0 0 auto;
-  font-size:.59rem;
-  opacity:.72;
-}
-
 .gc-ascension-mine-panels{
   min-width:0;
 }
@@ -480,72 +474,6 @@
   min-width:2px;
   background:color-mix(in srgb,var(--asc-theme) 82%,white 6%);
   box-shadow:0 0 7px color-mix(in srgb,var(--asc-theme) 35%,transparent);
-}
-
-/* One compact run HUD replaces the two stacked rows of mini cards. */
-.gc-ascension-run-hud{
-  display:grid;
-  grid-template-columns:minmax(0,1.25fr) 1px minmax(0,1fr);
-  gap:.65rem;
-  align-items:stretch;
-  padding:.55rem .7rem;
-  border:1px solid var(--gc-border,#2a3a45);
-  border-radius:var(--gc-radius-sm,2px);
-  background:
-    linear-gradient(135deg,rgba(40,55,65,.40),rgba(12,18,24,.82)),
-    repeating-linear-gradient(90deg,transparent,transparent 2px,rgba(255,255,255,.012) 2px,rgba(255,255,255,.012) 4px);
-}
-
-.gc-ascension-run-hud__group{
-  display:grid;
-  min-width:0;
-  align-items:center;
-}
-
-.gc-ascension-run-hud__group--progress{
-  grid-template-columns:repeat(5,minmax(0,1fr));
-}
-
-.gc-ascension-run-hud__group--effects{
-  grid-template-columns:repeat(4,minmax(0,1fr));
-}
-
-.gc-ascension-run-hud__divider{
-  width:1px;
-  background:color-mix(in srgb,var(--asc-theme) 25%,#2a3a45);
-}
-
-.gc-ascension-run-hud__item{
-  display:grid;
-  gap:.1rem;
-  min-width:0;
-  padding:.08rem .48rem;
-  border-left:1px solid rgba(255,255,255,.055);
-}
-
-.gc-ascension-run-hud__item:first-child{
-  border-left:0;
-}
-
-.gc-ascension-run-hud__item span{
-  min-width:0;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  font-size:.55rem;
-  line-height:1.1;
-  text-transform:uppercase;
-  letter-spacing:.035em;
-  opacity:.58;
-}
-
-.gc-ascension-run-hud__item strong{
-  font-size:.69rem;
-  color:color-mix(in srgb,var(--asc-theme) 74%,white 12%);
-}
-
-.gc-ascension-run-hud__item--ap strong{
-  color:var(--asc-theme);
 }
 
 /* Tree panel intentionally mirrors Commander Skill Trunk. */
@@ -1229,15 +1157,6 @@
   .gc-ascension-summary__item:first-child{
     border-left:1px solid color-mix(in srgb,var(--asc-theme) 24%,#2a3a45);
   }
-
-  .gc-ascension-run-hud{
-    grid-template-columns:1fr;
-  }
-
-  .gc-ascension-run-hud__divider{
-    width:100%;
-    height:1px;
-  }
 }
 
 @media (max-width:700px){
@@ -1298,16 +1217,6 @@
     min-width:0;
   }
 
-  .gc-ascension-run-hud__group--progress{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    row-gap:.35rem;
-  }
-
-  .gc-ascension-run-hud__group--effects{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    row-gap:.35rem;
-  }
-
   .gc-ascension-tree{
     padding:.65rem;
   }
@@ -1362,11 +1271,6 @@
 
   .gc-ascension-summary__item{
     border-left:1px solid color-mix(in srgb,var(--asc-theme) 24%,#2a3a45);
-  }
-
-  .gc-ascension-run-hud__group--progress,
-  .gc-ascension-run-hud__group--effects{
-    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
 
