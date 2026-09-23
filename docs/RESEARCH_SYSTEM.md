@@ -116,6 +116,18 @@ Der Ascension-Speedbonus wird vom selben stärksten Forschungsnetzwerk abgeleite
 
 **Kosten:** `economy_balance.research_upgrade_cost()` — `reference_production(metal+crystal @ level) × research_cost_afford_hours(level)` (GC-RESEARCH-COST-REBALANCE) × Tech-Tier aus `base_cost_m/c`.
 
+**Empire-Pacing (GC-RESEARCH-EMPIRE-PACING):** Der obige Wert bleibt der deterministische **Basisanker** für Audit, Score und Balance-Tabellen. Der tatsächlich bezahlte Account-Research-Preis wird serverseitig über `get_research_payment_cost()` an die effektive Reichsproduktion gekoppelt:
+
+- Quelle: kanonisches `empire_page.get_empire_production_aggregate()`, nur Ferronit + Crytite pro Stunde.
+- Reife: Durchschnitt aller eigenen Welten mit `min(1, planet_level / 15)`; Entwicklungsstufe **15** zählt als voll reif.
+- Tech L1–L20: Faktor **1,00×** — Early Game bleibt unverändert.
+- L20–L60: der Produktionsdruck blendet progressiv ein.
+- Ab L60: voller Exponent **0,50** (Quadratwurzel). 16× effektive Reichsproduktion → etwa 4× Preis; 169× → etwa 13×.
+- Kein Hardcap: große Reiche werden weiter skaliert, aber sublinear statt 1:1.
+- Zahlung bleibt vom **Context-Planeten**; der beim Queue-Start gespeicherte Kosten-Snapshot bleibt Refund-Wahrheit.
+
+Damit kann ein 11-Welten-Reich Account-Tech nicht mehr proportional zu seiner gesamten Produktionsmultiplikation komprimieren, ohne Ein-Welt- und Early-Game-Progression künstlich zu bestrafen.
+
 Afford-Anker (`RESEARCH_COST_AFFORD_HOURS`, energy_tech Tier 1.0):
 
 | Level | Ziel-Afford (h Produktion) |

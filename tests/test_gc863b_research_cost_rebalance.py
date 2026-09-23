@@ -10,12 +10,16 @@ import pytest
 
 from game.economy_balance import (
     RESEARCH_COST_AFFORD_HOURS,
+    RESEARCH_EMPIRE_MATURITY_LEVEL,
     research_cost_afford_hours,
     research_cost_anchor_total,
+    research_empire_cost_multiplier,
+    research_empire_maturity_index,
     research_upgrade_cost,
     reference_production_per_hour,
+    scale_research_cost_for_empire,
 )
-from game.research import RESEARCH_TECHS, get_research_cost
+from game.research import RESEARCH_TECHS, get_research_cost, get_research_payment_cost
 
 _BENCHMARK_LEVELS = (1, 5, 10, 15, 19, 20, 30, 40, 50, 75, 100)
 _PRE_GC863B_ENERGY_L1 = 801
@@ -102,6 +106,65 @@ class TestGcResearchCostRebalance:
         assert RESEARCH_COST_AFFORD_HOURS[10] == 8.0
         assert RESEARCH_COST_AFFORD_HOURS[30] == 96.0
         assert RESEARCH_COST_AFFORD_HOURS[120] == 8640.0
+
+
+class TestGcResearchEmpirePacing:
+    def test_maturity_contract_is_level_15(self) -> None:
+        assert RESEARCH_EMPIRE_MATURITY_LEVEL == 15
+        assert research_empire_maturity_index([15, 15, 15]) == pytest.approx(1.0)
+        assert research_empire_maturity_index([0, 0, 0]) == pytest.approx(0.0)
+
+    def test_early_research_is_unchanged(self) -> None:
+        income = _income(20) * 169
+        assert research_empire_cost_multiplier(
+            20,
+            empire_combined_per_hour=income,
+            maturity_index=1.0,
+        ) == pytest.approx(1.0)
+
+    def test_midgame_pressure_blends_in(self) -> None:
+        income = _income(40) * 16
+        assert research_empire_cost_multiplier(
+            40,
+            empire_combined_per_hour=income,
+            maturity_index=1.0,
+        ) == pytest.approx(2.0, rel=1e-9)
+
+    def test_endgame_uses_sqrt_empire_pressure(self) -> None:
+        income = _income(120) * 169
+        assert research_empire_cost_multiplier(
+            120,
+            empire_combined_per_hour=income,
+            maturity_index=1.0,
+        ) == pytest.approx(13.0, rel=1e-9)
+
+    def test_immature_empire_contributes_proportionally(self) -> None:
+        mature = research_empire_cost_multiplier(
+            120,
+            empire_combined_per_hour=_income(120) * 169,
+            maturity_index=1.0,
+        )
+        partial = research_empire_cost_multiplier(
+            120,
+            empire_combined_per_hour=_income(120) * 169,
+            maturity_index=0.25,
+        )
+        assert 1.0 < partial < mature
+
+    def test_dynamic_payment_preserves_base_anchor_and_rounding(self) -> None:
+        base_m, base_c = get_research_cost("energy_tech", 120)
+        paid_m, paid_c = get_research_payment_cost(
+            "energy_tech",
+            120,
+            cost_context={
+                "empire_combined_per_hour": int(_income(120) * 169),
+                "maturity_index": 1.0,
+                "world_count": 11,
+            },
+        )
+        assert paid_m + paid_c > (base_m + base_c) * 12
+        scaled_m, scaled_c = scale_research_cost_for_empire(base_m, base_c, 13.0)
+        assert (paid_m, paid_c) == (scaled_m, scaled_c)
 
 
 class TestGc863bBuildingsUntouched:

@@ -65,6 +65,12 @@ def _set_hw(conn, uid: int, level: int) -> None:
     conn.commit()
 
 
+
+def test_colony_maturity_contract_is_level_15():
+    from game.planet_evolution.expansion_protocol import COLONY_MATURITY_REQUIRED_LEVEL
+
+    assert COLONY_MATURITY_REQUIRED_LEVEL == 15
+
 def test_ark_slots_cap_at_six_no_extrapolation():
     assert expansion_slots_unlocked(30) == 6
     assert expansion_slots_unlocked(35) == 6

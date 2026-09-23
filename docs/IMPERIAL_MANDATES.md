@@ -29,9 +29,9 @@ gameplay_cap       = min(effective_worlds, admin_ceiling)  # default 11
 
 `can_found_colony` / Fleet colonize blockieren nur **neue** Gründungen — nie bestehende Welten.
 
-### Colony Maturity Gate (PE ≥ 30)
+### Colony Maturity Gate (PE ≥ 15)
 
-Vor **jeder weiteren** Kolonie (ab der 2.) müssen alle bestehenden Nicht-Heimwelt-Kolonien `planet_level >= 30` haben. Die erste Kolonie ist ausgenommen. Reason: `colony_maturity_required`. Owner: `colony_maturity_gate()` in `expansion_protocol.py`.
+Vor **jeder weiteren** Kolonie (ab der 2.) müssen alle bestehenden Nicht-Heimwelt-Kolonien `planet_level >= 15` haben. Die erste Kolonie ist ausgenommen. Reason: `colony_maturity_required`. Owner: `colony_maturity_gate()` in `expansion_protocol.py`.
 
 ### Rechenbeispiele
 
@@ -76,7 +76,7 @@ Grants are lazy-synced in `ensure_player_mandate_state` (called from `expansion_
 |--------|------|
 | `planet_evolution_colony_slot_required` | Kernreich — Ark-Stufe zu niedrig |
 | `imperial_mandate_required` | Spätreich — nächstes Mandat fehlt |
-| `colony_maturity_required` | Bestehende Kolonien noch unter PE 30 |
+| `colony_maturity_required` | Bestehende Kolonien noch unter PE 15 |
 | `colony_limit_reached` / `expansion_admin_ceiling_reached` | Admin-Ceiling |
 
 Limit-Block + PE Expansion-Checkliste zeigen Mandate-Fortschritt (`current`/`required`), nicht Ark 30/35.

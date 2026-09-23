@@ -733,7 +733,7 @@
               <span class="pe-rail-step-copy">
                 <span class="pe-rail-step-label">{{ T(item.label_key, item.key) }}{% if item.current is defined and item.required is defined %} <span class="gc-mono">({{ item.current }}/{{ item.required }})</span>{% endif %}</span>
                 {% if item.key == 'colony_maturity' and item.detail_names %}
-                <span class="pe-rail-step-building hint">{{ T('expansion_checklist_colony_maturity_detail', 'Noch unter Entwicklungsstufe %(level)s: %(names)s', level=(item.required_level or 30), names=item.detail_names) }}</span>
+                <span class="pe-rail-step-building hint">{{ T('expansion_checklist_colony_maturity_detail', 'Noch unter Entwicklungsstufe %(level)s: %(names)s', level=(item.required_level or 15), names=item.detail_names) }}</span>
                 {% endif %}
               </span>
             </li>
