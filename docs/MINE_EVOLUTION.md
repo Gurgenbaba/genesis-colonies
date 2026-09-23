@@ -431,8 +431,10 @@ mine. No spending on research, fleet, storage or feeder development is deducted.
 The only non-resource constraint is the real `building_progress_floor_seconds`
 queue floor. This makes it an upper-bound stress case rather than a player forecast.
 
-GC-FERDI-DEEP-PACING-002 keeps the old queue floor unchanged through L400 and
-adds an unbounded cubic deep tail afterwards. A separate zero-cost queue check
+GC-FERDI-DEEP-PACING-002 keeps the old queue floor unchanged through L400,
+adds cubic record-pressure through L1000, then continues linearly without a cap
+so the canonical big-number base-time curve remains dominant. A separate
+zero-cost queue check
 assumes upgrades cost nothing at all; from L200 it remains below roughly L775
 after six months and L850 after twelve months. Therefore an 11-world pooled
 account cannot approach L2000 in one year through normal queue completion.
