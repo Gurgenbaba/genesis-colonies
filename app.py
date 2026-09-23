@@ -1143,6 +1143,9 @@ register_public_stats_routes(app)
 from game.arcade_scores import register_arcade_score_routes
 register_arcade_score_routes(app)
 
+from game.contact_form import register_contact_routes
+register_contact_routes(app)
+
 try:
     from game.internal_cron import start_embedded_cron_if_enabled
 
