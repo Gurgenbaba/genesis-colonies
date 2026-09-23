@@ -156,3 +156,98 @@ def test_explicit_recipient_overrides_sender(client, monkeypatch):
     monkeypatch.setenv("CONTACT_MAIL_TO", "inbox@example.com")
     _post(client)
     assert FakeSMTP.sent[0]["To"] == "inbox@example.com"
+
+
+# --- Discord webhook -------------------------------------------------------
+
+import json
+import re
+
+WEBHOOK = "https://discord.com/api/webhooks/123/test-token"
+
+
+class FakeResponse:
+    status = 204
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.fixture()
+def discord(monkeypatch):
+    calls = []
+
+    def fake_urlopen(req, timeout=None):
+        if getattr(fake_urlopen, "fail", False):
+            raise OSError("discord down")
+        calls.append(req)
+        return FakeResponse()
+
+    monkeypatch.setattr(contact, "urlopen", fake_urlopen)
+    monkeypatch.setenv("CONTACT_DISCORD_WEBHOOK", WEBHOOK)
+    fake_urlopen.calls = calls
+    return fake_urlopen
+
+
+def _payload(req):
+    body = req.data.decode("utf-8", "replace")
+    match = re.search(r'name="payload_json"\r\nContent-Type: application/json\r\n\r\n(.*?)\r\n--', body, re.S)
+    return json.loads(match.group(1)), body
+
+
+def test_discord_only_delivers_embed_and_files(client, discord, monkeypatch):
+    monkeypatch.delenv("CONTACT_SMTP_PASSWORD")
+    files = [(io.BytesIO(b"%PDF-1.4"), "Briefing.pdf")]
+    response = _post(client, {"message": LETTER + "\n\n@everyone schaut her"}, files=files)
+    assert response.status_code == 200, response.get_json()
+    assert FakeSMTP.sent == []
+
+    req = discord.calls[0]
+    assert req.full_url == WEBHOOK
+    assert req.get_header("User-agent").startswith("GenesisColoniesContact")
+    payload, body = _payload(req)
+    assert payload["allowed_mentions"] == {"parse": []}
+    embed = payload["embeds"][0]
+    assert embed["title"] == "Projektanfrage: Online-Shop"
+    assert "Online-Shop" in embed["description"]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields["E-Mail"] == "anna@example.org"
+    assert fields["Anhänge"] == "Briefing.pdf"
+    assert 'name="files[0]"; filename="Briefing.pdf"' in body
+
+
+def test_long_letter_is_attached_as_text_file(client, discord):
+    long_letter = "Hallo,\n\n" + ("Sehr ausführliche Beschreibung. " * 180)
+    _post(client, {"message": long_letter[:5900]})
+    payload, body = _payload(discord.calls[0])
+    assert len(payload["embeds"][0]["description"]) < 4096
+    assert 'filename="anfrage.txt"' in body
+
+
+def test_both_channels_are_used_and_one_success_is_enough(client, discord):
+    assert _post(client).status_code == 200
+    assert len(discord.calls) == 1 and len(FakeSMTP.sent) == 1
+
+    discord.fail = True
+    assert _post(client).status_code == 200  # mail still went out
+    FakeSMTP.fail = True
+    response = _post(client)
+    assert response.status_code == 502
+    assert response.get_json()["error"] == "send_failed"
+
+
+def test_invalid_webhook_url_is_ignored(client, monkeypatch):
+    monkeypatch.setenv("CONTACT_DISCORD_WEBHOOK", "https://evil.example/hook")
+    monkeypatch.delenv("CONTACT_SMTP_PASSWORD")
+    assert _post(client).status_code == 503
+
+
+def test_total_attachment_cap_matches_discord_limit(client, discord):
+    chunk = b"0" * (6 * 1024 * 1024)
+    files = [(io.BytesIO(chunk), "a.pdf"), (io.BytesIO(chunk), "b.pdf")]
+    response = _post(client, files=files)
+    assert response.status_code == 413
+    assert response.get_json()["error"] in ("request_too_large", "files_too_large")
