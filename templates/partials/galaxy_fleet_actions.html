@@ -127,7 +127,7 @@
   <p class="hint galaxy-colonize-blocked-hint" role="status">
     {{ block_title }}
     {% if block_reason == 'colony_maturity_required' and colonize_gate.get('underleveled_names') %}
-      <span class="gc-mono">{{ T('expansion_checklist_colony_maturity_detail', 'Noch unter Entwicklungsstufe %(level)s: %(names)s', level=(colonize_gate.get('required_level') or 30), names=colonize_gate.get('underleveled_names')) }}</span>
+      <span class="gc-mono">{{ T('expansion_checklist_colony_maturity_detail', 'Noch unter Entwicklungsstufe %(level)s: %(names)s', level=(colonize_gate.get('required_level') or 15), names=colonize_gate.get('underleveled_names')) }}</span>
     {% endif %}
   </p>
     {% endif %}
