@@ -10,6 +10,7 @@ from ..db import begin_write_transaction, commit, lock_planet_for_update, rollba
 from ..exact_math import decimal_text, decimal_value
 from ..models import db, try_spend_resources_conn
 from ..ranking import invalidate_player_score_cache
+from .constants import ASCENSION_UNLOCK_LEVEL
 from .definitions import get_ascension, get_ascensions
 from .history import append_history
 from .impact import impact_scopes, mechanics_impact_rows
@@ -30,8 +31,8 @@ def check_ascension_requirements(
     planet = get_planet_row(planet_id, conn=conn) or {}
     if planet.get("ascension_key"):
         return False, ["already_ascended"]
-    if int(planet.get("planet_level") or 1) < 25:
-        return False, ["planet_level>=25"]
+    if int(planet.get("planet_level") or 1) < ASCENSION_UNLOCK_LEVEL:
+        return False, [f"planet_level>={ASCENSION_UNLOCK_LEVEL}"]
 
     req = dict(adef.get("requirements") or {})
     cost = req.pop("cost", None)
