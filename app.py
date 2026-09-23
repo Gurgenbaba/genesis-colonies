@@ -1137,6 +1137,9 @@ register_player_changelog_routes(app)
 from game.empire_relay import register_empire_relay_routes
 register_empire_relay_routes(app)
 
+from game.public_stats import register_public_stats_routes
+register_public_stats_routes(app)
+
 try:
     from game.internal_cron import start_embedded_cron_if_enabled
 
