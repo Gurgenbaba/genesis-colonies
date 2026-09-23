@@ -13,6 +13,11 @@ channels, used together when both are configured:
 
 The request counts as delivered when at least one channel accepted it.
 
+When the portfolio sends its answers as a ``brief`` (see game.contact_brief),
+both channels carry a work order instead of the plain letter: requirements with
+acceptance criteria, open questions and a Markdown file for a coding agent. The
+customer's letter stays in the order, quoted.
+
 Environment:
     CONTACT_DISCORD_WEBHOOK  https://discord.com/api/webhooks/<id>/<token>
     CONTACT_SMTP_USER      mailbox that sends and (by default) receives
@@ -39,6 +44,8 @@ from urllib.request import Request, urlopen
 from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Any
+
+from game.contact_brief import WorkOrder, build_work_order, parse_brief
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +152,9 @@ def read_attachments(files: list) -> list[tuple[str, bytes, str]]:
 
 
 def build_message(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
-                  *, sender: str, recipient: str) -> EmailMessage:
+                  *, sender: str, recipient: str, order: WorkOrder | None = None) -> EmailMessage:
     msg = EmailMessage()
-    msg["Subject"] = fields["subject"]
+    msg["Subject"] = order.subject if order else fields["subject"]
     msg["From"] = formataddr(("Portfolio-Anfrage", sender))
     msg["To"] = recipient
     msg["Reply-To"] = formataddr((fields["name"], fields["email"])) if fields["name"] else fields["email"]
@@ -158,7 +165,9 @@ def build_message(fields: dict[str, str], attachments: list[tuple[str, bytes, st
         "Gesendet über das Kontaktformular auf gurgenbaba.github.io. "
         "\"Antworten\" geht direkt an den Absender."
     )
-    msg.set_content(fields["message"] + footer)
+    msg.set_content((order.markdown if order else fields["message"]) + footer)
+    if order:
+        msg.add_attachment(order.markdown.encode("utf-8"), maintype="text", subtype="markdown", filename=order.filename)
     for name, data, mime in attachments:
         maintype, _, subtype = mime.partition("/")
         msg.add_attachment(data, maintype=maintype, subtype=subtype or "octet-stream", filename=name)
@@ -184,9 +193,18 @@ def send_contact_mail(msg: EmailMessage) -> bool:
 DISCORD_DESCRIPTION_LIMIT = 3900
 
 
-def build_discord_payload(fields: dict[str, str], attachments: list[tuple[str, bytes, str]]) -> tuple[dict, list[tuple[str, bytes, str]]]:
+def build_discord_payload(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
+                          order: WorkOrder | None = None) -> tuple[dict, list[tuple[str, bytes, str]]]:
     """Embed JSON plus the files to upload. Long letters go along as a .txt file."""
     files = list(attachments)
+    if order:
+        embed = dict(order.embed)
+        data = order.markdown.encode("utf-8")
+        if sum(len(d) for _, d, _ in files) + len(data) <= MAX_TOTAL_BYTES:
+            files.insert(0, (order.filename, data, "text/markdown"))
+        else:
+            embed["footer"] = {"text": "Auftragsdatei passte nicht mehr ins Upload-Limit, sie steht in der Mail."}
+        return {"username": "Portfolio-Auftrag", "allowed_mentions": {"parse": []}, "embeds": [embed]}, files
     text = fields["message"]
     if len(text) > DISCORD_DESCRIPTION_LIMIT:
         files.append(("anfrage.txt", text.encode("utf-8"), "text/plain"))
@@ -226,11 +244,12 @@ def _multipart(payload: dict, files: list[tuple[str, bytes, str]]) -> tuple[byte
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
-def send_discord(fields: dict[str, str], attachments: list[tuple[str, bytes, str]]) -> bool:
+def send_discord(fields: dict[str, str], attachments: list[tuple[str, bytes, str]],
+                 order: WorkOrder | None = None) -> bool:
     url = discord_webhook_url()
     if not url:
         return False
-    payload, files = build_discord_payload(fields, attachments)
+    payload, files = build_discord_payload(fields, attachments, order)
     body, content_type = _multipart(payload, files)
     req = Request(url, data=body, method="POST", headers={
         "Content-Type": content_type,
@@ -282,15 +301,18 @@ def register_contact_routes(app) -> None:
             attachments = read_attachments(request.files.getlist("files"))
         except ContactError as err:
             return _reply({"ok": False, "error": err.code}, err.status)
+        brief = parse_brief(form.get("brief"))
+        order = build_work_order(brief, fields, [name for name, _, _ in attachments]) if brief else None
         delivered = []
-        if discord_webhook_url() and send_discord(fields, attachments):
+        if discord_webhook_url() and send_discord(fields, attachments, order):
             delivered.append("discord")
         if mail_configured():
             sender = _env("CONTACT_SMTP_USER")
             recipient = _env("CONTACT_MAIL_TO") or sender
-            if send_contact_mail(build_message(fields, attachments, sender=sender, recipient=recipient)):
+            if send_contact_mail(build_message(fields, attachments, sender=sender, recipient=recipient, order=order)):
                 delivered.append("mail")
         if not delivered:
             return _reply({"ok": False, "error": "send_failed"}, 502)
-        logger.info("contact request delivered via=%s attachments=%s", ",".join(delivered), len(attachments))
+        logger.info("contact request delivered via=%s attachments=%s work_order=%s",
+                    ",".join(delivered), len(attachments), bool(order))
         return _reply({"ok": True})
