@@ -10,9 +10,9 @@ from game.fleet import add_planet_ships, build_distribute_route, build_fleet_inc
 from game.expedition_events import calculate_expedition_loot_cap, expedition_event_keys, resolve_expedition_outcome
 from game.fleet_calc import apply_departure_deduction, build_collect_route, calculate_distance, calculate_fleet_speed, calculate_flight_seconds, calculate_fuel_cost, calculate_total_cargo, enrich_movement_timing, fleet_ships_are_cargo_only, fuel_efficiency_factor, normalize_collect_source_planet_ids, normalize_ships, split_resources_evenly, split_ships_across_targets, validate_departure_balances
 from game.alliance import add_alliance_member, create_alliance
-from game.fleet_defs import EXPEDITION_POSITION, FLEET_FUEL_RESOURCE, ship_score_value
+from game.fleet_defs import EXPEDITION_POSITION, FLEET_FUEL_RESOURCE, SHIPS, ship_score_value
 from game.messages import get_message, list_messages
-from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, get_research_levels, init_db
+from game.models import DEFAULT_GAME_SETTINGS, create_user, ensure_player_and_homeworld, get_planets_by_player, get_research_levels, init_db
 from game.planet_evolution.service import colonize_planet
 
 _username_seq = 0
@@ -213,6 +213,28 @@ def test_calculate_distance_hierarchy():
     assert calculate_distance((1, 100, 3), (2, 100, 3)) == 20000
     # Lower coordinate tiers must not leak into a higher-tier jump.
     assert calculate_distance((1, 1, 1), (2, 499, 15)) == 20000
+
+def test_x1_utility_hull_speed_anchors():
+    # Universe mission-speed knobs stay neutral; utility pacing belongs to hull defs.
+    assert DEFAULT_GAME_SETTINGS["fleet_speed_war"] == "1.0"
+    assert DEFAULT_GAME_SETTINGS["fleet_speed_holding"] == "1.0"
+    assert DEFAULT_GAME_SETTINGS["fleet_speed_peaceful"] == "1.0"
+
+    seed_speed = int(SHIPS["seed_ark"]["speed"])
+    reclaimer_speed = int(SHIPS["harvest_reclaimer"]["speed"])
+    assert seed_speed == 20_000
+    assert reclaimer_speed == 40_000
+
+    adjacent_system = calculate_distance((1, 7, 2), (1, 8, 2))
+    assert adjacent_system == 2795
+    assert calculate_flight_seconds(adjacent_system, seed_speed, 100, admin_speed_multiplier=1.0) == 4148
+    assert calculate_flight_seconds(adjacent_system, reclaimer_speed, 100, admin_speed_multiplier=1.0) == 2936
+
+    # Fresh 2h asteroid fields remain reachable at x1 across a broad same-galaxy radius.
+    hundred_systems = calculate_distance((1, 1, 2), (1, 101, 2))
+    assert hundred_systems == 12200
+    assert calculate_flight_seconds(hundred_systems, reclaimer_speed, 100, admin_speed_multiplier=1.0) < 2 * 3600
+
 
 def test_calculate_fleet_speed_slowest():
     speed = calculate_fleet_speed({'veil_probe': 1, 'mule_courier': 10})
