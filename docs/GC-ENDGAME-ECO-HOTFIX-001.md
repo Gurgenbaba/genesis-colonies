@@ -20,7 +20,7 @@ The production owner now supports three process-local modes via `GC_ENDGAME_ECON
 
 - `GC_ENDGAME_ECONOMY_MODE`: `legacy|shadow|active` (default `legacy`)
 - `GC_ENDGAME_PRODUCTION_PIVOT`: default `120`, hard-clamped to `120..100000`
-- `GC_ENDGAME_PRODUCTION_TAIL_POWER`: default `4`, hard-clamped to `1..8`
+- `GC_ENDGAME_PRODUCTION_TAIL_POWER`: default `3`, hard-clamped to `1..8`
 - `GC_ENDGAME_SHADOW_MIN_LEVEL`: default `pivot-50` with lower bound `120`
 
 Invalid mode values fail closed to `legacy`.

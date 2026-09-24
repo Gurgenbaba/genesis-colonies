@@ -18,7 +18,7 @@ operator gate:
 - `active`: the coordinated V2 rules below.
 
 **Never enable `active` with the old L650 candidate pivot.** The final V2 candidate
-uses pivot **L120** and tail power **q=4**.
+uses pivot **L120** and live tail power **q=3**. The progression-score valuation remains frozen on the original q4 cutover reference so balance edits do not rewrite history.
 
 ## Production V2
 
@@ -26,7 +26,7 @@ For pivot `P=120`, historical mine output `f(P)`, `x=L-P`, and
 `s = 1/P + ln(1.075)`:
 
 ```text
-f_v2(P+x) = f(P) × (1 + s×x/4)^4
+f_live(P+x) = f(P) × (1 + s×x/3)^3
 ```
 
 It is value- and derivative-continuous at L120, monotone, unbounded, and replaces
@@ -37,12 +37,12 @@ Approximate output relative to L120:
 | Level | V2 / L120 |
 |---:|---:|
 | 120 | 1.00× |
-| 150 | 6.63× |
-| 200 | 46.62× |
-| 300 | 459.31× |
-| 500 | 5,629.87× |
-| 650 | 18,653.52× |
-| 1000 | 123,434.87× |
+| 150 | 5.90× |
+| 200 | 31.28× |
+| 300 | 199.10× |
+| 500 | 1,411.02× |
+| 650 | 3,545.79× |
+| 1000 | 14,993.40× |
 
 `legacy` and `shadow` continue returning the old production values.
 
@@ -50,19 +50,22 @@ Approximate output relative to L120:
 
 Through L120 the historical GC-821 ROI anchors are unchanged. The initial V2
 cutover used a `0.45` tail exponent. That kept the displayed incremental ROI
-moderate, but under a q4 production tail it also made every later *fresh record*
-upgrade cheaper relative to the mine's current output.
+moderate, but it still let mature empires convert huge production pools into too
+many *fresh record* levels. Ferdi's launch pass therefore separates record pushing
+from Ascension rebuilding: records become progressively harder, while the rebuild
+path becomes dramatically stronger.
 
 For UNI1 launch hardening, **live mine pricing** above L120 now uses:
 
 ```text
-H_live(L) = 2000h × (L / 120)^1.00
+H_live(L) = 2000h × (L / 120)^2.40
 ```
 
-The q4 tail has marginal output/current output approaching `~1/L`; a linear
-investment horizon offsets that decay. The practical cost of pushing a new record
-therefore stays in a roughly stable multi-day saving band instead of collapsing
-toward instant late-game upgrades.
+The q3 tail already slows raw number growth. The steeper 2.4 investment horizon
+adds the second guardrail: every new lifetime record consumes increasingly more
+of the mine's current production instead of settling into a flat late-game saving
+band. Ascension discounts do not apply to a new record, so prestige cannot bypass
+this pressure.
 
 The live upgrade-cost owner continues to price mines from the canonical production
 delta. No event, Commander effect, directive, energy shortage or temporary
@@ -75,21 +78,22 @@ Reference live horizons:
 | Level | Hours | Days |
 |---:|---:|---:|
 | 120 | 2,000 | 83.3 |
-| 200 | ~3,333 | 138.9 |
-| 300 | ~5,000 | 208.3 |
-| 400 | ~6,667 | 277.8 |
-| 500 | ~8,333 | 347.2 |
-| 650 | ~10,833 | 451.4 |
-| 1000 | ~16,667 | 694.4 |
+| 200 | ~6,815 | 284.0 |
+| 300 | ~18,034 | 751.4 |
+| 400 | ~35,970 | 1,498.7 |
+| 500 | ~61,450 | 2,560.4 |
+| 650 | ~115,342 | 4,805.9 |
+| 1000 | ~324,336 | 13,514.0 |
 
 These are **incremental payback horizons**, not literal saving time from zero.
-Against the q4 mine's current output, a fresh Ferronit record level remains roughly
-in the ~3–4 day reference-cost band across the deep endgame before player bonuses.
+The actual next-level price is still derived from the canonical production delta;
+the point of the curve is that fresh records become steadily more demanding instead
+of converging on a cheap late-game band.
 
-**Progression score does not follow this live-price change.**
-`game/progression_valuation.py` intentionally keeps the V2 cutover reference
-horizon frozen at exponent `0.45`, so changing launch-era prices cannot
-retroactively rewrite earned ranking or Commander milestone history.
+**Progression score does not follow this live-price/production change.**
+`game/progression_valuation.py` intentionally keeps the original V2 q4 production
+reference and horizon exponent `0.45` frozen, so q3 gameplay and steeper launch-era
+prices cannot retroactively rewrite earned ranking or Commander milestone history.
 
 ## Research V2
 
@@ -168,13 +172,13 @@ The report never writes `player_scores`.
 
 ## Atomic cutover procedure
 
-1. Deploy this code with `GC_ENDGAME_ECONOMY_MODE=shadow`, pivot `120`, q=`4`.
+1. Deploy this code with `GC_ENDGAME_ECONOMY_MODE=shadow`, pivot `120`, q=`3`.
 2. Run and review the complete shadow ranking report on Production data.
 3. At cutover timestamp **T**, while still on V1 gameplay, settle outstanding
    resource ticks through T using the normal authoritative resource/tick path.
 4. Existing queued jobs keep their stored paid-cost snapshots. Do not reprice or
    refund them from V2 formulas.
-5. Switch `GC_ENDGAME_ECONOMY_MODE=active` with pivot `120`, q=`4`.
+5. Switch `GC_ENDGAME_ECONOMY_MODE=active` with pivot `120`, q=`3`.
 6. Recompute every player's score with V2 and run one full rank rebuild.
 7. Verify ranking, 5× PvP corridors, Commander claims, economy endpoints and
    high-level storage before reopening normal operations.

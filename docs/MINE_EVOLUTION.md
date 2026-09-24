@@ -126,18 +126,18 @@ Owner: `game/mine_evolution/nodebuster.py`
 ### Reconstruction
 
 - Max rank: 10
-- +10 restart levels per rank
+- +12 restart levels per rank
 
 ### Frugal Rebuild
 
 - Max rank: 10
-- -4% mine upgrade cost per rank
+- -5.5% mine upgrade cost per rank (rebuild only; full-tree floor 37.5% of normal cost)
 - Active only while rebuilding at or below the lifetime best depth
 
 ### Rapid Rebuild
 
 - Max rank: 10
-- -5% mine build time per rank
+- -6.5% mine build time per rank (rebuild only; full-tree floor 30% of normal time)
 - Active only while rebuilding at or below the lifetime best depth
 
 ### Deep Yield
@@ -157,12 +157,13 @@ Owner: `game/mine_evolution/nodebuster.py`
 - Max rank: 3
 - Requires Reconstruction, Frugal Rebuild, Rapid Rebuild, Deep Yield and Deep Storage at rank 5
 - Per rank:
-  - +10 restart levels
+  - +12 restart levels
   - +5% permanent production
-  - -2% rebuild cost
-  - -2% rebuild time
+  - -2.5% rebuild cost
+  - -2.5% rebuild time
 
-At the V1 caps the maximum restart baseline is level 130.
+At the launch caps the maximum restart baseline is level 156, still below the
+L200 Ascension activation threshold.
 
 Skill costs rise with purchased rank. The browser receives the server-computed cost,
 availability and affordability; it never calculates the tree economy itself.
@@ -213,11 +214,11 @@ Deep Yield / Overdrive increase that multiplier for only the matching
 
 Reconstruction Surge is intentionally separate from the permanent multiplier:
 
-- `ProductionContext.mine_rebuild_modifier = 1.30` only while the current mine
+- `ProductionContext.mine_rebuild_modifier = 2.00` only while the current mine
   level is inside the authoritative rebuild window;
 - it multiplies the **mine part only**, never the planet's standard income;
 - without Breakthrough Window it ends at lifetime best depth;
-- with Breakthrough Window it ends at lifetime best depth +25;
+- with Breakthrough Window it ends at lifetime best depth +50;
 - outside that window the modifier returns exactly to `1.0`.
 
 ---
@@ -324,17 +325,15 @@ The server validates rank cap, prerequisites, AP balance and ownership atomicall
 
 ## Buildings UI
 
-Each mine card exposes one compact Nodebuster surface:
+The normal mine card is deliberately progressive-disclosure:
 
-- current run level
-- AP available
-- AP gained if Ascending now
-- lifetime best depth
-- current restart level
-- Ascension count
-- permanent rebuild / production bonuses
-- six-node permanent skill tree
-- Ascend CTA from level 200 onward
+- always visible: mine identity, current level and the immediate build/Ascension action;
+- one reveal: next-level time, effect and resource cost;
+- deeper technical data: level tables, energy/production breakdown and formulas;
+- the dedicated Skill Tree → Ascension tab owns AP, best depth, restart level,
+  Ascension count and permanent skill-tree detail.
+
+This keeps the building grid readable without deleting any power-user data.
 
 The confirm modal explicitly shows:
 
@@ -389,30 +388,31 @@ contract gate is missing. See `docs/UNI1_LAUNCH_CONTRACT.md`.
 
 ---
 
-## Ascension Breakthrough V3
+## Ascension Breakthrough V4
 
-V3 keeps the V2 q-tail breakthroughs, but removes the duplicated restart mechanic
+V4 keeps the breakthrough structure, but rebases it around the launch q3 tail and
+makes the reset/rebuild payoff materially stronger. It retains the removal of the duplicated restart mechanic
 from the expensive Legacy keystone. The expensive nodes now change four different
 parts of the prestige loop: endgame scaling, rebuild production, rebuild reach and
 the second endgame scaling jump.
 
 | Keystone | Cost | Gate | Permanent rule change |
 |---|---:|---|---|
-| Core Resonance | 15 AP | Deep Yield 8+, best depth L300 | Personal mine tail q4.00 -> q4.10 |
-| Reconstruction Surge | 20 AP | Reconstruction 8+, best depth L400 | +30% **mine-only** production while rebuilding through the lifetime best |
-| Breakthrough Window | 24 AP | Frugal 8+ and Rapid 8+, best depth L400 | Rebuild cost/time discounts **and Reconstruction Surge** remain active through best depth +25 |
-| Singularity Excavation | 36 AP | Core Resonance, Overdrive III, best depth L500 | Personal mine tail q4.10 -> q4.20 |
+| Core Resonance | 15 AP | Deep Yield 8+, best depth L300 | Personal mine tail q3.00 -> q3.15 |
+| Reconstruction Surge | 20 AP | Reconstruction 8+, best depth L400 | +100% **mine-only** production while rebuilding through the lifetime best |
+| Breakthrough Window | 24 AP | Frugal 8+ and Rapid 8+, best depth L400 | Rebuild cost/time discounts **and Reconstruction Surge** remain active through best depth +50 |
+| Singularity Excavation | 36 AP | Core Resonance, Overdrive III, best depth L500 | Personal mine tail q3.15 -> q3.30 |
 
 The q-tail breakthroughs are **not** extra production multipliers. The Mine
 Evolution owner exposes an integer hundredths delta into
 `ProductionContext.mine_tail_power_bonus_hundredths`; the canonical
-`game/production_formula.py` applies that delta only to the active q4 endgame
+`game/production_formula.py` applies that delta only to the active q3 endgame
 tail for the matching planet and mine.
 
 Rollout safety remains unchanged:
 
 - legacy/shadow endgame modes ignore personal q-tail breakthroughs;
-- active mode uses global q4 plus the per-mine delta;
+- active mode uses global q3 plus the per-mine delta;
 - levels at/below the endgame pivot remain unchanged;
 - production math stays server-authoritative and no frontend formula exists.
 
@@ -422,8 +422,24 @@ Rollout safety remains unchanged:
 
 The primary comparison remains the self-funded one-mine curve: one Ferronit mine,
 all generated value reinvested into itself. It reports 6-month (182.5 d) and
-12-month (365 d) outcomes for baseline q4, the current +40% stack, q4.10/q4.20,
-the combined stack, current max rebuild and full Breakthrough V3.
+12-month (365 d) outcomes for baseline q3, the current +40% stack, q3.15/q3.30,
+the combined stack, current max rebuild and full Breakthrough V4.
+
+Current deterministic anchors:
+
+| Scenario | Start | 6 months | 12 months | Days to L300 | Days to L500 |
+|---|---:|---:|---:|---:|---:|
+| Baseline q3 | 200 | 223 | 245 | 886.6 | 3758.3 |
+| q3 + current +40% | 200 | 232 | 261 | 633.3 | 2684.5 |
+| Core Resonance q3.15 | 200 | 225 | 249 | 796.7 | 3176.9 |
+| Singularity q3.30 | 200 | 227 | 253 | 719.3 | 2704.0 |
+| q3.30 + current +40% | 200 | 237 | 273 | 513.8 | 1931.4 |
+| Current max rebuild | 156 | 246 | 315 | 319.3 | 1088.5 |
+| Full Breakthrough V4 | 156 | 343 | 478 | 133.6 | 399.4 |
+
+The deliberately hostile 11-world pooling stress reaches **L508 after six months**
+and **L705 after twelve months**; the zero-resource-cost queue ceilings remain
+L769 / L836. These are upper-bound stress values, not normal player forecasts.
 
 The second path is deliberately hostile: **11 mature feeder worlds** are assumed
 to mirror the record mine's output and pool 100% of that value into one target

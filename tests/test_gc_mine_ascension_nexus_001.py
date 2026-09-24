@@ -101,7 +101,7 @@ def test_rebuild_skills_discount_cost_and_time_only_through_best_depth(game_clie
         user_id=int(uid),
     )
     assert ok, reason
-    assert int(queued["duration"]) == 95
+    assert int(queued["duration"]) == 94
 
     conn = db()
     try:
@@ -115,9 +115,9 @@ def test_rebuild_skills_discount_cost_and_time_only_through_best_depth(game_clie
             (pid,),
         ).fetchone()
         assert row is not None
-        assert int(row["cost_metal"]) == 96
-        assert int(row["cost_crystal"]) == 96
-        assert round(float(row["finish_time"]) - float(row["start_time"])) == 95
+        assert int(row["cost_metal"]) == 95
+        assert int(row["cost_crystal"]) == 95
+        assert round(float(row["finish_time"]) - float(row["start_time"])) == 94
     finally:
         conn.close()
 

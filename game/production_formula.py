@@ -105,7 +105,7 @@ ENDGAME_PRODUCTION_PIVOT_LEVEL = _env_int(
 )
 ENDGAME_PRODUCTION_TAIL_POWER = _env_int(
     "GC_ENDGAME_PRODUCTION_TAIL_POWER",
-    4,
+    3,
     minimum=1,
     maximum=8,
 )

@@ -133,13 +133,13 @@ def test_reconstruction_changes_next_reset_baseline(mevo_db):
     ok, reason, skill = purchase_skill(uid, planet, "metal_mine", "reconstruction")
     assert ok, reason
     assert skill["skill_rank"] == 1
-    assert skill["reset_level"] == 10
+    assert skill["reset_level"] == 12
 
     _set_level(uid, "metal_mine", 200)
     ok, reason, second = evolve_mine(uid, planet, "metal_mine")
     assert ok, reason
-    assert second["reset_level"] == 10
-    assert int(get_planet_buildings(int(planet["id"]))["metal_mine"]) == 10
+    assert second["reset_level"] == 12
+    assert int(get_planet_buildings(int(planet["id"]))["metal_mine"]) == 12
 
 
 def test_output_skill_is_per_mine_and_per_planet(mevo_db):
@@ -300,10 +300,10 @@ def test_breakthrough_window_reaches_buildings_cost_and_time_consumer(mevo_db):
             )
         commit(conn)
 
-        assert rebuild_bps_for_target(pid, "metal_mine", 525, conn=conn) == (6800, 6000)
-        assert rebuild_bps_for_target(pid, "metal_mine", 526, conn=conn) == (10000, 10000)
-        assert _nodebuster_rebuild_bps(pid, "metal_mine", 525, conn=conn) == (6800, 6000)
-        assert _nodebuster_rebuild_bps(pid, "metal_mine", 526, conn=conn) == (10000, 10000)
+        assert rebuild_bps_for_target(pid, "metal_mine", 550, conn=conn) == (5600, 4800)
+        assert rebuild_bps_for_target(pid, "metal_mine", 551, conn=conn) == (10000, 10000)
+        assert _nodebuster_rebuild_bps(pid, "metal_mine", 550, conn=conn) == (5600, 4800)
+        assert _nodebuster_rebuild_bps(pid, "metal_mine", 551, conn=conn) == (10000, 10000)
     finally:
         conn.close()
 
@@ -341,7 +341,7 @@ def test_breakthrough_tail_flows_from_db_into_production_context(mevo_db):
             )
         commit(conn)
 
-        assert tail_power_bonus_hundredths_for(pid, "metal_mine", conn=conn) == 20
+        assert tail_power_bonus_hundredths_for(pid, "metal_mine", conn=conn) == 30
 
         buildings = get_planet_buildings(pid, conn=conn)
         research = get_research_levels(uid, conn=conn)
@@ -354,7 +354,7 @@ def test_breakthrough_tail_flows_from_db_into_production_context(mevo_db):
             force_refresh=True,
         )
         context = production_context_from_resolver(resolver, "metal")
-        assert context.mine_tail_power_bonus_hundredths == 20
+        assert context.mine_tail_power_bonus_hundredths == 30
     finally:
         conn.close()
 
@@ -477,7 +477,7 @@ def test_rebuild_surge_flows_from_db_into_canonical_production_context(mevo_db):
             )
             return production_context_from_resolver(resolver, "metal")
 
-        assert _context_at(500).mine_rebuild_modifier == pytest.approx(1.30)
+        assert _context_at(500).mine_rebuild_modifier == pytest.approx(2.00)
         assert _context_at(501).mine_rebuild_modifier == pytest.approx(1.0)
 
         conn.execute(
@@ -493,8 +493,8 @@ def test_rebuild_surge_flows_from_db_into_canonical_production_context(mevo_db):
         )
         commit(conn)
 
-        assert _context_at(525).mine_rebuild_modifier == pytest.approx(1.30)
-        assert _context_at(526).mine_rebuild_modifier == pytest.approx(1.0)
+        assert _context_at(550).mine_rebuild_modifier == pytest.approx(2.00)
+        assert _context_at(551).mine_rebuild_modifier == pytest.approx(1.0)
     finally:
         conn.close()
 

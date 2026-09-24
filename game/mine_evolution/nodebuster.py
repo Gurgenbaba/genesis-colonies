@@ -29,11 +29,13 @@ QUEUE_SAFETY_SENTINEL = 2_147_483_647
 
 # Breakthrough V2: expensive, one-rank mechanics that change the prestige loop
 # instead of only adding another flat percentage.  Tail deltas are stored as
-# hundredths so q4.00 -> q4.10 -> q4.20 never depends on binary-float state.
-CORE_RESONANCE_TAIL_POWER_HUNDREDTHS = 10
-SINGULARITY_TAIL_POWER_HUNDREDTHS = 10
-LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS = 3000
-BREAKTHROUGH_WINDOW_LEVELS = 25
+# hundredths so q3.00 -> q3.15 -> q3.30 never depends on binary-float state.
+CORE_RESONANCE_TAIL_POWER_HUNDREDTHS = 15
+SINGULARITY_TAIL_POWER_HUNDREDTHS = 15
+# A hard reset must feel transformative: the expensive keystone doubles only
+# the mine part while rebuilding, never standard income or fresh-record output.
+LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS = 10000
+BREAKTHROUGH_WINDOW_LEVELS = 50
 
 SKILL_CATALOG: Dict[str, Dict[str, Any]] = {
     "reconstruction": {
@@ -323,7 +325,7 @@ def skill_prerequisites_met(
 
 
 def tail_power_bonus_hundredths(skills: Dict[str, int]) -> int:
-    """Personal q-tail increase for one mine: q4.00 -> q4.10 -> q4.20."""
+    """Personal q-tail increase for one mine: q3.00 -> q3.15 -> q3.30."""
     core = 1 if int(skills.get("core_resonance", 0) or 0) > 0 else 0
     singularity = 1 if int(skills.get("singularity_excavation", 0) or 0) > 0 else 0
     return (
@@ -345,7 +347,7 @@ def reset_start_level(skills: Dict[str, int], best_depth: int = 0) -> int:
     del best_depth
     reconstruction = max(0, int(skills.get("reconstruction", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    base = reconstruction * 10 + overdrive * 10
+    base = reconstruction * 12 + overdrive * 12
     # Ascension must always restart below the L200 activation threshold.
     return min(ASCENSION_MIN_LEVEL - 1, base)
 
@@ -353,13 +355,13 @@ def reset_start_level(skills: Dict[str, int], best_depth: int = 0) -> int:
 def rebuild_cost_bps(skills: Dict[str, int]) -> int:
     frugal = max(0, int(skills.get("frugal_rebuild", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    return max(5000, 10000 - 400 * frugal - 200 * overdrive)
+    return max(3500, 10000 - 550 * frugal - 250 * overdrive)
 
 
 def rebuild_time_bps(skills: Dict[str, int]) -> int:
     rapid = max(0, int(skills.get("rapid_rebuild", 0) or 0))
     overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-    return max(4500, 10000 - 500 * rapid - 200 * overdrive)
+    return max(3000, 10000 - 650 * rapid - 250 * overdrive)
 
 
 def rebuild_production_bonus_bps(skills: Dict[str, int]) -> int:
@@ -383,7 +385,7 @@ def rebuild_production_multiplier_for(
 
     Legacy Reconstruction is intentionally a rebuild accelerator, not another
     restart-level mechanic. Breakthrough Window extends this surge together
-    with the existing rebuild cost/time discounts through best depth +25.
+    with the existing rebuild cost/time discounts through best depth +50.
     """
     bt = str(building_type or "")
     if not is_evolvable_mine(bt):
@@ -989,7 +991,7 @@ def purchase_skill(
             "points_unspent": new_unspent,
             "reset_level": reset_start_level(updated_skills, int(state.get("best_depth") or 0)),
             "tail_power_bonus_hundredths": tail_power_bonus_hundredths(updated_skills),
-            "tail_power": 4.0 + tail_power_bonus_hundredths(updated_skills) / 100.0,
+            "tail_power": _tail_power_display(tail_power_bonus_hundredths(updated_skills)),
             "rebuild_window_extra_levels": rebuild_window_extra_levels(updated_skills),
             "rebuild_window_level": int(state.get("best_depth") or 0) + rebuild_window_extra_levels(updated_skills),
             "rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(updated_skills)) * 100)),

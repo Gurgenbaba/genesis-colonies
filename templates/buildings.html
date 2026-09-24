@@ -151,12 +151,6 @@
                     class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level"
                     title="{{ T('buildings_col_level') }}"
                     aria-label="{{ T('buildings_col_level') }}">{{ b.level|fmt_int }}</span>
-              <div class="gc-bld-hero-action-row">
-                {# TK ⚡ + live ETA only on #build-mini-queue #}
-                <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
-                  {{ render_hero_time_chip(none, b.time_seconds, 'build', T('buildings_col_time')) }}
-                </span>
-              </div>
             </div>
             <div class="gc-bld-card-hero-title">
               <div class="gc-bld-card-title-wrap">
@@ -171,7 +165,7 @@
             </div>
           </div>
 
-          {{ render_building_effect_bundle(b) }}
+          {# GC-FERDI-DISCLOSURE-001: secondary upgrade data lives behind one click. #}
 
           {% if building_type == 'research_lab' and b.research_lab_ascension is defined and b.research_lab_ascension %}
           {% set _lab_asc_rank = (b.research_lab_ascension_rank|default(0)|int) %}
@@ -290,11 +284,27 @@
           </button>
           {% endif %}
 
-          <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-            <div class="gc-bld-card-costs">
-              {{ render_building_prog_costs(b, b.cost_metal, b.cost_crystal, b.target_level, false) }}
+          <details class="gc-progression-reveal" data-progression-reveal>
+            <summary class="gc-progression-reveal__summary">
+              <span class="gc-progression-reveal__label">
+                {{ T("progression_costs_heading", "Kosten") }} · {{ T("buildings_col_time", "Bauzeit") }}
+              </span>
+              <span class="gc-progression-reveal__target gc-mono">→ L{{ b.target_level|fmt_int }}</span>
+              <span class="gc-progression-reveal__chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="gc-progression-reveal__body">
+              <div class="gc-progression-reveal__time">
+                <span>{{ T("buildings_col_time", "Bauzeit") }}</span>
+                {{ render_hero_time_chip(none, b.time_seconds, 'build', T('buildings_col_time')) }}
+              </div>
+              {{ render_building_effect_bundle(b) }}
+              <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
+                <div class="gc-bld-card-costs">
+                  {{ render_building_prog_costs(b, b.cost_metal, b.cost_crystal, b.target_level, false) }}
+                </div>
+              </div>
             </div>
-          </div>
+          </details>
         </article>
       {% endfor %}
     </div>
@@ -312,6 +322,7 @@
 {% block extra_head %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nodebuster_ascension.css') }}?v={{ GC_ASSET_VERSION }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/progression_disclosure.css') }}?v={{ GC_ASSET_VERSION }}">
 {# Stage LCP = planet landscape (base preload). Retro cards keep first-card hero preload. #}
 {% if not ui_is_stage and _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">

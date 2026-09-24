@@ -18,6 +18,7 @@ from game.economy_balance import (
 )
 from game.progression_valuation import (
     V2_PIVOT_LEVEL,
+    V2_TAIL_POWER,
     building_progression_resources_v2,
     building_progression_value_v2,
     reference_investment_horizon_hours_v2,
@@ -31,14 +32,15 @@ from game.research import cumulative_research_resource_totals
 def _restore_rollout(monkeypatch):
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "legacy")
     monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_PIVOT_LEVEL", 120)
-    monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 4)
+    monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 3)
     yield
 
 
-def test_final_candidate_defaults_to_l120_q4():
+def test_live_candidate_is_l120_q3_while_score_reference_stays_frozen():
     assert V2_PIVOT_LEVEL == 120
+    assert V2_TAIL_POWER == 4  # ranking valuation is deliberately historical/frozen
     assert pf.ENDGAME_PRODUCTION_PIVOT_LEVEL == 120
-    assert pf.ENDGAME_PRODUCTION_TAIL_POWER == 4
+    assert pf.ENDGAME_PRODUCTION_TAIL_POWER == 3
 
 
 def test_v2_tail_matches_approved_relative_shape():
@@ -87,28 +89,27 @@ def test_active_mine_cost_horizon_rises_after_l120(monkeypatch):
     assert mine_roi_anchor_hours(120) == pytest.approx(2000.0)
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
     assert mine_roi_anchor_hours(120) == pytest.approx(2000.0)
-    assert mine_roi_anchor_hours(200) / 24.0 == pytest.approx(138.89, rel=0.01)
-    assert mine_roi_anchor_hours(300) / 24.0 == pytest.approx(208.33, rel=0.01)
-    assert mine_roi_anchor_hours(500) / 24.0 == pytest.approx(347.22, rel=0.01)
-    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(451.39, rel=0.01)
-    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(694.44, rel=0.01)
+    assert mine_roi_anchor_hours(200) / 24.0 == pytest.approx(283.96, rel=0.01)
+    assert mine_roi_anchor_hours(300) / 24.0 == pytest.approx(751.41, rel=0.01)
+    assert mine_roi_anchor_hours(500) / 24.0 == pytest.approx(2560.42, rel=0.01)
+    assert mine_roi_anchor_hours(650) / 24.0 == pytest.approx(4805.91, rel=0.01)
+    assert mine_roi_anchor_hours(1000) / 24.0 == pytest.approx(13514.00, rel=0.01)
 
 
-def test_active_mine_cost_stays_in_stable_current_output_affordability_band(monkeypatch):
+def test_active_mine_cost_gets_materially_harder_for_fresh_records(monkeypatch):
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
-    # Live price / current mine output is the practical saving time for a fresh
-    # record-level upgrade before account/planet modifiers.  The old 0.45 tail
-    # collapsed from ~77h at L200 to ~22h at L1000; the linear horizon keeps
-    # high-end levels from getting progressively cheaper forever.
+    # Price / current output is the practical neutral saving time for one fresh
+    # record level.  Ferdi pacing intentionally rises in the deep game; rebuild
+    # discounts are the separate path that makes an Ascension reset worthwhile.
     affordability_hours = []
     for level in (200, 300, 400, 500, 650, 1000):
         metal, crystal = power_upgrade_cost("metal_mine", level)
         current_output = reference_production_per_hour("metal", level)
         affordability_hours.append((metal + crystal) / current_output)
 
-    assert min(affordability_hours) >= 65.0
-    assert max(affordability_hours) <= 110.0
-    assert affordability_hours[-1] >= affordability_hours[-2] * 0.90
+    assert affordability_hours == sorted(affordability_hours)
+    assert affordability_hours[0] >= 160.0
+    assert affordability_hours[-1] >= affordability_hours[0] * 5.0
 
 
 def test_research_effect_tail_is_active_only_and_diminishing(monkeypatch):
@@ -137,7 +138,7 @@ def _sanitize_total_in_cold_start_mode(mode: str) -> dict:
         {
             "GC_ENDGAME_ECONOMY_MODE": str(mode),
             "GC_ENDGAME_PRODUCTION_PIVOT": "120",
-            "GC_ENDGAME_PRODUCTION_TAIL_POWER": "4",
+            "GC_ENDGAME_PRODUCTION_TAIL_POWER": "3",
         }
     )
     code = (

@@ -24,7 +24,7 @@ def _set_uni1_launch_contract(monkeypatch) -> None:
     monkeypatch.setenv("GC_UNIVERSE_SPEED_PROFILE", "x1")
     monkeypatch.setenv("GC_ENDGAME_ECONOMY_MODE", "active")
     monkeypatch.setenv("GC_ENDGAME_PRODUCTION_PIVOT", "120")
-    monkeypatch.setenv("GC_ENDGAME_PRODUCTION_TAIL_POWER", "4")
+    monkeypatch.setenv("GC_ENDGAME_PRODUCTION_TAIL_POWER", "3")
     monkeypatch.setenv("GC_NETWORK_START_RESOURCE_MULTIPLIER", "10")
     monkeypatch.setenv("GC_NETWORK_START_TIMEKEEPER_SECONDS", "259200")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ENABLED", "0")

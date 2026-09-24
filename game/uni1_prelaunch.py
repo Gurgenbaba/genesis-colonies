@@ -51,8 +51,8 @@ def _validate_prelaunch_environment(token: str) -> None:
         raise RuntimeError("uni1_prelaunch_requires_active_endgame_economy")
     if str(os.environ.get("GC_ENDGAME_PRODUCTION_PIVOT") or "").strip() != "120":
         raise RuntimeError("uni1_prelaunch_requires_pivot_120")
-    if str(os.environ.get("GC_ENDGAME_PRODUCTION_TAIL_POWER") or "").strip() != "4":
-        raise RuntimeError("uni1_prelaunch_requires_q4")
+    if str(os.environ.get("GC_ENDGAME_PRODUCTION_TAIL_POWER") or "").strip() != "3":
+        raise RuntimeError("uni1_prelaunch_requires_q3")
     if int(_starter_resource_multiplier()) != 10:
         raise RuntimeError("uni1_prelaunch_requires_start_resource_multiplier_10")
     if int(_starter_timekeeper_seconds()) != 72 * 3600:
