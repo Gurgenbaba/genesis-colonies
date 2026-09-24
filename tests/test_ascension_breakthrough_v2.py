@@ -150,7 +150,7 @@ def test_rebuild_surge_boosts_mine_output_not_standard_income():
     assert surged_total == pytest.approx(standard + mine * 2.00)
 
 
-def test_breakthrough_window_extends_rebuild_discount_exactly_25_levels():
+def test_breakthrough_window_extends_rebuild_discount_exactly_50_levels():
     assert BREAKTHROUGH_WINDOW_LEVELS == 50
     assert rebuild_window_extra_levels({"breakthrough_window": 0}) == 0
     assert rebuild_window_extra_levels({"breakthrough_window": 1}) == 50
@@ -326,7 +326,7 @@ def test_panel_legacy_keystone_keeps_restart_baseline_and_reports_surge():
         profiles=profiles,
     )
     assert fields["nodebuster_best_depth"] == 400
-    assert fields["nodebuster_reset_level"] == 80
+    assert fields["nodebuster_reset_level"] == 96
     assert fields["nodebuster_rebuild_production_bonus_pct"] == pytest.approx(100.0)
     assert fields["nodebuster_rebuild_production_active"] is False
     assert fields["nodebuster_rebuild_production_reach"] == 400
