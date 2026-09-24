@@ -983,8 +983,13 @@
           const row = maxBtn.closest(".combat-sim-unit-row");
           const inp = row?.querySelector(".combat-sim-qty");
           if (!inp || inp.disabled) return;
-          const val = Math.max(0, parseInt(ownFleetStock()[inp.dataset.unitInput] || 0, 10));
-          inp.value = String(val);
+          const rawMax = ownFleetStock()[inp.dataset.unitInput] || "0";
+          if (typeof GC.setGameplayIntegerInput === "function") {
+            GC.setGameplayIntegerInput(inp, rawMax);
+          } else {
+            inp.value = String(rawMax);
+          }
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
           applyUnitFilters(row.closest("[data-sim-side]"));
           return;
         }

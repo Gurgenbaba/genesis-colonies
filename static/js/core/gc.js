@@ -16,72 +16,92 @@
    * JSON values above 2^53-1 arrive from Flask as decimal strings. Keep them
    * strings for forms/transport and use BigInt only for exact compare/display.
    */
-  GC.normalizeGameplayInteger = function normalizeGameplayInteger(value) {
-    if (typeof value === "bigint") return value.toString();
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) return "0";
-      return BigInt(Math.trunc(value)).toString();
-    }
-    if (value === null || value === undefined || value === "") return "0";
+  // main.js is currently the canonical gameplay-input owner and is loaded
+  // before this split-core file. Never shadow its cap-aware/locale-aware helpers.
+  // Standalone consumers still receive lossless fallbacks from this module.
+  GC.normalizeGameplayInteger =
+    GC.normalizeGameplayInteger ||
+    function normalizeGameplayInteger(value) {
+      if (typeof value === "bigint") return value.toString();
+      if (typeof value === "number") {
+        if (!Number.isFinite(value)) return "0";
+        return BigInt(Math.trunc(value)).toString();
+      }
+      if (value === null || value === undefined || value === "") return "0";
 
-    var raw = String(value).trim();
-    if (!raw) return "0";
+      var raw = String(value).trim();
+      if (!raw) return "0";
 
-    // Integer UI accepts grouping separators, never fractional gameplay units.
-    raw = raw.replace(/[\s._,'’]/g, "");
-    if (!/^-?\d+$/.test(raw)) return "0";
+      // Integer UI accepts grouping separators, never fractional gameplay units.
+      raw = raw.replace(/[\s._,'’]/g, "");
+      if (!/^-?\d+$/.test(raw)) return "0";
 
-    var negative = raw.charAt(0) === "-";
-    var digits = negative ? raw.slice(1) : raw;
-    digits = digits.replace(/^0+(?=\d)/, "");
-    if (!digits) digits = "0";
-    if (digits === "0") return "0";
-    return negative ? "-" + digits : digits;
-  };
+      var negative = raw.charAt(0) === "-";
+      var digits = negative ? raw.slice(1) : raw;
+      digits = digits.replace(/^0+(?=\d)/, "");
+      if (!digits) digits = "0";
+      if (digits === "0") return "0";
+      return negative ? "-" + digits : digits;
+    };
 
-  GC.gameplayBigInt = function gameplayBigInt(value) {
-    try {
-      return BigInt(GC.normalizeGameplayInteger(value));
-    } catch (_) {
-      return BigInt(0);
-    }
-  };
+  GC.gameplayBigInt =
+    GC.gameplayBigInt ||
+    function gameplayBigInt(value) {
+      try {
+        return BigInt(GC.normalizeGameplayInteger(value));
+      } catch (_) {
+        return BigInt(0);
+      }
+    };
 
-  GC.compareGameplayIntegers = function compareGameplayIntegers(a, b) {
-    var left = GC.gameplayBigInt(a);
-    var right = GC.gameplayBigInt(b);
-    return left < right ? -1 : left > right ? 1 : 0;
-  };
+  GC.compareGameplayIntegers =
+    GC.compareGameplayIntegers ||
+    function compareGameplayIntegers(a, b) {
+      var left = GC.gameplayBigInt(a);
+      var right = GC.gameplayBigInt(b);
+      return left < right ? -1 : left > right ? 1 : 0;
+    };
 
-  GC.isPositiveGameplayInteger = function isPositiveGameplayInteger(value) {
-    return GC.gameplayBigInt(value) > BigInt(0);
-  };
+  GC.isPositiveGameplayInteger =
+    GC.isPositiveGameplayInteger ||
+    function isPositiveGameplayInteger(value) {
+      return GC.gameplayBigInt(value) > BigInt(0);
+    };
 
-  GC.readGameplayIntegerInput = function readGameplayIntegerInput(input, fallback) {
-    var normalized = GC.normalizeGameplayInteger(input && input.value);
-    if (!GC.isPositiveGameplayInteger(normalized)) {
-      return GC.normalizeGameplayInteger(fallback === undefined ? "0" : fallback);
-    }
-    return normalized;
-  };
-
-  GC.setGameplayIntegerInput = function setGameplayIntegerInput(input, value) {
-    if (!input) return;
-    input.value = GC.normalizeGameplayInteger(value);
-  };
-
-  GC.fmtGameplayInteger = function fmtGameplayInteger(value, locale) {
-    var normalized = GC.normalizeGameplayInteger(value);
-    try {
-      var lang =
-        locale ||
-        (global.document && global.document.documentElement && global.document.documentElement.lang) ||
-        "de-DE";
-      return BigInt(normalized).toLocaleString(lang);
-    } catch (_) {
+  GC.readGameplayIntegerInput =
+    GC.readGameplayIntegerInput ||
+    function readGameplayIntegerInput(input, fallback) {
+      var normalized = GC.normalizeGameplayInteger(input && input.value);
+      if (!GC.isPositiveGameplayInteger(normalized)) {
+        return GC.normalizeGameplayInteger(fallback === undefined ? "0" : fallback);
+      }
       return normalized;
-    }
-  };
+    };
+
+  GC.fmtGameplayInteger =
+    GC.fmtGameplayInteger ||
+    function fmtGameplayInteger(value, locale) {
+      var normalized = GC.normalizeGameplayInteger(value);
+      try {
+        var lang =
+          locale ||
+          (global.document && global.document.documentElement && global.document.documentElement.lang) ||
+          "de-DE";
+        return BigInt(normalized).toLocaleString(lang);
+      } catch (_) {
+        return normalized;
+      }
+    };
+
+  GC.setGameplayIntegerInput =
+    GC.setGameplayIntegerInput ||
+    function setGameplayIntegerInput(input, value) {
+      if (!input) return;
+      var normalized = GC.normalizeGameplayInteger(value);
+      // Programmatic writes (MAX buttons, presets, live state) must look exactly
+      // like manual typing. Keep transport exact; only the visible input is grouped.
+      input.value = GC.fmtGameplayInteger(normalized);
+    };
 
   /** GC-PERF-IMG: prefer sibling .webp for static rasters; keep query string. */
   GC.preferWebpStaticUrl = function preferWebpStaticUrl(url) {
