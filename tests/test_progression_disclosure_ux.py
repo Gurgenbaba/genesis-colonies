@@ -100,4 +100,10 @@ def test_shared_flip_contract_uses_artwork_only_and_is_accessible():
     assert "perspective: 1200px" in css
     assert "transform: rotateY(180deg)" in css
     assert "backface-visibility: hidden" in css
+
+    trigger_rule = css.split(".gc-bld-hero-img-stack[data-card-flip-trigger] {", 1)[1].split("}", 1)[0]
+    assert "position: absolute" in trigger_rule
+    assert "inset: 0" in trigger_rule
+    assert "position: relative" not in trigger_rule
+
     assert "prefers-reduced-motion: reduce" in css
