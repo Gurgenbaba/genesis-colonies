@@ -25,8 +25,14 @@
 
     var front = card.querySelector("[data-card-flip-front]");
     var back = card.querySelector("[data-card-flip-back]");
-    if (front) front.setAttribute("aria-hidden", on ? "true" : "false");
-    if (back) back.setAttribute("aria-hidden", on ? "false" : "true");
+    if (front) {
+      front.setAttribute("aria-hidden", on ? "true" : "false");
+      front.inert = on;
+    }
+    if (back) {
+      back.setAttribute("aria-hidden", on ? "false" : "true");
+      back.inert = !on;
+    }
   }
 
   function toggleFrom(node) {
@@ -63,8 +69,17 @@
     var card = cardFor(trigger);
     if (!card) return;
     event.preventDefault();
-    if (trigger.hasAttribute("data-card-flip-back-trigger")) setFlipped(card, false);
-    else toggleFrom(trigger);
+    if (trigger.hasAttribute("data-card-flip-back-trigger")) {
+      setFlipped(card, false);
+      var artwork = card.querySelector("[data-card-flip-trigger]");
+      if (artwork) requestAnimationFrame(function () { artwork.focus(); });
+    } else {
+      toggleFrom(trigger);
+      var backButton = card.querySelector("[data-card-flip-back-trigger]");
+      if (backButton && card.classList.contains("is-flipped")) {
+        requestAnimationFrame(function () { backButton.focus(); });
+      }
+    }
   });
 
   GC.setCardFlipped = setFlipped;
