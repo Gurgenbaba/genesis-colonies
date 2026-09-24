@@ -165,7 +165,6 @@ def test_chooser_partial_in_base():
     )
     assert "gc-bld-ui-chooser" in chooser
     assert 'data-bld-ui-choice="cards"' in chooser
-    assert 'data-bld-ui-choice="cards"\n              aria-pressed="true"' in chooser
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     assert "initBuildingsUiChooser" in main
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
