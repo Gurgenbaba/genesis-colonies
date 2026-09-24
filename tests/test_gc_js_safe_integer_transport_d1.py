@@ -88,6 +88,116 @@ def test_core_browser_contract_uses_bigint_and_no_20_digit_runtime_cap():
     assert "inp.maxLength = inp.id ===" not in main
 
 
+def test_split_core_does_not_shadow_canonical_formatted_input_helpers():
+    core = (ROOT / "static" / "js" / "core" / "gc.js").read_text(encoding="utf-8")
+
+    for helper in (
+        "normalizeGameplayInteger",
+        "gameplayBigInt",
+        "compareGameplayIntegers",
+        "isPositiveGameplayInteger",
+        "readGameplayIntegerInput",
+        "setGameplayIntegerInput",
+    ):
+        assert f"GC.{helper} ||" in core
+
+    set_block = core.split(
+        "GC.setGameplayIntegerInput =",
+        1,
+    )[1].split("/** GC-PERF-IMG", 1)[0]
+    assert "GC.fmtGameplayInteger(normalized)" in set_block
+    assert "input.value = GC.normalizeGameplayInteger(value)" not in set_block
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_core_standalone_programmatic_write_uses_grouped_display_without_precision_loss():
+    core_path = ROOT / "static" / "js" / "core" / "gc.js"
+    huge = str(HUGE)
+    script = f"""
+require({json.dumps(str(core_path))});
+const GC = globalThis.GC;
+const input = {{ value: "" }};
+const huge = {json.dumps(huge)};
+GC.setGameplayIntegerInput(input, huge);
+if (GC.normalizeGameplayInteger(input.value) !== huge) process.exit(20);
+if (input.value === huge) process.exit(21);
+if (!/[.\s,\u00a0\u202f]/.test(input.value)) process.exit(22);
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_split_core_preserves_preexisting_main_input_setter():
+    core_path = ROOT / "static" / "js" / "core" / "gc.js"
+    script = f"""
+globalThis.GC = {{
+  setGameplayIntegerInput(input, value) {{
+    input.value = "kept:" + String(value);
+  }}
+}};
+const before = globalThis.GC.setGameplayIntegerInput;
+require({json.dumps(str(core_path))});
+if (globalThis.GC.setGameplayIntegerInput !== before) process.exit(30);
+const input = {{ value: "" }};
+globalThis.GC.setGameplayIntegerInput(input, "1234");
+if (input.value !== "kept:1234") process.exit(31);
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_all_max_quantity_paths_use_shared_formatting_setters():
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    shipyard = (ROOT / "static" / "js" / "pages" / "shipyard.js").read_text(encoding="utf-8")
+    defense = (ROOT / "static" / "js" / "pages" / "defense.js").read_text(encoding="utf-8")
+
+    shipyard_max = shipyard.split('var maxBtn = e.target.closest("[data-shipyard-max]")', 1)[1].split(
+        'var cancelBtn = e.target.closest("[data-shipyard-queue-cancel]")', 1
+    )[0]
+    assert "setGameplayIntegerInput(qtyInpMax, maxQty)" in shipyard_max
+    assert "qtyInpMax.value = maxQty" not in shipyard_max
+
+    defense_max = defense.split('var maxBtn = e.target.closest("[data-defense-max]")', 1)[1].split(
+        'var cancelBtn = e.target.closest("[data-defense-queue-cancel]")', 1
+    )[0]
+    assert "setGameplayIntegerInput(qtyInp, maxQty)" in defense_max
+    assert "qtyInp.value = maxQty" not in defense_max
+
+    troop_max = defense.split('var maxBtn = e.target.closest("[data-troop-max]")', 1)[1].split(
+        'var trainBtn = e.target.closest("[data-troop-train]")', 1
+    )[0]
+    assert "setGameplayIntegerInput(amountInp, maxQty)" in troop_max
+    assert "amountInp.value = maxQty" not in troop_max
+
+    donate_start = main.index('const donateMaxBtn = ev.target.closest("[data-donate-max]")')
+    donate_end = main.index('const donateBtn = ev.target.closest("[data-donate-btn]")', donate_start)
+    donate_max = main[donate_start:donate_end]
+    assert "setGameplayIntegerInput(input, maxVal)" in donate_max
+
+    exchange_start = main.index("const applyExchangeMaxAmount = () => {")
+    exchange_end = main.index("const setDirection = (dir) => {", exchange_start)
+    exchange_max = main[exchange_start:exchange_end]
+    assert "setGameplayIntegerInput(amountInput, maxVal)" in exchange_max
+
+    fleet_start = main.index("const setFleetShipInputValue = (page, inp, n) => {")
+    fleet_end = main.index("const scrollFleetShipInputEnd", fleet_start)
+    fleet_max = main[fleet_start:fleet_end]
+    assert "setNumberInputValue(inp, n)" in fleet_max
+
+
 def test_shipyard_defense_and_troops_submit_exact_decimal_strings():
     shipyard = (ROOT / "static" / "js" / "pages" / "shipyard.js").read_text(
         encoding="utf-8"
