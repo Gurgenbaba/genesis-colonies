@@ -326,7 +326,6 @@
 {% block extra_head %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/nodebuster_ascension.css') }}?v={{ GC_ASSET_VERSION }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/progression_disclosure.css') }}?v={{ GC_ASSET_VERSION }}">
 {# Stage LCP = planet landscape (base preload). Retro cards keep first-card hero preload. #}
 {% if not ui_is_stage and _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
@@ -717,7 +716,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/card_flip.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/buildings.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/mine_nodebuster.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/research_lab_ascension.js') }}?v={{ GC_ASSET_VERSION }}"></script>
