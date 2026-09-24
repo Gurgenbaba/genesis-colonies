@@ -188,7 +188,7 @@ Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 ## UI
 
 - Template: `templates/research.html`
-- **Forschungsnetzwerk-Header auf `/research`:** read-only; belegte/gesamte Slots, stärkstes Labor, Ascension-Rang und nächster Unlock.
+- **Forschungsnetzwerk-Block auf `/research`:** read-only; belegte/gesamte Slots, stärkstes Labor, Ascension-Rang und nächster Unlock. Die Seitenkopf-Laborstufe wird nicht separat dupliziert.
 - **Gebäude-UI:** Forschungslabor zeigt Rank, Queue-Kapazität, Gate-Fortschritt und Research-Speedbonus; bei erreichtem Gate läuft die Ascension dort über Tribute-CTA + Bestätigungsdialog.
 - **Queue-UX (GC-536C):** Status in jeder Tech-Card (`queue_job` via `game/queue_card.py`).
 - Kompakt-Header: `#research-queue-compact`.
