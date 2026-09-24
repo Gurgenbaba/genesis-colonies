@@ -79,7 +79,7 @@ SCENARIOS = (
 
 
 @contextmanager
-def uni1_q4_curve():
+def uni1_endgame_curve():
     previous = (
         pf.ENDGAME_ECONOMY_MODE,
         pf.ENDGAME_PRODUCTION_PIVOT_LEVEL,
@@ -208,7 +208,7 @@ def run_horizons(
     horizons_days: Iterable[Decimal | int | float] = (Decimal("182.5"), Decimal("365")),
 ) -> Dict[str, Dict[str, int]]:
     out: Dict[str, Dict[str, int]] = {}
-    with uni1_q4_curve():
+    with uni1_endgame_curve():
         for scenario in scenarios:
             out[scenario.key] = {
                 f"{Decimal(str(days)):g}d": level_after_days(scenario, days)
@@ -218,7 +218,7 @@ def run_horizons(
 
 
 def main() -> None:
-    with uni1_q4_curve():
+    with uni1_endgame_curve():
         results = run_horizons()
         print("Scenario | Start | 6 months | 12 months | Days to L300 | Days to L500")
         print("--- | ---: | ---: | ---: | ---: | ---:")
