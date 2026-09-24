@@ -11,7 +11,7 @@ pooling their full value production into one record mine. That path also applies
 the canonical mine queue floor, so it provides an aggressive upper bound rather
 than a casual-player forecast.
 
-The simulator pins the UNI1 q4 rollout locally and restores process globals afterwards.
+The simulator pins the UNI1 q3 rollout locally and restores process globals afterwards.
 """
 
 from __future__ import annotations
@@ -46,34 +46,34 @@ class Scenario:
 
 
 SCENARIOS = (
-    Scenario("baseline_q4", "Baseline q4"),
-    Scenario("current_stack", "q4 + current +40%", production_multiplier=Decimal("1.40")),
-    Scenario("core_resonance", "Core Resonance q4.10", tail_bonus_hundredths=10),
-    Scenario("singularity", "Singularity q4.20", tail_bonus_hundredths=20),
+    Scenario("baseline_q3", "Baseline q3"),
+    Scenario("current_stack", "q3 + current +40%", production_multiplier=Decimal("1.40")),
+    Scenario("core_resonance", "Core Resonance q3.15", tail_bonus_hundredths=15),
+    Scenario("singularity", "Singularity q3.30", tail_bonus_hundredths=30),
     Scenario(
         "singularity_stack",
-        "q4.20 + current +40%",
-        tail_bonus_hundredths=20,
+        "q3.30 + current +40%",
+        tail_bonus_hundredths=30,
         production_multiplier=Decimal("1.40"),
     ),
     Scenario(
         "current_max_rebuild",
-        "Current max rebuild from L130",
-        start_level=130,
+        "Current max rebuild from L156",
+        start_level=156,
         production_multiplier=Decimal("1.40"),
         rebuild_best_depth=500,
-        rebuild_cost_multiplier=Decimal("0.54"),
+        rebuild_cost_multiplier=Decimal("0.375"),
     ),
     Scenario(
         "breakthrough_full",
-        "Full Breakthrough V3 from L130 +30% rebuild surge",
-        start_level=130,
-        tail_bonus_hundredths=20,
+        "Full Breakthrough V4 from L156 +100% rebuild surge",
+        start_level=156,
+        tail_bonus_hundredths=30,
         production_multiplier=Decimal("1.40"),
         rebuild_best_depth=500,
-        rebuild_window_levels=25,
-        rebuild_cost_multiplier=Decimal("0.54"),
-        rebuild_production_multiplier=Decimal("1.30"),
+        rebuild_window_levels=50,
+        rebuild_cost_multiplier=Decimal("0.375"),
+        rebuild_production_multiplier=Decimal("2.00"),
     ),
 )
 
@@ -87,7 +87,7 @@ def uni1_q4_curve():
     )
     pf.ENDGAME_ECONOMY_MODE = "active"
     pf.ENDGAME_PRODUCTION_PIVOT_LEVEL = 120
-    pf.ENDGAME_PRODUCTION_TAIL_POWER = 4
+    pf.ENDGAME_PRODUCTION_TAIL_POWER = 3
     try:
         yield
     finally:
