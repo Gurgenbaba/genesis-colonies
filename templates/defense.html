@@ -44,6 +44,14 @@
   <header class="defense-headline section-header">
     <div class="section-header-row">
       <h2 class="section-title">{{ T("defense_title") }}</h2>
+      {% if defense_tab == 'structures' %}
+      <span class="gc-panel-subtitle gc-mono" data-defense-factory-label>
+        {{ T("defense_factory_level", level=df.defense_factory_level|default(0)) }}
+      </span>
+      <span class="gc-panel-subtitle gc-mono" data-defense-batch-capacity>
+        {{ T("defense_production_capacity", capacity=(df.production_batch_capacity|default(3))) }}
+      </span>
+      {% endif %}
       {% if CODEX_PRIMARY %}
       {% include "partials/codex_context_btn.html" %}
       {% endif %}
@@ -74,18 +82,6 @@
 
   {% if defense_tab == 'structures' %}
   <div class="defense-shell gc-panel" data-defense-tab-panel="structures">
-  <section class="defense-status-panel">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("defense_factory_title") }}</span>
-      <span class="gc-panel-subtitle gc-mono" data-defense-factory-label>
-        {{ T("defense_factory_level", level=df.defense_factory_level|default(0)) }}
-      </span>
-      <span class="gc-panel-subtitle gc-mono" data-defense-batch-capacity>
-        {{ T("defense_production_capacity", capacity=(df.production_batch_capacity|default(3))) }}
-      </span>
-    </div>
-  </section>
-
   {% set df_q = df.defense_queue if df.defense_queue is defined and df.defense_queue else {} %}
   {% set df_q_summary = df_q.summary if df_q.summary is defined and df_q.summary else {} %}
   {% set df_q_limit = (df_q_summary.limit if df_q_summary.limit is defined else 3)|int %}
