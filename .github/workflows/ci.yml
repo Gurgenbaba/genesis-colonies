@@ -72,7 +72,9 @@ jobs:
             tests/test_commander_classes.py::test_linear_gate_and_sp_unlock \
             tests/test_commander_classes.py::test_effect_resolver_includes_class_mods \
             tests/test_inventory_booster_visibility.py::test_use_duration_booster_creates_active_entry \
-            tests/test_inventory_booster_visibility.py::test_production_booster_tier_ladder_25_then_50
+            tests/test_inventory_booster_visibility.py::test_production_booster_tier_ladder_25_then_50 \
+            tests/test_alliance.py::test_project_start_consumes_alliance_pool \
+            tests/test_alliance.py::test_project_start_tech_uses_resource_binder
 
   big-score:
     name: big-score-ranking

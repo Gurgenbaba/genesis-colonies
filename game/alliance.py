@@ -2329,6 +2329,8 @@ def _deduct_pool(conn, alliance_id: int, cost: Mapping[str, int]) -> None:
 
 
 def start_alliance_project(player_id: int, project_kind: str, target_key: str, conn=None) -> None:
+    from .models import resource_db_param
+
     kind = str(project_kind or "").strip().lower()
     key = str(target_key or "").strip()
     if kind not in ("building", "tech"):

@@ -1963,6 +1963,47 @@ def test_project_start_consumes_alliance_pool(alliance_db):
         conn.close()
 
 
+def test_project_start_tech_uses_resource_binder(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("TBN", "Tech Binder", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'research_archive', 1) "
+            "ON CONFLICT(alliance_id, building_key) DO UPDATE SET level = 1;",
+            (aid,),
+        )
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+
+        start_alliance_project(uid, "tech", "research_network", conn=conn)
+        conn.commit()
+
+        row = conn.execute(
+            """
+            SELECT project_kind, target_key, cost_metal, cost_crystal, cost_fuel_cells
+            FROM alliance_projects
+            WHERE alliance_id = ? AND status = 'active'
+            ORDER BY id DESC
+            LIMIT 1;
+            """,
+            (aid,),
+        ).fetchone()
+        assert row is not None
+        assert row["project_kind"] == "tech"
+        assert row["target_key"] == "research_network"
+        assert int(row["cost_metal"]) > 0
+        assert int(row["cost_crystal"]) > 0
+        assert int(row["cost_fuel_cells"]) > 0
+    finally:
+        conn.close()
+
+
 def test_cannot_start_second_active_project(alliance_db):
     conn = db()
     try:
