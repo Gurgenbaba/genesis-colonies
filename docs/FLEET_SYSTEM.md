@@ -155,6 +155,15 @@ Server-authoritativ; Preview und Send verwenden exakt dieselbe Berechnung.
 | Nachbarsystem | 2795 | 2:18:05 |
 | Nachbargalaxie | 20000 | 6:09:06 |
 
+**x1 Utility-Hulls (100 %, ohne Forschungs-/Commander-Bonus)**
+
+| Hull | Base Speed | Nachbarposition | Nachbarsystem | Zweck |
+|---|---:|---:|---:|---|
+| Seed Ark | 20000 | 0:41:31 | 1:09:08 | Kolonisierung bleibt auf x1 spielbar, ohne globale Friedensflüge zu beschleunigen |
+| Harvest Reclaimer | 40000 | 0:29:24 | 0:48:56 | Asteroiden-/Debris-Rennen; frisches 2h-Feld ist selbst bei Δ100 Systemen in ~1:42 erreichbar |
+
+Die drei Universe-Multiplikatoren bleiben neutral: `fleet_speed_war = 1.0`, `fleet_speed_holding = 1.0`, `fleet_speed_peaceful = 1.0`. Utility-Pacing wird über den jeweiligen Hull-Speed gelöst; gemischte Flotten verwenden weiterhin das langsamste Schiff.
+
 Fuel bleibt ein separater kanonischer Owner: `fuel_efficiency` Research + Schiff-defs. Die Fuel-Formel selbst bleibt unverändert, verwendet aber dieselbe kanonische Routendistanz wie der Fleet-Timer. Cargo capacity bleibt pro Schiffstyp.
 
 Preview: `POST /api/fleet/preview` → debounced im Client (~300ms); keine Frontend-Zeitmathematik.
