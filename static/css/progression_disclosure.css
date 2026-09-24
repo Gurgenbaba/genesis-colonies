@@ -9,10 +9,11 @@
 
 .gc-card-flip-stage {
   position: relative;
-  min-height: 190px;
   transform-style: preserve-3d;
-  transition: transform 280ms cubic-bezier(.2,.72,.2,1);
-  will-change: transform;
+  transition:
+    transform 280ms cubic-bezier(.2,.72,.2,1),
+    height 220ms cubic-bezier(.2,.72,.2,1);
+  will-change: transform, height;
 }
 
 [data-card-flip].is-flipped .gc-card-flip-stage {
@@ -27,7 +28,6 @@
 
 .gc-card-flip-face--front {
   position: relative;
-  min-height: 190px;
   transform: rotateY(0deg);
 }
 
@@ -38,7 +38,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  overflow: auto;
+  overflow: visible;
   transform: rotateY(180deg);
   pointer-events: none;
   background:
@@ -193,11 +193,6 @@
 }
 
 @media (max-width: 640px) {
-  .gc-card-flip-stage,
-  .gc-card-flip-face--front {
-    min-height: 180px;
-  }
-
   .gc-card-flip-back__body,
   .gc-progression-reveal__body {
     padding: 7px 8px 8px;
