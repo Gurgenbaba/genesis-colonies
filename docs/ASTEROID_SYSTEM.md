@@ -36,8 +36,10 @@ Temporary asteroid belts in densely settled classic galaxy systems. Harvest with
 | Slots | free classic positions 1–15 only (no planet / active boss / reserved TTL / active asteroid) |
 | Race | multiple outbound OK; **first arrival** atomic claim; late arrivals miss |
 | Expire en route | asteroid-stamped flight → `expired` report, **no** debris fallback |
-| Ship | `harvest_reclaimer` (role `recycle`) |
+| Ship | `harvest_reclaimer` (role `recycle`, x1 base speed 40000) |
 | Loot | metal / crystal / fuel_cells only — rolled at spawn, random within type range |
+
+**x1 reachability anchor:** asteroid TTL stays at 2 h. The Reclaimer speed is intentionally a hull-level exception instead of a global mission multiplier: at 100 % and no research bonus it reaches an adjacent system in ~49 min and a target 100 systems away in the same galaxy in ~1 h 42 min. Existing first-arrival/expiry rules remain unchanged.
 
 ---
 
