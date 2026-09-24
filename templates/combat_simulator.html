@@ -177,7 +177,7 @@
                   <img src="{{ _icon_png }}" alt="" class="gc-combat-sim-unit-icon" width="28" height="28" loading="lazy"
                        onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
                   <span class="gc-combat-sim-unit-name combat-sim-unit-name">{{ T(unit.name_key, unit.key) }}</span>
-                  <input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-qty combat-sim-qty" value="0" data-unit-input="{{ unit.key }}">
+                  <input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-qty combat-sim-qty gc-num-input" value="0" data-unit-input="{{ unit.key }}">
                   {% if side == 'attacker' %}
                   <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost gc-combat-sim-qty-max" data-qty-max>{{ T("combat_simulator_max", "Max") }}</button>
                   {% endif %}
@@ -195,7 +195,7 @@
                   <img src="{{ _def_png }}" alt="" class="gc-combat-sim-unit-icon" width="28" height="28" loading="lazy"
                        onerror="this.onerror=null;this.src='{{ _def_placeholder }}';">
                   <span class="gc-combat-sim-unit-name combat-sim-unit-name">{{ T(unit.name_key, unit.key) }}</span>
-                  <input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-qty combat-sim-qty" value="0" data-unit-input="{{ unit.key }}">
+                  <input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-qty combat-sim-qty gc-num-input" value="0" data-unit-input="{{ unit.key }}">
                 </div>
                 {% endfor %}
               </div>
