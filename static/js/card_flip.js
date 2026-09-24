@@ -13,9 +13,38 @@
     return node && node.closest ? node.closest("[data-card-flip]") : null;
   }
 
+  function faceHeight(face) {
+    if (!face) return 0;
+    return Math.max(face.scrollHeight || 0, Math.ceil(face.getBoundingClientRect().height || 0));
+  }
+
+  function sizeStageFor(card, flipped) {
+    if (!card) return;
+    var stage = card.querySelector("[data-card-flip-stage]");
+    var face = card.querySelector(flipped ? "[data-card-flip-back]" : "[data-card-flip-front]");
+    if (!stage || !face) return;
+
+    var height = faceHeight(face);
+    if (height > 0) {
+      stage.style.height = height + "px";
+    }
+
+    if (!flipped) {
+      window.setTimeout(function () {
+        if (!card.classList.contains("is-flipped")) {
+          stage.style.height = "";
+        }
+      }, 320);
+    }
+  }
+
   function setFlipped(card, flipped) {
     if (!card) return;
     var on = !!flipped;
+    var front = card.querySelector("[data-card-flip-front]");
+    var back = card.querySelector("[data-card-flip-back]");
+
+    sizeStageFor(card, on);
     card.classList.toggle("is-flipped", on);
     card.setAttribute("data-card-flip-state", on ? "back" : "front");
 
@@ -23,8 +52,6 @@
       trigger.setAttribute("aria-pressed", on ? "true" : "false");
     });
 
-    var front = card.querySelector("[data-card-flip-front]");
-    var back = card.querySelector("[data-card-flip-back]");
     if (front) {
       front.setAttribute("aria-hidden", on ? "true" : "false");
       front.inert = on;
@@ -33,6 +60,10 @@
       back.setAttribute("aria-hidden", on ? "false" : "true");
       back.inert = !on;
     }
+
+    requestAnimationFrame(function () {
+      sizeStageFor(card, on);
+    });
   }
 
   function toggleFrom(node) {
@@ -82,5 +113,14 @@
     }
   });
 
+  window.addEventListener("resize", function () {
+    document.querySelectorAll("[data-card-flip].is-flipped").forEach(function (card) {
+      sizeStageFor(card, true);
+    });
+  });
+
   GC.setCardFlipped = setFlipped;
+  GC.syncCardFlipHeight = function (card) {
+    sizeStageFor(card, !!(card && card.classList.contains("is-flipped")));
+  };
 })(window);
