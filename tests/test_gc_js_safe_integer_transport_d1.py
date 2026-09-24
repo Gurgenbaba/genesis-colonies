@@ -121,7 +121,7 @@ const huge = {json.dumps(huge)};
 GC.setGameplayIntegerInput(input, huge);
 if (GC.normalizeGameplayInteger(input.value) !== huge) process.exit(20);
 if (input.value === huge) process.exit(21);
-if (!/[.\s,\u00a0\u202f]/.test(input.value)) process.exit(22);
+if (!/[.\\s,\\u00a0\\u202f]/.test(input.value)) process.exit(22);
 """
     completed = subprocess.run(
         ["node", "-e", script],
@@ -179,8 +179,8 @@ def test_all_max_quantity_paths_use_shared_formatting_setters():
     troop_max = defense.split('var maxBtn = e.target.closest("[data-troop-max]")', 1)[1].split(
         'var trainBtn = e.target.closest("[data-troop-train]")', 1
     )[0]
-    assert "setGameplayIntegerInput(amountInp, maxQty)" in troop_max
-    assert "amountInp.value = maxQty" not in troop_max
+    assert "setGameplayIntegerInput(qtyInp, maxQty)" in troop_max
+    assert "qtyInp.value = maxQty" not in troop_max
 
     donate_start = main.index('const donateMaxBtn = ev.target.closest("[data-donate-max]")')
     donate_end = main.index('const donateBtn = ev.target.closest("[data-donate-btn]")', donate_start)
