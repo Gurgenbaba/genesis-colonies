@@ -5,6 +5,7 @@
 [data-card-flip] {
   perspective: 1200px;
   overflow: hidden;
+  align-self: start;
 }
 
 .gc-card-flip-stage {
