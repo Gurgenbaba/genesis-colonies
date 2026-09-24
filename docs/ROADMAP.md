@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.9 Alpha** / Build `0.5.9.147` (Reality-Sync 2026-08-10).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.9 Alpha** / Live-Release `2d8eadd3274d10d3f876d86d44664eb138f8f5dc` (Reality-Sync 2026-09-24).
 
 Status-Legende:
 
@@ -13,7 +13,18 @@ Status-Legende:
 
 **Epics → Tickets:** Epics werden nicht direkt implementiert. Siehe Ticket-Workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Beta Gate:** Der Übergang von Alpha zu Beta ist verbindlich in [BETA_GATE.md](BETA_GATE.md) geregelt. `v1.0.0-beta.1` ist erst erlaubt, wenn Alliance MVP, GC-BETA-001, GC-BETA-002 und GC-BETA-003 abgeschlossen sind.
+**Beta Gate:** Der Übergang von Alpha zu Beta ist verbindlich in [BETA_GATE.md](BETA_GATE.md) geregelt. Alliance MVP und große Teile des Architektur-/Reality-Syncs sind abgeschlossen; Alpha-Exit bleibt an Green CI, manuellen Kernsystem-Smoke und keine offenen P0/P1 gekoppelt.
+
+### September 2026 — Live-Stand
+
+| Bereich | Status | Live-Anker |
+|---------|--------|------------|
+| **UNI1 / UNI2** | ✅ | Beide Universen auf gemeinsamem Release `2d8eadd…`; UNI1 `main`, UNI2 `u2/staging-runtime` |
+| **Universe-Pacing** | ✅ | x1-Baseline: Production / Build / Research / Shipyard / War / Hold / Peaceful = `1.0` über das x1-Profil |
+| **Utility-Flugzeiten** | ✅ | Seed Ark `20.000`, Harvest Reclaimer `40.000`; globale Fleet-Speed-Werte bleiben x1 |
+| **Ascension** | ✅ Kern | Commander-Level UI, 3–2–1 Tree, Breakthroughs, Rekonstruktionsimpuls |
+| **PostgreSQL** | ✅ Live | PostgreSQL autoritativ; NUMERIC-/Big-Number-Hardening, Navigation-Perf, Queue-/Maintenance-Worker |
+| **Aktueller Fokus** | 🔄 | Energie-Balance, Bild-/Asset-Caching, Social/Posteingang/Notifications, Trader-/Alliance-Polish, 6/12-Monats-Balance-Simulation |
 
 ---
 
@@ -97,6 +108,10 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Galaxie** — Karte, Slots, Koordinaten | ✅ | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
 | **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
 | **Flotte** — Send, Tick, Missionen | ✅ | Attack combat active |
+| **x1 Flight Pacing** — kanonische Formel + neutrale Universe-Speed-Werte | ✅ | `fleet_speed_war/holding/peaceful = 1.0`; Utility-Pacing über Hull-Speed |
+| **Seed Ark / Kolonieschiff** | ✅ | Speed `20.000`; ΔS1 @100 %, Research 0 ≈ **1:09:08** |
+| **Harvest Reclaimer / Recycler** | ✅ | Speed `40.000`; ΔS1 ≈ **0:48:56**, ΔS100 ≈ **1:42:02** |
+| **Asteroiden-Reichweite** | ✅ | TTL bleibt 2 h; frischer ΔS100-Asteroid ist mit nacktem Reclaimer erreichbar; first-arrival bleibt atomar |
 | **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Lootbox Meta-only Rebalance** | ✅ | GC-864 — keine Economy-Inflation aus Containern |
 | **Collector Exchange** — Sammler-Markt, 4 Spezialisten, Prestige | 🔄 | EPIC-18 · GC-965A/B ✅ · GC-966A/B ✅ UI · GC-967 Inventar-Hints 📋 |
@@ -130,13 +145,15 @@ GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-806 Navigation
 
 ---
 
-## Phase 5 — Social & Meta ✅ (Alliance MVP)
+## Phase 5 — Social & Meta 🔄 (Alliance MVP ✅, Communication v2 offen)
 
 | Item | Status | Notizen |
 |------|--------|---------|
 | **PlayerCard** — Profil, Stats | ✅ | `/api/player-card/*` |
 | **Messages** — Inbox, Send | ✅ | Flotten-/System-Mails |
-| **Chat** — Rooms, DM, Alliance room | ✅ | Rate limit in-process |
+| **Posteingang / Notifications v2** | 🔄 | echte Kategorien, ungelesen/Actions, systemweite Notifications; bestehende Messages als Owner weiterverwenden |
+| **Bestätigungs-Popups** | 📋 | eigener Genesis-Style für riskante/irreversible Actions statt Browser-Dialoge |
+| **Chat** — Rooms, DM, Alliance room | ✅ | Rate limit / Multi-Worker-Verhalten weiter härten |
 | Chat Admin (mute, ban, delete) | ✅ | |
 | **Allianz** — Hub UI (EPIC-09 MVP) | ✅ | GC-AL-MVP-01…09: Management, Spenden, Projekte, Tech, Boni, PJAX |
 | Allianz Diplomatie → Fleet Hooks | ✅ | GC-AL-DIP-01: NAP-Lock, Bündnis-Transport, war-Flag |
@@ -162,28 +179,29 @@ Details: [SECURITY.md](SECURITY.md)
 
 ---
 
-## Phase 7 — Platform & Scale 📋
+## Phase 7 — Platform & Scale 🔄
 
-Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).  
-**Produktentscheidung (2026-07):** Produktion bleibt auf **SQLite**. Postgres-Schema/Driver-Arbeit bleibt optionaler Code-Pfad; **Cutover / Multi-Worker auf PG sind nicht geplant.** Scale = Ops-Disziplin (1 Replica, 1 Worker, Sidecar, Backups) — [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md), [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
+Master-Docs: [GC_PERF_CORE.md](GC_PERF_CORE.md), [GC_PG_HIGHSPEED_001.md](GC_PG_HIGHSPEED_001.md).
+
+**Reality-Sync September 2026:** PostgreSQL ist jetzt der autoritative Produktionspfad. UNI1 und UNI2 laufen auf PostgreSQL; der frühere SQLite-only Roadmap-Text ist historisch und nicht mehr der Live-Stand.
 
 | Item | Status | Notizen |
-|------|--------|--------|
-| Performance Core Epic | ✅ Foundation | SQLite-first; PG-Cutover **deferred / not planned** |
-| Messbarkeit (GC-PERF-CORE-001) | ✅ | Request-/SQL-/Payload-Budgets auf RequestPerf |
-| PostgreSQL Backend (Driver/Pool) | ✅ optional | Code vorhanden; **nicht** Produktionsziel |
-| PostgreSQL Schema-Port | ✅ optional | Historisch; kein Cutover-Plan |
-| PostgreSQL Backend-Parität / Staging / Cutover | 💡 deferred | Bewusst nicht priorisiert — SQLite bleibt |
-| Multi-Worker / Game-Worker | 💡 deferred | Erst sinnvoll mit Multi-Writer-DB; unter SQLite = 1 Worker |
-| Diet/Delta State | ✅ | `poll_version` + `?since=` |
-| Lazy Resource Accrual | ✅ | `GC_RESOURCE_PERSIST_SEC` (default 600) |
-| `main.js` Modularisierung | 🔄 Scaffold | Echter Split → GC-PERF-JS-002 |
-| Redis / Definition Cache | ✅ Basis | EffectResolver-Cache → GC-PERF-EFFECT-CACHE-001 |
-| Lasttest-Werkzeug | ✅ | `scripts/perf_load_test.py` — Staging-Baseline später |
-| WebSocket Push (optional) | 💡 | Polling bleibt Fallback |
-| i18n UI-Switch (DE/EN) | 🔄 | `game/i18n.py`, Locales; Default `de` — siehe CAPABILITY P1 |
-| CDN / Asset-Pipeline | 💡 | `VERSION` Cache-Bust |
-| SQLite Ops Hygiene | 🔄 | 1 Worker/Replica, embedded cron, daily backups |
+|------|--------|---------|
+| PostgreSQL Backend | ✅ Live | Autoritative DB; kein SQLite-Fallback im Live-Pfad |
+| PostgreSQL Schema / Migrationen | ✅ | Production-Migrationspfad aktiv |
+| NUMERIC / Big-Number-Hardening | ✅ | Economy-/Score-/Resource-Pfade gegen Präzisions-/Overflow-Probleme gehärtet |
+| PostgreSQL Navigation Performance | ✅ | Release-Gate + dedizierter CI-Check |
+| Multi-Worker Runtime | ✅ | Gunicorn/gthread + separater Queue-Worker + Maintenance-Sidecar |
+| UNI1 / UNI2 Branch-Parität | ✅ | `main` und `u2/staging-runtime` werden releaseweise synchronisiert |
+| Request-/SQL-/Payload-Budgets | ✅ Basis | Performance-Core Messbarkeit / Hotpath-Gates |
+| Inventory-/Action-Hotpaths | ✅ | Slim-Responses, PJAX-/State-Regressionen gehärtet |
+| **Bild-/Asset-Caching** | 🔄 Aktueller Fokus | Assets pro Client möglichst einmal laden, danach Cache-Hits; Bilder müssen trotzdem permanent präsent sein |
+| `main.js` Modularisierung | 🔄 | Weiterer Split ohne Parallel-Owner |
+| Redis / shared ephemeral cache | 💡 | Nur wenn messbarer Multi-Worker-Bedarf entsteht |
+| WebSocket Push | 💡 | Polling bleibt verlässlicher Fallback |
+| i18n UI-Switch (DE/EN) | 🔄 | Locale-Hardening läuft weiter |
+| CDN / Asset-Pipeline | 📋 | Nach sauberem Cache-Contract; keine Cache-Bust-Spam-Requests |
+| Backups / Restore Drill | 📋 Operator | PostgreSQL-Backup und Restore als LiveOps-Gate |
 
 ---
 
@@ -192,6 +210,12 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).
 | Item | Status |
 |------|--------|
 | Balancing-Tooling (Admin) | 🔄 teilweise |
+| **Ascension UI / Skill Tree** | ✅ | Commander-Visual-Language, eigener Skill-Tree-Tab, kompakter Run-HUD |
+| **Ascension Breakthroughs** | ✅ | Rekonstruktionsimpuls: 20 AP, Rekonstruktion VIII + Besttiefe L400, +30 % echte Minenproduktion im Rebuild bis Besttiefe |
+| **Endgame Economy q3-Tail** | 🔄 | Unbegrenzter polynomialer Candidate ab Pivot; Runtime-Aktivierung operator-owned |
+| **Empire-Scaling Forschung** | ✅ | Reife-/Produktionsdruck statt trivialisierter 11-Welten-Forschung |
+| **6-/12-Monats Balance-Simulation** | 🔄 Aktueller Fokus | 1 Planet vs. 11/11-Welten; Progressionsbrüche, ROI, Ascension-Tempo und Rekorde prüfen |
+| **Energie-Balance / Ascension-Energie-Nodes** | 🔄 Aktueller Fokus | Energie darf Endgame nicht trivial/broken werden; starke Utility-Nodes statt Prozent-Kleinkram |
 | Tutorial / Onboarding | ✅ Command Initiation full-game tour (Colony Core + Empire + LiveOps visits) — see [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | Season / Universe-Reset | 💡 |
 | **World Boss Events (EPIC-20)** | 🔄 | GC-W01…W08 + GC-WB-TAME — [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
@@ -255,7 +279,8 @@ Start nach Completion-First-Pass (GC-610), sofern nicht reine Identity-Tickets (
 2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
 2026 Q1      Phase 4b 🔄     Defense ✅; Combat ✅
 2026 Q2      Phase 5–6       Alliance MVP ✅, Beta Gate, Security
-2026 Q3+     Phase 9         Imperium & Expansion (EPIC-15, GC-560+)
+2026 Q3      Live Alpha      PostgreSQL, Ascension/Endgame-Rework, x1 Flight Pacing, Alliance/Combat-Polish
+2026 Q4+     Beta-Horizont    Social/Notifications, Asset-Perf, Energie-Balance, Langzeit-Balancing
 ```
 
 *Timeline orientierend — keine festen Release-Daten.*
@@ -297,9 +322,9 @@ Wartungs-Schulden sind kein Beta-Blocker, solange GC-000 eingehalten wird, CI gr
 | Chat rate limit in-process | Multi-worker | Redis |
 | Recycler UX polish (GC-800C) | Optional UX | GC-800A/B ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md) |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |
-| SQLite Single-Writer | Scale | Ops: 1 Worker/Replica — Cutover **nicht** geplant ([CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)) |
+| Asset-Request-Duplikate | Performance / CDN | Per-client one-time caching + immutable/versioned assets; Bilder bleiben dauerhaft sichtbar |
 | `fleet_presets` CHECK ohne colonize | Schema | Migration fix |
-| Ressourcen als REAL statt INTEGER | Präzision ab ~9×10¹⁵ | [GC-622B](GC-622B_RESOURCE_INTEGER_MIGRATION.md) (Backlog) |
+| Ressourcen-/Score-Big-Numbers | Präzision / Endgame | PostgreSQL NUMERIC-Core live; Regression-Gates für große Werte weiter pflegen |
 
 ---
 
@@ -323,12 +348,14 @@ Kanonisch: **[CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)**. Kurz:
 
 | Prio | Fokus | Status |
 |------|-------|--------|
-| P0 | Combat polish (GC-700E) → dann P2 | ✅ GC-700E; GC-AL-DIP-01 ✅ |
-| P1 | Beta Gate, First-30, Collector, Megabunker, i18n | 💡 zurückgestellt |
-| P2 | Alliance Kriegs-Meta · Imperium Presence (566B/568) · Marketplace | 📋 aktiv |
-| P3 | Radar, Seasons, Contract-Schuld (GC-512C, Legacy-Admin, …) | 💡 |
+| P0 | Live-Stabilität / CI / PostgreSQL Hotpaths | ✅ aktuell grün; Regressionen sofort vor Feature-Arbeit |
+| P1 | Energie-Balance + Ascension-Endgame + 6/12m Simulation | 🔄 aktiv |
+| P1 | Bild-/Asset-Caching + Payload-/Request-Diet | 🔄 aktiv |
+| P1 | Social/Posteingang/Notifications + Confirmation UX | 📋 als nächster sichtbarer UX-Block |
+| P2 | Alliance-/Trader-Polish, Combat-Pacing beobachten, Asteroiden-/Recycler-Loop verfeinern | 📋 |
+| P3 | Territorial Warfare, Marketplace, Seasons / weiterer Greenfield-Content | 💡 |
 
-**Nicht priorisieren:** Postgres-Cutover, WebSocket, parallele Engines.
+**Nicht priorisieren:** erneuter Datenbank-Umbau, WebSocket-Zwang, parallele Engines oder globale Fleet-Speed-Hacks. x1 bleibt Baseline; Spezialfälle werden am jeweiligen Hull/System gelöst.
 
 ### Completion-First (Alpha — ab GC-600)
 
