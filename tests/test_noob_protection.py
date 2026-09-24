@@ -37,7 +37,7 @@ def noob_db(tmp_path, monkeypatch):
 
 
 def _player():
-    ok, err, user = create_user(f"noob_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    ok, err, user = create_user(f"noob_{uuid.uuid4().int % 10_000_000_000:010d}", "test-pass-123")
     assert ok, err
     uid = int(user["id"])
     ensure_player_and_homeworld(uid)
@@ -45,7 +45,7 @@ def _player():
 
 
 def _foreign_player():
-    ok, err, user = create_user(f"foreign_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    ok, err, user = create_user(f"foreign_{uuid.uuid4().int % 10_000_000_000:010d}", "test-pass-123")
     assert ok, err
     uid = int(user["id"])
     conn = db()
