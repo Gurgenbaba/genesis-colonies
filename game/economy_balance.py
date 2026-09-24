@@ -32,11 +32,13 @@ ROI_BENCHMARK_LEVELS: Tuple[int, ...] = (20, 40, 60, 80, 100, 120)
 NEUTRAL_BALANCE_SLOT = 9
 MINE_PACE_REF_LEVEL = 20
 MINE_ENDGAME_PACE_THRESHOLD = 80
-# GC-UNI1-COST-STABILITY — q4 tail has marginal output ~1/L, so a linear
-# investment horizon keeps fresh record-level affordability roughly stationary
-# instead of making every later mine level cheaper relative to current output.
-# Historical anchors through L120 remain byte-for-byte unchanged.
-MINE_ENDGAME_ROI_EXPONENT = 1.0
+# GC-FERDI-RECORD-PACING-003 — the live q3 tail keeps output readable, while
+# record pushes must get substantially harder instead of allowing year-one
+# empires to sprint through hundreds of permanent mine levels.  Historical
+# anchors through L120 remain byte-for-byte unchanged; only L121+ uses the
+# steeper investment horizon.  Ascension rebuild discounts are applied later
+# and remain the intended way to make a reset feel powerful.
+MINE_ENDGAME_ROI_EXPONENT = 2.4
 
 # GC-821F — target payback hours (neutral slot, metal mine reference).
 MINE_UPGRADE_ROI_TARGET_HOURS: Dict[int, float] = {
@@ -589,13 +591,13 @@ def _mine_upgrade_cost_total_raw(building_type: str, target_level: int) -> float
 
 
 def mine_roi_anchor_hours(level: int) -> float:
-    """Mine ROI target; active q4 pricing stays sustainable beyond the L120 anchor.
+    """Mine ROI target; active q3 record pricing hardens beyond the L120 anchor.
 
-    The q4 production tail is asymptotically polynomial, so its marginal gain as a
-    share of current output falls approximately like 1/L.  A linear live-cost
-    horizon (exponent 1.0) offsets that decay and keeps a fresh record-level mine
-    upgrade in a stable multi-day affordability band instead of becoming
-    progressively cheaper forever.  Levels <=120 keep the historical anchors.
+    Levels <=120 keep the historical anchors exactly.  Above the pivot, a 2.4
+    horizon exponent deliberately makes each new lifetime record increasingly
+    expensive relative to current output.  Ascension rebuild discounts are
+    separate and therefore accelerate regained levels without trivialising the
+    next fresh record.
     """
     lvl = max(1, int(level))
     from .production_formula import ENDGAME_PRODUCTION_PIVOT_LEVEL, endgame_economy_mode
