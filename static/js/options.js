@@ -460,7 +460,7 @@
       try {
         const data = await postOptionsJson("/api/options/buildings-ui", {
           buildings_ui_mode: mode,
-          mark_choice_done: false,
+          mark_choice_done: true,
         });
         if (!data || data.ok !== true) {
           if (hint) {
