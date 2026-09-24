@@ -385,7 +385,7 @@ def rebuild_production_multiplier_for(
 
     Legacy Reconstruction is intentionally a rebuild accelerator, not another
     restart-level mechanic. Breakthrough Window extends this surge together
-    with the existing rebuild cost/time discounts through best depth +25.
+    with the existing rebuild cost/time discounts through best depth +50.
     """
     bt = str(building_type or "")
     if not is_evolvable_mine(bt):
@@ -991,7 +991,7 @@ def purchase_skill(
             "points_unspent": new_unspent,
             "reset_level": reset_start_level(updated_skills, int(state.get("best_depth") or 0)),
             "tail_power_bonus_hundredths": tail_power_bonus_hundredths(updated_skills),
-            "tail_power": 4.0 + tail_power_bonus_hundredths(updated_skills) / 100.0,
+            "tail_power": _tail_power_display(tail_power_bonus_hundredths(updated_skills)),
             "rebuild_window_extra_levels": rebuild_window_extra_levels(updated_skills),
             "rebuild_window_level": int(state.get("best_depth") or 0) + rebuild_window_extra_levels(updated_skills),
             "rebuild_cost_pct": int(round((1.0 - rebuild_cost_multiplier(updated_skills)) * 100)),
