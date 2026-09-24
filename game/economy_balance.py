@@ -667,7 +667,7 @@ def storage_capacity_at_depot_level(storage_level: int) -> int:
     # Storage capacity is a persisted progression promise.  Re-anchoring it to
     # an active production cutover would retroactively shrink already-built
     # depots and freeze players above the new cap.  Keep the historical Ferdi
-    # curve as the continuity floor; live production remains q4 independently.
+    # curve as the continuity floor; live production remains independently balanceable.
     reference_buffer_cap = legacy_mine_output_decimal(
         STORAGE_REFERENCE_RESOURCE,
         reference_mine_level,
