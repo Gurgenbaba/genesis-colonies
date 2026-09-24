@@ -142,12 +142,6 @@
         <span class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level tech-level-current"
               title="{{ T('buildings_col_level') }}"
               aria-label="{{ T('buildings_col_level') }}">{{ curr_lvl|fmt_int }}</span>
-        <div class="gc-bld-hero-action-row">
-          {# TK ⚡ + live ETA only on #research-mini-queue #}
-          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
-            {{ render_hero_time_chip(none, tech.time_seconds, 'research', T('research_col_time')) }}
-          </span>
-        </div>
       </div>
       <div class="gc-bld-card-hero-title">
         <div class="gc-bld-card-title-wrap">
@@ -162,13 +156,27 @@
       </div>
     </div>
 
-    {{ render_research_effect_bundle(tech) }}
-
-    <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-      <div class="gc-bld-card-costs tech-cost-cell">
-        {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
+    <details class="gc-progression-reveal" data-progression-reveal>
+      <summary class="gc-progression-reveal__summary">
+        <span class="gc-progression-reveal__label">
+          {{ T("progression_costs_heading", "Kosten") }} · {{ T("research_col_time", "Forschungszeit") }}
+        </span>
+        <span class="gc-progression-reveal__target gc-mono">→ L{{ target_lvl|fmt_int }}</span>
+        <span class="gc-progression-reveal__chevron" aria-hidden="true">⌄</span>
+      </summary>
+      <div class="gc-progression-reveal__body">
+        <div class="gc-progression-reveal__time">
+          <span>{{ T("research_col_time", "Forschungszeit") }}</span>
+          {{ render_hero_time_chip(none, tech.time_seconds, 'research', T('research_col_time')) }}
+        </div>
+        {{ render_research_effect_bundle(tech) }}
+        <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
+          <div class="gc-bld-card-costs tech-cost-cell">
+            {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
+          </div>
+        </div>
       </div>
-    </div>
+    </details>
 
     {{ render_research_blockers(tech, queue_full) }}
   </article>
@@ -197,6 +205,7 @@
 
 {% block extra_head %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/progression_disclosure.css') }}?v={{ GC_ASSET_VERSION }}">
 {% if _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
