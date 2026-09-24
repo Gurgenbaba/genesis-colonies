@@ -20,11 +20,11 @@
        {% if onerror %}onerror="{{ onerror }}"{% else %}onerror="{{ _onerr }}"{% endif %}>
 {% endmacro %}
 
-{% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy', lcp_primary=false) %}
+{% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy', lcp_primary=false, flip=false, flip_label='') %}
   {# GC-PERF-CARD-TIMERS-001: no dual-layer progress wash on cards (ETA/% live on mini-queue). #}
   {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
   {% set _primary_role = 'primary' if hero_load in ('high', 'eager') else 'defer' %}
-  <div class="gc-bld-hero-img-stack">
+  <div class="gc-bld-hero-img-stack"{% if flip %} data-card-flip-trigger role="button" tabindex="0" aria-pressed="false"{% if flip_label %} aria-label="{{ flip_label }}"{% endif %}{% endif %}>
     <img src="{{ src }}"
          alt=""
          class="gc-bld-card-hero-img"

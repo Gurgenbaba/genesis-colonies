@@ -133,11 +133,15 @@
 
   <article class="gc-building-card gc-research-card gc-prog-card {{ row_class }}{% if locked %} tech-row-locked{% endif %}{% if tech.queue_job is defined and tech.queue_job %} gc-research-card--in-queue{% if tech.queue_job.status == 'active' %} gc-research-card--queue-active{% else %} gc-research-card--queue-pending{% endif %}{% endif %}"
            data-research-card
+           data-card-flip
+           data-card-flip-state="front"
            data-tech-key="{{ tech.key }}"
            role="listitem">
+    <div class="gc-card-flip-stage" data-card-flip-stage>
+      <div class="gc-card-flip-face gc-card-flip-face--front" data-card-flip-front aria-hidden="false">
 
     <div class="gc-bld-card-hero">
-      {{ render_hero_img_stack(_research_webp, _research_png, none, hero_load, lcp_primary) }}
+      {{ render_hero_img_stack(_research_webp, _research_png, none, hero_load, lcp_primary, true, T('buildings_technical_data')) }}
       <div class="gc-bld-hero-right-stack">
         <span class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level tech-level-current"
               title="{{ T('buildings_col_level') }}"
@@ -156,29 +160,28 @@
       </div>
     </div>
 
-    <details class="gc-progression-reveal" data-progression-reveal>
-      <summary class="gc-progression-reveal__summary">
-        <span class="gc-progression-reveal__label">
-          {{ T("progression_costs_heading", "Kosten") }} · {{ T("research_col_time", "Forschungszeit") }}
-        </span>
-        <span class="gc-progression-reveal__target gc-mono">→ L{{ target_lvl|fmt_int }}</span>
-        <span class="gc-progression-reveal__chevron" aria-hidden="true">⌄</span>
-      </summary>
-      <div class="gc-progression-reveal__body">
-        <div class="gc-progression-reveal__time">
-          <span>{{ T("research_col_time", "Forschungszeit") }}</span>
-          {{ render_hero_time_chip(none, tech.time_seconds, 'research', T('research_col_time')) }}
-        </div>
-        {{ render_research_effect_bundle(tech) }}
-        <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-          <div class="gc-bld-card-costs tech-cost-cell">
-            {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
           </div>
+      <div class="gc-card-flip-face gc-card-flip-face--back" data-card-flip-back aria-hidden="true" inert>
+        <button type="button" class="gc-card-flip-backbar" data-card-flip-back-trigger aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">
+          <span class="gc-card-flip-backbar__icon" aria-hidden="true">↶</span>
+          <span class="gc-card-flip-backbar__label">{{ T("progression_costs_heading", "Kosten") }} · {{ T("research_col_time", "Forschungszeit") }}</span>
+          <span class="gc-card-flip-backbar__target gc-mono">→ L{{ target_lvl|fmt_int }}</span>
+        </button>
+        <div class="gc-progression-reveal__body gc-card-flip-back__body">
+          <div class="gc-progression-reveal__time gc-card-flip-back__time">
+            <span>{{ T("research_col_time", "Forschungszeit") }}</span>
+            {{ render_hero_time_chip(none, tech.time_seconds, 'research', T('research_col_time')) }}
+          </div>
+          {{ render_research_effect_bundle(tech) }}
+          <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
+            <div class="gc-bld-card-costs tech-cost-cell">
+              {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
+            </div>
+          </div>
+          {{ render_research_blockers(tech, queue_full) }}
         </div>
       </div>
-    </details>
-
-    {{ render_research_blockers(tech, queue_full) }}
+    </div>
   </article>
 {% endmacro %}
 
@@ -304,4 +307,5 @@
 
 {% block extra_scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/card_flip.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}

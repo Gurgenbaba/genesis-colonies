@@ -1,94 +1,154 @@
-/* GC-FERDI-DISCLOSURE-001
-   Progressive disclosure for primary progression cards.
-   Front: identity + current level/stock + action.
-   Reveal: next-level time/effect/cost.
-   Deeper technical data remains on the card-title action. */
+/* GC-FERDI-FLIP-002
+   Acute data stays on the front. Clicking only the artwork flips to secondary
+   cost/time/effect information. Technical-data modals remain the deeper layer. */
 
-.gc-progression-reveal {
-  margin: 0;
-  border-top: 1px solid rgba(119, 180, 255, 0.16);
-  background: linear-gradient(180deg, rgba(5, 12, 25, 0.22), rgba(5, 12, 25, 0.48));
+[data-card-flip] {
+  perspective: 1200px;
+  overflow: hidden;
 }
 
-.gc-progression-reveal > summary {
-  min-height: 36px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+.gc-card-flip-stage {
+  position: relative;
+  min-height: 190px;
+  transform-style: preserve-3d;
+  transition: transform 280ms cubic-bezier(.2,.72,.2,1);
+  will-change: transform;
+}
+
+[data-card-flip].is-flipped .gc-card-flip-stage {
+  transform: rotateY(180deg);
+}
+
+.gc-card-flip-face {
+  width: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.gc-card-flip-face--front {
+  position: relative;
+  min-height: 190px;
+  transform: rotateY(0deg);
+}
+
+.gc-card-flip-face--back {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  overflow: auto;
+  transform: rotateY(180deg);
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 80% 12%, rgba(54, 211, 153, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(4, 17, 29, 0.99), rgba(2, 11, 20, 0.99));
+  border: 1px solid rgba(91, 236, 183, 0.18);
+}
+
+[data-card-flip].is-flipped .gc-card-flip-face--front {
+  pointer-events: none;
+}
+
+[data-card-flip].is-flipped .gc-card-flip-face--back {
+  pointer-events: auto;
+}
+
+.gc-bld-hero-img-stack[data-card-flip-trigger] {
+  position: relative;
   cursor: pointer;
-  list-style: none;
-  user-select: none;
-  color: var(--gc-text-muted, #9aafc8);
-  font-size: 0.74rem;
-  letter-spacing: 0.025em;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
+  outline: none;
 }
 
-.gc-progression-reveal > summary::-webkit-details-marker {
-  display: none;
+.gc-bld-hero-img-stack[data-card-flip-trigger]::after {
+  content: "↻";
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(123, 230, 194, 0.42);
+  border-radius: 999px;
+  background: rgba(2, 14, 24, 0.78);
+  color: #b7ffe6;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.72;
+  transform: translateZ(1px);
+  transition: opacity 140ms ease, transform 140ms ease, background-color 140ms ease;
 }
 
-.gc-progression-reveal > summary::marker {
-  content: "";
+.gc-bld-hero-img-stack[data-card-flip-trigger]:hover::after,
+.gc-bld-hero-img-stack[data-card-flip-trigger]:focus-visible::after {
+  opacity: 1;
+  transform: translateZ(1px) rotate(24deg) scale(1.06);
+  background: rgba(12, 50, 55, 0.94);
 }
 
-.gc-progression-reveal > summary:hover,
-.gc-progression-reveal > summary:focus-visible {
+.gc-bld-hero-img-stack[data-card-flip-trigger]:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(123, 230, 194, 0.72);
+}
+
+.gc-card-flip-backbar {
+  min-height: 37px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 0;
+  border-bottom: 1px solid rgba(119, 180, 255, 0.16);
+  background: rgba(7, 25, 39, 0.9);
   color: var(--gc-text, #e7f2ff);
-  background: rgba(80, 155, 235, 0.08);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
 }
 
-.gc-progression-reveal > summary:focus-visible {
-  outline: 1px solid rgba(110, 190, 255, 0.62);
+.gc-card-flip-backbar:hover,
+.gc-card-flip-backbar:focus-visible {
+  background: rgba(13, 48, 59, 0.96);
+}
+
+.gc-card-flip-backbar:focus-visible {
+  outline: 1px solid rgba(123, 230, 194, 0.75);
   outline-offset: -1px;
 }
 
-.gc-progression-reveal__label {
+.gc-card-flip-backbar__icon {
+  color: #8ff0cf;
+  font-size: 1rem;
+}
+
+.gc-card-flip-backbar__label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
-.gc-progression-reveal__target {
+.gc-card-flip-backbar__target {
   color: var(--gc-accent, #79c9ff);
+  font-size: 0.72rem;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.gc-progression-reveal__chevron {
-  width: 18px;
-  height: 18px;
-  display: inline-grid;
-  place-items: center;
-  font-size: 1rem;
-  line-height: 1;
-  transform: rotate(0deg);
-  transform-origin: center;
-  transition: transform 150ms ease;
-}
-
-.gc-progression-reveal[open] > summary {
-  color: var(--gc-text, #e7f2ff);
-  background: rgba(80, 155, 235, 0.07);
-}
-
-.gc-progression-reveal[open] > summary .gc-progression-reveal__chevron {
-  transform: rotate(180deg);
-}
-
-.gc-progression-reveal__body {
+.gc-progression-reveal__body,
+.gc-card-flip-back__body {
   display: grid;
   gap: 8px;
-  padding: 4px 10px 10px;
-  animation: gc-progression-reveal-in 130ms ease-out both;
+  padding: 8px 10px 10px;
 }
 
-.gc-progression-reveal__time {
+.gc-progression-reveal__time,
+.gc-card-flip-back__time {
   min-height: 30px;
   display: flex;
   align-items: center;
@@ -102,7 +162,7 @@
   font-size: 0.72rem;
 }
 
-.gc-progression-reveal .gc-bld-hero-time-chip {
+.gc-card-flip-face--back .gc-bld-hero-time-chip {
   position: static;
   inset: auto;
   margin: 0;
@@ -113,47 +173,40 @@
   color: var(--gc-text, #e7f2ff);
 }
 
-.gc-progression-reveal .gc-bld-effect-bundle,
-.gc-progression-reveal .gc-card-benefit-block,
-.gc-progression-reveal .gc-bld-card-meta,
-.gc-progression-reveal .gc-bld-card-costs {
+.gc-card-flip-face--back .gc-bld-effect-bundle,
+.gc-card-flip-face--back .gc-card-benefit-block,
+.gc-card-flip-face--back .gc-bld-card-meta,
+.gc-card-flip-face--back .gc-bld-card-costs,
+.gc-card-flip-face--back .gc-compact-unit-stats,
+.gc-card-flip-face--back .gc-unit-build-time {
   margin-top: 0;
   margin-bottom: 0;
 }
 
-.gc-progression-reveal .gc-bld-card-meta--costs-only {
+.gc-card-flip-face--back .gc-bld-card-meta--costs-only {
   padding-top: 0;
 }
 
-@keyframes gc-progression-reveal-in {
-  from {
-    opacity: 0;
-    transform: translateY(-3px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (max-width: 640px) {
-  .gc-progression-reveal > summary {
-    min-height: 34px;
-    padding: 6px 8px;
-    gap: 6px;
-    font-size: 0.7rem;
+  .gc-card-flip-stage,
+  .gc-card-flip-face--front {
+    min-height: 180px;
   }
 
+  .gc-card-flip-back__body,
   .gc-progression-reveal__body {
-    padding: 3px 8px 8px;
+    padding: 7px 8px 8px;
+  }
+
+  .gc-card-flip-backbar {
+    min-height: 34px;
+    padding: 5px 7px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gc-progression-reveal > summary,
-  .gc-progression-reveal__chevron,
-  .gc-progression-reveal__body {
+  .gc-card-flip-stage,
+  .gc-bld-hero-img-stack[data-card-flip-trigger]::after {
     transition: none;
-    animation: none;
   }
 }

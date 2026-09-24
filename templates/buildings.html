@@ -122,16 +122,20 @@
 
         <article class="gc-building-card gc-prog-card {{ row_class }}{% if b.queue_job is defined and b.queue_job %} gc-building-card--in-queue{% if b.queue_job.status == 'active' %} gc-building-card--queue-active{% else %} gc-building-card--queue-pending{% endif %}{% endif %}{% if _evo and _evo_rank > 0 %} gc-building-card--evolved{% endif %}"
                  data-building-card
+                 data-card-flip
+                 data-card-flip-state="front"
                  data-building-type="{{ building_type }}"
                  data-building-row="{{ building_type }}"
                  {% if _uncapped %}data-uncapped="1"{% endif %}
                  role="listitem">
+          <div class="gc-card-flip-stage" data-card-flip-stage>
+            <div class="gc-card-flip-face gc-card-flip-face--front" data-card-flip-front aria-hidden="false">
 
           <div class="gc-bld-card-hero">
             {% set _bld_png = url_for('static', filename=b.icon) %}
             {% set _bld_webp = _bld_png|webp_static %}
             {% set _card_load = 'high' if (_lcp_hero and loop.index0 == 0) else 'lazy' %}
-            {{ render_hero_img_stack(_bld_webp, _bld_png, none, _card_load, _lcp_hero and loop.index0 == 0) }}
+            {{ render_hero_img_stack(_bld_webp, _bld_png, none, _card_load, _lcp_hero and loop.index0 == 0, true, T('buildings_technical_data', 'Technische Daten')) }}
             {% if (_evo and _evo_rank > 0) or (b.stellar_forge_unlocked is defined and b.stellar_forge_unlocked and b.stellar_forge_rank > 0) %}
             <div class="gc-bld-hero-left-stack">
               {% if _evo and _evo_rank > 0 %}
@@ -284,27 +288,27 @@
           </button>
           {% endif %}
 
-          <details class="gc-progression-reveal" data-progression-reveal>
-            <summary class="gc-progression-reveal__summary">
-              <span class="gc-progression-reveal__label">
-                {{ T("progression_costs_heading", "Kosten") }} · {{ T("buildings_col_time", "Bauzeit") }}
-              </span>
-              <span class="gc-progression-reveal__target gc-mono">→ L{{ b.target_level|fmt_int }}</span>
-              <span class="gc-progression-reveal__chevron" aria-hidden="true">⌄</span>
-            </summary>
-            <div class="gc-progression-reveal__body">
-              <div class="gc-progression-reveal__time">
-                <span>{{ T("buildings_col_time", "Bauzeit") }}</span>
-                {{ render_hero_time_chip(none, b.time_seconds, 'build', T('buildings_col_time')) }}
-              </div>
-              {{ render_building_effect_bundle(b) }}
-              <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-                <div class="gc-bld-card-costs">
-                  {{ render_building_prog_costs(b, b.cost_metal, b.cost_crystal, b.target_level, false) }}
+                      </div>
+            <div class="gc-card-flip-face gc-card-flip-face--back" data-card-flip-back aria-hidden="true" inert>
+              <button type="button" class="gc-card-flip-backbar" data-card-flip-back-trigger aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">
+                <span class="gc-card-flip-backbar__icon" aria-hidden="true">↶</span>
+                <span class="gc-card-flip-backbar__label">{{ T("progression_costs_heading", "Kosten") }} · {{ T("buildings_col_time", "Bauzeit") }}</span>
+                <span class="gc-card-flip-backbar__target gc-mono">→ L{{ b.target_level|fmt_int }}</span>
+              </button>
+              <div class="gc-progression-reveal__body gc-card-flip-back__body">
+                <div class="gc-progression-reveal__time gc-card-flip-back__time">
+                  <span>{{ T("buildings_col_time", "Bauzeit") }}</span>
+                  {{ render_hero_time_chip(none, b.time_seconds, 'build', T('buildings_col_time')) }}
+                </div>
+                {{ render_building_effect_bundle(b) }}
+                <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
+                  <div class="gc-bld-card-costs">
+                    {{ render_building_prog_costs(b, b.cost_metal, b.cost_crystal, b.target_level, false) }}
+                  </div>
                 </div>
               </div>
             </div>
-          </details>
+          </div>
         </article>
       {% endfor %}
     </div>
@@ -713,6 +717,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/card_flip.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/buildings.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/mine_nodebuster.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/research_lab_ascension.js') }}?v={{ GC_ASSET_VERSION }}"></script>

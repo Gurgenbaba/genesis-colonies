@@ -49,9 +49,14 @@
              data-troop-key="{{ unit.key }}"
              data-troop-card="{{ unit.key }}"
              data-troop-unlocked="{{ 1 if unit.unlocked else 0 }}"
+             data-card-flip
+             data-card-flip-state="front"
              role="listitem">
+      <div class="gc-card-flip-stage" data-card-flip-stage>
+        <div class="gc-card-flip-face gc-card-flip-face--front" data-card-flip-front aria-hidden="false">
+
       <div class="gc-bld-card-hero">
-        {{ render_hero_img_stack(_troop_webp, _troop_png, none, 'lazy', false) }}
+        {{ render_hero_img_stack(_troop_webp, _troop_png, none, 'lazy', false, true, T('troop_detail_open', 'Eigenschaften anzeigen')) }}
         <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
         <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-stock-badge"
               data-troop-stock="{{ unit.key }}">×{{ unit.amount|fmt_int }}</span>
@@ -66,14 +71,9 @@
           </div>
         </div>
       </div>
+      
       {% if unit.unlocked %}
-      <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-troop-cost
-           data-unit-cost-metal="{{ unit.cost_metal|default(unit.train_cost.metal|default(0)) }}"
-           data-unit-cost-crystal="{{ unit.cost_crystal|default(unit.train_cost.crystal|default(0)) }}">
-        {{ render_card_costs_block(unit.cost_metal|default(unit.train_cost.metal|default(0)), unit.cost_crystal|default(unit.train_cost.crystal|default(0)), none) }}
-      </div>
-      {{ render_unit_build_time_footer(unit.train_seconds) }}
-      <footer class="gc-ship-card-action shipyard-ship-actions barracks-troop-card-actions">
+<footer class="gc-ship-card-action shipyard-ship-actions barracks-troop-card-actions">
         <input type="text" inputmode="numeric" value="1"
                class="gc-input shipyard-qty-input gc-num-input" data-troop-amount="{{ unit.key }}"
                {% if unit.max_train %}data-input-max="{{ unit.max_train }}"{% endif %}
@@ -96,8 +96,34 @@
         </button>
       </footer>
       {% else %}
+
       <p class="hint">{{ T("barracks_troops_locked", "Kaserne Stufe %(level)s", level=unit.required_barracks_level) }}</p>
+      
       {% endif %}
+        </div>
+        <div class="gc-card-flip-face gc-card-flip-face--back" data-card-flip-back aria-hidden="true" inert>
+          <button type="button" class="gc-card-flip-backbar" data-card-flip-back-trigger aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">
+            <span class="gc-card-flip-backbar__icon" aria-hidden="true">↶</span>
+            <span class="gc-card-flip-backbar__label">{{ T('buildings_technical_data', 'Technische Daten') }}</span>
+          </button>
+          <div class="gc-card-flip-back__body">
+      {% if unit.unlocked %}
+
+      <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-troop-cost
+           data-unit-cost-metal="{{ unit.cost_metal|default(unit.train_cost.metal|default(0)) }}"
+           data-unit-cost-crystal="{{ unit.cost_crystal|default(unit.train_cost.crystal|default(0)) }}">
+        {{ render_card_costs_block(unit.cost_metal|default(unit.train_cost.metal|default(0)), unit.cost_crystal|default(unit.train_cost.crystal|default(0)), none) }}
+      </div>
+      {{ render_unit_build_time_footer(unit.train_seconds) }}
+      
+      {% else %}
+
+      <p class="hint">{{ T("barracks_troops_locked", "Kaserne Stufe %(level)s", level=unit.required_barracks_level) }}</p>
+      
+      {% endif %}
+          </div>
+        </div>
+      </div>
     </article>
     {% endfor %}
   </div>
