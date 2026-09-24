@@ -61,16 +61,16 @@ def _login(client, player_id: int, username: str):
 
 def test_normalize_buildings_ui_mode_default():
     assert normalize_buildings_ui_mode(None) == DEFAULT_BUILDINGS_UI_MODE
-    assert normalize_buildings_ui_mode("nope") == "stage"
+    assert normalize_buildings_ui_mode("nope") == "cards"
     assert normalize_buildings_ui_mode("STAGE") == "stage"
     assert normalize_buildings_ui_mode("cards") == "cards"
 
 
-def test_buildings_ui_defaults_prompt_pending(bui_db):
+def test_buildings_ui_defaults_to_cards_without_prompt(bui_db):
     pid, _ = _create_player()
     settings = get_buildings_ui_settings(pid)
-    assert settings["buildings_ui_mode"] == "stage"
-    assert settings["buildings_ui_prompt_pending"] is True
+    assert settings["buildings_ui_mode"] == "cards"
+    assert settings["buildings_ui_prompt_pending"] is False
 
 
 def test_update_buildings_ui_marks_choice_done(bui_db):
@@ -153,8 +153,8 @@ def test_options_snapshot_includes_buildings_ui(bui_db):
 
     pid, _ = _create_player()
     snap = get_options_snapshot(pid)
-    assert snap.get("buildings_ui_mode") == "stage"
-    assert snap.get("buildings_ui_prompt_pending") is True
+    assert snap.get("buildings_ui_mode") == "cards"
+    assert snap.get("buildings_ui_prompt_pending") is False
 
 
 def test_chooser_partial_in_base():
@@ -164,7 +164,8 @@ def test_chooser_partial_in_base():
         encoding="utf-8"
     )
     assert "gc-bld-ui-chooser" in chooser
-    assert 'data-bld-ui-choice="stage"' in chooser
+    assert 'data-bld-ui-choice="cards"' in chooser
+    assert 'data-bld-ui-choice="cards"\n              aria-pressed="true"' in chooser
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     assert "initBuildingsUiChooser" in main
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
@@ -172,3 +173,29 @@ def test_chooser_partial_in_base():
     chunk = css.split(".gc-bld-ui-chooser{")[1].split("}")[0]
     assert "position: fixed" in chunk
     assert "place-items: center" in chunk
+
+
+def test_duplicate_info_vertical_cleanup_contracts():
+    research = (ROOT / "templates" / "research.html").read_text(encoding="utf-8")
+    assert "research-lab-chip" not in research
+    assert "research-network-block" in research
+
+    shipyard = (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
+    assert "shipyard-status-panel" not in shipyard
+    assert "data-shipyard-level-label" in shipyard
+    assert "data-shipyard-batch-capacity" in shipyard
+
+    defense = (ROOT / "templates" / "defense.html").read_text(encoding="utf-8")
+    assert "defense-status-panel" not in defense
+    assert "data-defense-factory-label" in defense
+    assert "data-defense-batch-capacity" in defense
+
+
+def test_building_templates_fallback_to_cards():
+    buildings = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
+    options = (ROOT / "templates" / "options.html").read_text(encoding="utf-8")
+    options_js = (ROOT / "static" / "js" / "options.js").read_text(encoding="utf-8")
+
+    assert "else 'cards') %}" in buildings
+    assert "od.get('buildings_ui_mode', 'cards')" in options
+    assert "mark_choice_done: true" in options_js
