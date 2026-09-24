@@ -172,13 +172,13 @@ The report never writes `player_scores`.
 
 ## Atomic cutover procedure
 
-1. Deploy this code with `GC_ENDGAME_ECONOMY_MODE=shadow`, pivot `120`, q=`4`.
+1. Deploy this code with `GC_ENDGAME_ECONOMY_MODE=shadow`, pivot `120`, q=`3`.
 2. Run and review the complete shadow ranking report on Production data.
 3. At cutover timestamp **T**, while still on V1 gameplay, settle outstanding
    resource ticks through T using the normal authoritative resource/tick path.
 4. Existing queued jobs keep their stored paid-cost snapshots. Do not reprice or
    refund them from V2 formulas.
-5. Switch `GC_ENDGAME_ECONOMY_MODE=active` with pivot `120`, q=`4`.
+5. Switch `GC_ENDGAME_ECONOMY_MODE=active` with pivot `120`, q=`3`.
 6. Recompute every player's score with V2 and run one full rank rebuild.
 7. Verify ranking, 5× PvP corridors, Commander claims, economy endpoints and
    high-level storage before reopening normal operations.
