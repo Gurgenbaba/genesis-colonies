@@ -21,6 +21,7 @@
 
 {% block extra_head %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/progression_disclosure.css') }}?v={{ GC_ASSET_VERSION }}">
 {% if _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
@@ -120,9 +121,12 @@
       {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
       {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}"
-               data-defense-card="{{ unit.defense_key }}" data-unlocked="1" role="listitem">
+               data-defense-card="{{ unit.defense_key }}" data-unlocked="1" data-card-flip data-card-flip-state="front" role="listitem">
+        <div class="gc-card-flip-stage" data-card-flip-stage>
+          <div class="gc-card-flip-face gc-card-flip-face--front" data-card-flip-front aria-hidden="false">
+
         <div class="gc-bld-card-hero">
-          {{ render_hero_img_stack(_def_webp, _def_png, none, _card_load, loop.index0 == 0) }}
+          {{ render_hero_img_stack(_def_webp, _def_png, none, _card_load, loop.index0 == 0, true, T('defense_detail_open')) }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_defense_stock_chip(unit.defense_key, owned) }}
           <div class="gc-bld-card-hero-title">
@@ -136,14 +140,6 @@
             </div>
           </div>
         </div>
-        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense', unit.attack_stat, unit.shield_stat, unit.hull_stat) }}
-        <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-defense-cost
-             data-unit-cost-metal="{{ unit.cost_metal }}"
-             data-unit-cost-crystal="{{ unit.cost_crystal }}"
-             {% if unit.cost_fuel_cells %}data-unit-cost-fuel="{{ unit.cost_fuel_cells }}"{% endif %}>
-          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
-        </div>
-        {{ render_unit_build_time_footer(unit.build_seconds) }}
         <footer class="gc-ship-card-action shipyard-ship-actions">
           <input type="text" inputmode="numeric" value="1"
                  class="gc-input shipyard-qty-input gc-num-input" data-defense-qty="{{ unit.defense_key }}"
@@ -166,6 +162,25 @@
             {% endif %}
           </button>
         </footer>
+          </div>
+          <div class="gc-card-flip-face gc-card-flip-face--back" data-card-flip-back aria-hidden="true">
+            <button type="button" class="gc-card-flip-backbar" data-card-flip-back-trigger aria-label="{{ T('action_back', 'Zurück') }}">
+              <span class="gc-card-flip-backbar__icon" aria-hidden="true">↶</span>
+              <span class="gc-card-flip-backbar__label">{{ T('buildings_technical_data', 'Technische Daten') }}</span>
+            </button>
+            <div class="gc-card-flip-back__body">
+{{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense', unit.attack_stat, unit.shield_stat, unit.hull_stat) }}
+        <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-defense-cost
+             data-unit-cost-metal="{{ unit.cost_metal }}"
+             data-unit-cost-crystal="{{ unit.cost_crystal }}"
+             {% if unit.cost_fuel_cells %}data-unit-cost-fuel="{{ unit.cost_fuel_cells }}"{% endif %}>
+          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
+        </div>
+        {{ render_unit_build_time_footer(unit.build_seconds) }}
+        
+            </div>
+          </div>
+        </div>
       </article>
       {% endfor %}
     </div>
@@ -186,9 +201,12 @@
       {% set _def_png = unit.icon|default(url_for('static', filename='img/defense/' ~ unit.defense_key ~ '.png')) %}
       {% set _def_webp = _def_png|webp_static %}
       <article class="gc-ship-card gc-prog-card gc-prog-locked is-locked"
-               data-defense-card="{{ unit.defense_key }}" data-unlocked="0" role="listitem">
+               data-defense-card="{{ unit.defense_key }}" data-unlocked="0" data-card-flip data-card-flip-state="front" role="listitem">
+        <div class="gc-card-flip-stage" data-card-flip-stage>
+          <div class="gc-card-flip-face gc-card-flip-face--front" data-card-flip-front aria-hidden="false">
+
         <div class="gc-bld-card-hero">
-          {{ render_hero_img_stack(_def_webp, _def_png, none, 'lazy', false) }}
+          {{ render_hero_img_stack(_def_webp, _def_png, none, 'lazy', false, true, T('defense_detail_open')) }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_defense_stock_chip(unit.defense_key, owned) }}
           <div class="gc-bld-card-hero-title">
@@ -210,11 +228,23 @@
             </div>
           </div>
         </div>
-        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense', unit.attack_stat, unit.shield_stat, unit.hull_stat) }}
+        
+          </div>
+          <div class="gc-card-flip-face gc-card-flip-face--back" data-card-flip-back aria-hidden="true">
+            <button type="button" class="gc-card-flip-backbar" data-card-flip-back-trigger aria-label="{{ T('action_back', 'Zurück') }}">
+              <span class="gc-card-flip-backbar__icon" aria-hidden="true">↶</span>
+              <span class="gc-card-flip-backbar__label">{{ T('buildings_technical_data', 'Technische Daten') }}</span>
+            </button>
+            <div class="gc-card-flip-back__body">
+{{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense', unit.attack_stat, unit.shield_stat, unit.hull_stat) }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
           {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
         </div>
         {{ render_unit_build_time_footer(unit.build_seconds) }}
+      
+            </div>
+          </div>
+        </div>
       </article>
       {% endfor %}
     </div>
@@ -237,5 +267,6 @@
 
 {% block extra_scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/card_flip.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/pages/defense.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
