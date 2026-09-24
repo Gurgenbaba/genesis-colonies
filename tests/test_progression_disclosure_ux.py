@@ -28,7 +28,6 @@ def test_building_cards_flip_secondary_upgrade_data_behind_artwork():
     assert "gc-bld-card-meta--costs-only" in back
     assert "data-building-tech-data" in front
     assert "<details" not in card
-    assert "js/card_flip.js" in tpl
 
 
 def test_research_cards_flip_secondary_upgrade_data_behind_artwork():
@@ -51,7 +50,6 @@ def test_research_cards_flip_secondary_upgrade_data_behind_artwork():
     assert "render_research_blockers" in back
     assert "data-research-tech-data" in front
     assert "<details" not in card
-    assert "js/card_flip.js" in tpl
 
 
 def test_defense_cards_keep_build_action_front_and_stats_costs_on_back():
@@ -67,8 +65,6 @@ def test_defense_cards_keep_build_action_front_and_stats_costs_on_back():
     assert "render_compact_unit_stat_chips" in back
     assert "data-defense-cost" in back
     assert "render_unit_build_time_footer" in back
-    assert "js/card_flip.js" in tpl
-    assert "progression_disclosure.css" in tpl
 
 
 def test_troop_cards_keep_train_action_front_and_cost_time_on_back():
@@ -82,6 +78,35 @@ def test_troop_cards_keep_train_action_front_and_cost_time_on_back():
     assert "data-troop-cost" not in front
     assert "data-troop-cost" in back
     assert "render_unit_build_time_footer" in back
+
+
+def test_shipyard_cards_keep_build_action_front_and_stats_costs_on_back():
+    tpl = _read("templates/shipyard.html")
+    card = tpl.split('<article class="gc-ship-card gc-prog-card {{ row_class }}"', 1)[1].split(
+        "</article>", 1
+    )[0]
+    front = _face(card, "data-card-flip-front", "data-card-flip-back")
+    back = card.split("data-card-flip-back", 1)[1]
+
+    assert "data-card-flip" in card
+    assert "data-shipyard-build" in front
+    assert "data-shipyard-max" in front
+    assert "render_compact_unit_stat_chips" not in front
+    assert "data-shipyard-cost" not in front
+    assert "render_compact_unit_stat_chips" in back
+    assert "data-shipyard-cost" in back
+    assert "render_unit_build_time_footer" in back
+
+
+def test_flip_assets_live_in_persistent_shell_for_pjax_navigation():
+    base = _read("templates/base.html")
+    for tpl_name in ("templates/buildings.html", "templates/research.html", "templates/defense.html"):
+        tpl = _read(tpl_name)
+        assert "css/progression_disclosure.css" not in tpl
+        assert "js/card_flip.js" not in tpl
+
+    assert "css/progression_disclosure.css" in base
+    assert "js/card_flip.js" in base
 
 
 def test_shared_flip_contract_uses_artwork_only_and_is_accessible():
@@ -100,6 +125,11 @@ def test_shared_flip_contract_uses_artwork_only_and_is_accessible():
     assert "perspective: 1200px" in css
     assert "transform: rotateY(180deg)" in css
     assert "backface-visibility: hidden" in css
+    assert "overflow: visible" in css
+    assert "overflow: auto" not in css
+    assert "min-height: 190px" not in css
+    assert "stage.style.height = height + \"px\"" in js
+    assert "face.scrollHeight" in js
 
     trigger_rule = css.split(".gc-bld-hero-img-stack[data-card-flip-trigger] {", 1)[1].split("}", 1)[0]
     assert "position: absolute" in trigger_rule

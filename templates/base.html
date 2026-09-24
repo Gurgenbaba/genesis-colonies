@@ -30,6 +30,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planet_evolution_clarity.css') }}?v={{ GC_ASSET_VERSION }}">
   {# GC-ASC-PJAX-001: Ascension tree is a PJAX page; keep its styling in the persistent shell. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/nodebuster_ascension.css') }}?v={{ GC_ASSET_VERSION }}">
+  {# GC-FLIP-PJAX-003: progression cards are PJAX-reachable; flip geometry must live in the persistent shell. #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/progression_disclosure.css') }}?v={{ GC_ASSET_VERSION }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mando_exact_numbers.css') }}?v={{ GC_ASSET_VERSION }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/empire_resource_relay.css') }}?v={{ GC_ASSET_VERSION }}">
 
@@ -799,6 +801,7 @@
   {% include "partials/cookie_notice.html" %}
 
   <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+  <script src="{{ url_for('static', filename='js/card_flip.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/gc.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/state.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/lifecycle.js') }}?v={{ GC_ASSET_VERSION }}"></script>
