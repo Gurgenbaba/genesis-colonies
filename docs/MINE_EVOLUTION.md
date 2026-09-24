@@ -425,6 +425,22 @@ all generated value reinvested into itself. It reports 6-month (182.5 d) and
 12-month (365 d) outcomes for baseline q3, the current +40% stack, q3.15/q3.30,
 the combined stack, current max rebuild and full Breakthrough V4.
 
+Current deterministic anchors:
+
+| Scenario | Start | 6 months | 12 months | Days to L300 | Days to L500 |
+|---|---:|---:|---:|---:|---:|
+| Baseline q3 | 200 | 223 | 245 | 886.6 | 3758.3 |
+| q3 + current +40% | 200 | 232 | 261 | 633.3 | 2684.5 |
+| Core Resonance q3.15 | 200 | 225 | 249 | 796.7 | 3176.9 |
+| Singularity q3.30 | 200 | 227 | 253 | 719.3 | 2704.0 |
+| q3.30 + current +40% | 200 | 237 | 273 | 513.8 | 1931.4 |
+| Current max rebuild | 156 | 246 | 315 | 319.3 | 1088.5 |
+| Full Breakthrough V4 | 156 | 343 | 478 | 133.6 | 399.4 |
+
+The deliberately hostile 11-world pooling stress reaches **L508 after six months**
+and **L705 after twelve months**; the zero-resource-cost queue ceilings remain
+L769 / L836. These are upper-bound stress values, not normal player forecasts.
+
 The second path is deliberately hostile: **11 mature feeder worlds** are assumed
 to mirror the record mine's output and pool 100% of that value into one target
 mine. No spending on research, fleet, storage or feeder development is deducted.
