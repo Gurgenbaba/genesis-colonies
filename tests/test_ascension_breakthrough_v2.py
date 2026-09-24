@@ -27,7 +27,7 @@ from scripts.sim_ascension_breakthroughs import (
     pooled_empire_level_after_days,
     queue_floor_level_after_days,
     run_horizons,
-    uni1_q4_curve,
+    uni1_endgame_curve,
 )
 
 
@@ -222,7 +222,7 @@ def test_six_and_twelve_month_simulation_stays_progressive_without_runaway():
 
 def test_eleven_world_pooling_cannot_turn_one_year_into_l2000():
     stress = _scenario("singularity_stack")
-    with uni1_q4_curve():
+    with uni1_endgame_curve():
         six_month_pool = pooled_empire_level_after_days(
             stress, Decimal("182.5"), feeder_worlds=11
         )
@@ -239,16 +239,16 @@ def test_eleven_world_pooling_cannot_turn_one_year_into_l2000():
 
 
 def test_reinvestment_benchmarks_match_balance_review():
-    with uni1_q4_curve():
-        baseline_days = hours_to_target(_scenario("baseline_q4"), 300) / Decimal(24)
+    with uni1_endgame_curve():
+        baseline_days = hours_to_target(_scenario("baseline_q3"), 300) / Decimal(24)
         current_days = hours_to_target(_scenario("current_stack"), 300) / Decimal(24)
-        q420_days = hours_to_target(_scenario("singularity"), 300) / Decimal(24)
-        q420_stack_days = hours_to_target(_scenario("singularity_stack"), 300) / Decimal(24)
+        singularity_days = hours_to_target(_scenario("singularity"), 300) / Decimal(24)
+        singularity_stack_days = hours_to_target(_scenario("singularity_stack"), 300) / Decimal(24)
 
     assert float(baseline_days) == pytest.approx(886.6, abs=4.0)
     assert float(current_days) == pytest.approx(633.3, abs=4.0)
-    assert float(q420_days) == pytest.approx(719.3, abs=4.0)
-    assert float(q420_stack_days) == pytest.approx(513.8, abs=4.0)
+    assert float(singularity_days) == pytest.approx(719.3, abs=4.0)
+    assert float(singularity_stack_days) == pytest.approx(513.8, abs=4.0)
 
 
 def test_panel_fields_expose_concrete_energy_and_breakthrough_previews():
