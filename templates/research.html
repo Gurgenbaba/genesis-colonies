@@ -208,7 +208,6 @@
 
 {% block extra_head %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/progression_disclosure.css') }}?v={{ GC_ASSET_VERSION }}">
 {% if _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
@@ -307,5 +306,4 @@
 
 {% block extra_scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/card_flip.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
