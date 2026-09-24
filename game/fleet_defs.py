@@ -293,7 +293,9 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 12500, "crystal": 7500, "fuel_cells": 7500},
         "build_seconds": 220,
-        "speed": 2000,
+        # x1 utility anchor: asteroid hunts must stay viable inside the 2h field TTL
+        # without raising the universe-wide peaceful fleet-speed multiplier.
+        "speed": 40000,
         "cargo": 20000,
         "fuel": 300,
         "attack": 1,
@@ -313,7 +315,9 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 62500, "crystal": 37500, "fuel_cells": 60000},
         "build_seconds": 260,
-        "speed": 1500,
+        # x1 utility anchor: colonization is deliberately faster than bulk cargo
+        # while the canonical flight formula and universe mission speed stay x1.
+        "speed": 20000,
         "cargo": 5000,
         "fuel": 200,
         "attack": 10,

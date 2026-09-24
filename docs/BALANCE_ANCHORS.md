@@ -16,6 +16,9 @@ python scripts/gen_anchor_tables.py docs/GC_ANCHOR_TABLES_X1.md
 | `production_speed` | 1.0 | 1.0 |
 | `build_speed` | 1.0 | **1.1** |
 | `research_speed` | 1.0 | **0.85** |
+| `fleet_speed_war` | 1.0 | **1.0** |
+| `fleet_speed_holding` | 1.0 | **1.0** |
+| `fleet_speed_peaceful` | 1.0 | **1.0** |
 | Galaxieslot | 9 (neutral) | — |
 | Energie | 100 % | — |
 | Forschung | 0 (Benchmark) | — |
@@ -47,6 +50,7 @@ Vollständige Tabellen: **[GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)**
 7. **Produktions-Basis (Ferdi-Rebase):** `Standard + MineBasis × level × 1.075^level` — Standard 15k/10k/5k; Energie nur auf Minen-Anteil — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 8. **Forschung Kosten (GC-RESEARCH-COST-REBALANCE):** `research_cost_afford_hours × Referenzproduktion (Fe+Cr)` — steile Afford-Kurve (L10=8h … L120=8640h); Zeiten unverändert (GC-825).
 9. **Deep-Endgame-Minenzeit:** normaler 10-s-Floor; L225–L400 sanfte Mine-only-Rampe; L425–L1000 kubischer 25-Level-Floor (`82 + 60 × steps³`), danach unbeschränkte lineare Fortsetzung als 11-Welten-Pooling-Guardrail — kein Max-Level.
+10. **Fleet x1 bleibt x1:** War/Hold/Peaceful stehen auf 1.0. Kolonisierung/Recycler werden nicht über Universe-Speed beschleunigt, sondern über Utility-Hulls: `seed_ark speed=20000`, `harvest_reclaimer speed=40000`. Damit bleibt PvP separat justierbar und der 2h-Asteroiden-TTL erreichbar.
 
 ---
 
