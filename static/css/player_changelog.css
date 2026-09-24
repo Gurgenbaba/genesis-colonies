@@ -14,7 +14,6 @@
 .gc-player-changelog-head { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.15rem .85rem; border-bottom: 1px solid rgba(var(--gc-id-rgb, 70, 229, 255), .22); background: linear-gradient(180deg, rgba(var(--gc-id-rgb, 70, 229, 255), .09), transparent); }
 .gc-player-changelog-head h2 { margin: .2rem 0 .35rem; font-family: Orbitron, sans-serif; font-size: clamp(1.05rem, 2.4vw, 1.45rem); letter-spacing: .03em; }
 .gc-player-changelog-head p { margin: 0; max-width: 780px; color: var(--gc-text-muted, #91a7b8); line-height: 1.45; font-size: .88rem; }
-.gc-player-changelog-eyebrow { font: 700 .68rem/1 JetBrains Mono, monospace; letter-spacing: .16em; color: rgb(var(--gc-id-rgb, 70, 229, 255)); }
 .gc-player-changelog-controls { display: flex; gap: .65rem; align-items: center; padding: .75rem 1.15rem; border-bottom: 1px solid rgba(255,255,255,.07); }
 .gc-player-changelog-search { flex: 1 1 360px; display: flex; align-items: center; gap: .5rem; border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.22); padding: .5rem .7rem; }
 .gc-player-changelog-search input { width: 100%; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; }
