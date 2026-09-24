@@ -1,0 +1,159 @@
+/* GC-FERDI-DISCLOSURE-001
+   Progressive disclosure for primary progression cards.
+   Front: identity + current level/stock + action.
+   Reveal: next-level time/effect/cost.
+   Deeper technical data remains on the card-title action. */
+
+.gc-progression-reveal {
+  margin: 0;
+  border-top: 1px solid rgba(119, 180, 255, 0.16);
+  background: linear-gradient(180deg, rgba(5, 12, 25, 0.22), rgba(5, 12, 25, 0.48));
+}
+
+.gc-progression-reveal > summary {
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  color: var(--gc-text-muted, #9aafc8);
+  font-size: 0.74rem;
+  letter-spacing: 0.025em;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.gc-progression-reveal > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gc-progression-reveal > summary::marker {
+  content: "";
+}
+
+.gc-progression-reveal > summary:hover,
+.gc-progression-reveal > summary:focus-visible {
+  color: var(--gc-text, #e7f2ff);
+  background: rgba(80, 155, 235, 0.08);
+}
+
+.gc-progression-reveal > summary:focus-visible {
+  outline: 1px solid rgba(110, 190, 255, 0.62);
+  outline-offset: -1px;
+}
+
+.gc-progression-reveal__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-progression-reveal__target {
+  color: var(--gc-accent, #79c9ff);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.gc-progression-reveal__chevron {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1rem;
+  line-height: 1;
+  transform: rotate(0deg);
+  transform-origin: center;
+  transition: transform 150ms ease;
+}
+
+.gc-progression-reveal[open] > summary {
+  color: var(--gc-text, #e7f2ff);
+  background: rgba(80, 155, 235, 0.07);
+}
+
+.gc-progression-reveal[open] > summary .gc-progression-reveal__chevron {
+  transform: rotate(180deg);
+}
+
+.gc-progression-reveal__body {
+  display: grid;
+  gap: 8px;
+  padding: 4px 10px 10px;
+  animation: gc-progression-reveal-in 130ms ease-out both;
+}
+
+.gc-progression-reveal__time {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid rgba(119, 180, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.14);
+  color: var(--gc-text-muted, #9aafc8);
+  font-size: 0.72rem;
+}
+
+.gc-progression-reveal .gc-bld-hero-time-chip {
+  position: static;
+  inset: auto;
+  margin: 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--gc-text, #e7f2ff);
+}
+
+.gc-progression-reveal .gc-bld-effect-bundle,
+.gc-progression-reveal .gc-card-benefit-block,
+.gc-progression-reveal .gc-bld-card-meta,
+.gc-progression-reveal .gc-bld-card-costs {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.gc-progression-reveal .gc-bld-card-meta--costs-only {
+  padding-top: 0;
+}
+
+@keyframes gc-progression-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .gc-progression-reveal > summary {
+    min-height: 34px;
+    padding: 6px 8px;
+    gap: 6px;
+    font-size: 0.7rem;
+  }
+
+  .gc-progression-reveal__body {
+    padding: 3px 8px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-progression-reveal > summary,
+  .gc-progression-reveal__chevron,
+  .gc-progression-reveal__body {
+    transition: none;
+    animation: none;
+  }
+}
