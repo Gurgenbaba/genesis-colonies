@@ -6,11 +6,6 @@
      data-player-id="{{ CURRENT_PLAYER_ID or '' }}"
      data-dev-combat="{{ '1' if GC_DEBUG_ENABLED or AUTH_ADMIN else '0' }}">
 
-  <header class="section-header">
-    <h1 class="section-title">{{ T("messages.title") }}</h1>
-    <p class="section-hint hint">{{ T("messages.subtitle") }}</p>
-  </header>
-
   <section class="gc-panel gc-messages-panel" aria-labelledby="messages-panel-title">
     <div class="gc-panel-header gc-messages-head">
       <div class="gc-panel-head-left">
