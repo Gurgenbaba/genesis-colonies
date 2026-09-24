@@ -20,7 +20,7 @@
      data-sfx-ui-sound="{{ od.get('sfx_ui_sound', 0.1)|e }}"
      data-sfx-combat-sound="{{ od.get('sfx_combat_sound', 0.1)|e }}"
      data-default-spy-probes="{{ od.get('default_spy_probes', 5)|int }}"
-     data-buildings-ui-mode="{{ od.get('buildings_ui_mode', 'stage')|e }}">
+     data-buildings-ui-mode="{{ od.get('buildings_ui_mode', 'cards')|e }}">
 
   <section class="gc-options-control-module" aria-labelledby="options-control-title">
 
@@ -397,19 +397,19 @@
 
           <article class="gc-options-card gc-options-buildings-ui-card"
                    id="options-buildings-ui"
-                   data-buildings-ui-mode="{{ od.get('buildings_ui_mode', 'stage')|e }}">
+                   data-buildings-ui-mode="{{ od.get('buildings_ui_mode', 'cards')|e }}">
             <header class="gc-options-card-head">
               <span class="gc-options-card-title">{{ T("options_buildings_ui_title", "Gebäude-Menü") }}</span>
               <span class="gc-options-card-sub">{{ T("options_buildings_ui_subtitle", "Kolonie-Stage oder Retro-Karten.") }}</span>
             </header>
             <div class="gc-options-buildings-ui-grid" role="radiogroup" aria-label="{{ T('options_buildings_ui_title', 'Gebäude-Menü') }}">
-              {% set _bld_mode = od.get('buildings_ui_mode', 'stage') %}
+              {% set _bld_mode = od.get('buildings_ui_mode', 'cards') %}
               <label class="gc-options-buildings-ui-choice">
                 <input type="radio"
                        name="buildings_ui_mode"
                        value="stage"
                        data-buildings-ui-mode-input
-                       {% if _bld_mode != 'cards' %}checked{% endif %}>
+                       {% if _bld_mode == 'stage' %}checked{% endif %}>
                 <span class="gc-options-buildings-ui-choice-body">
                   <strong>{{ T("buildings_ui_mode_stage", "Kolonie-Stage") }}</strong>
                   <span class="hint">{{ T("buildings_ui_mode_stage_help", "Neues Build-UI: Landschaft, Props, +1/MAX auf der Stage.") }}</span>
@@ -420,7 +420,7 @@
                        name="buildings_ui_mode"
                        value="cards"
                        data-buildings-ui-mode-input
-                       {% if _bld_mode == 'cards' %}checked{% endif %}>
+                       {% if _bld_mode != 'stage' %}checked{% endif %}>
                 <span class="gc-options-buildings-ui-choice-body">
                   <strong>{{ T("buildings_ui_mode_cards", "Retro-Karten") }}</strong>
                   <span class="hint">{{ T("buildings_ui_mode_cards_help", "Klassische Gebäude-Kartenliste wie zuvor.") }}</span>

@@ -73,7 +73,7 @@ SPY_PROBE_QUICK_VALUES = (1, 3, 5, 10, 25)
 BUILDINGS_UI_STAGE = "stage"
 BUILDINGS_UI_CARDS = "cards"
 BUILDINGS_UI_MODES = frozenset({BUILDINGS_UI_STAGE, BUILDINGS_UI_CARDS})
-DEFAULT_BUILDINGS_UI_MODE = BUILDINGS_UI_STAGE
+DEFAULT_BUILDINGS_UI_MODE = BUILDINGS_UI_CARDS
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-.]{1,39}$")
 _EMAIL_RE = re.compile(
@@ -132,7 +132,7 @@ def ensure_account_options_schema(conn=None) -> None:
             c, "users", "default_spy_probes", "INTEGER NOT NULL DEFAULT 5"
         )
         ensure_column(
-            c, "users", "buildings_ui_mode", "TEXT NOT NULL DEFAULT 'stage'"
+            c, "users", "buildings_ui_mode", "TEXT NOT NULL DEFAULT 'cards'"
         )
         ensure_column(
             c, "users", "buildings_ui_choice_done", "INTEGER NOT NULL DEFAULT 0"
@@ -1105,7 +1105,7 @@ def update_spy_probe_settings(
 
 
 def get_buildings_ui_settings(player_id: int, *, conn=None) -> Dict[str, Any]:
-    """Colony Stage vs Retro cards preference + one-time chooser flag."""
+    """Retro cards are the default; Colony Stage remains an explicit power-user option."""
     pid = int(player_id or 0)
     if pid <= 0:
         return {
@@ -1119,7 +1119,7 @@ def get_buildings_ui_settings(player_id: int, *, conn=None) -> Dict[str, Any]:
         if not column_exists(c, "users", "buildings_ui_mode"):
             return {
                 "buildings_ui_mode": DEFAULT_BUILDINGS_UI_MODE,
-                "buildings_ui_prompt_pending": True,
+                "buildings_ui_prompt_pending": False,
             }
         row = c.execute(
             """
@@ -1131,13 +1131,17 @@ def get_buildings_ui_settings(player_id: int, *, conn=None) -> Dict[str, Any]:
         if not row:
             return {
                 "buildings_ui_mode": DEFAULT_BUILDINGS_UI_MODE,
-                "buildings_ui_prompt_pending": True,
+                "buildings_ui_prompt_pending": False,
             }
-        mode = normalize_buildings_ui_mode(row["buildings_ui_mode"])
         done = bool(int(row["buildings_ui_choice_done"] or 0))
+        mode = (
+            normalize_buildings_ui_mode(row["buildings_ui_mode"])
+            if done
+            else DEFAULT_BUILDINGS_UI_MODE
+        )
         return {
             "buildings_ui_mode": mode,
-            "buildings_ui_prompt_pending": not done,
+            "buildings_ui_prompt_pending": False,
         }
     finally:
         if own:

@@ -318,7 +318,7 @@
 
 {% set active_tab = (active_tab if active_tab is defined and active_tab else 'resources') %}
 {% set rows_by_tab = (rows_by_tab if rows_by_tab is defined and rows_by_tab else {}) %}
-{% set buildings_ui_mode = (buildings_ui_mode if buildings_ui_mode is defined and buildings_ui_mode in ('stage', 'cards') else 'stage') %}
+{% set buildings_ui_mode = (buildings_ui_mode if buildings_ui_mode is defined and buildings_ui_mode in ('stage', 'cards') else 'cards') %}
 {% set ui_is_stage = buildings_ui_mode == 'stage' %}
 {% set _lcp_rows = rows_by_tab.get(active_tab, []) if rows_by_tab else [] %}
 {% set _lcp_preload_href = (url_for('static', filename=_lcp_rows[0].icon)|webp_static) if (_lcp_rows and not ui_is_stage) else '' %}
@@ -337,7 +337,7 @@
 {% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
 {% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
 {% set bq_queue_full = (bq_summary.count or 0)|int >= bq_limit|int %}
-{% set buildings_ui_mode = (buildings_ui_mode if buildings_ui_mode is defined and buildings_ui_mode in ('stage', 'cards') else 'stage') %}
+{% set buildings_ui_mode = (buildings_ui_mode if buildings_ui_mode is defined and buildings_ui_mode in ('stage', 'cards') else 'cards') %}
 {% set ui_is_stage = buildings_ui_mode == 'stage' %}
 
 <div class="gc-page buildings-wrapper" data-buildings-page data-buildings-ui-mode="{{ buildings_ui_mode }}" data-active-building-tab="{{ active_tab }}" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">

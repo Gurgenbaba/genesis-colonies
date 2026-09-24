@@ -48,6 +48,10 @@
   <header class="shipyard-headline section-header">
     <div class="section-header-row">
       <h2 class="section-title">{{ T("shipyard_title") }}</h2>
+      <span class="gc-panel-subtitle gc-mono" data-shipyard-level-label>{{ T("shipyard_level_value", level=sy.orbital_shipyard_level) }}</span>
+      <span class="gc-panel-subtitle gc-mono" data-shipyard-batch-capacity>
+        {{ T("shipyard_parallel_capacity", capacity=(sy.production_batch_capacity|default(3))) }}
+      </span>
       {% if CODEX_PRIMARY %}
       {% include "partials/codex_context_btn.html" %}
       {% endif %}
@@ -64,16 +68,6 @@
   {% set planet_ships = sy.current_ships if sy.current_ships is defined else {} %}
 
   <div class="shipyard-shell gc-panel">
-  <section class="shipyard-status-panel">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("shipyard_level_title") }}</span>
-      <span class="gc-panel-subtitle gc-mono" data-shipyard-level-label>{{ T("shipyard_level_value", level=sy.orbital_shipyard_level) }}</span>
-      <span class="gc-panel-subtitle gc-mono" data-shipyard-batch-capacity>
-        {{ T("shipyard_parallel_capacity", capacity=(sy.production_batch_capacity|default(3))) }}
-      </span>
-    </div>
-  </section>
-
   {% set sy_q = sy.shipyard_queue if sy.shipyard_queue is defined and sy.shipyard_queue else {} %}
   {% set sy_q_summary = sy_q.summary if sy_q.summary is defined and sy_q.summary else {} %}
   {% set sy_q_limit = (sy_q_summary.limit if sy_q_summary.limit is defined else 3)|int %}

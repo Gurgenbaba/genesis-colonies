@@ -228,10 +228,6 @@
   <header class="gc-page-header section-header research-page-header">
     <div class="section-header-row">
       <h2 class="section-title">{{ T("research_title") }}</h2>
-      <span class="research-lab-chip" title="{{ T('research_lab_panel_hint') }}">
-        🔬 {{ T("research_lab_level") }}:
-        <span class="lab-level-highlight">{{ lab_level|fmt_int }}</span>
-      </span>
       {% if CODEX_PRIMARY %}
       {% include "partials/codex_context_btn.html" %}
       {% endif %}
