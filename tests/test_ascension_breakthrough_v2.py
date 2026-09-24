@@ -95,11 +95,11 @@ def test_reconstruction_surge_is_strong_without_duplicating_restart_level():
     base = {"reconstruction": 8, "overdrive": 3}
     with_surge = {**base, "legacy_reconstruction": 1}
 
-    assert LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS == 3000
+    assert LEGACY_RECONSTRUCTION_REBUILD_PRODUCTION_BPS == 10000
     assert rebuild_production_bonus_bps(base) == 0
-    assert rebuild_production_bonus_bps(with_surge) == 3000
-    assert reset_start_level(base, 1000) == 110
-    assert reset_start_level(with_surge, 1000) == 110
+    assert rebuild_production_bonus_bps(with_surge) == 10000
+    assert reset_start_level(base, 1000) == 132
+    assert reset_start_level(with_surge, 1000) == 132
 
 
 def test_reconstruction_surge_runs_to_record_and_window_extends_it():
@@ -120,17 +120,17 @@ def test_reconstruction_surge_runs_to_record_and_window_extends_it():
     }
     assert rebuild_production_multiplier_for(
         1, "metal_mine", 500, profiles=profiles
-    ) == pytest.approx(1.30)
+    ) == pytest.approx(2.00)
     assert rebuild_production_multiplier_for(
         1, "metal_mine", 501, profiles=profiles
     ) == pytest.approx(1.0)
 
     profiles["metal_mine"]["skills"]["breakthrough_window"] = 1
     assert rebuild_production_multiplier_for(
-        1, "metal_mine", 525, profiles=profiles
-    ) == pytest.approx(1.30)
+        1, "metal_mine", 550, profiles=profiles
+    ) == pytest.approx(2.00)
     assert rebuild_production_multiplier_for(
-        1, "metal_mine", 526, profiles=profiles
+        1, "metal_mine", 551, profiles=profiles
     ) == pytest.approx(1.0)
 
 
@@ -139,7 +139,7 @@ def test_rebuild_surge_boosts_mine_output_not_standard_income():
     surged = pf.ProductionContext(
         resource_type="metal",
         level=50,
-        mine_rebuild_modifier=1.30,
+        mine_rebuild_modifier=2.00,
     )
     base_total = pf.calculate_resource_output("metal", base)
     surged_total = pf.calculate_resource_output("metal", surged)
@@ -147,67 +147,67 @@ def test_rebuild_surge_boosts_mine_output_not_standard_income():
     mine = pf.mine_output("metal", 50)
 
     assert base_total == pytest.approx(standard + mine)
-    assert surged_total == pytest.approx(standard + mine * 1.30)
+    assert surged_total == pytest.approx(standard + mine * 2.00)
 
 
 def test_breakthrough_window_extends_rebuild_discount_exactly_25_levels():
-    assert BREAKTHROUGH_WINDOW_LEVELS == 25
+    assert BREAKTHROUGH_WINDOW_LEVELS == 50
     assert rebuild_window_extra_levels({"breakthrough_window": 0}) == 0
-    assert rebuild_window_extra_levels({"breakthrough_window": 1}) == 25
+    assert rebuild_window_extra_levels({"breakthrough_window": 1}) == 50
 
 
-def test_tail_breakthroughs_are_q410_then_q420():
+def test_tail_breakthroughs_are_q315_then_q330():
     assert tail_power_bonus_hundredths({"core_resonance": 0}) == 0
-    assert tail_power_bonus_hundredths({"core_resonance": 1}) == 10
+    assert tail_power_bonus_hundredths({"core_resonance": 1}) == 15
     assert tail_power_bonus_hundredths(
         {"core_resonance": 1, "singularity_excavation": 1}
-    ) == 20
+    ) == 30
 
 
 @pytest.mark.parametrize(
-    ("level", "q410_pct", "q420_pct"),
+    ("level", "q315_pct", "q330_pct"),
     (
-        (200, 3.4, 6.9),
-        (300, 7.7, 15.8),
-        (500, 13.5, 28.5),
-        (650, 16.6, 35.6),
-        (1000, 21.8, 48.1),
+        (200, 7.0, 14.2),
+        (300, 14.8, 31.1),
+        (500, 25.0, 55.3),
+        (650, 30.4, 68.9),
+        (1000, 39.6, 93.6),
     ),
 )
-def test_fractional_q_tail_matches_breakthrough_balance_table(level, q410_pct, q420_pct):
-    q4 = pf.endgame_tail_mine_output_decimal("metal", level, pivot_level=120, tail_power=4)
-    q410 = pf.endgame_tail_mine_output_decimal(
-        "metal", level, pivot_level=120, tail_power=Decimal("4.10")
+def test_fractional_q_tail_matches_breakthrough_balance_table(level, q315_pct, q330_pct):
+    q3 = pf.endgame_tail_mine_output_decimal("metal", level, pivot_level=120, tail_power=3)
+    q315 = pf.endgame_tail_mine_output_decimal(
+        "metal", level, pivot_level=120, tail_power=Decimal("3.15")
     )
-    q420 = pf.endgame_tail_mine_output_decimal(
-        "metal", level, pivot_level=120, tail_power=Decimal("4.20")
+    q330 = pf.endgame_tail_mine_output_decimal(
+        "metal", level, pivot_level=120, tail_power=Decimal("3.30")
     )
-    assert (float(q410 / q4) - 1.0) * 100.0 == pytest.approx(q410_pct, abs=0.08)
-    assert (float(q420 / q4) - 1.0) * 100.0 == pytest.approx(q420_pct, abs=0.08)
+    assert (float(q315 / q3) - 1.0) * 100.0 == pytest.approx(q315_pct, abs=0.08)
+    assert (float(q330 / q3) - 1.0) * 100.0 == pytest.approx(q330_pct, abs=0.08)
 
 
 def test_personal_tail_bonus_only_changes_active_endgame_tail(monkeypatch):
     monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_PIVOT_LEVEL", 120)
-    monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 4)
+    monkeypatch.setattr(pf, "ENDGAME_PRODUCTION_TAIL_POWER", 3)
 
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "legacy")
     legacy_base = pf.mine_output_decimal("metal", 500)
     legacy_breakthrough = pf.mine_output_decimal(
-        "metal", 500, tail_power_bonus_hundredths=20
+        "metal", 500, tail_power_bonus_hundredths=30
     )
     assert legacy_breakthrough == legacy_base
 
     monkeypatch.setattr(pf, "ENDGAME_ECONOMY_MODE", "active")
     active_base = pf.mine_output_decimal("metal", 500)
     active_breakthrough = pf.mine_output_decimal(
-        "metal", 500, tail_power_bonus_hundredths=20
+        "metal", 500, tail_power_bonus_hundredths=30
     )
-    assert float(active_breakthrough / active_base) == pytest.approx(1.285, abs=0.001)
+    assert float(active_breakthrough / active_base) == pytest.approx(1.553, abs=0.001)
 
 
 def test_six_and_twelve_month_simulation_stays_progressive_without_runaway():
     results = run_horizons()
-    baseline = results["baseline_q4"]
+    baseline = results["baseline_q3"]
     core = results["core_resonance"]
     singularity = results["singularity"]
     stacked = results["singularity_stack"]
@@ -245,10 +245,10 @@ def test_reinvestment_benchmarks_match_balance_review():
         q420_days = hours_to_target(_scenario("singularity"), 300) / Decimal(24)
         q420_stack_days = hours_to_target(_scenario("singularity_stack"), 300) / Decimal(24)
 
-    assert float(baseline_days) == pytest.approx(395.0, abs=2.0)
-    assert float(current_days) == pytest.approx(282.0, abs=2.0)
-    assert float(q420_days) == pytest.approx(355.0, abs=2.0)
-    assert float(q420_stack_days) == pytest.approx(254.0, abs=2.0)
+    assert float(baseline_days) == pytest.approx(886.6, abs=4.0)
+    assert float(current_days) == pytest.approx(633.3, abs=4.0)
+    assert float(q420_days) == pytest.approx(719.3, abs=4.0)
+    assert float(q420_stack_days) == pytest.approx(513.8, abs=4.0)
 
 
 def test_panel_fields_expose_concrete_energy_and_breakthrough_previews():
@@ -296,11 +296,11 @@ def test_panel_fields_expose_concrete_energy_and_breakthrough_previews():
     assert core["levels"][1]["pct"] > 0
 
     legacy = rows["legacy_reconstruction"]["preview"]
-    assert legacy["production_bonus_pct"] == pytest.approx(30.0)
+    assert legacy["production_bonus_pct"] == pytest.approx(100.0)
     assert legacy["rebuild_reach"] == 500
 
     window = rows["breakthrough_window"]["preview"]
-    assert window["window_after"] - window["window_before"] == 25
+    assert window["window_after"] - window["window_before"] == 50
 
 
 def test_panel_legacy_keystone_keeps_restart_baseline_and_reports_surge():
@@ -327,6 +327,6 @@ def test_panel_legacy_keystone_keeps_restart_baseline_and_reports_surge():
     )
     assert fields["nodebuster_best_depth"] == 400
     assert fields["nodebuster_reset_level"] == 80
-    assert fields["nodebuster_rebuild_production_bonus_pct"] == pytest.approx(30.0)
+    assert fields["nodebuster_rebuild_production_bonus_pct"] == pytest.approx(100.0)
     assert fields["nodebuster_rebuild_production_active"] is False
     assert fields["nodebuster_rebuild_production_reach"] == 400
