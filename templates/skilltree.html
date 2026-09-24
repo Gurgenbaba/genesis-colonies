@@ -420,7 +420,6 @@
               {% if mine.building_type == 'metal_mine' %}{{ T('resource_metal_short', 'FN') }}{% elif mine.building_type == 'crystal_mine' %}{{ T('resource_crystal_short', 'CT') }}{% else %}{{ T('resource_fuel_cells_short', 'BZ') }}{% endif %}
             </div>
             <div>
-              <p class="skilltree-kicker">{{ T('mine_ascension_kicker', 'Langzeit-Progression') }}</p>
               <h3>{{ T('building_' ~ mine.building_type) }}</h3>
               <p class="gc-ascension-mine-hero__run gc-mono">
                 {{ T('mine_ascension_level', level=mine.level) }}
