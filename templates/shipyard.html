@@ -131,7 +131,7 @@
             </div>
             <footer class="gc-ship-card-action shipyard-ship-actions">
               <input type="text" inputmode="numeric" value="1"
-                     class="gc-input shipyard-qty-input gc-num-input" data-shipyard-qty="{{ ship.ship_key }}"
+                     class="gc-input shipyard-qty-input gc-num-input" data-shipyard-qty="{{ ship.ship_key }}" {# i18n-ok: structural attributes #}
                      {% if ship.max_build is defined and ship.max_build %}data-input-max="{{ ship.max_build }}"{% endif %}
                      aria-label="{{ T('shipyard_amount_label') }}">
               <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-max="{{ ship.ship_key }}"
@@ -141,7 +141,7 @@
               <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
                       data-shipyard-build="{{ ship.ship_key }}"
                       data-can-build="{{ '1' if ship.can_build else '0' }}"
-                      {% if not ship.can_build %}disabled aria-disabled="true"{% endif %}
+                      {% if not ship.can_build %}disabled aria-disabled="true"{% endif %} {# i18n-ok: technical ARIA state #}
                       {% if ship.block_reason == 'queue_full' %}title="{{ T('shipyard_btn_queue_full', 'Werftwarteschlange voll') }}"{% endif %}>
                 {% if ship.block_reason == 'queue_full' %}
                   {{ T("shipyard_btn_queue_full", "Werftwarteschlange voll") }}
@@ -210,7 +210,7 @@
                 </div>
                 <div class="gc-bld-card-hero-action-slot">
                   <button type="button"
-                          class="gc-bld-head-action-btn gc-bld-head-action-btn--warn status-pill-icon-btn gc-req-hover-trigger"
+                          class="gc-bld-head-action-btn gc-bld-head-action-btn--warn status-pill-icon-btn gc-req-hover-trigger" {# i18n-ok: structural class attribute #}
                           data-action-state="warn"
                           disabled
                           {{ render_ship_unlock_req_hover_attrs(ship, sy_lvl) }}
