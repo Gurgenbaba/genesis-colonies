@@ -56,9 +56,14 @@
 }
 
 .gc-bld-hero-img-stack[data-card-flip-trigger] {
-  position: relative;
+  /* Preserve the canonical hero stack geometry from style.css. The flip trigger
+     is the image layer itself; making it relative collapses the absolutely
+     positioned image stack to 0px height and removes the click hitbox. */
+  position: absolute;
+  inset: 0;
   cursor: pointer;
   outline: none;
+  touch-action: manipulation;
 }
 
 .gc-bld-hero-img-stack[data-card-flip-trigger]::after {
