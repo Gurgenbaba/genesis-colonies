@@ -593,9 +593,9 @@ def _validate_network_runtime_config() -> list[str]:
             errors.append(
                 "UNI 1 launch requires GC_ENDGAME_PRODUCTION_PIVOT=120."
             )
-        if _env_str("GC_ENDGAME_PRODUCTION_TAIL_POWER") != "4":
+        if _env_str("GC_ENDGAME_PRODUCTION_TAIL_POWER") != "3":
             errors.append(
-                "UNI 1 launch requires GC_ENDGAME_PRODUCTION_TAIL_POWER=4."
+                "UNI 1 launch requires GC_ENDGAME_PRODUCTION_TAIL_POWER=3."
             )
 
         if _env_str("GC_NETWORK_START_RESOURCE_MULTIPLIER") != "10":
