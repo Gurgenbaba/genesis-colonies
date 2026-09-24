@@ -15,7 +15,6 @@
   {% endif %}
 
   <header class="gc-page-header section-header vote-center-header">
-    <p class="vote-center-eyebrow">{{ T("vote_center_eyebrow", "VOTE REWARDS") }}</p>
     <h1 class="section-title">{{ T("vote_center_title", "Vote Center") }}</h1>
     <p class="section-hint hint vote-center-hint">
       {{ T("vote_center_hint_multi", "Unterstütze Genesis Colonies auf Toplisten und hole deine Belohnungen hier ab.") }}
@@ -138,10 +137,6 @@
       <span class="gc-panel-title">{{ T("vote_center_rewards_title", "Belohnungen") }}</span>
       <span class="vote-center-pending-badge gc-mono" data-vote-pending-count>{{ pending_count }}</span>
     </div>
-    <p class="vote-center-rewards-summary">
-      {{ T("vote_center_rewards_available", "Belohnungen verfügbar:") }}
-      <strong class="gc-mono" data-vote-pending-count-inline>{{ pending_count }}</strong>
-    </p>
     <div class="vote-center-rewards-actions">
       <button type="button"
               class="gc-btn gc-btn-secondary vote-center-claim-all-btn"
