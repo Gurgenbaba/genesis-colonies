@@ -46,7 +46,7 @@ Required at public launch:
 
 - `GC_ENDGAME_ECONOMY_MODE=active`
 - `GC_ENDGAME_PRODUCTION_PIVOT=120`
-- `GC_ENDGAME_PRODUCTION_TAIL_POWER=4`
+- `GC_ENDGAME_PRODUCTION_TAIL_POWER=3`
 
 This is the coordinated production/cost/research/progression-score cutover. UNI 1
 must not launch on the old permanent exponential tail.
@@ -141,7 +141,7 @@ The reset is fail-closed and requires:
 
 - current universe is `uni1`
 - `GC_NETWORK_UNI1_OPEN=0`
-- true x1 profile + active Economy V2 (pivot 120, q4)
+- true x1 profile + active Economy V2 (pivot 120, q3)
 - `ASCENSION_RULESET=nodebuster-v1`
 - Pirate AI and inactive autoplay deployment hard-offs
 
@@ -191,7 +191,7 @@ completion marker exists.
 ## Public-open gate
 
 `GC_NETWORK_UNI1_OPEN=1` is fail-closed. Production config validation rejects an
-open UNI 1 if the x1 profile, q4 Economy V2, first-entry bundle, synthetic hard-offs,
+open UNI 1 if the x1 profile, q3 Economy V2, first-entry bundle, synthetic hard-offs,
 PayPal live configuration, maintenance owner or Nodebuster Ascension ruleset is
 missing.
 
