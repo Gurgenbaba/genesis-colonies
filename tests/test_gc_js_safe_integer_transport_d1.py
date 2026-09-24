@@ -197,6 +197,16 @@ def test_all_max_quantity_paths_use_shared_formatting_setters():
     fleet_max = main[fleet_start:fleet_end]
     assert "setNumberInputValue(inp, n)" in fleet_max
 
+    combat_tpl = (ROOT / "templates" / "combat_simulator.html").read_text(encoding="utf-8")
+    combat_js = (ROOT / "static" / "js" / "combat_simulator.js").read_text(encoding="utf-8")
+    assert "combat-sim-qty gc-num-input" in combat_tpl
+    combat_start = combat_js.index('const maxBtn = e.target.closest("[data-qty-max]")')
+    combat_end = combat_js.index('if (e.target.closest("[data-sim-reload-fleet]"))', combat_start)
+    combat_max = combat_js[combat_start:combat_end]
+    assert "GC.setGameplayIntegerInput(inp, rawMax)" in combat_max
+    assert 'dispatchEvent(new Event("input"' in combat_max
+    assert "inp.value = String(val)" not in combat_max
+
 
 def test_shipyard_defense_and_troops_submit_exact_decimal_strings():
     shipyard = (ROOT / "static" / "js" / "pages" / "shipyard.js").read_text(
