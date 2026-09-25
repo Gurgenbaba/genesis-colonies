@@ -177,6 +177,24 @@
               </form>
             </article>
 
+            <article class="gc-options-card" id="options-mail-updates"
+                     data-mail-updates-status="loading">
+              <header class="gc-options-card-head">
+                <span class="gc-options-card-title">{{ T("options_mail_updates_title", "E-Mail-Updates") }}</span>
+                <span class="gc-options-card-sub">{{ T("options_mail_updates_subtitle", "Neue Universen & große Genesis-Updates") }}</span>
+              </header>
+              <p class="gc-options-form-lead">{{ T("options_mail_updates_lead", "Erhalte nur bei wichtigen Genesis-Colonies-Neuigkeiten eine E-Mail. Kein wöchentlicher Newsletter.") }}</p>
+              <div class="gc-options-verify-row">
+                <span class="gc-options-verify-badge gc-options-verify-badge-warn" id="options-mail-updates-badge">{{ T("options_mail_updates_loading", "Status wird geladen …") }}</span>
+              </div>
+              <div class="gc-options-form-actions">
+                <button type="button" class="gc-btn gc-btn-primary" id="options-mail-updates-enable" hidden>{{ T("options_mail_updates_enable", "E-Mail-Updates aktivieren") }}</button>
+                <button type="button" class="gc-btn gc-btn-outline" id="options-mail-updates-disable" hidden>{{ T("options_mail_updates_disable", "E-Mail-Updates deaktivieren") }}</button>
+                <p class="gc-options-form-hint" id="options-mail-updates-hint" role="status" aria-live="polite" hidden></p>
+              </div>
+              <p class="hint">{{ T("options_mail_updates_privacy", "Freiwillig · Double-Opt-In · jederzeit über jede Update-Mail oder hier deaktivierbar.") }}</p>
+            </article>
+
             <article class="gc-options-card">
               <header class="gc-options-card-head">
                 <span class="gc-options-card-title">{{ T("options_password") }}</span>
