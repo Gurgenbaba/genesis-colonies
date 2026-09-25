@@ -35,3 +35,11 @@ def test_long_horizon_audit_uses_consistent_topology_and_live_owners():
         assert all(entry["payment_total"] > 0 for entry in row["research"])
         assert all(entry["afford_hours"] > 0 for entry in row["research"])
         assert all(entry["late_infra_time_hours"] >= 10 / 3600 for entry in row["research"])
+
+    skip = audit["free_skip_economy"]
+    assert skip["login_cycle_tk_equivalent_sec"] > 0
+    assert skip["login_perfect_365_tk_equivalent_sec"] > skip["login_cycle_tk_equivalent_sec"] * 12
+    assert skip["battle_pass_free_tk_equivalent_sec"] >= skip["battle_pass_free_tk_direct_sec"]
+    assert skip["zero_cost_365_free_skip_ceiling"] >= skip["zero_cost_365_no_skip_ceiling"]
+    assert skip["zero_cost_365_free_skip_ceiling"] < 1000
+    assert skip["nodebuster_full_tree_ap"] == 339
