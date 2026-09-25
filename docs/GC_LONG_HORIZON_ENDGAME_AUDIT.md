@@ -1,0 +1,199 @@
+# GC — 6/12 Month Endgame Magnitude Audit
+
+> Generated/verified against canonical server owners by `scripts/audit_long_horizon_economy.py`.
+> This document is a balance review, not a gameplay formula owner.
+
+## Scope
+
+The long-horizon record-mine simulation is deliberately optimistic. It measures
+upper bounds, not an expected player route:
+
+- 1 mature world self-funding one record Ferronit mine;
+- 11 mature worlds pooling 100% of their mirrored output into one record mine;
+- a zero-resource-cost queue ceiling;
+- canonical mine upgrade costs and deep progression floors;
+- live storage, Trader, energy, research, Timekeeper and shipyard owners.
+
+Normal accounts spend on other mines, energy, research, storage, fleets, defense,
+expansion and failed/idle opportunities, so real progression is slower.
+
+## Record-mine anchors
+
+| Topology | 6 months | 12 months |
+|---|---:|---:|
+| 1 world, self-funded | L237 | L273 |
+| 11 mature worlds, fully pooled | L508 | L705 |
+| zero resource cost | L769 | L836 |
+
+There is no mine hard cap. The deep queue floor is the calendar guardrail.
+Even free deterministic Login/Free-Pass Timekeeper only moves the one-year
+zero-resource ceiling from **L836 to L857**.
+
+## Magnitude at the key anchors
+
+| Anchor | Ferronit/h | Next mine cost | Queue floor | AP if reset |
+|---|---:|---:|---:|---:|
+| 1 world / 6m / L237 | 12.76 B | 1.53 T | 12 s | 2 |
+| 1 world / 12m / L273 | 25.14 B | 3.25 T | 16 s | 3 |
+| 11 worlds / 6m / L508 | 345.15 B | 71.65 T | 3,922 s | 16 |
+| 11 worlds / 12m / L705 | 1.20 T | 336.20 T | 103,762 s | 26 |
+| zero-cost / 12m / L836 | 2.25 T | 741.06 T | 294,862 s | 32 |
+
+The first year reaches low-trillion hourly output only in the hostile pooled
+upper bound. The problem is therefore not an L2000/year runaway.
+
+## Storage — healthy
+
+Max depot progression still provides a production-relative endgame buffer:
+
+- depot structural maximum used by the audit: L150;
+- production-buffer window: **72 hours**;
+- capacity is derived from current canonical production rather than a fixed
+  late-game integer.
+
+Result: storage remains relevant and does not become an accidental hard cap when
+mine output reaches billions/trillions.
+
+## Trader Hub — late-game relevance breaks
+
+Current daily hard ceiling is 50 B resources. Its materiality falls sharply:
+
+| Anchor | 50 B cap as % of empire Ferronit/day |
+|---|---:|
+| 1 world / 6m | 16.3219% |
+| 1 world / 12m | 8.2880% |
+| 11 worlds / 6m | 0.0549% |
+| 11 worlds / 12m | **0.0158%** |
+
+The anti-arbitrage / daily-limit concept is sound, but a fixed 50 B maximum
+eventually turns the Trader into a cosmetic system. Follow-up should make the
+upper bound scale-aware while retaining daily limits, route validation and
+anti-arbitrage.
+
+## Energy — first hard mechanical pressure
+
+Audit state is intentionally generous: Solar at its current structural cap,
+Geothermal L50 and Energy Tech L50.
+
+| Record level | Slot 1 | Slot 8 | Slot 15 |
+|---|---:|---:|---:|
+| L273 | 100% | 100% | 100% |
+| L508 | 100% | 100% | 78.0% |
+| L705 | 100% | 100% | **51.8%** |
+| L836 | 100% | 83.7% | **41.8%** |
+
+With Ascension Optimized Energy X + Load Balancing X, the L705 slot-15 example
+recovers only to **73.5%**.
+
+This is the clearest long-horizon mechanical break. Mine levels are unbounded
+while live Solar remains structurally capped. `docs/ENERGY_V2.md` is therefore
+the natural next balance candidate, but it should be introduced through measured
+shadow/active rollout rather than a blind production buff.
+
+## Research — sequential pacing still matters
+
+The audit uses an intentionally mature research stack: Lab100, Academy50,
+Buildtime Tech120 and Research Network Ascension V. It now measures **cumulative**
+0→target cost/time, not just the final level.
+
+Optimistic lower bounds at the 11-world / 12-month income anchor:
+
+| Target tech level | Optimistic 0→target floor |
+|---|---:|
+| L60 | 0.7 d |
+| L100 | 8.5 d |
+| L120 | 19.5 d |
+| L150 | 65.9 d |
+| L200 | 268.1 d |
+
+At the 1-world / 12-month income anchor, L120 alone is already ~319 days and
+L150 ~1512 days under the same generous fixed-income assumption.
+
+Result: research does **not** currently show the same runaway as pooled mine
+production. The L120+ tail remains a long-term progression axis. Re-evaluate
+individual tech effects separately (especially linear combat/fleet effects),
+but do not globally nerf research pacing from this audit.
+
+## Free Timekeeper / queue skips — material, not runaway
+
+Deterministic rewards only; random container drops are excluded:
+
+- perfect 30-day Login cycle: **146.3 h** Timekeeper-equivalent;
+- perfect 365-day Login attendance: **1,757.1 h**;
+- one complete Free Battle Pass L1–50: **27.7 h** equivalent, of which 1 h is
+  direct Timekeeper;
+- zero-resource one-year mine queue ceiling moves only **L836 → L857** when the
+  deterministic Login + one Free Pass skip budget is added.
+
+Therefore earned Free Timekeeper changes pacing meaningfully but does not defeat
+the deep-mine calendar guardrail.
+
+## Nodebuster AP — not runaway
+
+The full current permanent tree costs **339 AP per mine**.
+
+A reset at the hostile one-year L705 record grants 26 AP. A single deep reset
+therefore buys less than 8% of the full tree. The AP economy is not the first
+balance problem exposed by this review.
+
+## Military economy — count inflation is the next sink risk
+
+The audit uses the most expensive currently active static hull
+(`planet_breaker`) and a Level-50 Orbital Shipyard:
+
+| Anchor | Resource-affordable hulls/h | Yard R0/h | Forge Rank X/h | R0 bottleneck |
+|---|---:|---:|---:|---|
+| 1 world / 6m | 51,056 | 394,815 | 6,317,100 | resources |
+| 1 world / 12m | 100,546 | 394,815 | 6,317,100 | resources |
+| 11 worlds / 6m | 1,380,614 | 394,815 | 6,317,100 | queue |
+| 11 worlds / 12m | **4,805,599** | 394,815 | 6,317,100 | queue |
+
+Static hull prices stop being a meaningful resource sink in the pooled endgame;
+the normal yard becomes the limiter. Stellar Forge can then reopen multi-million
+units/hour throughput.
+
+Do not simply multiply all ship prices: fleet counts, Forge campaigns, losses,
+fuel, combat value and production throughput need a dedicated long-horizon
+military simulation before changing live costs.
+
+## Living Universe / inactive-human fairness
+
+Current V6 inactive-human progression still passes artificial caps to the shared
+planner:
+
+- building duration cap: **900 s**;
+- research duration cap: **1200 s**;
+- chain limit: 1.
+
+That means an inactive human can receive a shorter build/research timer than the
+same canonical action would have for an active human. This conflicts with the
+desired Living Universe contract where commanders should use real containers,
+earned Timekeeper and owned boosters.
+
+The shared auto-empire module also contains a 10-hour synthetic Timekeeper refill
+for planner-driven Shipyard/Defense actions. Current V6 inactive-human ship and
+defense actions call their domain owners directly and therefore do **not**
+currently use that refill; Pirate/shared planner paths still can.
+
+Follow-up: remove timer caps from the inactive-human V6 path and let it consume
+only legitimately owned rewards/Timekeeper. Keep any AI-only acceleration
+explicitly isolated from dormant human accounts.
+
+## Priority
+
+1. **P0 — Inactive-human fairness:** remove synthetic build/research caps before
+   expanding Living Universe into Trader/Inventory/Rewards.
+2. **P1 — Energy V2 measured rollout:** solve the cold-world L500–700 power wall.
+3. **P1 — Trader late-game scaling:** retain limits but make the maximum
+   production-aware.
+4. **P2 — Military long-horizon sink simulation:** quantify Forge rank, fleet
+   losses, fuel and combat count inflation before touching prices.
+5. **P2 — UX magnitude layer:** compact B/T/Qa display with exact value in
+   tooltip/detail surfaces; keep one primary visible information location.
+6. **Watch — Research/AP/Storage:** current audit does not justify a global nerf.
+
+## Regression owner
+
+`tests/test_long_horizon_economy_audit.py` locks the audit invariants.
+`.github/workflows/endgame-economy-hotfix.yml` runs the audit on relevant
+economy changes.
