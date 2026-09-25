@@ -9234,5 +9234,6 @@
   "mail_updates_prompt_body": "Wir mailen dir nur bei neuen Genesis-Colonies-Universen und wirklich großen Updates. Kein Wochen-Newsletter.",
   "mail_updates_prompt_enable": "Updates aktivieren",
   "mail_updates_prompt_later": "Später",
-  "mail_updates_prompt_privacy": "Freiwillig · Double-Opt-In · jederzeit abbestellbar"
+  "mail_updates_prompt_privacy": "Freiwillig · Double-Opt-In · jederzeit abbestellbar",
+  "mail_updates_prompt_kicker": "GENESIS SIGNAL"
 }
