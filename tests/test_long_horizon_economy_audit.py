@@ -23,7 +23,8 @@ def test_long_horizon_audit_uses_consistent_topology_and_live_owners():
         assert row["next_queue_floor_seconds"] >= 10
         assert row["storage_buffer_hours"] >= 24
         assert row["metal_storage_v2_floor"] >= row["metal_per_hour"] * row["storage_buffer_hours"]
-        assert 0 <= row["trader_cap_vs_empire_metal_day_pct"] <= 100
+        assert 79.99 <= row["trader_limit_vs_empire_day_pct"] <= 80.01
+        assert row["trader_daily_limit"] > 0
         military = row["military_sink"]
         assert military["resource_units_per_hour"] > 0
         assert military["queue_units_per_hour_rank0"] > 0
@@ -32,6 +33,20 @@ def test_long_horizon_audit_uses_consistent_topology_and_live_owners():
         assert all(0 <= entry["grid_pct"] <= 100 for entry in row["energy"])
         assert all(0 <= entry["optimized_grid_pct"] <= 100 for entry in row["energy"])
         assert all(0 <= entry["optimized_balanced_pct"] <= 100 for entry in row["energy"])
+        assert all(entry["solar_structural_cap"] == 200 for entry in row["energy"])
+        assert all(entry["required_solar_level"] > 0 for entry in row["energy"])
+        assert all(
+            entry["required_solar_level_optimized"] <= entry["required_solar_level"]
+            for entry in row["energy"]
+        )
+
+    cold_12m = next(
+        entry for entry in rows["11w_12m"]["energy"] if entry["slot"] == 15
+    )
+    assert cold_12m["required_solar_level"] > 200
+    assert cold_12m["required_solar_level_optimized"] > 200
+    assert cold_12m["solar_bridge"]["queue_hours"] > 0
+    assert cold_12m["solar_bridge"]["cost_total"] > 0
 
     for row in (rows["1w_12m"], rows["11w_12m"]):
         targets = [entry["target_level"] for entry in row["research"]]
