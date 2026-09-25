@@ -1679,14 +1679,25 @@ def _effective_building_queue_cap(
         return int(max_lab_level_for_rank(lab_rank))
 
     from .mine_evolution import get_evolution_rank, is_evolvable_mine, required_level_for_evolution
+    from .mine_evolution.ruleset import is_nodebuster_ruleset
+
+    # GC-ENDGAME-ENERGY-001: under Nodebuster, Solar becomes a normal
+    # unbounded infrastructure sink once the historical Nexus cap is reached.
+    # It does NOT become an Ascension mine and earns no AP/production prestige;
+    # the queue owner merely stops hard-capping its level at 200.
+    if (
+        planet_id is not None
+        and is_nodebuster_ruleset()
+        and (
+            is_evolvable_mine(building_type)
+            or str(building_type) == "solar_plant"
+        )
+    ):
+        from .mine_evolution.nodebuster import QUEUE_SAFETY_SENTINEL
+        return int(QUEUE_SAFETY_SENTINEL)
 
     if not is_evolvable_mine(building_type) or planet_id is None:
         return max_level
-
-    from .mine_evolution.ruleset import is_nodebuster_ruleset
-    if is_nodebuster_ruleset():
-        from .mine_evolution.nodebuster import QUEUE_SAFETY_SENTINEL
-        return int(QUEUE_SAFETY_SENTINEL)
 
     rank = (
         max(0, int(evolution_rank))
@@ -1729,11 +1740,19 @@ def _make_panel_row(
         pid = None
 
     from .mine_evolution import get_evolution_ranks_for_planet, is_evolvable_mine, panel_evolution_fields
+    from .mine_evolution.ruleset import is_nodebuster_ruleset
 
-    uncapped = is_evolvable_mine(building_type)
+    evolvable = is_evolvable_mine(building_type)
+    uncapped = bool(
+        evolvable
+        or (
+            str(building_type) == "solar_plant"
+            and is_nodebuster_ruleset()
+        )
+    )
     evo_ranks = None
     evolution_rank = None
-    if pid is not None and uncapped:
+    if pid is not None and evolvable:
         if panel_ctx is not None:
             evo_ranks = getattr(panel_ctx, "_mine_evo_ranks", None)
             if evo_ranks is None:
