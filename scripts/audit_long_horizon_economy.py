@@ -40,6 +40,8 @@ from game.login_rewards import LOGIN_CYCLE_DAYS, LOGIN_REWARD_CATALOG
 from game import battle_pass
 from game import auto_empire
 from game import inactive_autoplay
+from game.fleet_defs import ACTIVE_SHIP_KEYS, get_ship
+from game.shipyard import orbital_production_batch_capacity, production_level_cycle_seconds
 from game.time_floors import building_progress_floor_seconds
 from scripts.sim_ascension_breakthroughs import (
     SCENARIOS,
@@ -202,6 +204,64 @@ def _energy_snapshot(level: int, slot: int) -> Dict[str, Any]:
     }
 
 
+def _military_sink_snapshot(
+    *,
+    metal_per_hour: Decimal,
+    crystal_per_hour: Decimal,
+    fuel_per_hour: Decimal,
+) -> Dict[str, Any]:
+    """Static-hull affordability versus the real Level-50 shipyard throughput."""
+    candidates: list[tuple[int, str, Dict[str, Any]]] = []
+    for key in ACTIVE_SHIP_KEYS:
+        spec = get_ship(key) or {}
+        cost = spec.get("build_cost") or {}
+        total = sum(max(0, int(cost.get(res) or 0)) for res in ("metal", "crystal", "fuel_cells"))
+        candidates.append((total, str(key), spec))
+    _total, ship_key, spec = max(candidates, key=lambda row: (row[0], row[1]))
+    cost = spec.get("build_cost") or {}
+
+    afford_limits: list[Decimal] = []
+    for resource, production in (
+        ("metal", Decimal(metal_per_hour)),
+        ("crystal", Decimal(crystal_per_hour)),
+        ("fuel_cells", Decimal(fuel_per_hour)),
+    ):
+        unit_cost = max(0, int(cost.get(resource) or 0))
+        if unit_cost > 0:
+            afford_limits.append(max(Decimal(0), production) / Decimal(unit_cost))
+    resource_units_h = min(afford_limits) if afford_limits else Decimal(0)
+
+    yard_level = 50
+    base_seconds = max(1, int(spec.get("build_seconds") or 1))
+    cycle_seconds = int(production_level_cycle_seconds(base_seconds, yard_level))
+    cap_rank0 = int(orbital_production_batch_capacity(yard_level, forge_rank=0))
+    cap_rank10 = int(orbital_production_batch_capacity(yard_level, forge_rank=10))
+    queue_rank0_h = Decimal(cap_rank0) * Decimal(3600) / Decimal(cycle_seconds)
+    queue_rank10_h = Decimal(cap_rank10) * Decimal(3600) / Decimal(cycle_seconds)
+
+    return {
+        "reference_ship": ship_key,
+        "unit_cost": {
+            "metal": max(0, int(cost.get("metal") or 0)),
+            "crystal": max(0, int(cost.get("crystal") or 0)),
+            "fuel_cells": max(0, int(cost.get("fuel_cells") or 0)),
+        },
+        "shipyard_level": yard_level,
+        "cycle_seconds": cycle_seconds,
+        "capacity_rank0": cap_rank0,
+        "capacity_rank10": cap_rank10,
+        "resource_units_per_hour": int(resource_units_h),
+        "queue_units_per_hour_rank0": int(queue_rank0_h),
+        "queue_units_per_hour_rank10": int(queue_rank10_h),
+        "bottleneck_rank0": (
+            "resources" if resource_units_h < queue_rank0_h else "queue"
+        ),
+        "bottleneck_rank10": (
+            "resources" if resource_units_h < queue_rank10_h else "queue"
+        ),
+    }
+
+
 def _late_research_time_hours(target_level: int) -> float:
     resolver = EffectResolver(
         {"research_lab": 100, "academy": 50},
@@ -291,6 +351,7 @@ def build_audit() -> Dict[str, Any]:
             level = int(topology[topology_key][horizon])
             metal_ph = _resource_output_per_hour("metal", level, stress)
             crystal_ph = _resource_output_per_hour("crystal", level, stress)
+            fuel_ph = _resource_output_per_hour("fuel_cells", level, stress)
             empire_combined = (metal_ph + crystal_ph) * Decimal(int(worlds))
             next_cost = upgrade_value_cost(level + 1, stress)
             queue_floor = int(building_progress_floor_seconds("metal_mine", level + 1))
@@ -304,7 +365,13 @@ def build_audit() -> Dict[str, Any]:
                     "level": level,
                     "metal_per_hour": int(metal_ph),
                     "crystal_per_hour": int(crystal_ph),
+                    "fuel_per_hour": int(fuel_ph),
                     "empire_combined_per_hour": int(empire_combined),
+                    "military_sink": _military_sink_snapshot(
+                        metal_per_hour=metal_ph,
+                        crystal_per_hour=crystal_ph,
+                        fuel_per_hour=fuel_ph,
+                    ),
                     "next_upgrade_total": int(next_cost),
                     "next_upgrade_resource_hours": float(
                         next_cost / max(Decimal(1), metal_ph * Decimal(int(worlds)))
@@ -367,6 +434,20 @@ def main() -> None:
             f"{row['next_queue_floor_seconds']}s | {row['ascension_ap_if_reset']} | "
             f"{row['storage_buffer_hours']}h | "
             f"{row['trader_cap_vs_empire_metal_day_pct']:.4f}%"
+        )
+
+    print()
+    print("Static military sink benchmark (most expensive active hull, Yard L50)")
+    print("Anchor | Hull | Resource/h capacity | Queue/h R0 | Queue/h Forge R10 | Bottleneck R0")
+    print("--- | --- | ---: | ---: | ---: | ---")
+    for row in audit["anchors"]:
+        mil = row["military_sink"]
+        print(
+            f"{row['key']} | {mil['reference_ship']} | "
+            f"{mil['resource_units_per_hour']:,} | "
+            f"{mil['queue_units_per_hour_rank0']:,} | "
+            f"{mil['queue_units_per_hour_rank10']:,} | "
+            f"{mil['bottleneck_rank0']}"
         )
 
     print()
