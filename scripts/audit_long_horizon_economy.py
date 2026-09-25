@@ -221,10 +221,14 @@ def _research_rows(
 ) -> list[Dict[str, Any]]:
     rows: list[Dict[str, Any]] = []
     income = max(Decimal(1), Decimal(empire_combined_per_hour))
-    for target in RESEARCH_TARGETS:
+    cumulative_cost = Decimal(0)
+    cumulative_queue_hours = Decimal(0)
+    target_set = {int(v) for v in RESEARCH_TARGETS}
+
+    for level in range(1, max(target_set) + 1):
         metal, crystal = get_research_payment_cost(
             "energy_tech",
-            int(target),
+            int(level),
             cost_context={
                 "empire_combined_per_hour": int(income),
                 "maturity_index": 1.0,
@@ -232,12 +236,27 @@ def _research_rows(
             },
         )
         total = Decimal(int(metal) + int(crystal))
+        queue_hours = Decimal(str(_late_research_time_hours(int(level))))
+        cumulative_cost += total
+        cumulative_queue_hours += queue_hours
+
+        if level not in target_set:
+            continue
+        cumulative_afford_hours = cumulative_cost / income
         rows.append(
             {
-                "target_level": int(target),
+                "target_level": int(level),
                 "payment_total": int(total),
                 "afford_hours": float(total / income),
-                "late_infra_time_hours": _late_research_time_hours(int(target)),
+                "late_infra_time_hours": float(queue_hours),
+                "cumulative_payment_total": int(cumulative_cost),
+                "cumulative_afford_hours": float(cumulative_afford_hours),
+                "cumulative_queue_hours": float(cumulative_queue_hours),
+                # Optimistic lower bound: income keeps accruing while the one
+                # sequential research queue is occupied.
+                "reach_floor_hours": float(
+                    max(cumulative_afford_hours, cumulative_queue_hours)
+                ),
             }
         )
     return rows
@@ -398,8 +417,8 @@ def main() -> None:
         "Research payment/time: mature empire income at anchor; "
         "Lab100 + Academy50 + Buildtime120 + Research Network Asc V"
     )
-    print("Anchor | Tech target | Afford | Queue time")
-    print("--- | ---: | ---: | ---:")
+    print("Anchor | Tech target | Next afford | Next queue | 0->target optimistic floor")
+    print("--- | ---: | ---: | ---: | ---:")
     for row in audit["anchors"]:
         if row["key"] == "zero_12m":
             continue
@@ -407,7 +426,8 @@ def main() -> None:
             print(
                 f"{row['key']} | L{research['target_level']} | "
                 f"{research['afford_hours']:.1f}h | "
-                f"{research['late_infra_time_hours']:.1f}h"
+                f"{research['late_infra_time_hours']:.1f}h | "
+                f"{research['reach_floor_hours'] / 24:.1f}d"
             )
 
 
