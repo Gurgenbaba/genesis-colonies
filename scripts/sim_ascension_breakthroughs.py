@@ -1,15 +1,16 @@
 """Ascension Breakthrough V2 long-horizon balance simulator.
 
-The primary table is intentionally a curve comparison, not a player forecast:
+The primary table is intentionally a progression ceiling, not a player forecast:
 - one Ferronit mine
 - all generated value is reinvested into that same mine
 - neutral modifiers except the selected Ascension production multiplier
 - upgrade cost uses the live power_upgrade_cost owner
+- every upgrade also obeys the canonical mine queue floor
 
 A second stress path models the exact Ferdi concern: up to 11 mature feeder worlds
-pooling their full value production into one record mine. That path also applies
-the canonical mine queue floor, so it provides an aggressive upper bound rather
-than a casual-player forecast.
+pooling their full value production into one record mine. Both topologies use the
+same queue-floor owner, so 1-world and 11-world results are directly comparable.
+A third zero-resource-cost path is the absolute calendar-time ceiling.
 
 The simulator pins the UNI1 q3 rollout locally and restores process globals afterwards.
 """
@@ -135,34 +136,21 @@ def hours_to_target(scenario: Scenario, target_level: int) -> Decimal:
     return elapsed
 
 
-def level_after_days(scenario: Scenario, days: Decimal | int | float) -> int:
-    budget_hours = Decimal(str(days)) * Decimal(24)
-    elapsed = Decimal(0)
-    level = int(scenario.start_level)
-    while True:
-        hourly = production_value_per_hour(level, scenario)
-        if hourly <= 0:
-            return level
-        step = upgrade_value_cost(level + 1, scenario) / hourly
-        if elapsed + step > budget_hours:
-            return level
-        elapsed += step
-        level += 1
-
-
-def pooled_empire_level_after_days(
+def record_push_level_after_days(
     scenario: Scenario,
     days: Decimal | int | float,
     *,
-    feeder_worlds: int = 11,
+    feeder_worlds: int = 1,
 ) -> int:
-    """Aggressive record-push ceiling with all mature worlds funding one mine.
+    """Optimistic record-mine ceiling for a fixed empire topology.
 
-    Every feeder is assumed to magically keep the record mine's current output,
-    and every unit of generated value is spendable on the target upgrade. The
-    only non-resource constraint is the canonical server queue floor. Real
-    accounts lose value to other buildings, research, fleet, storage and feeder
-    progression, so they can only be slower than this stress path.
+    ``feeder_worlds=1`` means one mine funds itself. Higher values assume every
+    mature feeder magically mirrors the record mine's current production and can
+    transfer 100% of that value with no logistics loss. In every case the target
+    mine still consumes its real sequential queue-floor time.
+
+    The result is therefore an upper bound: normal play also spends on research,
+    storage, energy, fleet, defenses and feeder progression.
     """
     worlds = max(1, int(feeder_worlds))
     budget_hours = Decimal(str(days)) * Decimal(24)
@@ -183,6 +171,23 @@ def pooled_empire_level_after_days(
         elapsed += step
         level = target
 
+
+def level_after_days(scenario: Scenario, days: Decimal | int | float) -> int:
+    return record_push_level_after_days(scenario, days, feeder_worlds=1)
+
+
+def pooled_empire_level_after_days(
+    scenario: Scenario,
+    days: Decimal | int | float,
+    *,
+    feeder_worlds: int = 11,
+) -> int:
+    """Aggressive record-push ceiling with mature worlds funding one mine."""
+    return record_push_level_after_days(
+        scenario,
+        days,
+        feeder_worlds=max(1, int(feeder_worlds)),
+    )
 
 def queue_floor_level_after_days(
     days: Decimal | int | float,
@@ -217,6 +222,30 @@ def run_horizons(
     return out
 
 
+def run_topology_horizons(
+    scenario: Scenario,
+    *,
+    horizons_days: Iterable[Decimal | int | float] = (Decimal("182.5"), Decimal("365")),
+) -> Dict[str, Dict[str, int]]:
+    """Compare the same record push under 1-world, 11-world and zero-cost bounds."""
+    out: Dict[str, Dict[str, int]] = {
+        "one_world": {},
+        "eleven_world_pool": {},
+        "zero_cost_queue": {},
+    }
+    with uni1_endgame_curve():
+        for days in horizons_days:
+            key = f"{Decimal(str(days)):g}d"
+            out["one_world"][key] = record_push_level_after_days(
+                scenario, days, feeder_worlds=1
+            )
+            out["eleven_world_pool"][key] = record_push_level_after_days(
+                scenario, days, feeder_worlds=11
+            )
+            out["zero_cost_queue"][key] = queue_floor_level_after_days(days)
+    return out
+
+
 def main() -> None:
     with uni1_endgame_curve():
         results = run_horizons()
@@ -233,17 +262,30 @@ def main() -> None:
             )
 
         stress = next(row for row in SCENARIOS if row.key == "singularity_stack")
+        topology = run_topology_horizons(stress)
         print()
-        print("Empire-pooling stress (11 mature feeder worlds → one record mine)")
+        print("Record-mine topology stress (same scenario, same queue floor)")
+        print("Topology | 6 months | 12 months")
+        print("--- | ---: | ---:")
         print(
-            "6 months: "
-            f"L{pooled_empire_level_after_days(stress, Decimal('182.5'), feeder_worlds=11)} "
-            f"(zero-cost queue ceiling L{queue_floor_level_after_days(Decimal('182.5'))})"
+            "1 world self-funded | "
+            f"L{topology['one_world']['182.5d']} | "
+            f"L{topology['one_world']['365d']}"
         )
         print(
-            "12 months: "
-            f"L{pooled_empire_level_after_days(stress, Decimal('365'), feeder_worlds=11)} "
-            f"(zero-cost queue ceiling L{queue_floor_level_after_days(Decimal('365'))})"
+            "11 mature worlds pooled | "
+            f"L{topology['eleven_world_pool']['182.5d']} | "
+            f"L{topology['eleven_world_pool']['365d']}"
+        )
+        print(
+            "Zero-cost queue ceiling | "
+            f"L{topology['zero_cost_queue']['182.5d']} | "
+            f"L{topology['zero_cost_queue']['365d']}"
+        )
+        print()
+        print(
+            "Scope: record-mine upper bounds only; Genesis has no completion level "
+            "and normal accounts spend on research, storage, energy, fleet and feeders."
         )
 
 
