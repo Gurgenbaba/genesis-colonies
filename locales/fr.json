@@ -9234,5 +9234,6 @@
   "mail_updates_prompt_body": "Nous vous écrivons uniquement pour les nouveaux univers de Genesis Colonies et les mises à jour vraiment majeures. Pas de newsletter hebdomadaire.",
   "mail_updates_prompt_enable": "Activer les mises à jour",
   "mail_updates_prompt_later": "Plus tard",
-  "mail_updates_prompt_privacy": "Facultatif · double opt-in · désinscription à tout moment"
+  "mail_updates_prompt_privacy": "Facultatif · double opt-in · désinscription à tout moment",
+  "mail_updates_prompt_kicker": "GENESIS SIGNAL"
 }
