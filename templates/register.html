@@ -197,11 +197,7 @@
         </label>
 
         <label class="auth-check auth-check--optional">
-          <input type="checkbox"
-                 name="mail_updates"
-                 value="1"
-                 data-register-mail-updates
-                 {% if request.method == 'POST' and request.form.get('mail_updates') == '1' %}checked{% endif %}>
+          <input type="checkbox" name="mail_updates" value="1" data-register-mail-updates {% if request.method == 'POST' and request.form.get('mail_updates') == '1' %}checked{% endif %}>
           <span>
             {{ T("register_mail_updates_label", "Informiere mich gelegentlich per E-Mail über neue Genesis-Colonies-Universen und große Updates.") }}
             <small class="auth-hint auth-hint-compact">
