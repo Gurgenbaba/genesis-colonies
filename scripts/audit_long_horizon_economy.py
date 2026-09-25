@@ -552,6 +552,24 @@ def main() -> None:
             )
 
     print()
+    print("Solar bridge burden above structural L200 (only rows that need it)")
+    print("Anchor | Slot | Target | Cost | Queue | Target +Opt X | Cost +Opt X | Queue +Opt X")
+    print("--- | ---: | ---: | ---: | ---: | ---: | ---: | ---:")
+    for row in audit["anchors"]:
+        for energy in row["energy"]:
+            bridge = energy["solar_bridge"]
+            bridge_opt = energy["solar_bridge_optimized"]
+            if int(bridge["to_level"]) <= int(bridge["from_level"]):
+                continue
+            print(
+                f"{row['key']} | {energy['slot']} | "
+                f"L{bridge['to_level']} | {_human_number(bridge['cost_total'])} | "
+                f"{bridge['queue_hours']:.1f}h | "
+                f"L{bridge_opt['to_level']} | {_human_number(bridge_opt['cost_total'])} | "
+                f"{bridge_opt['queue_hours']:.1f}h"
+            )
+
+    print()
     skip = audit["free_skip_economy"]
     print("Deterministic free skip economy (container RNG excluded)")
     print(
