@@ -9234,5 +9234,6 @@
   "mail_updates_prompt_body": "Yalnızca yeni Genesis Colonies evrenleri ve gerçekten büyük güncellemeler için e-posta göndeririz. Haftalık bülten yok.",
   "mail_updates_prompt_enable": "Güncellemeleri etkinleştir",
   "mail_updates_prompt_later": "Daha sonra",
-  "mail_updates_prompt_privacy": "İsteğe bağlı · double opt-in · istediğiniz zaman abonelikten çıkabilirsiniz"
+  "mail_updates_prompt_privacy": "İsteğe bağlı · double opt-in · istediğiniz zaman abonelikten çıkabilirsiniz",
+  "mail_updates_prompt_kicker": "GENESIS SIGNAL"
 }
