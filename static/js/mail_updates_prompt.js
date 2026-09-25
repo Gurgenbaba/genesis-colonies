@@ -10,6 +10,11 @@
   const DISMISS_KEY = "gc_mail_updates_prompt_dismissed_at";
   const DISMISS_MS = 14 * 24 * 60 * 60 * 1000;
 
+  function tr(key, fallback) {
+    const value = window.GC_LOCALE && window.GC_LOCALE[key];
+    return value && value !== key ? String(value) : fallback;
+  }
+
   function dismissedRecently() {
     try {
       const ts = Number(localStorage.getItem(DISMISS_KEY) || 0);
@@ -74,15 +79,15 @@
 
     prompt.hidden = false;
     if (state.status === "pending") {
-      if (statusEl) statusEl.textContent = "Bestätigung noch offen – du kannst die Mail erneut senden.";
-      if (enableBtn) enableBtn.textContent = "Bestätigung erneut senden";
+      if (statusEl) statusEl.textContent = tr("options_mail_updates_pending", "Bestätigung ausstehend");
+      if (enableBtn) enableBtn.textContent = tr("options_mail_updates_resend", "Bestätigung erneut senden");
     }
 
     if (enableBtn) {
       enableBtn.addEventListener("click", async () => {
         if (enableBtn.disabled) return;
         enableBtn.disabled = true;
-        if (statusEl) statusEl.textContent = "Bestätigungs-Mail wird gesendet …";
+        if (statusEl) statusEl.textContent = tr("options_mail_updates_loading", "Wird gesendet …");
         try {
           const res = await requestJson("/api/options/mail-updates/enable", {
             method: "POST",
@@ -96,13 +101,13 @@
                 : "Gerade nicht verfügbar. Versuch es später erneut.";
             return;
           }
-          if (statusEl) statusEl.textContent = "Bestätigungs-Mail gesendet ✓";
+          if (statusEl) statusEl.textContent = tr("options_mail_updates_confirmation_sent", "Bestätigungs-E-Mail wurde gesendet.");
           if (typeof GC.showNotify === "function") {
-            GC.showNotify("Bestätigungs-Mail gesendet.", "success");
+            GC.showNotify(tr("options_mail_updates_confirmation_sent", "Bestätigungs-E-Mail wurde gesendet."), "success");
           }
           window.setTimeout(() => hidePrompt(prompt, false), 2600);
         } catch (_) {
-          if (statusEl) statusEl.textContent = "Gerade nicht verfügbar. Versuch es später erneut.";
+          if (statusEl) statusEl.textContent = tr("options_mail_updates_unavailable", "E-Mail-Updates sind gerade nicht verfügbar.");
         } finally {
           enableBtn.disabled = false;
         }
