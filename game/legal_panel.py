@@ -16,8 +16,8 @@ OPERATOR_CITY = "Breitungen"
 OPERATOR_COUNTRY = "Deutschland"
 OPERATOR_EMAIL = "r.finn2303@gmail.com"
 OPERATOR_ADDRESS_LINE = f"{OPERATOR_STREET}, {OPERATOR_POSTAL} {OPERATOR_CITY}"
-LEGAL_TEXT_VERSION = "v2.1"
-LEGAL_STAND = "01.08.2026"
+LEGAL_TEXT_VERSION = "v2.2"
+LEGAL_STAND = "26.09.2026"
 
 DOC_IMPRINT = "imprint"
 DOC_PRIVACY = "privacy"
@@ -177,7 +177,7 @@ def _de_strings() -> Dict[str, str]:
             "Je nach Nutzung können Daten an folgende Empfänger gelangen:\n\n"
             "**Auftragsverarbeiter (Art. 28 DSGVO)**\n"
             "- **Railway** (Hosting der Spielserver) — AV-/DPA-Vertrag abgeschlossen\n"
-            "- **SMTP-Anbieter** (E-Mail-Verifikation / Passwort-Reset, sofern konfiguriert)\n"
+            "- **Brevo / SMTP-Versanddienst** (Account-Mails sowie freiwillige Update-Mails, sofern aktiviert)\n"
             "- optional **Microsoft edge-tts** / **OpenAI** (nur wenn per Konfiguration aktiv)\n\n"
             "**Eigenständige Verantwortliche (kein AV nach Art. 28)**\n"
             "- **PayPal** (Shop-Zahlungen) — PayPal verarbeitet Zahlungsdaten als eigener "
@@ -211,9 +211,16 @@ def _de_strings() -> Dict[str, str]:
         ),
         "legal_privacy_marketing_title": "Marketing / Newsletter",
         "legal_privacy_marketing_body": (
-            "Es gibt **keinen Marketing-Newsletter** und keine Analyse-Tracker Dritter "
-            "(kein Google Analytics o. Ä.). Transaktionsmails (Verifikation, Passwort-Reset) "
-            "werden nur zur Kontofunktion versendet."
+            "**Optionale E-Mail-Updates:** Informationen über neue Genesis-Colonies-Universen "
+            "und größere Spielupdates werden nur versendet, wenn du sie freiwillig aktivierst "
+            "und die Bestätigungs-Mail anklickst (Double-Opt-In). Rechtsgrundlage ist deine "
+            "Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Die Einwilligung ist keine Voraussetzung "
+            "für die Nutzung des Spiels und kann jederzeit in den Optionen oder über den "
+            "Abmeldelink in jeder Update-Mail widerrufen werden.\n\n"
+            "**Account-Mails** (z. B. Verifikation, Passwort-Reset und notwendige "
+            "Sicherheits-/Kontohinweise) bleiben davon getrennt und dienen der Kontofunktion. "
+            "Es werden keine Tracking-Cookies oder externen Analyse-Tracker für diese "
+            "Einwilligung eingesetzt."
         ),
         "cookie_notice_title": "Cookies",
         "cookie_notice_body": (
@@ -409,7 +416,7 @@ def _en_strings() -> Dict[str, str]:
             "Depending on use, data may go to:\n\n"
             "**Processors (Art. 28 GDPR)**\n"
             "- **Railway** (game hosting) — DPA concluded\n"
-            "- **SMTP provider** (email verification / password reset, if configured)\n"
+            "- **Brevo / SMTP delivery provider** (account email and optional update email, if enabled)\n"
             "- optionally **Microsoft edge-tts** / **OpenAI** (only if enabled in config)\n\n"
             "**Independent controllers (not Art. 28 processors)**\n"
             "- **PayPal** (shop payments) — PayPal processes payment data as its own "
@@ -438,8 +445,15 @@ def _en_strings() -> Dict[str, str]:
         ),
         "legal_privacy_marketing_title": "Marketing / newsletter",
         "legal_privacy_marketing_body": (
-            "There is **no marketing newsletter** and no third-party analytics trackers. "
-            "Transactional email (verification, password reset) is sent only for account function."
+            "**Optional email updates:** information about new Genesis Colonies universes "
+            "and major game updates is sent only if you voluntarily enable it and confirm "
+            "the confirmation email (double opt-in). The legal basis is your consent "
+            "(Art. 6(1)(a) GDPR). Consent is not required to use the game and can be "
+            "withdrawn at any time in Options or through the unsubscribe link in every "
+            "update email.\n\n"
+            "**Account email** (for example verification, password reset and necessary "
+            "security/account notices) remains separate and is used for account operation. "
+            "No tracking cookies or third-party analytics trackers are used for this consent."
         ),
         "cookie_notice_title": "Cookies",
         "cookie_notice_body": (
