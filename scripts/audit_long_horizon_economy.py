@@ -22,6 +22,9 @@ if str(ROOT) not in sys.path:
 
 from game import production_formula as pf
 from game.economy_balance import (
+    EXCHANGE_DAILY_LIMIT_MIN,
+    EXCHANGE_DAILY_LIMIT_PCT_DEFAULT,
+    power_upgrade_cost,
     storage_production_buffer_capacity,
     storage_reference_hours_at_depot_level,
 )
@@ -157,6 +160,67 @@ def _ratio_bps(supply: int, demand: int) -> int:
     return max(0, min(10_000, (int(supply) * 10_000) // max(1, int(demand))))
 
 
+def _required_solar_level(
+    resolver: EffectResolver,
+    target_demand: int,
+    *,
+    minimum: int = 0,
+) -> int:
+    """Smallest Solar level whose live formula supplies target_demand."""
+    demand = max(0, int(target_demand))
+    if demand <= 0:
+        return max(0, int(minimum))
+    solar_factor = float(resolver.get_modifiers().get("solar_output_factor") or 1.0)
+
+    def _supply(level: int) -> int:
+        return int(
+            EffectResolver.solar_energy_base_at_level(int(level))
+            * solar_factor
+        )
+
+    lo = max(0, int(minimum))
+    if _supply(lo) >= demand:
+        return lo
+    hi = max(lo + 1, int(resolver.buildings.get("metal_mine") or 1))
+    while _supply(hi) < demand:
+        hi *= 2
+    while lo + 1 < hi:
+        mid = (lo + hi) // 2
+        if _supply(mid) >= demand:
+            hi = mid
+        else:
+            lo = mid
+    return int(hi)
+
+
+def _solar_bridge_investment(from_level: int, to_level: int) -> Dict[str, Any]:
+    start = max(0, int(from_level))
+    target = max(start, int(to_level))
+    metal = 0
+    crystal = 0
+    queue_seconds = 0
+    timer = EffectResolver(
+        {
+            "solar_plant": start,
+            "nanofactory": 50,
+            "command_center": 50,
+        },
+        {"buildtime_tech": 120},
+        settings=DEFAULT_GAME_SETTINGS,
+    )
+    for lvl in range(start + 1, target + 1):
+        cost_m, cost_c = power_upgrade_cost("solar_plant", lvl)
+        metal += int(cost_m)
+        crystal += int(cost_c)
+        queue_seconds += int(timer.get_build_time_seconds("solar_plant", lvl))
+    return {
+        "from_level": start,
+        "to_level": target,
+        "cost_total": int(metal + crystal),
+        "queue_hours": float(Decimal(queue_seconds) / Decimal(3600)),
+    }
+
+
 def _energy_snapshot(level: int, slot: int) -> Dict[str, Any]:
     cap_resolver = EffectResolver(
         {"planet_core_nexus": 50, "geothermal_nexus": 50},
@@ -164,13 +228,13 @@ def _energy_snapshot(level: int, slot: int) -> Dict[str, Any]:
         settings=DEFAULT_GAME_SETTINGS,
         planet_position=int(slot),
     )
-    solar_cap = int(cap_resolver.get_max_building_level("solar_plant"))
+    solar_structural_cap = int(cap_resolver.get_max_building_level("solar_plant"))
 
     buildings = {
         "metal_mine": int(level),
         "crystal_mine": int(level),
         "fuel_cell_plant": int(level),
-        "solar_plant": solar_cap,
+        "solar_plant": solar_structural_cap,
         "geothermal_nexus": 50,
     }
     research = {"energy_tech": 50}
@@ -196,14 +260,25 @@ def _energy_snapshot(level: int, slot: int) -> Dict[str, Any]:
         )
     )
 
+    required_solar = _required_solar_level(resolver, demand)
+    required_solar_optimized = _required_solar_level(resolver, optimized_demand)
+    bridge = _solar_bridge_investment(solar_structural_cap, required_solar)
+    bridge_optimized = _solar_bridge_investment(
+        solar_structural_cap, required_solar_optimized
+    )
+
     return {
         "slot": int(slot),
-        "solar_cap": solar_cap,
+        "solar_structural_cap": solar_structural_cap,
         "supply": int(supply),
         "demand": int(demand),
         "grid_pct": base_bps / 100.0,
         "optimized_grid_pct": optimized_grid_bps / 100.0,
         "optimized_balanced_pct": optimized_balanced_bps / 100.0,
+        "required_solar_level": int(required_solar),
+        "required_solar_level_optimized": int(required_solar_optimized),
+        "solar_bridge": bridge,
+        "solar_bridge_optimized": bridge_optimized,
     }
 
 
@@ -337,10 +412,6 @@ def build_audit() -> Dict[str, Any]:
         )
         storage_cap_level = int(cap_resolver.get_max_building_level("metal_storage"))
         storage_hours = int(storage_reference_hours_at_depot_level(storage_cap_level))
-        trader_hard_cap = min(
-            int(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit", 50_000_000_000)),
-            int(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_max", 50_000_000_000)),
-        )
 
         anchors = []
         anchor_specs = (
@@ -358,7 +429,17 @@ def build_audit() -> Dict[str, Any]:
             empire_combined = (metal_ph + crystal_ph) * Decimal(int(worlds))
             next_cost = upgrade_value_cost(level + 1, stress)
             queue_floor = int(building_progress_floor_seconds("metal_mine", level + 1))
-            daily_metal = metal_ph * Decimal(24) * Decimal(int(worlds))
+            empire_day_total = (
+                metal_ph + crystal_ph + fuel_ph
+            ) * Decimal(24) * Decimal(int(worlds))
+            trader_limit = max(
+                int(EXCHANGE_DAILY_LIMIT_MIN),
+                int(
+                    empire_day_total
+                    * Decimal(int(EXCHANGE_DAILY_LIMIT_PCT_DEFAULT))
+                    / Decimal(100)
+                ),
+            )
             storage_floor = int(storage_production_buffer_capacity(metal_ph, storage_cap_level))
 
             anchors.append(
@@ -384,10 +465,10 @@ def build_audit() -> Dict[str, Any]:
                     "storage_level_cap": storage_cap_level,
                     "storage_buffer_hours": storage_hours,
                     "metal_storage_v2_floor": storage_floor,
-                    "trader_hard_cap": trader_hard_cap,
-                    "trader_cap_vs_empire_metal_day_pct": float(
-                        Decimal(trader_hard_cap) * Decimal(100)
-                        / max(Decimal(1), daily_metal)
+                    "trader_daily_limit": int(trader_limit),
+                    "trader_limit_vs_empire_day_pct": float(
+                        Decimal(trader_limit) * Decimal(100)
+                        / max(Decimal(1), empire_day_total)
                     ),
                     "energy": [_energy_snapshot(level, slot) for slot in AUDIT_SLOTS],
                     "research": _research_rows(
@@ -427,7 +508,7 @@ def main() -> None:
     print()
     print(
         "Anchor | Lvl | Metal/h | Next cost | Queue floor | AP | "
-        "Storage buffer | Trader cap/day"
+        "Storage buffer | Trader limit"
     )
     print("--- | ---: | ---: | ---: | ---: | ---: | ---: | ---:")
     for row in audit["anchors"]:
@@ -436,7 +517,7 @@ def main() -> None:
             f"{_human_number(row['next_upgrade_total'])} | "
             f"{row['next_queue_floor_seconds']}s | {row['ascension_ap_if_reset']} | "
             f"{row['storage_buffer_hours']}h | "
-            f"{row['trader_cap_vs_empire_metal_day_pct']:.4f}%"
+            f"{row['trader_limit_vs_empire_day_pct']:.1f}% empire/day"
         )
 
     print()
@@ -454,15 +535,38 @@ def main() -> None:
         )
 
     print()
-    print("Live energy at current caps: Solar cap + Geo50 + Energy Tech50")
-    print("Anchor | Slot | Grid | +Optimized Energy X | +Load Balancing X")
-    print("--- | ---: | ---: | ---: | ---:")
+    print("Live energy at structural Solar cap + Geo50 + Energy Tech50")
+    print(
+        "Anchor | Slot | Grid | +Optimized X | +Load Balancing X | "
+        "Solar for 100% | Solar for 100% +Opt X"
+    )
+    print("--- | ---: | ---: | ---: | ---: | ---: | ---:")
     for row in audit["anchors"]:
         for energy in row["energy"]:
             print(
                 f"{row['key']} | {energy['slot']} | {energy['grid_pct']:.1f}% | "
                 f"{energy['optimized_grid_pct']:.1f}% | "
-                f"{energy['optimized_balanced_pct']:.1f}%"
+                f"{energy['optimized_balanced_pct']:.1f}% | "
+                f"L{energy['required_solar_level']} | "
+                f"L{energy['required_solar_level_optimized']}"
+            )
+
+    print()
+    print("Solar bridge burden above structural L200 (only rows that need it)")
+    print("Anchor | Slot | Target | Cost | Queue | Target +Opt X | Cost +Opt X | Queue +Opt X")
+    print("--- | ---: | ---: | ---: | ---: | ---: | ---: | ---:")
+    for row in audit["anchors"]:
+        for energy in row["energy"]:
+            bridge = energy["solar_bridge"]
+            bridge_opt = energy["solar_bridge_optimized"]
+            if int(bridge["to_level"]) <= int(bridge["from_level"]):
+                continue
+            print(
+                f"{row['key']} | {energy['slot']} | "
+                f"L{bridge['to_level']} | {_human_number(bridge['cost_total'])} | "
+                f"{bridge['queue_hours']:.1f}h | "
+                f"L{bridge_opt['to_level']} | {_human_number(bridge_opt['cost_total'])} | "
+                f"{bridge_opt['queue_hours']:.1f}h"
             )
 
     print()

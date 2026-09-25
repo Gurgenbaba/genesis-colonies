@@ -54,41 +54,46 @@ Max depot progression still provides a production-relative endgame buffer:
 Result: storage remains relevant and does not become an accidental hard cap when
 mine output reaches billions/trillions.
 
-## Trader Hub — late-game relevance breaks
+## Trader Hub — audit false positive corrected
 
-Current daily hard ceiling is 50 B resources. Its materiality falls sharply:
+The first audit accidentally read the legacy `exchange_daily_limit` /
+`exchange_daily_limit_max` settings and treated their historical 50 B values
+as a runtime hard cap.
 
-| Anchor | 50 B cap as % of empire Ferronit/day |
-|---|---:|
-| 1 world / 6m | 16.3219% |
-| 1 world / 12m | 8.2880% |
-| 11 worlds / 6m | 0.0549% |
-| 11 worlds / 12m | **0.0158%** |
+The canonical owner `game/exchange.py::resolve_exchange_daily_limit()` does
+**not** use those keys. Runtime is:
 
-The anti-arbitrage / daily-limit concept is sound, but a fixed 50 B maximum
-eventually turns the Trader into a cosmetic system. Follow-up should make the
-upper bound scale-aware while retaining daily limits, route validation and
-anti-arbitrage.
+`max(exchange_daily_limit_min, floor(empire_day_total × daily_limit_pct / 100))`
 
-## Energy — first hard mechanical pressure
+and the existing regression
+`test_exchange_daily_limit_ignores_legacy_admin_cap` explicitly locks this
+behavior. At the default 80%, every 6/12-month stress anchor therefore remains
+at **80% of empire daily production**. No Trader balance patch is needed here;
+the docs/audit were stale, not the runtime.
 
-Audit state is intentionally generous: Solar at its current structural cap,
-Geothermal L50 and Energy Tech L50.
+## Energy — structural L200 wall resolved with a narrow bridge
 
-| Record level | Slot 1 | Slot 8 | Slot 15 |
-|---|---:|---:|---:|
-| L273 | 100% | 100% | 100% |
-| L508 | 100% | 100% | 78.0% |
-| L705 | 100% | 100% | **51.8%** |
-| L836 | 100% | 83.7% | **41.8%** |
+The audit exposed a real mismatch: production mines were unbounded while Solar
+stopped at the historical Nexus L200 structural cap. On cold worlds this became
+a hard penalty despite mature Energy Tech and Ascension utility nodes.
 
-With Ascension Optimized Energy X + Load Balancing X, the L705 slot-15 example
-recovers only to **73.5%**.
+The Nodebuster Buildings queue now lets Solar continue past L200 **without**
+turning it into an Ascension mine and without changing the global energy formula.
+Resolver structural previews can still report the Nexus anchor; mutation
+authority is the Buildings queue.
 
-This is the clearest long-horizon mechanical break. Mine levels are unbounded
-while live Solar remains structurally capped. `docs/ENERGY_V2.md` is therefore
-the natural next balance candidate, but it should be introduced through measured
-shadow/active rollout rather than a blind production buff.
+Required Solar for a full grid under the existing live formula:
+
+| Record depth | Slot 15, normal | Slot 15, Optimized Energy X |
+|---|---:|---:|
+| L508 | L245 | L205 |
+| L705 | **L339** | **L284** |
+| L836 zero-cost ceiling | L402 | L336 |
+
+This preserves the climate trade-off: cold worlds need more power
+infrastructure, but they are no longer mathematically stranded at Solar L200.
+Candidate A in `docs/ENERGY_V2.md` remains simulation-only; no global
+supply/demand rewrite was required for this fix.
 
 ## Research — sequential pacing still matters
 
@@ -176,13 +181,15 @@ no longer invents queue speed for them.
 
 ## Priority
 
-1. **P1 — Energy V2 measured rollout:** solve the cold-world L500–700 power wall.
-2. **P1 — Trader late-game scaling:** retain limits but make the maximum
-   production-aware.
-3. **P2 — Military long-horizon sink simulation:** quantify Forge rank, fleet
+1. **P1 — Structural-cap consistency audit:** verify remaining capped
+   infrastructure against the persistent/no-max progression contract instead of
+   waiting for another L500+ mismatch.
+2. **P2 — Military long-horizon sink simulation:** quantify Forge rank, fleet
    losses, fuel and combat count inflation before touching prices.
-4. **P2 — UX magnitude layer:** compact B/T/Qa display with exact value in
+3. **P2 — UX magnitude layer:** compact B/T/Qa display with exact value in
    tooltip/detail surfaces; keep one primary visible information location.
+4. **Watch — Global Energy V2:** Candidate A remains a future strategic rework;
+   the immediate L200 Solar wall is solved without it.
 5. **Watch — Research/AP/Storage:** current audit does not justify a global nerf.
 
 ## Regression owner

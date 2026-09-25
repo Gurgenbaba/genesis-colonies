@@ -5,7 +5,9 @@ from __future__ import annotations
 import math
 from typing import Dict, FrozenSet, Tuple
 
-# Production mines only — solar_plant stays on nexus caps.
+# Production mines only. Solar is not an Ascension/AP mine; under Nodebuster
+# its Buildings queue may still continue beyond the resolver's Nexus cap as
+# ordinary endgame energy infrastructure (GC-ENDGAME-ENERGY-001).
 EVOLVABLE_MINES: FrozenSet[str] = frozenset(
     {"metal_mine", "crystal_mine", "fuel_cell_plant"}
 )

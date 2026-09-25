@@ -1,6 +1,6 @@
 # Energy V2 — OGame-inspired power economy research
 
-**Status:** candidate / simulation only. No global energy-curve change is live.
+**Status:** global Candidate A remains simulation-only. The narrow endgame bridge is live: under Nodebuster, Solar may be upgraded beyond the historical Nexus L200 cap while all current supply/demand formulas remain unchanged.
 
 ## Why this exists
 
@@ -56,8 +56,10 @@ three producers and Solar at the same level, the raw grid is about **75%**.
 Players can overbuild Solar, add a second source, use orbital capacity, or
 improve individual Ascension mines.
 
-The V2 design assumes Solar eventually becomes **unbounded** like ascended
-production. That cap change is not active yet.
+The first V2-compatible bridge is now active: Solar is **unbounded in the
+Nodebuster Buildings queue**, but it is not an Ascension mine and earns no AP.
+This deliberately solves only the L200 structural-cap mismatch; Candidate A's
+global Solar coefficient and demand rewrite remain inactive.
 
 ### Geothermal Nexus — Fusion role
 
@@ -114,10 +116,11 @@ Before changing the global live curve:
 3. Review hot/mid/cold slots (1/8/15).
 4. Review Energy Technology 0/20/50/100 candidate behavior.
 5. Verify Geo L50 remains meaningful at mine depths L300–L1000.
-6. Add live shadow telemetry comparing current supply/demand with Candidate A.
-7. Only then add an explicit `GC_ENERGY_V2_MODE=active` operator switch.
-8. After activation, remove the temporary Energy-Tech L50 protection cap.
-9. Add per-producer 0–100% allocation and orbital collectors as separate slices.
+6. Keep the shipped unbounded-Solar bridge as the live L200+ pressure valve.
+7. Add live shadow telemetry comparing current supply/demand with Candidate A.
+8. Only then add an explicit `GC_ENERGY_V2_MODE=active` operator switch.
+9. After activation, remove the temporary Energy-Tech L50 protection cap.
+10. Add per-producer 0–100% allocation and orbital collectors as separate slices.
 
 The current global energy behavior remains the fallback until those gates are
 closed.
