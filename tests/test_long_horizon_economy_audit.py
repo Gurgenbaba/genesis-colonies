@@ -54,3 +54,5 @@ def test_long_horizon_audit_uses_consistent_topology_and_live_owners():
     assert skip["zero_cost_365_free_skip_ceiling"] >= skip["zero_cost_365_no_skip_ceiling"]
     assert skip["zero_cost_365_free_skip_ceiling"] < 1000
     assert skip["nodebuster_full_tree_ap"] == 339
+    assert skip["inactive_human_real_queue_timers"] is True
+    assert skip["shared_planner_synthetic_refill_sec"] == 36_000

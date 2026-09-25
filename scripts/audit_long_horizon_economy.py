@@ -122,13 +122,16 @@ def _free_skip_economy() -> Dict[str, Any]:
             365, skip_seconds=deterministic_free_year
         ),
         "nodebuster_full_tree_ap": int(full_tree_ap),
-        "autoplay_build_duration_cap_sec": getattr(
+        "inactive_human_real_queue_timers": bool(
+            getattr(inactive_autoplay, "INACTIVE_HUMAN_REAL_QUEUE_TIMERS", False)
+        ),
+        "legacy_inactive_build_duration_cap_sec": getattr(
             inactive_autoplay, "INACTIVE_BUILD_DURATION_CAP", None
         ),
-        "autoplay_research_duration_cap_sec": getattr(
+        "legacy_inactive_research_duration_cap_sec": getattr(
             inactive_autoplay, "INACTIVE_RESEARCH_DURATION_CAP", None
         ),
-        "autoplay_synthetic_refill_sec": getattr(
+        "shared_planner_synthetic_refill_sec": getattr(
             auto_empire, "AUTOPLAY_TIMEKEEPER_REFILL_SEC", None
         ),
     }
@@ -487,10 +490,15 @@ def main() -> None:
         f"Nodebuster full skill tree: {skip['nodebuster_full_tree_ap']} AP per mine"
     )
     print(
-        "Autoplay synthetic pacing knobs: "
-        f"build_cap={skip['autoplay_build_duration_cap_sec']}s, "
-        f"research_cap={skip['autoplay_research_duration_cap_sec']}s, "
-        f"refill={skip['autoplay_synthetic_refill_sec']}s"
+        "Dormant-human queue parity: "
+        f"real_timers={skip['inactive_human_real_queue_timers']}; "
+        "legacy caps retained for compatibility only "
+        f"({skip['legacy_inactive_build_duration_cap_sec']}s/"
+        f"{skip['legacy_inactive_research_duration_cap_sec']}s)"
+    )
+    print(
+        "Shared planner AI-only synthetic refill: "
+        f"{skip['shared_planner_synthetic_refill_sec']}s"
     )
     print()
 

@@ -158,39 +158,32 @@ military simulation before changing live costs.
 
 ## Living Universe / inactive-human fairness
 
-Current V6 inactive-human progression still passes artificial caps to the shared
-planner:
+Resolved after this audit: dormant human accounts now pass **no artificial
+build/research duration cap** into the shared planner. Their queues use the same
+canonical timers as active humans, with one decision per tick and no same-tick
+force-complete chain.
 
-- building duration cap: **900 s**;
-- research duration cap: **1200 s**;
-- chain limit: 1.
+The old 900/1200-second constants remain only for compatibility/admin references;
+the V6 human path does not consume them.
 
-That means an inactive human can receive a shorter build/research timer than the
-same canonical action would have for an active human. This conflicts with the
-desired Living Universe contract where commanders should use real containers,
-earned Timekeeper and owned boosters.
+The shared auto-empire module still contains a 10-hour synthetic Timekeeper refill
+for planner-driven Shipyard/Defense actions. Current V6 dormant-human ship and
+defense decisions call the canonical domain owners directly and do **not** use
+that refill. Pirate/shared AI paths can still opt into it.
 
-The shared auto-empire module also contains a 10-hour synthetic Timekeeper refill
-for planner-driven Shipyard/Defense actions. Current V6 inactive-human ship and
-defense actions call their domain owners directly and therefore do **not**
-currently use that refill; Pirate/shared planner paths still can.
-
-Follow-up: remove timer caps from the inactive-human V6 path and let it consume
-only legitimately owned rewards/Timekeeper. Keep any AI-only acceleration
-explicitly isolated from dormant human accounts.
+Result: Living Universe can continue to choose actions for dormant humans, but it
+no longer invents queue speed for them.
 
 ## Priority
 
-1. **P0 — Inactive-human fairness:** remove synthetic build/research caps before
-   expanding Living Universe into Trader/Inventory/Rewards.
-2. **P1 — Energy V2 measured rollout:** solve the cold-world L500–700 power wall.
-3. **P1 — Trader late-game scaling:** retain limits but make the maximum
+1. **P1 — Energy V2 measured rollout:** solve the cold-world L500–700 power wall.
+2. **P1 — Trader late-game scaling:** retain limits but make the maximum
    production-aware.
-4. **P2 — Military long-horizon sink simulation:** quantify Forge rank, fleet
+3. **P2 — Military long-horizon sink simulation:** quantify Forge rank, fleet
    losses, fuel and combat count inflation before touching prices.
-5. **P2 — UX magnitude layer:** compact B/T/Qa display with exact value in
+4. **P2 — UX magnitude layer:** compact B/T/Qa display with exact value in
    tooltip/detail surfaces; keep one primary visible information location.
-6. **Watch — Research/AP/Storage:** current audit does not justify a global nerf.
+5. **Watch — Research/AP/Storage:** current audit does not justify a global nerf.
 
 ## Regression owner
 

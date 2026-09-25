@@ -45,10 +45,13 @@ REVISIT_COOLDOWNS_KEY = "living_universe_revisit_cooldowns"
 BUSY_KEY = "inactive_autoplay_busy"
 BUSY_STALE_SEC = 900.0
 
-# Soft caps so queues turn over on fleet-cron cadence (still slower than pirate 90s).
-INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
-INACTIVE_RESEARCH_DURATION_CAP = 1200  # 20 min
-# GC-PERF-AUTOPLAY-003: no same-tick force-complete chains (was 2).
+# Legacy planner caps kept for import/admin compatibility only. Living Universe
+# human accounts must use the same canonical queue durations as active humans.
+# Pirate AI may still pass its own AI-only caps through the shared planner.
+INACTIVE_BUILD_DURATION_CAP = 900
+INACTIVE_RESEARCH_DURATION_CAP = 1200
+INACTIVE_HUMAN_REAL_QUEUE_TIMERS = True
+# One decision per tick; with real human timers there is never same-tick chaining.
 INACTIVE_CHAIN_LIMIT = 1
 
 # GC-2623 — Living Universe V6. One shift decision starts at most one domain.
@@ -1067,8 +1070,8 @@ def _sync_planet_for_decision(
         allow_ships=False,
         allow_defense=False,
         personality=str(personality),
-        build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
-        research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
+        build_duration_cap=None,
+        research_duration_cap=None,
         target_scale=float(ambition_scale),
         source="living_universe",
         update_scores=True,
@@ -1251,8 +1254,8 @@ def _run_player_economy(
                     allow_ships=False,
                     allow_defense=False,
                     personality=personality,
-                    build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
-                    research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
+                    build_duration_cap=None,
+                    research_duration_cap=None,
                     target_scale=ambition_scale,
                     source="living_universe",
                     update_scores=True,
@@ -1884,7 +1887,9 @@ def run_inactive_autoplay_tick(
             "revisit_sec": revisit_sec(),
             "tick_per_cron": tick_per_cron(),
             "inactive_threshold_sec": float(RANKING_INACTIVE_AFTER_SEC),
-            "build_duration_cap": INACTIVE_BUILD_DURATION_CAP,
+            "build_duration_cap": None,
+            "research_duration_cap": None,
+            "real_queue_timers": INACTIVE_HUMAN_REAL_QUEUE_TIMERS,
             "chain_limit": INACTIVE_CHAIN_LIMIT,
             "hold_ms": hold_ms,
             "write_commits": write_commits if short_tx else 0,
