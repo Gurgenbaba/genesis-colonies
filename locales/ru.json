@@ -9234,5 +9234,6 @@
   "mail_updates_prompt_body": "Мы пишем только о новых вселенных Genesis Colonies и действительно крупных обновлениях. Без еженедельной рассылки.",
   "mail_updates_prompt_enable": "Включить обновления",
   "mail_updates_prompt_later": "Позже",
-  "mail_updates_prompt_privacy": "Необязательно · double opt-in · отписка в любое время"
+  "mail_updates_prompt_privacy": "Необязательно · double opt-in · отписка в любое время",
+  "mail_updates_prompt_kicker": "GENESIS SIGNAL"
 }
