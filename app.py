@@ -91,6 +91,7 @@ from game import support as support_logic
 from game import messages as messages_logic
 from game import options as options_logic
 from game import account_email as account_email_logic
+from game import mail_hub as mail_hub_logic
 from game import discord_auth as discord_auth_logic
 
 from game.bootstrap import bootstrap_application
@@ -1922,6 +1923,9 @@ def auth_discord_start():
         and str(request.args.get("legal_ack") or "").strip() == "1"
     )
     session["discord_allow_register"] = bool(allow_register)
+    session["discord_mail_updates"] = (
+        str(request.args.get("mail_updates") or "").strip() == "1"
+    )
 
     state = discord_auth_logic.start_oauth_session(session, link=False)
     return redirect(discord_auth_logic.build_authorize_url(state))
@@ -1997,6 +2001,19 @@ def auth_discord_callback():
 
     login_user(user)
     if err_key == "discord_register_ok":
+        if bool(session.pop("discord_mail_updates", False)):
+            try:
+                _email = str(user.get("email") or user.get("discord_email") or "").strip()
+                if _email:
+                    mail_hub_logic.request_updates(
+                        int(user["id"]),
+                        _email,
+                        locale=str(user.get("locale") or current_locale() or "de"),
+                        email_verified=bool(user.get("email_verified")),
+                        source="discord_register",
+                    )
+            except Exception:
+                logger.exception("mail hub opt-in request failed after Discord register")
         flash(T("msg_discord_register_success"), "success")
         return redirect(url_for("discord_welcome"))
     flash(T("msg_discord_login_success"), "success")
@@ -2081,6 +2098,17 @@ def register():
                     finally:
                         conn.close()
                     login_user(user)
+                    if str(request.form.get("mail_updates") or "") == "1":
+                        try:
+                            mail_hub_logic.request_updates(
+                                uid,
+                                email,
+                                locale=str(user.get("locale") or current_locale() or "de"),
+                                email_verified=bool(user.get("email_verified")),
+                                source="register",
+                            )
+                        except Exception:
+                            logger.exception("mail hub opt-in request failed after register user_id=%s", uid)
                     flash(T("msg_register_success_verify") or T("msg_register_success"), "success")
                     return redirect(url_for("overview"))
 
@@ -10481,6 +10509,74 @@ def api_options_resend_verification():
         status = 429 if err == "options_error_verify_resend_rate" else 400
         return _options_api_response(False, err, None, status)
     return _options_api_response(True, err, {"email_verified": False})
+
+
+@app.route("/api/options/mail-updates/status", methods=["GET"])
+@require_login_api
+def api_options_mail_updates_status():
+    pid = _current_player_id()
+    assert pid is not None
+    user = get_current_user() or {}
+    email = str(user.get("email") or "").strip()
+    verified = bool(int(user.get("email_verified") or 0))
+    if not email:
+        return _options_api_response(
+            True, None,
+            {"eligible": False, "configured": mail_hub_logic.configured(), "status": "no_email"},
+        )
+    if not verified:
+        return _options_api_response(
+            True, None,
+            {"eligible": False, "configured": mail_hub_logic.configured(), "status": "email_unverified"},
+        )
+    state = mail_hub_logic.status(int(pid))
+    return _options_api_response(
+        True, None,
+        {
+            "eligible": True,
+            "configured": bool(state.get("configured")),
+            "status": str(state.get("status") or "unavailable"),
+        },
+    )
+
+
+@app.route("/api/options/mail-updates/enable", methods=["POST"])
+@require_login_api
+def api_options_mail_updates_enable():
+    pid = _current_player_id()
+    assert pid is not None
+    user = get_current_user() or {}
+    email = str(user.get("email") or "").strip()
+    verified = bool(int(user.get("email_verified") or 0))
+    if not email:
+        return _options_api_response(False, "options_mail_updates_need_email", None, 400)
+    if not verified:
+        return _options_api_response(False, "options_mail_updates_verify_first", None, 409)
+    if not mail_hub_logic.configured():
+        return _options_api_response(False, "options_mail_updates_unavailable", None, 503)
+    ok, data = mail_hub_logic.request_updates(
+        int(pid),
+        email,
+        locale=str(user.get("locale") or current_locale() or "de"),
+        email_verified=True,
+        source="options",
+    )
+    if not ok:
+        return _options_api_response(False, "options_mail_updates_unavailable", data, 503)
+    return _options_api_response(True, "options_mail_updates_confirmation_sent", data)
+
+
+@app.route("/api/options/mail-updates/disable", methods=["POST"])
+@require_login_api
+def api_options_mail_updates_disable():
+    pid = _current_player_id()
+    assert pid is not None
+    if not mail_hub_logic.configured():
+        return _options_api_response(False, "options_mail_updates_unavailable", None, 503)
+    ok, data = mail_hub_logic.revoke_updates(int(pid))
+    if not ok:
+        return _options_api_response(False, "options_mail_updates_unavailable", data, 503)
+    return _options_api_response(True, "options_mail_updates_disabled", data)
 
 
 @app.route("/api/options/vacation/enable", methods=["POST"])
