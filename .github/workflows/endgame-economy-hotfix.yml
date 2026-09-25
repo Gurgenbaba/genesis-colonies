@@ -33,6 +33,8 @@ on:
       - "tests/test_mine_evolution.py"
       - "tests/test_ascension_breakthrough_v2.py"
       - "scripts/sim_ascension_breakthroughs.py"
+      - "scripts/audit_long_horizon_economy.py"
+      - "tests/test_long_horizon_economy_audit.py"
       - ".github/workflows/endgame-economy-hotfix.yml"
 
 concurrency:
