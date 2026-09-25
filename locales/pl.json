@@ -9234,5 +9234,6 @@
   "mail_updates_prompt_body": "Napiszemy tylko o nowych uniwersach Genesis Colonies i naprawdę dużych aktualizacjach. Bez cotygodniowego newslettera.",
   "mail_updates_prompt_enable": "Włącz aktualizacje",
   "mail_updates_prompt_later": "Później",
-  "mail_updates_prompt_privacy": "Opcjonalne · double opt-in · rezygnacja w dowolnym momencie"
+  "mail_updates_prompt_privacy": "Opcjonalne · double opt-in · rezygnacja w dowolnym momencie",
+  "mail_updates_prompt_kicker": "GENESIS SIGNAL"
 }
