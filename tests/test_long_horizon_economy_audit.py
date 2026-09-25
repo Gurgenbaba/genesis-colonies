@@ -24,6 +24,10 @@ def test_long_horizon_audit_uses_consistent_topology_and_live_owners():
         assert row["storage_buffer_hours"] >= 24
         assert row["metal_storage_v2_floor"] >= row["metal_per_hour"] * row["storage_buffer_hours"]
         assert 0 <= row["trader_cap_vs_empire_metal_day_pct"] <= 100
+        military = row["military_sink"]
+        assert military["resource_units_per_hour"] > 0
+        assert military["queue_units_per_hour_rank0"] > 0
+        assert military["queue_units_per_hour_rank10"] >= military["queue_units_per_hour_rank0"]
         assert {entry["slot"] for entry in row["energy"]} == {1, 8, 15}
         assert all(0 <= entry["grid_pct"] <= 100 for entry in row["energy"])
         assert all(0 <= entry["optimized_grid_pct"] <= 100 for entry in row["energy"])
@@ -35,6 +39,13 @@ def test_long_horizon_audit_uses_consistent_topology_and_live_owners():
         assert all(entry["payment_total"] > 0 for entry in row["research"])
         assert all(entry["afford_hours"] > 0 for entry in row["research"])
         assert all(entry["late_infra_time_hours"] >= 10 / 3600 for entry in row["research"])
+        assert all(entry["cumulative_afford_hours"] >= entry["afford_hours"] for entry in row["research"])
+        assert all(entry["cumulative_queue_hours"] >= entry["late_infra_time_hours"] for entry in row["research"])
+        assert all(
+            entry["reach_floor_hours"]
+            >= max(entry["cumulative_afford_hours"], entry["cumulative_queue_hours"])
+            for entry in row["research"]
+        )
 
     skip = audit["free_skip_economy"]
     assert skip["login_cycle_tk_equivalent_sec"] > 0
