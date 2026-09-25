@@ -1,0 +1,22 @@
+<aside class="gc-mail-updates-prompt" id="gc-mail-updates-prompt" hidden aria-live="polite" aria-label="{{ T('mail_updates_prompt_title', 'Keinen Universumsstart verpassen') }}">
+  <button type="button" class="gc-mail-updates-prompt-close" data-mail-updates-dismiss aria-label="{{ T('close', 'Schließen') }}">×</button>
+  <div class="gc-mail-updates-prompt-kicker">{{ T("mail_updates_prompt_kicker", "GENESIS SIGNAL") }}</div>
+  <strong class="gc-mail-updates-prompt-title">
+    {{ T("mail_updates_prompt_title", "Keinen Universumsstart verpassen") }}
+  </strong>
+  <p>
+    {{ T("mail_updates_prompt_body", "Wir mailen dir nur bei neuen Genesis-Colonies-Universen und wirklich großen Updates. Kein Wochen-Newsletter.") }}
+  </p>
+  <div class="gc-mail-updates-prompt-actions">
+    <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-mail-updates-enable>
+      {{ T("mail_updates_prompt_enable", "Updates aktivieren") }}
+    </button>
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-mail-updates-dismiss>
+      {{ T("mail_updates_prompt_later", "Später") }}
+    </button>
+  </div>
+  <small class="gc-mail-updates-prompt-status" data-mail-updates-status></small>
+  <small class="gc-mail-updates-prompt-privacy">
+    {{ T("mail_updates_prompt_privacy", "Freiwillig · Double-Opt-In · jederzeit abbestellbar") }}
+  </small>
+</aside>
