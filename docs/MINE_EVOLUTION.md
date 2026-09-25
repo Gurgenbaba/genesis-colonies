@@ -421,9 +421,11 @@ Rollout safety remains unchanged:
 `scripts/sim_ascension_breakthroughs.py` owns two deterministic long-horizon checks.
 
 The primary comparison remains the self-funded one-mine curve: one Ferronit mine,
-all generated value reinvested into itself. It reports 6-month (182.5 d) and
-12-month (365 d) outcomes for baseline q3, the current +40% stack, q3.15/q3.30,
-the combined stack, current max rebuild and full Breakthrough V4.
+all generated value reinvested into itself. **Every upgrade now obeys the same
+canonical mine queue floor as the 11-world stress path**, so the topologies are
+directly comparable. It reports 6-month (182.5 d) and 12-month (365 d) outcomes
+for baseline q3, the current +40% stack, q3.15/q3.30, the combined stack, current
+max rebuild and full Breakthrough V4.
 
 Current deterministic anchors:
 
@@ -437,9 +439,13 @@ Current deterministic anchors:
 | Current max rebuild | 156 | 246 | 315 | 319.3 | 1088.5 |
 | Full Breakthrough V4 | 156 | 343 | 478 | 133.6 | 399.4 |
 
-The deliberately hostile 11-world pooling stress reaches **L508 after six months**
-and **L705 after twelve months**; the zero-resource-cost queue ceilings remain
-L769 / L836. These are upper-bound stress values, not normal player forecasts.
+For the same q3.30 + current-stack scenario the simulator also prints a topology
+comparison: **1 world self-funded**, **11 mature worlds pooled**, and the
+**zero-resource-cost queue ceiling**. The deliberately hostile 11-world pooling
+stress reaches **L508 after six months** and **L705 after twelve months**; the
+zero-resource-cost queue ceilings remain L769 / L836. These are upper-bound
+record-mine stress values, not normal player forecasts and not a "game completion"
+level — Genesis has no maximum mine level.
 
 The second path is deliberately hostile: **11 mature feeder worlds** are assumed
 to mirror the record mine's output and pool 100% of that value into one target
