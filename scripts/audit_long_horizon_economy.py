@@ -65,6 +65,25 @@ def _timekeeper_equivalent(bundle: Dict[str, Any]) -> int:
     return int(seconds)
 
 
+def _queue_ceiling_with_skip(
+    days: int | float | Decimal,
+    *,
+    skip_seconds: int = 0,
+    start_level: int = 200,
+) -> int:
+    """Absolute record-mine ceiling if resources cost zero and earned TK is perfect."""
+    budget = Decimal(str(days)) * Decimal(86400) + Decimal(max(0, int(skip_seconds)))
+    elapsed = Decimal(0)
+    level = max(0, int(start_level))
+    while True:
+        target = level + 1
+        step = Decimal(building_progress_floor_seconds("metal_mine", target))
+        if elapsed + step > budget:
+            return level
+        elapsed += step
+        level = target
+
+
 def _free_skip_economy() -> Dict[str, Any]:
     login_cycle = sum(_timekeeper_equivalent(dict(day)) for day in LOGIN_REWARD_CATALOG)
 
@@ -87,6 +106,7 @@ def _free_skip_economy() -> Dict[str, Any]:
         for rank in range(max(0, int(cfg.get("max_rank") or 0))):
             full_tree_ap += int(skill_point_cost(key, rank))
 
+    deterministic_free_year = int(login_year + bp_free)
     return {
         "login_cycle_days": int(LOGIN_CYCLE_DAYS),
         "login_cycle_tk_equivalent_sec": int(login_cycle),
@@ -94,6 +114,11 @@ def _free_skip_economy() -> Dict[str, Any]:
         "battle_pass_free_levels": int(battle_pass.DEFAULT_MAX_LEVEL),
         "battle_pass_free_tk_direct_sec": int(bp_direct),
         "battle_pass_free_tk_equivalent_sec": int(bp_free),
+        "deterministic_free_year_tk_equivalent_sec": deterministic_free_year,
+        "zero_cost_365_no_skip_ceiling": _queue_ceiling_with_skip(365),
+        "zero_cost_365_free_skip_ceiling": _queue_ceiling_with_skip(
+            365, skip_seconds=deterministic_free_year
+        ),
         "nodebuster_full_tree_ap": int(full_tree_ap),
         "autoplay_build_duration_cap_sec": getattr(
             inactive_autoplay, "INACTIVE_BUILD_DURATION_CAP", None
@@ -352,6 +377,11 @@ def main() -> None:
         f"Battle Pass free L1-{skip['battle_pass_free_levels']}: "
         f"{skip['battle_pass_free_tk_equivalent_sec'] / 3600:.1f}h TK-equivalent "
         f"({skip['battle_pass_free_tk_direct_sec'] / 3600:.1f}h direct TK)"
+    )
+    print(
+        "Free login + one complete Free Pass, zero resource cost: "
+        f"L{skip['zero_cost_365_no_skip_ceiling']} -> "
+        f"L{skip['zero_cost_365_free_skip_ceiling']} absolute 365d queue ceiling"
     )
     print(
         f"Nodebuster full skill tree: {skip['nodebuster_full_tree_ap']} AP per mine"
