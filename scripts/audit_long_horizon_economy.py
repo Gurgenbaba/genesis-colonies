@@ -27,12 +27,19 @@ from game.economy_balance import (
 )
 from game.effects import EffectResolver
 from game.mine_evolution.nodebuster import (
+    SKILL_CATALOG,
     ascension_points_for_depth,
     effective_shortage_ratio_bps,
     energy_draw_bps,
+    skill_point_cost,
 )
 from game.models import DEFAULT_GAME_SETTINGS
 from game.research import get_research_payment_cost
+from game.inventory_catalog import BOOSTER_TIME_SECONDS
+from game.login_rewards import LOGIN_CYCLE_DAYS, LOGIN_REWARD_CATALOG
+from game import battle_pass
+from game import auto_empire
+from game import inactive_autoplay
 from game.time_floors import building_progress_floor_seconds
 from scripts.sim_ascension_breakthroughs import (
     SCENARIOS,
@@ -44,6 +51,60 @@ from scripts.sim_ascension_breakthroughs import (
 
 AUDIT_SLOTS = (1, 8, 15)
 RESEARCH_TARGETS = (60, 100, 120, 150, 200)
+
+
+def _timekeeper_equivalent(bundle: Dict[str, Any]) -> int:
+    """Direct TK plus depositable legacy queue-time items in one reward bundle."""
+    seconds = max(0, int(bundle.get("timekeeper_sec") or 0))
+    for raw in bundle.get("items") or []:
+        if not isinstance(raw, dict):
+            continue
+        key = str(raw.get("item_key") or "")
+        amount = max(0, int(raw.get("amount") or 0))
+        seconds += int(BOOSTER_TIME_SECONDS.get(key) or 0) * amount
+    return int(seconds)
+
+
+def _free_skip_economy() -> Dict[str, Any]:
+    login_cycle = sum(_timekeeper_equivalent(dict(day)) for day in LOGIN_REWARD_CATALOG)
+
+    # Perfect 365-day attendance: the 30-day catalog repeats after day 30.
+    login_year = 0
+    for day_idx in range(365):
+        login_year += _timekeeper_equivalent(
+            dict(LOGIN_REWARD_CATALOG[day_idx % LOGIN_CYCLE_DAYS])
+        )
+
+    bp_free = 0
+    bp_direct = 0
+    for level in range(1, int(battle_pass.DEFAULT_MAX_LEVEL) + 1):
+        free, _premium = battle_pass._default_level_rewards(level)
+        bp_free += _timekeeper_equivalent(free)
+        bp_direct += max(0, int(free.get("timekeeper_sec") or 0))
+
+    full_tree_ap = 0
+    for key, cfg in SKILL_CATALOG.items():
+        for rank in range(max(0, int(cfg.get("max_rank") or 0))):
+            full_tree_ap += int(skill_point_cost(key, rank))
+
+    return {
+        "login_cycle_days": int(LOGIN_CYCLE_DAYS),
+        "login_cycle_tk_equivalent_sec": int(login_cycle),
+        "login_perfect_365_tk_equivalent_sec": int(login_year),
+        "battle_pass_free_levels": int(battle_pass.DEFAULT_MAX_LEVEL),
+        "battle_pass_free_tk_direct_sec": int(bp_direct),
+        "battle_pass_free_tk_equivalent_sec": int(bp_free),
+        "nodebuster_full_tree_ap": int(full_tree_ap),
+        "autoplay_build_duration_cap_sec": getattr(
+            inactive_autoplay, "INACTIVE_BUILD_DURATION_CAP", None
+        ),
+        "autoplay_research_duration_cap_sec": getattr(
+            inactive_autoplay, "INACTIVE_RESEARCH_DURATION_CAP", None
+        ),
+        "autoplay_synthetic_refill_sec": getattr(
+            auto_empire, "AUTOPLAY_TIMEKEEPER_REFILL_SEC", None
+        ),
+    }
 
 
 def _scenario(key: str):
@@ -226,6 +287,7 @@ def build_audit() -> Dict[str, Any]:
         "scenario": stress.key,
         "topology": topology,
         "anchors": anchors,
+        "free_skip_economy": _free_skip_economy(),
     }
 
 
@@ -276,6 +338,32 @@ def main() -> None:
             )
 
     print()
+    skip = audit["free_skip_economy"]
+    print("Deterministic free skip economy (container RNG excluded)")
+    print(
+        f"Login {skip['login_cycle_days']}d: "
+        f"{skip['login_cycle_tk_equivalent_sec'] / 3600:.1f}h TK-equivalent"
+    )
+    print(
+        "Perfect 365d login attendance: "
+        f"{skip['login_perfect_365_tk_equivalent_sec'] / 3600:.1f}h TK-equivalent"
+    )
+    print(
+        f"Battle Pass free L1-{skip['battle_pass_free_levels']}: "
+        f"{skip['battle_pass_free_tk_equivalent_sec'] / 3600:.1f}h TK-equivalent "
+        f"({skip['battle_pass_free_tk_direct_sec'] / 3600:.1f}h direct TK)"
+    )
+    print(
+        f"Nodebuster full skill tree: {skip['nodebuster_full_tree_ap']} AP per mine"
+    )
+    print(
+        "Autoplay synthetic pacing knobs: "
+        f"build_cap={skip['autoplay_build_duration_cap_sec']}s, "
+        f"research_cap={skip['autoplay_research_duration_cap_sec']}s, "
+        f"refill={skip['autoplay_synthetic_refill_sec']}s"
+    )
+    print()
+
     print(
         "Research payment/time: mature empire income at anchor; "
         "Lab100 + Academy50 + Buildtime120 + Research Network Asc V"
