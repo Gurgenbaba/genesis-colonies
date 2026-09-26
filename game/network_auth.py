@@ -16,9 +16,13 @@ import os
 import secrets
 import time
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from flask import Response, jsonify, redirect, request, session, url_for
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .db import begin_write_transaction, commit, db, is_integrity_error, rollback, table_exists
 from .models import create_user, get_homeworld
@@ -459,7 +463,23 @@ def _network_before_request():
         if endpoint in {"login", "register"}:
             if session.get("user_id"):
                 return redirect(url_for("overview"))
-            return redirect(_authority_auth_url(endpoint, universe), code=302)
+            authority_target = _authority_auth_url(endpoint, universe)
+            target_host = (urlsplit(authority_target).hostname or "").lower()
+            request_host = str(request.host or "").split(":", 1)[0].strip().lower()
+            if target_host and request_host == target_host:
+                logger.error(
+                    "network auth self-redirect blocked host=%s universe=%s authority=%s endpoint=%s",
+                    request_host,
+                    universe,
+                    authority_key(),
+                    endpoint,
+                )
+                return (
+                    "Genesis Network configuration error. Please retry shortly.",
+                    503,
+                    {"Cache-Control": "no-store"},
+                )
+            return redirect(authority_target, code=302)
         if endpoint in {"forgot_password", "reset_password", "auth_discord_start"}:
             return redirect(f"{authority_url()}/login?{urlencode({'network_target': universe})}", code=302)
         return None
