@@ -126,3 +126,56 @@ def test_wrong_audience_is_rejected(network_db, monkeypatch):
     assert valid is False
     assert reject_reason == "invalid_audience"
     assert payload is None
+
+
+def test_non_authority_login_self_redirect_fails_closed(network_db, monkeypatch):
+    network_db("uni1")
+    monkeypatch.setenv("GC_NETWORK_AUTHORITY_URL", "https://www.genesis-colonies.de")
+    network_auth = _reload_network(monkeypatch, "uni1")
+
+    from flask import Flask
+
+    app = Flask(__name__)
+    app.secret_key = "test-secret-key-not-default-value-32chars"
+    network_auth.install_network_auth(app)
+
+    @app.route("/login")
+    def login():
+        return "login-form", 200
+
+    client = app.test_client()
+    response = client.get(
+        "/login",
+        base_url="https://www.genesis-colonies.de",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 503
+    assert b"configuration error" in response.data.lower()
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_non_authority_login_redirects_to_distinct_authority_host(network_db, monkeypatch):
+    network_db("uni1")
+    monkeypatch.setenv("GC_NETWORK_AUTHORITY_URL", "https://auth.example.test")
+    network_auth = _reload_network(monkeypatch, "uni1")
+
+    from flask import Flask
+
+    app = Flask(__name__)
+    app.secret_key = "test-secret-key-not-default-value-32chars"
+    network_auth.install_network_auth(app)
+
+    @app.route("/login")
+    def login():
+        return "login-form", 200
+
+    client = app.test_client()
+    response = client.get(
+        "/login",
+        base_url="https://uni1.example.test",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "https://auth.example.test/login?network_target=uni1"
