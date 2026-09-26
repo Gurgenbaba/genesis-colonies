@@ -39,7 +39,6 @@ def _reload_network(monkeypatch, universe: str):
     monkeypatch.setenv("GC_NETWORK_AUTHORITY_KEY", "dev")
     monkeypatch.setenv("GC_NETWORK_DOMAIN", "genesis-colonies.com")
     monkeypatch.setenv("GC_NETWORK_UNIVERSES", "uni1")
-    monkeypatch.setenv("GC_NETWORK_AUTHORITY_URL", "https://dev.genesis-colonies.com")
     monkeypatch.setenv("GC_NETWORK_UNI1_OPEN", "1")
     monkeypatch.setenv("GC_NETWORK_START_RESOURCE_MULTIPLIER", "10")
     monkeypatch.setenv("GC_NETWORK_START_TIMEKEEPER_SECONDS", str(72 * 3600))
