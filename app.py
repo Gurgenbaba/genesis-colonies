@@ -10108,6 +10108,7 @@ def api_office_support_reply():
         support_logic.office_reply_ticket(
             str(payload.get("external_ticket_id") or ""),
             str(payload.get("requester_external_id") or ""),
+            str(payload.get("delivery_id") or ""),
             str(payload.get("body") or ""),
         )
     )
