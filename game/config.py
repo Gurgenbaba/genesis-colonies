@@ -329,7 +329,7 @@ def get_public_alias_hosts() -> tuple[str, ...]:
     Browser-facing aliases that must never own an independent login session.
 
     Example production authority value:
-      GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com,genesis-colonies.de
+      GC_PUBLIC_ALIAS_HOSTS=www.genesis-colonies.de,genesis-colonies.com
 
     API/postback routes are intentionally not redirected by the app hook so
     third-party callbacks can keep using a historical alias while browser
@@ -660,16 +660,11 @@ def _validate_network_runtime_config() -> list[str]:
         key: _network_url_for_key(key, authority=authority, authority_url=authority_url)
         for key in configured_universes
     }
-    uni1_url = universe_urls.get(
-        "uni1",
-        _network_url_for_key("uni1", authority=authority, authority_url=authority_url),
-    )
     current_open = (
         True
         if universe == authority
         else _network_env_truthy(f"GC_NETWORK_{universe.upper().replace('-', '_')}_OPEN")
     )
-    uni1_open = _network_env_truthy("GC_NETWORK_UNI1_OPEN")
 
     if not _env_str("GC_UNIVERSE_KEY"):
         errors.append(
