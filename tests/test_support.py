@@ -121,6 +121,7 @@ def test_office_reply_lands_in_player_ticket_without_mail(support_db, monkeypatc
     delivered = office_reply_ticket(
         f"uni1:{ticket_id}",
         f"uni1:{player_id}",
+        "office-delivery-0001",
         "Antwort direkt aus Gurgenbaba Office.",
     )
     assert delivered["ok"] is True
@@ -131,6 +132,19 @@ def test_office_reply_lands_in_player_ticket_without_mail(support_db, monkeypatc
     assert ticket["messages"][-1]["sender_role"] == "admin"
     assert ticket["messages"][-1]["sender_name"] == "Support"
     assert ticket["messages"][-1]["message"] == "Antwort direkt aus Gurgenbaba Office."
+    message_count = len(ticket["messages"])
+
+    replay = office_reply_ticket(
+        f"uni1:{ticket_id}",
+        f"uni1:{player_id}",
+        "office-delivery-0001",
+        "Antwort direkt aus Gurgenbaba Office.",
+    )
+    assert replay["ok"] is True
+    assert replay["data"]["duplicate"] is True
+    replay_state = list_tickets(player_id)
+    replay_ticket = next(item for item in replay_state["data"]["tickets"] if int(item["id"]) == ticket_id)
+    assert len(replay_ticket["messages"]) == message_count
 
 
 def test_create_ticket_creates_forum_thread(support_db, monkeypatch):
