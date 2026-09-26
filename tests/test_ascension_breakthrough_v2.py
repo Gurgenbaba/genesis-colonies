@@ -26,7 +26,9 @@ from scripts.sim_ascension_breakthroughs import (
     hours_to_target,
     pooled_empire_level_after_days,
     queue_floor_level_after_days,
+    record_push_level_after_days,
     run_horizons,
+    run_topology_horizons,
     uni1_endgame_curve,
 )
 
@@ -236,6 +238,24 @@ def test_eleven_world_pooling_cannot_turn_one_year_into_l2000():
     assert six_month_pool <= six_month_ceiling < 775
     assert twelve_month_pool <= twelve_month_ceiling < 850
     assert twelve_month_pool < 1000
+
+
+def test_one_and_eleven_world_topologies_share_the_same_calendar_guardrail():
+    stress = _scenario("singularity_stack")
+    topology = run_topology_horizons(stress)
+
+    for horizon in ("182.5d", "365d"):
+        one = topology["one_world"][horizon]
+        pooled = topology["eleven_world_pool"][horizon]
+        zero_cost = topology["zero_cost_queue"][horizon]
+        assert one <= pooled <= zero_cost
+
+    # The single-world path now also goes through record_push_level_after_days,
+    # so future refactors cannot silently drop the canonical mine queue floor.
+    with uni1_endgame_curve():
+        assert record_push_level_after_days(
+            stress, Decimal("365"), feeder_worlds=1
+        ) == topology["one_world"]["365d"]
 
 
 def test_reinvestment_benchmarks_match_balance_review():

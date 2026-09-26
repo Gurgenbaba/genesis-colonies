@@ -20,6 +20,13 @@ def test_nodebuster_enqueue_cap_is_only_internal_safety_sentinel():
         planet_id=1,
         evolution_rank=999,
     ) == QUEUE_SAFETY_SENTINEL
+    # GC-ENDGAME-ENERGY-001: Solar shares the no-max queue contract under
+    # Nodebuster, but remains outside Mine Ascension/AP.
+    assert buildings_mod._effective_building_queue_cap(
+        "solar_plant",
+        200,
+        planet_id=1,
+    ) == QUEUE_SAFETY_SENTINEL
 
 
 def test_mine_template_keeps_ascension_controls_without_skill_tree():
@@ -38,3 +45,9 @@ def test_queue_owner_contains_nodebuster_rebuild_scaling():
     assert "rebuild_cost_bps" in source
     assert "rebuild_time_bps" in source
     assert "_scale_bps(" in source
+
+
+def test_solar_is_unbounded_in_queue_but_not_an_ascension_mine():
+    from game.mine_evolution import is_evolvable_mine
+
+    assert is_evolvable_mine("solar_plant") is False

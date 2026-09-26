@@ -23,11 +23,11 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 | Gebäude | Live-Vertrag |
 |---------|--------------|
 | `metal_mine`, `crystal_mine`, `fuel_cell_plant` | **unbounded** im kanonischen Buildings-Queue-Owner; L200 ist nur die erste freiwillige Nodebuster-Ascension-Schwelle |
-| `solar_plant` | `50 + planet_core_nexus + 2×geothermal_nexus` — maximal 200 bei Nexus 50/50 |
+| `solar_plant` | struktureller Nexus-Wert weiter `50 + planet_core_nexus + 2×geothermal_nexus`; unter `nodebuster-v1` im **Buildings-Queue-Owner unbounded**, damit L200+ Minen durch zusätzliche Energie-Infrastruktur versorgt werden können |
 | `metal_storage`, `crystal_storage`, `fuel_storage` | `50 + 2×geothermal_nexus` (ohne Core) |
 | alle übrigen | bestehende eigene Caps / Ascension-Owner |
 
-Der Resolver darf für Produktionsminen weiterhin den Nexus-Strukturwert liefern, weil andere technische Vorschauen ihn nutzen. **`game/buildings.py::_effective_building_queue_cap()` ist die Mutation-Authority:** unter `nodebuster-v1` erhalten Produktionsminen nur einen internen Safety-Sentinel und können ohne Ascension-Zwang über L200/L225/... weitergebaut werden.
+Der Resolver darf für Produktionsminen und Solar weiterhin den Nexus-Strukturwert liefern, weil technische Vorschauen ihn nutzen. **`game/buildings.py::_effective_building_queue_cap()` ist die Mutation-Authority:** unter `nodebuster-v1` erhalten Produktionsminen **und Solar** nur einen internen Safety-Sentinel. Minen behalten ihren freiwilligen Ascension/AP-Loop; Solar ist lediglich unbounded Infrastruktur und bekommt **keine** Mine-Ascension/AP.
 
 Mine Ascension ist stattdessen freiwilliger Prestige-Loop: Tiefe pushen → ausgewählte Mine resetten → AP verdienen → permanenten per-Mine Tree ausbauen → bis zur Lifetime-Besttiefe billiger/schneller rekonstruieren. Details: [MINE_EVOLUTION.md](MINE_EVOLUTION.md).
 

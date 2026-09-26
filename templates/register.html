@@ -196,6 +196,16 @@
           </span>
         </label>
 
+        <label class="auth-check auth-check--optional">
+          <input type="checkbox" name="mail_updates" value="1" data-register-mail-updates {% if request.method == 'POST' and request.form.get('mail_updates') == '1' %}checked{% endif %}>
+          <span>
+            {{ T("register_mail_updates_label", "Informiere mich gelegentlich per E-Mail über neue Genesis-Colonies-Universen und große Updates.") }}
+            <small class="auth-hint auth-hint-compact">
+              {{ T("register_mail_updates_hint", "Freiwillig · Bestätigung per E-Mail (Double-Opt-In) · jederzeit abbestellbar.") }}
+            </small>
+          </span>
+        </label>
+
         <button type="submit"
                 class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
                 data-loading-text="{{ loading }}">
@@ -220,6 +230,25 @@
     </section>
   </div>
 </div>
+
+<script>
+  (() => {
+    if (window.gcDiscordMailUpdatesBound) return;
+    window.gcDiscordMailUpdatesBound = true;
+    document.addEventListener('click', (ev) => {
+      const link = ev.target.closest && ev.target.closest('[data-auth-discord-register]');
+      if (!link) return;
+      const age = document.querySelector('[data-register-age]');
+      const legal = document.querySelector('[data-register-legal]');
+      const updates = document.querySelector('[data-register-mail-updates]');
+      const url = new URL(link.href, window.location.origin);
+      if (age && age.checked) url.searchParams.set('age_ok', '1');
+      if (legal && legal.checked) url.searchParams.set('legal_ack', '1');
+      if (updates && updates.checked) url.searchParams.set('mail_updates', '1');
+      link.href = url.toString();
+    }, true);
+  })();
+</script>
 
 {% if err %}
 <script>

@@ -1,11 +1,11 @@
 """
 GC-832 / GC-MINE-ASC-NEXUS-001 — Nexus producer level-cap matrix.
 
-Production mines and solar still expose the structural Nexus cap in EffectResolver.
+Production mines and Solar still expose the structural Nexus cap in EffectResolver.
 With both Nexuses at level 50 this reaches level 200. Under Nodebuster V1 the
-Buildings queue owner deliberately ignores that structural cap for production mines,
-so Ascension stays voluntary and mine progression remains unbounded. Solar continues
-to obey the Nexus cap; storage keeps its own formula.
+Buildings queue owner deliberately ignores that structural cap for production mines
+and Solar. Mines retain voluntary Ascension/AP; Solar is ordinary unbounded energy
+infrastructure. Storage keeps its own formula.
 
 Run: python -m pytest tests/test_nexus_building_caps.py -v
 """

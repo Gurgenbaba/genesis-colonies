@@ -47,7 +47,7 @@ Aufgerufen von:
 
 ## Energie
 
-- **Supply:** `solar_plant` (+ `geothermal_nexus` via `solar_output_factor`)
+- **Supply:** `solar_plant` (+ `geothermal_nexus` via `solar_output_factor`); unter Nodebuster ist Solar im Queue-Owner nach dem historischen Nexus-L200-Anker unbounded
 - **Demand:** `metal_mine`, `crystal_mine`, `fuel_cell_plant`
 - **Skalierung:** `energy_ratio = min(1, total/used)` drosselt alle Produktionsraten
 - **`energy_tech`:** reduziert nur Minen-Verbrauch (`mine_energy_factor`) — **1 % pro Stufe** (Alpha-Balance)
@@ -155,17 +155,16 @@ Gleiche Ressource als Input/Output ist verboten.
 | Setting | Default |
 |---------|---------|
 | `exchange_enabled` | 1 |
-| `exchange_rate_metal_to_crystal` | 0.85 |
-| `exchange_rate_crystal_to_metal` | 0.85 |
-| `exchange_daily_limit` | 50.000.000.000 | Admin-Hardcap (zusätzlich zu computed limit) |
+| `exchange_rate_metal_to_crystal` | 1.5 |
+| `exchange_rate_crystal_to_metal` | 1.0 |
 | `exchange_daily_limit_pct` | 80 | Prozent der Empire-Tagesproduktion (Fe+Cr+BZ/Tag) |
-| `exchange_daily_limit_min` | 500.000 | Untergrenze pro Commander |
-| `exchange_daily_limit_max` | 50.000.000.000 | Obergrenze pro Commander |
+| `exchange_daily_limit_min` | 500.000 | Untergrenze pro Commander; bestehende DBs können migrationsbedingt einen höheren Wert tragen |
 | `exchange_min_amount` | 100 |
 | `fuel_exchange_enabled` | 1 |
-| `fuel_exchange_metal_per_unit` | 20 |
-| `fuel_exchange_crystal_per_unit` | 14 |
+| `fuel_exchange_metal_per_unit` | 3 |
+| `fuel_exchange_crystal_per_unit` | 2 |
 | `fuel_exchange_min_units` | 10 |
+| `exchange_daily_limit`, `exchange_daily_limit_max` | **Legacy / vom Runtime-Limit ignoriert** |
 | `fuel_production_per_hour` | **Deprecated** — Anzeige/Legacy-Admin; Produktion via `LEVEL_GROWTH` base 8.0 |
 
 ### Regeln
@@ -173,7 +172,7 @@ Gleiche Ressource als Input/Output ist verboten.
 - Abbuchung/Gutschrift vom **context planet**
 - Trader Hub erlaubt **Overflow** über Lagerkapazität (Tausch + Schrottplatz)
 - Tageslimit zählt `give_amount` pro Spieler
-- **GC-557D:** `daily_limit = clamp(empire_day_total × pct / 100, min, max)`, dann `min(..., exchange_daily_limit)` — Empire-Tagesproduktion = Summe aller Kolonien (EffectResolver, ×24h)
+- **Runtime:** `daily_limit = max(exchange_daily_limit_min, floor(empire_day_total × exchange_daily_limit_pct / 100))`; **kein Hardcap**. Legacy-`exchange_daily_limit`/`exchange_daily_limit_max` werden absichtlich ignoriert (Regression: `test_exchange_daily_limit_ignores_legacy_admin_cap`). Empire-Tagesproduktion = Summe aller Kolonien (EffectResolver, ×24h)
 - Log: `exchange_log`
 
 Legacy: `POST /api/trader/fuel-exchange` delegiert an metal → fuel_cells; `game/fuel_exchange.py` deprecated.

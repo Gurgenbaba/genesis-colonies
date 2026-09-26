@@ -89,7 +89,7 @@ def test_v5_runtime_never_uses_resource_injection_floor():
     ), patch(
         "game.inactive_autoplay.plan_passive_planet_tick",
         return_value={"build": None, "finished": {}},
-    ), patch(
+    ) as plan, patch(
         "game.inactive_autoplay._maybe_join_world_boss",
         return_value={"ok": True, "joined": False},
     ):
@@ -97,6 +97,11 @@ def test_v5_runtime_never_uses_resource_injection_floor():
 
     assert out["ok"] is True
     floor.assert_not_called()
+    plan.assert_called_once()
+    kwargs = plan.call_args.kwargs
+    assert kwargs["build_duration_cap"] is None
+    assert kwargs["research_duration_cap"] is None
+    assert kwargs["chain_limit"] == 1
 
 
 def test_v5_ship_decision_uses_real_shipyard_without_timekeeper_boost():

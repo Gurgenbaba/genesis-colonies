@@ -15,7 +15,7 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 ## Rules
 
 - Never auto-debit on poll or page load **for a human-driven request** (HUD/⚡ flow below).
-- Exception — autoplay accounts (EPIC-26, GC-2616): `game/auto_empire.py::_auto_boost_timekeeper` auto-credits + auto-applies for **inactive sticky-roster** accounts (`game/inactive_autoplay.py`) and **pirate AI bots** (`game/pirates/economy.py`) only, never for a human player mid-session. Both share the one `plan_passive_planet_tick` owner — no parallel speed mechanic per faction (Rule 16).
+- AI-only exception — `game/auto_empire.py::_auto_boost_timekeeper` may auto-credit + auto-apply for planner-driven AI paths such as pirate economy. **Dormant human Living Universe actions do not use this refill** and use canonical real queue timers.
 - Apply only via **⚡** on the **active mini-queue strip** (Build/Research/Shipyard/Defense/Troops) or PE queue list → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, active_job_remaining)`).
 - **One ⚡ per job** — no second Apply on building/research hero slots or PE tech cards.
 - Domains: `build`, `research`, `shipyard`, `defense`, `troops`, `planet_research`, `ascension`.
@@ -69,13 +69,17 @@ Response: `{ ok, reason, state, timekeeper, seconds_applied, jobs_finished }`
 **GC-TK-PANEL-REFRESH-001:** When apply completes the active head (`jobs_finished: true` on response + `state`, detected after finish by head-job id change), the client calls `forceCanonicalGameStateRefresh("timekeeper_apply")` on Buildings / Research / Shipyard / Defense / PE pages so locks, affordability, and stock update from `include_panel=1` (same path as timer-zero). Slim apply stays diet; full panel is only fetched after a real finish. **GC-INSTANT-QUEUE-FINISH-001:** natural timer-zero (and the same card path) optimistic-patches level from `data-target-level` before that reconcile so the UI does not wait on `include_panel` RTT. `syncProductionPanelsAfterGameState` also refreshes shipyard/defense **catalog/stock** after any on-page `timekeeper_apply` when the slim slice omitted ships/defenses — progressive batch delivery can grant units without `jobs_finished`.
 `POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory vault TK chips: Alle / Bau / Forschung / Werft).
 
-## Autoplay auto-boost (GC-2616)
+## AI planner auto-boost (GC-2616)
 
-Defense/Shipyard queues have no `duration_cap` in `plan_passive_planet_tick` (build/research already force-complete same-tick via `duration_cap` + `chain_limit`, so an auto-apply there would spend balance with no visible extra effect). For autoplay accounts only:
+The shared planner still supports an **AI-only** Shipyard/Defense acceleration path:
 
-1. After a successful `try_build_defense`/`try_build_ships` enqueue, `_auto_boost_timekeeper(conn, player_id, planet_id, domain)` runs.
-2. If `timekeeper.get_balance(player_id) <= 0`: `timekeeper.credit(player_id, 36_000, source="autoplay_replenish")` (10h refill).
-3. `timekeeper.apply_timekeeper(player_id, domain, planet_id=planet_id, mode="max")` — same ledger/API path a manually playing owner uses; if the account's human owner returns to active play, their own Timekeeper history shows these entries (`source="autoplay_replenish"` / `source` starting with `apply:<domain>`) — nothing hidden or fake.
+1. After a planner-driven `try_build_defense`/`try_build_ships` enqueue, an AI caller may run `_auto_boost_timekeeper(conn, player_id, planet_id, domain)`.
+2. If its Timekeeper balance is empty, the helper can credit 36,000 s with source `autoplay_replenish`.
+3. It then applies that balance through the canonical Timekeeper owner.
+
+Living Universe V6 dormant-human decisions intentionally bypass this helper for
+Shipyard/Defense and pass `duration_cap=None` for Build/Research. A dormant
+human therefore gets no synthetic queue time or synthetic Timekeeper credit.
 
 ## Migration
 

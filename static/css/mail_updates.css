@@ -1,0 +1,63 @@
+.gc-mail-updates-prompt {
+  position: fixed;
+  right: 20px;
+  bottom: 76px;
+  z-index: 1200;
+  width: min(390px, calc(100vw - 28px));
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(101, 187, 255, .28);
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgba(10, 22, 37, .97), rgba(7, 14, 26, .97)),
+    radial-gradient(circle at top right, rgba(55, 161, 255, .18), transparent 55%);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .42), inset 0 1px rgba(255,255,255,.04);
+  color: var(--text, #e6edf3);
+  backdrop-filter: blur(12px);
+}
+.gc-mail-updates-prompt[hidden] { display: none !important; }
+.gc-mail-updates-prompt-kicker {
+  margin-bottom: 5px;
+  color: #76c8ff;
+  font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .14em;
+}
+.gc-mail-updates-prompt-title {
+  display: block;
+  padding-right: 26px;
+  font-size: 17px;
+}
+.gc-mail-updates-prompt p {
+  margin: 8px 0 12px;
+  color: rgba(230, 237, 243, .78);
+  line-height: 1.45;
+}
+.gc-mail-updates-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gc-mail-updates-prompt-close {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  border: 0;
+  background: transparent;
+  color: rgba(230, 237, 243, .6);
+  font-size: 22px;
+  cursor: pointer;
+}
+.gc-mail-updates-prompt-status,
+.gc-mail-updates-prompt-privacy {
+  display: block;
+  margin-top: 9px;
+  color: rgba(230, 237, 243, .58);
+  font-size: 11px;
+}
+.gc-mail-updates-prompt-status:empty { display: none; }
+@media (max-width: 640px) {
+  .gc-mail-updates-prompt {
+    right: 14px;
+    bottom: 76px;
+    width: calc(100vw - 28px);
+  }
+}

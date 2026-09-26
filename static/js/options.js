@@ -35,6 +35,7 @@
         setFieldValue(form, "email", email);
         if (page) page.setAttribute("data-email", email);
         updateEmailVerifyUi(Boolean(data.email_verified));
+        refreshMailUpdatesStatus();
       },
     },
     "options-form-password": {
@@ -554,6 +555,144 @@
     });
   }
 
+  function setMailUpdatesHint(text, isError) {
+    const hint = document.getElementById("options-mail-updates-hint");
+    if (!hint) return;
+    hint.textContent = text || "";
+    hint.hidden = !text;
+    hint.classList.toggle("gc-options-hint-error", Boolean(isError));
+    hint.classList.toggle("gc-options-hint-success", Boolean(text) && !isError);
+  }
+
+  function renderMailUpdatesStatus(state) {
+    const block = document.getElementById("options-mail-updates");
+    const badge = document.getElementById("options-mail-updates-badge");
+    const enable = document.getElementById("options-mail-updates-enable");
+    const disable = document.getElementById("options-mail-updates-disable");
+    if (!block || !badge || !enable || !disable) return;
+
+    const status = String((state && state.status) || "unavailable");
+    const eligible = Boolean(state && state.eligible);
+    const configured = Boolean(state && state.configured);
+    block.dataset.mailUpdatesStatus = status;
+    enable.hidden = true;
+    disable.hidden = true;
+    badge.classList.remove("gc-options-verify-badge-ok", "gc-options-verify-badge-warn");
+
+    if (!configured || status === "unavailable") {
+      badge.classList.add("gc-options-verify-badge-warn");
+      badge.textContent = t("options_mail_updates_unavailable", "E-Mail-Updates sind gerade nicht verfügbar.");
+      return;
+    }
+    if (!eligible) {
+      badge.classList.add("gc-options-verify-badge-warn");
+      badge.textContent = status === "email_unverified"
+        ? t("options_mail_updates_verify_first", "Bitte bestätige zuerst deine Account-E-Mail.")
+        : t("options_mail_updates_need_email", "Hinterlege zuerst eine E-Mail-Adresse.");
+      return;
+    }
+    if (status === "confirmed") {
+      badge.classList.add("gc-options-verify-badge-ok");
+      badge.textContent = t("options_mail_updates_active", "Aktiv · bestätigt");
+      disable.hidden = false;
+      return;
+    }
+    if (status === "pending") {
+      badge.classList.add("gc-options-verify-badge-warn");
+      badge.textContent = t("options_mail_updates_pending", "Bestätigung ausstehend");
+      enable.hidden = false;
+      enable.textContent = t("options_mail_updates_resend", "Bestätigung erneut senden");
+      return;
+    }
+
+    badge.textContent = t("options_mail_updates_inactive", "Nicht aktiviert");
+    enable.hidden = false;
+    enable.textContent = t("options_mail_updates_enable", "E-Mail-Updates aktivieren");
+  }
+
+  async function refreshMailUpdatesStatus() {
+    const block = document.getElementById("options-mail-updates");
+    if (!block || typeof GC.fetchGameAction !== "function") return;
+    try {
+      const res = await GC.fetchGameAction("/api/options/mail-updates/status", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      if (!res || res.ok !== true) {
+        renderMailUpdatesStatus({ configured: false, status: "unavailable" });
+        return;
+      }
+      renderMailUpdatesStatus(res.data || {});
+    } catch (err) {
+      if (err && err.name === "AuthError") return;
+      renderMailUpdatesStatus({ configured: false, status: "unavailable" });
+    }
+  }
+
+  function bindMailUpdatesControls() {
+    const block = document.getElementById("options-mail-updates");
+    const enable = document.getElementById("options-mail-updates-enable");
+    const disable = document.getElementById("options-mail-updates-disable");
+    if (!block || !enable || !disable || block.dataset.gcBound === "1") return;
+    block.dataset.gcBound = "1";
+
+    enable.addEventListener("click", async () => {
+      if (enable.disabled) return;
+      enable.disabled = true;
+      setMailUpdatesHint("", false);
+      try {
+        const res = await postOptionsJson("/api/options/mail-updates/enable", {});
+        if (!res || res.ok !== true) {
+          setMailUpdatesHint(msgKey(res && res.error), true);
+          return;
+        }
+        setMailUpdatesHint(
+          t("options_mail_updates_confirmation_sent", "Bestätigungs-E-Mail wurde gesendet."),
+          false
+        );
+        await refreshMailUpdatesStatus();
+      } catch (err) {
+        if (!(err && err.name === "AuthError")) {
+          setMailUpdatesHint(
+            t("options_mail_updates_unavailable", "E-Mail-Updates sind gerade nicht verfügbar."),
+            true
+          );
+        }
+      } finally {
+        enable.disabled = false;
+      }
+    });
+
+    disable.addEventListener("click", async () => {
+      if (disable.disabled) return;
+      disable.disabled = true;
+      setMailUpdatesHint("", false);
+      try {
+        const res = await postOptionsJson("/api/options/mail-updates/disable", {});
+        if (!res || res.ok !== true) {
+          setMailUpdatesHint(msgKey(res && res.error), true);
+          return;
+        }
+        setMailUpdatesHint(
+          t("options_mail_updates_disabled", "E-Mail-Updates wurden deaktiviert."),
+          false
+        );
+        await refreshMailUpdatesStatus();
+      } catch (err) {
+        if (!(err && err.name === "AuthError")) {
+          setMailUpdatesHint(
+            t("options_mail_updates_unavailable", "E-Mail-Updates sind gerade nicht verfügbar."),
+            true
+          );
+        }
+      } finally {
+        disable.disabled = false;
+      }
+    });
+
+    refreshMailUpdatesStatus();
+  }
+
   const OPTIONS_TAB_LS_KEY = "gc_options_active_tab";
   const OPTIONS_TABS = ["profile", "account", "notify", "galaxy", "vacation", "security"];
 
@@ -657,6 +796,7 @@
       setSpyProbeInputUi(readSpyProbeCount(page));
     }
     bindResendVerification();
+    bindMailUpdatesControls();
     bindDiscordUnlink();
     const safetyFromPage = readOptionsSafetyFromPage(page);
     syncSafetyCountdownTimers(safetyFromPage);

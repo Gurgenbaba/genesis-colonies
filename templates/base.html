@@ -549,6 +549,8 @@
   {% endif %}
 
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mail_updates.css') }}?v={{ GC_ASSET_VERSION }}">
+  {% include "partials/mail_updates_prompt.html" %}
   {% include "partials/chat.html" %}
   {% include "partials/player_card_modal.html" %}
   {% include "partials/ship_detail_modal.html" %}
@@ -813,6 +815,7 @@
   <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/messages.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/options.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+  <script src="{{ url_for('static', filename='js/mail_updates_prompt.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% endif %}
   {% block extra_scripts %}{% endblock %}
 </body>
