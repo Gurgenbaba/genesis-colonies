@@ -27,7 +27,13 @@ from game.discord_support import (
     sync_discord_thread_tags,
 )
 from game.models import create_user, init_db
-from game.support import change_ticket_status, create_ticket, notify_discord_new_ticket
+from game.support import (
+    change_ticket_status,
+    create_ticket,
+    list_tickets,
+    notify_discord_new_ticket,
+    office_reply_ticket,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATE_SCRIPT = ROOT / "migrate.py"
@@ -101,6 +107,44 @@ def test_create_ticket_without_discord_does_not_call_api(support_db, monkeypatch
     assert res["ok"] is True
     assert int(res["data"]["ticket_id"]) > 0
     assert called["n"] == 0
+
+
+def test_office_reply_lands_in_player_ticket_without_mail(support_db, monkeypatch):
+    player_id, _ = _create_player()
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
+    created = create_ticket(
+        player_id,
+        {"subject": "Ingame", "category": "general", "message": "Bitte ingame antworten."},
+    )
+    ticket_id = int(created["data"]["ticket_id"])
+
+    delivered = office_reply_ticket(
+        f"uni1:{ticket_id}",
+        f"uni1:{player_id}",
+        "office-delivery-0001",
+        "Antwort direkt aus Gurgenbaba Office.",
+    )
+    assert delivered["ok"] is True
+
+    state = list_tickets(player_id)
+    ticket = next(item for item in state["data"]["tickets"] if int(item["id"]) == ticket_id)
+    assert ticket["status"] == "in_progress"
+    assert ticket["messages"][-1]["sender_role"] == "admin"
+    assert ticket["messages"][-1]["sender_name"] == "Support"
+    assert ticket["messages"][-1]["message"] == "Antwort direkt aus Gurgenbaba Office."
+    message_count = len(ticket["messages"])
+
+    replay = office_reply_ticket(
+        f"uni1:{ticket_id}",
+        f"uni1:{player_id}",
+        "office-delivery-0001",
+        "Antwort direkt aus Gurgenbaba Office.",
+    )
+    assert replay["ok"] is True
+    assert replay["data"]["duplicate"] is True
+    replay_state = list_tickets(player_id)
+    replay_ticket = next(item for item in replay_state["data"]["tickets"] if int(item["id"]) == ticket_id)
+    assert len(replay_ticket["messages"]) == message_count
 
 
 def test_create_ticket_creates_forum_thread(support_db, monkeypatch):
