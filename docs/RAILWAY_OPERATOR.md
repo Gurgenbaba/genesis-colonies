@@ -47,16 +47,17 @@ Still manual (platform/registrar) — do once, then push-to-deploy is enough:
 
 ### 1. DNS & domains
 
-- [ ] `www.genesis-colonies.de` is the **canonical browser/auth origin** and is healthy on Railway.
-- [ ] `genesis-colonies.com` stays attached to the same authority service as the stable public/toplist entry URL.
-- [ ] `GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com` on the authority service.
-- [ ] Browser traffic hitting `.com` redirects with HTTP 308 to the same path/query on `www.genesis-colonies.de` **before session/auth hooks run**.
-- [ ] `/api/*` is deliberately exempt from alias redirects so existing vote/payment postbacks keep working even when a provider still calls the `.com` host.
+- [ ] `dev.genesis-colonies.com` is the **canonical DEV/browser/auth origin** and is healthy on Railway.
+- [ ] `www.genesis-colonies.de` stays attached to the authority service for old bookmarks/users.
+- [ ] `genesis-colonies.com` stays attached to the authority service as the stable public/toplist entry URL.
+- [ ] `GC_PUBLIC_ALIAS_HOSTS=www.genesis-colonies.de,genesis-colonies.com` on the authority service.
+- [ ] Browser traffic hitting either legacy alias redirects with HTTP 308 to the same path/query on `dev.genesis-colonies.com` **before session/auth hooks run**.
+- [ ] `/api/*` is deliberately exempt from alias redirects so existing vote/payment postbacks keep working.
 - [ ] `PUBLIC_BASE_URL=https://dev.genesis-colonies.com`.
-- [ ] Discord OAuth / payment return URLs use the canonical `.de` origin. Do not start a second browser session on `.com`.
-- [ ] TLS green for both public hosts.
+- [ ] New Discord OAuth / payment return URLs use the canonical DEV origin; legacy browser return URLs may redirect once to DEV.
+- [ ] TLS green for DEV and all retained aliases.
 
-The `.com` address may remain listed on TopG/GTop100/Arena/GameToor and other directories. Human visitors take one canonical redirect; machine callbacks under `/api/*` remain accepted directly.
+The root `.com` address may remain listed on TopG/GTop100/Arena/GameToor and other directories. Human visitors take one canonical redirect; machine callbacks under `/api/*` remain accepted directly.
 
 
 ### Adding the next universe without code changes
@@ -64,10 +65,10 @@ The `.com` address may remain listed on TopG/GTop100/Arena/GameToor and other di
 1. Create/clone the isolated Railway universe service and database.
 2. Attach `uniN.genesis-colonies.com` to that service.
 3. Add `uniN` to `GC_NETWORK_UNIVERSES` on DEV and all participating universe services.
-4. Set the new service to `GC_UNIVERSE_KEY=uniN`, `PUBLIC_BASE_URL=https://uniN.genesis-colonies.com`, and `GC_NETWORK_UNIN_OPEN=0`.
+4. Example for UNI 2: set `GC_UNIVERSE_KEY=uni2`, `PUBLIC_BASE_URL=https://uni2.genesis-colonies.com`, and `GC_NETWORK_UNI2_OPEN=0`.
 5. Deploy while closed, run that universe's launch/reset contract, then explicitly flip its OPEN flag when ready.
 
-The generic Network handoff resolves `uniN` from `GC_NETWORK_DOMAIN`; `GC_NETWORK_UNIN_URL` is only needed when a universe does not follow the standard hostname convention.
+The generic Network handoff resolves `uniN` from `GC_NETWORK_DOMAIN`; an explicit `GC_NETWORK_UNI2_URL` (and later the matching `GC_NETWORK_<KEY>_URL`) is only needed when a universe does not follow the standard hostname convention.
 
 ### 2. Wait for CI (one toggle)
 
