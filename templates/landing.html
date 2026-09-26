@@ -244,45 +244,53 @@
     </header>
 
     <div class="landing-server-grid">
-      <article class="landing-server-card landing-server-card--live">
-        <div class="landing-server-card-head">
-          <div>
-            <span class="landing-server-code">{{ server_dev_code }}</span>
-            <h3 class="landing-server-name">{{ server_dev_name }}</h3>
-          </div>
-          <span class="landing-server-status landing-server-status--live">
-            <span class="landing-server-status-dot" aria-hidden="true"></span>{{ server_live_label }}
-          </span>
-        </div>
-        <p class="landing-server-desc">{{ server_dev_desc }}</p>
-        <div class="landing-server-meta">{{ server_dev_meta }}</div>
-        <div class="landing-server-actions">
-          <a class="gc-btn gc-btn-primary" href="{{ dev_base_url }}/register">{{ server_register }}</a>
-          <a class="gc-btn gc-btn-ghost" href="{{ dev_base_url }}/login">{{ server_login }}</a>
-        </div>
-      </article>
+      {% for universe in GC_NETWORK_UNIVERSES %}
+        {% set is_dev = universe.authority %}
+        {% set is_uni1 = universe.key == 'uni1' %}
+        {% if is_dev %}
+          {% set card_code = server_dev_code %}
+          {% set card_name = server_dev_name %}
+          {% set card_desc = server_dev_desc %}
+          {% set card_meta = server_dev_meta %}
+        {% elif is_uni1 %}
+          {% set card_code = server_uni1_code %}
+          {% set card_name = server_uni1_name %}
+          {% set card_desc = server_uni1_desc %}
+          {% set card_meta = server_uni1_meta %}
+        {% else %}
+          {% set card_code = universe.label %}
+          {% set card_name = universe.label %}
+          {% set card_desc = "Eigenständiges Genesis-Colonies-Universum." %}
+          {% set card_meta = "Genesis Network · " ~ universe.url %}
+        {% endif %}
 
-      <article class="landing-server-card landing-server-card--uni1{% if not uni1_open %} is-locked{% endif %}">
+      <article class="landing-server-card landing-server-card--{{ universe.key }}{% if universe.open %} landing-server-card--live{% else %} is-locked{% endif %}">
         <div class="landing-server-card-head">
           <div>
-            <span class="landing-server-code">{{ server_uni1_code }}</span>
-            <h3 class="landing-server-name">{{ server_uni1_name }}</h3>
+            <span class="landing-server-code">{{ card_code }}</span>
+            <h3 class="landing-server-name">{{ card_name }}</h3>
           </div>
-          <span class="landing-server-status{% if uni1_open %} landing-server-status--live{% else %} landing-server-status--prepare{% endif %}">
-            {% if uni1_open %}<span class="landing-server-status-dot" aria-hidden="true"></span>{{ server_live_label }}{% else %}{{ server_prepare_label }}{% endif %}
+          <span class="landing-server-status{% if universe.open %} landing-server-status--live{% else %} landing-server-status--prepare{% endif %}">
+            {% if universe.open %}<span class="landing-server-status-dot" aria-hidden="true"></span>{{ server_live_label }}{% else %}{{ server_prepare_label }}{% endif %}
           </span>
         </div>
-        <p class="landing-server-desc">{{ server_uni1_desc }}</p>
-        <div class="landing-server-meta">{{ server_uni1_meta }}</div>
+        <p class="landing-server-desc">{{ card_desc }}</p>
+        <div class="landing-server-meta">{{ card_meta }}</div>
         <div class="landing-server-actions">
-          {% if uni1_open %}
-            <a class="gc-btn gc-btn-primary" href="{{ uni1_base_url }}/register">{{ server_register }}</a>
-            <a class="gc-btn gc-btn-ghost" href="{{ uni1_base_url }}/login">{{ server_login }}</a>
+          {% if universe.open %}
+            {% if universe.authority %}
+              <a class="gc-btn gc-btn-primary" href="{{ universe.url }}/register">{{ server_register }}</a>
+              <a class="gc-btn gc-btn-ghost" href="{{ universe.url }}/login">{{ server_login }}</a>
+            {% else %}
+              <a class="gc-btn gc-btn-primary" href="{{ GC_NETWORK_AUTHORITY_URL }}/register?network_target={{ universe.key }}">{{ server_register }}</a>
+              <a class="gc-btn gc-btn-ghost" href="{{ GC_NETWORK_AUTHORITY_URL }}/login?network_target={{ universe.key }}">{{ server_login }}</a>
+            {% endif %}
           {% else %}
             <button class="gc-btn gc-btn-ghost landing-server-disabled" type="button" disabled aria-disabled="true">{{ server_soon }}</button>
           {% endif %}
         </div>
       </article>
+      {% endfor %}
     </div>
   </section>
 
