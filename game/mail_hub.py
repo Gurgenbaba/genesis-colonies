@@ -7,6 +7,7 @@ must never break registration, login or gameplay.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -25,6 +26,12 @@ def _env(name: str, default: str = "") -> str:
 
 def configured() -> bool:
     return bool(_env("MAIL_HUB_URL") and _env("MAIL_HUB_API_KEY"))
+
+
+def callback_key_valid(supplied: str) -> bool:
+    expected = _env("MAIL_HUB_API_KEY")
+    candidate = str(supplied or "").strip()
+    return bool(expected and candidate and hmac.compare_digest(candidate, expected))
 
 
 def _identity(user_id: int) -> str:
@@ -137,6 +144,13 @@ def _office_ticket_category(category: str) -> str:
     return _SUPPORT_CATEGORY_MAP.get(str(category or "general").strip().lower(), "other")
 
 
+def _support_reply_url() -> str:
+    from .config import get_public_base_url
+
+    base = get_public_base_url().rstrip("/")
+    return f"{base}/api/office/support/reply" if base.startswith("https://") else ""
+
+
 def sync_support_ticket(
     ticket_id: int,
     *,
@@ -146,6 +160,7 @@ def sync_support_ticket(
     priority: str = "normal",
     player_name: str = "",
     player_email: str = "",
+    player_id: int | None = None,
 ) -> Tuple[bool, Dict[str, Any]]:
     """Mirror a Genesis support ticket into Gurgenbaba Office.
 
@@ -153,6 +168,7 @@ def sync_support_ticket(
     deliberately best-effort: callers must not fail a player action when Office
     is unavailable.
     """
+    requester_external_id = _identity(player_id) if player_id is not None else ""
     return _post(
         "/api/v1/tickets/intake",
         {
@@ -163,6 +179,8 @@ def sync_support_ticket(
             "body": str(message or "")[:10000],
             "requester_name": str(player_name or "")[:160],
             "requester_email": str(player_email or "").strip() or None,
+            "requester_external_id": requester_external_id,
+            "reply_url": _support_reply_url() if requester_external_id else "",
             "priority": str(priority or "normal"),
         },
     )
