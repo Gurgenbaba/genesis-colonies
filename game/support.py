@@ -213,6 +213,7 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
             priority=priority,
             player_name=player_name,
             player_email=player_email,
+            player_id=int(player_id),
         )
 
     return _ok({"ticket_id": ticket_id})
@@ -410,6 +411,73 @@ def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]
             direction="inbound",
         )
         return _ok({"ticket_id": int(ticket_id)})
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def office_reply_ticket(
+    external_ticket_id: str,
+    requester_external_id: str,
+    message: str,
+) -> dict[str, Any]:
+    """Accept an authenticated Gurgenbaba Office reply without echoing it back."""
+    msg = _norm_text(message, 1200)
+    if not msg:
+        return _err("missing_message")
+    universe = mail_hub_logic._env("GC_UNIVERSE_KEY", "uni1") or "uni1"
+    try:
+        ticket_universe, raw_ticket_id = str(external_ticket_id or "").split(":", 1)
+        player_universe, raw_player_id = str(requester_external_id or "").split(":", 1)
+        ticket_id = int(raw_ticket_id)
+        player_id = int(raw_player_id)
+    except (TypeError, ValueError):
+        return _err("invalid_target")
+    if ticket_universe != universe or player_universe != universe:
+        return _err("forbidden")
+
+    conn = db()
+    try:
+        if not _table_ready(conn):
+            return _err("support_not_ready")
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, player_id, category, discord_thread_id FROM support_tickets WHERE id = ? LIMIT 1;",
+            (ticket_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found")
+        if int(row["player_id"]) != player_id:
+            return _err("forbidden")
+
+        now = _now()
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            INSERT INTO support_messages (ticket_id, sender_id, sender_role, message, created_at)
+            VALUES (?, NULL, 'admin', ?, ?);
+            """,
+            (ticket_id, msg, now),
+        )
+        conn.execute(
+            """
+            UPDATE support_tickets
+            SET status = CASE WHEN status = 'closed' THEN 'open' WHEN status = 'open' THEN 'in_progress' ELSE status END,
+                updated_at = ?, last_message_at = ?
+            WHERE id = ?;
+            """,
+            (now, now, ticket_id),
+        )
+        commit(conn)
+        _sync_discord_ticket_tags(
+            discord_thread_id=str(row["discord_thread_id"] or ""),
+            category=str(row["category"] or "general"),
+            status="in_progress",
+        )
+        return _ok({"ticket_id": ticket_id})
     except Exception:
         rollback(conn)
         raise
