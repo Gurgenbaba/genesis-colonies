@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from game.config import _validate_network_runtime_config, canonical_public_redirect_target
 
 
@@ -173,6 +175,15 @@ def test_uni1_launch_rejects_old_ascension_ruleset(monkeypatch):
     monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
     errors = _validate_network_runtime_config()
     assert any("Nodebuster" in error for error in errors)
+
+
+def test_canonical_origin_hook_runs_before_network_auth():
+    app_source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+
+    canonical_hook = app_source.index("def _canonical_public_origin_redirect")
+    network_install = app_source.index("install_network_auth(app)")
+
+    assert canonical_hook < network_install
 
 
 def test_x1_profile_overrides_all_universe_speed_domains(monkeypatch):
