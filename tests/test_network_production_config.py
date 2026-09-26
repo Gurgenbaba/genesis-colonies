@@ -5,8 +5,9 @@ from pathlib import Path
 from game.config import _validate_network_runtime_config, canonical_public_redirect_target
 
 
-AUTHORITY_URL = "https://www.genesis-colonies.de"
-UNI1_URL = "https://genesis-colonies-u2-production.up.railway.app"
+AUTHORITY_URL = "https://dev.genesis-colonies.com"
+UNI1_URL = "https://uni1.genesis-colonies.com"
+UNI2_URL = "https://uni2.genesis-colonies.com"
 
 
 def _set_network_base(monkeypatch, *, universe: str = "dev") -> None:
@@ -15,6 +16,8 @@ def _set_network_base(monkeypatch, *, universe: str = "dev") -> None:
     monkeypatch.setenv("FLASK_DEBUG", "0")
     monkeypatch.setenv("GC_UNIVERSE_KEY", universe)
     monkeypatch.setenv("GC_NETWORK_AUTHORITY_KEY", "dev")
+    monkeypatch.setenv("GC_NETWORK_DOMAIN", "genesis-colonies.com")
+    monkeypatch.setenv("GC_NETWORK_UNIVERSES", "uni1")
     monkeypatch.setenv("GC_NETWORK_AUTHORITY_URL", AUTHORITY_URL)
     monkeypatch.setenv("GC_NETWORK_UNI1_URL", UNI1_URL)
     monkeypatch.setenv(
@@ -54,7 +57,7 @@ def test_authority_accepts_marketing_alias_without_session_split(monkeypatch):
     _set_network_base(monkeypatch, universe="dev")
     monkeypatch.setenv(
         "GC_PUBLIC_ALIAS_HOSTS",
-        "genesis-colonies.com,genesis-colonies.de",
+        "www.genesis-colonies.de,genesis-colonies.com",
     )
     assert _validate_network_runtime_config() == []
 
@@ -76,12 +79,12 @@ def test_network_authority_and_uni1_hosts_must_be_distinct(monkeypatch):
 
     errors = _validate_network_runtime_config()
 
-    assert any("must use different hosts" in error for error in errors)
+    assert any("must be distinct" in error for error in errors)
 
 
 def test_public_alias_must_not_repeat_canonical_host(monkeypatch):
     _set_network_base(monkeypatch, universe="dev")
-    monkeypatch.setenv("GC_PUBLIC_ALIAS_HOSTS", "www.genesis-colonies.de")
+    monkeypatch.setenv("GC_PUBLIC_ALIAS_HOSTS", "dev.genesis-colonies.com")
 
     errors = _validate_network_runtime_config()
 
@@ -98,7 +101,7 @@ def test_public_alias_redirect_preserves_path_and_query(monkeypatch):
         query_string="network_target=uni1",
     )
 
-    assert target == "https://www.genesis-colonies.de/login?network_target=uni1"
+    assert target == "https://dev.genesis-colonies.com/login?network_target=uni1"
 
 
 def test_public_alias_does_not_redirect_machine_callbacks(monkeypatch):
@@ -116,6 +119,26 @@ def test_public_alias_does_not_redirect_machine_callbacks(monkeypatch):
             request_host="genesis-colonies.com",
             path=path,
         ) == ""
+
+
+
+def test_future_universe_uses_domain_convention_without_code_change(monkeypatch):
+    _set_network_base(monkeypatch, universe="uni2")
+    monkeypatch.setenv("GC_NETWORK_UNIVERSES", "uni1,uni2")
+    monkeypatch.setenv("GC_NETWORK_UNI2_OPEN", "0")
+    monkeypatch.setenv("PUBLIC_BASE_URL", UNI2_URL)
+
+    assert _validate_network_runtime_config() == []
+
+
+def test_future_universe_role_must_be_registered(monkeypatch):
+    _set_network_base(monkeypatch, universe="uni2")
+    monkeypatch.setenv("GC_NETWORK_UNIVERSES", "uni1")
+    monkeypatch.setenv("PUBLIC_BASE_URL", UNI2_URL)
+
+    errors = _validate_network_runtime_config()
+
+    assert any("GC_NETWORK_UNIVERSES" in error for error in errors)
 
 
 def test_network_production_config_requires_explicit_universe(monkeypatch):
