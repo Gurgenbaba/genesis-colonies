@@ -358,8 +358,15 @@ def list_all_tickets(admin_id: int, *, status: str | None = None) -> dict[str, A
 
 def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]:
     msg = _norm_text(message, 1200)
+    delivery = str(delivery_id or "").strip()
     if not msg:
         return _err("missing_message")
+    if (
+        len(delivery) < 8
+        or len(delivery) > 128
+        or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for ch in delivery)
+    ):
+        return _err("invalid_delivery")
     conn = db()
     try:
         if not _table_ready(conn):
@@ -421,6 +428,7 @@ def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]
 def office_reply_ticket(
     external_ticket_id: str,
     requester_external_id: str,
+    delivery_id: str,
     message: str,
 ) -> dict[str, Any]:
     """Accept an authenticated Gurgenbaba Office reply without echoing it back."""
@@ -455,6 +463,27 @@ def office_reply_ticket(
 
         now = _now()
         begin_write_transaction(conn)
+        existing_delivery = conn.execute(
+            "SELECT ticket_id FROM support_office_deliveries WHERE delivery_id = ? LIMIT 1;",
+            (delivery,),
+        ).fetchone()
+        if existing_delivery:
+            if int(existing_delivery["ticket_id"]) != ticket_id:
+                rollback(conn)
+                return _err("forbidden")
+            commit(conn)
+            return _ok({"ticket_id": ticket_id, "duplicate": True})
+        inserted = conn.execute(
+            """
+            INSERT INTO support_office_deliveries(delivery_id, ticket_id, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(delivery_id) DO NOTHING;
+            """,
+            (delivery, ticket_id, now),
+        )
+        if int(getattr(inserted, "rowcount", 0) or 0) == 0:
+            commit(conn)
+            return _ok({"ticket_id": ticket_id, "duplicate": True})
         conn.execute(
             """
             INSERT INTO support_messages (ticket_id, sender_id, sender_role, message, created_at)
