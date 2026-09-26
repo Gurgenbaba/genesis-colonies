@@ -52,11 +52,22 @@ Still manual (platform/registrar) — do once, then push-to-deploy is enough:
 - [ ] `GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com` on the authority service.
 - [ ] Browser traffic hitting `.com` redirects with HTTP 308 to the same path/query on `www.genesis-colonies.de` **before session/auth hooks run**.
 - [ ] `/api/*` is deliberately exempt from alias redirects so existing vote/payment postbacks keep working even when a provider still calls the `.com` host.
-- [ ] `PUBLIC_BASE_URL=https://www.genesis-colonies.de`.
+- [ ] `PUBLIC_BASE_URL=https://dev.genesis-colonies.com`.
 - [ ] Discord OAuth / payment return URLs use the canonical `.de` origin. Do not start a second browser session on `.com`.
 - [ ] TLS green for both public hosts.
 
 The `.com` address may remain listed on TopG/GTop100/Arena/GameToor and other directories. Human visitors take one canonical redirect; machine callbacks under `/api/*` remain accepted directly.
+
+
+### Adding the next universe without code changes
+
+1. Create/clone the isolated Railway universe service and database.
+2. Attach `uniN.genesis-colonies.com` to that service.
+3. Add `uniN` to `GC_NETWORK_UNIVERSES` on DEV and all participating universe services.
+4. Set the new service to `GC_UNIVERSE_KEY=uniN`, `PUBLIC_BASE_URL=https://uniN.genesis-colonies.com`, and `GC_NETWORK_UNIN_OPEN=0`.
+5. Deploy while closed, run that universe's launch/reset contract, then explicitly flip its OPEN flag when ready.
+
+The generic Network handoff resolves `uniN` from `GC_NETWORK_DOMAIN`; `GC_NETWORK_UNIN_URL` is only needed when a universe does not follow the standard hostname convention.
 
 ### 2. Wait for CI (one toggle)
 
@@ -78,12 +89,14 @@ Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `
 | `GUNICORN_WORKERS` | **am besten unset** → SQLite `1`, PostgreSQL Production `2`; ein alter PG-Wert `1` wird automatisch auf `2` gefloort |
 | `GUNICORN_WORKER_CLASS` | `gthread` (default; `gevent` only if live WS push required) |
 | `GUNICORN_THREADS` | `4` (gthread) |
-| `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` on authority; `https://genesis-colonies-u2-production.up.railway.app` on UNI1 |
-| `GC_PUBLIC_ALIAS_HOSTS` | authority: `genesis-colonies.com`; UNI1: unset |
-| `GC_UNIVERSE_KEY` | authority: `dev`; UNI1: `uni1` |
+| `PUBLIC_BASE_URL` | `https://dev.genesis-colonies.com` on authority; `https://uni1.genesis-colonies.com` on UNI1 |
+| `GC_PUBLIC_ALIAS_HOSTS` | authority: `www.genesis-colonies.de,genesis-colonies.com`; universe services: unset |
+| `GC_NETWORK_DOMAIN` | `genesis-colonies.com` |
+| `GC_NETWORK_UNIVERSES` | authority + universe services: `uni1` (later `uni1,uni2,...`) |
+| `GC_UNIVERSE_KEY` | authority: `dev`; UNI1: `uni1`; future services: matching `uniN` |
 | `GC_NETWORK_AUTHORITY_KEY` | `dev` |
-| `GC_NETWORK_AUTHORITY_URL` | `https://www.genesis-colonies.de` |
-| `GC_NETWORK_UNI1_URL` | `https://genesis-colonies-u2-production.up.railway.app` |
+| `GC_NETWORK_AUTHORITY_URL` | `https://dev.genesis-colonies.com` |
+| `GC_NETWORK_UNI1_URL` | `https://uni1.genesis-colonies.com` |
 | `GC_EMBEDDED_CRON` | unset or `1` (default on in production) |
 | `GC_EMBEDDED_CRON_SEC` | unset → `60` |
 | `GC_EMBEDDED_BACKUP` | unset or `1` |
@@ -143,12 +156,12 @@ Soft-Off A/B + `hold_ms` measurement: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md)
 ## Smoke after deploy
 
 ```bash
-curl -sS https://www.genesis-colonies.de/healthz
-curl -sS https://www.genesis-colonies.de/health
+curl -sS https://dev.genesis-colonies.com/healthz
+curl -sS https://dev.genesis-colonies.com/health
 curl -I "https://genesis-colonies.com/login?network_target=uni1"
 ```
 
-The alias smoke must return **308** with `Location: https://www.genesis-colonies.de/login?network_target=uni1`. A repeated 302/308 to the same host is a release blocker.
+The alias smoke must return **308** with `Location: https://dev.genesis-colonies.com/login?network_target=uni1`. A repeated 302/308 to the same host is a release blocker.
 
 Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK). It also exposes the safe source `revision` when Railway provides `RAILWAY_GIT_COMMIT_SHA`.  
 Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate). Verify after every performance deploy:
