@@ -139,9 +139,6 @@ def _canonical_public_origin_redirect():
         return None
 
     path = str(request.path or "/")
-    if path in {"/health", "/healthz"} or path.startswith("/api/"):
-        return None
-
     target = canonical_public_redirect_target(
         request_host=str(request.host or ""),
         path=path,
