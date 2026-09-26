@@ -124,11 +124,18 @@ def universe_directory() -> tuple[dict[str, Any], ...]:
     return tuple(items)
 
 
+def universe_is_configured(key: str) -> bool:
+    k = str(key or "").strip().lower()
+    return k == authority_key() or k in set(configured_universe_keys())
+
+
 def universe_is_open(key: str) -> bool:
     k = str(key or "").strip().lower()
     if k == authority_key():
         return True
-    raw = _env(f"GC_NETWORK_{k.upper()}_OPEN", "0").lower()
+    if not universe_is_configured(k):
+        return False
+    raw = _env(f"GC_NETWORK_{_universe_env_token(k)}_OPEN", "0").lower()
     return raw in {"1", "true", "yes", "on"}
 
 
@@ -208,7 +215,11 @@ def issue_handoff(player_id: int, target_key: str) -> tuple[bool, str, str | Non
         return False, "network_auth_disabled", None
     if not is_authority():
         return False, "not_authority", None
-    if target == current_universe_key() or not universe_url(target):
+    if (
+        target == current_universe_key()
+        or not universe_is_configured(target)
+        or not universe_url(target)
+    ):
         return False, "invalid_target", None
     if not universe_is_open(target):
         return False, "universe_closed", None
@@ -548,7 +559,13 @@ def _network_before_request():
 
     if endpoint in {"login", "register"}:
         target = str(request.args.get("network_target") or "").strip().lower()
-        if request.method == "GET" and target and target != universe and universe_url(target):
+        if (
+            request.method == "GET"
+            and target
+            and target != universe
+            and universe_is_configured(target)
+            and universe_url(target)
+        ):
             session["gc_network_target"] = target
             if session.get("user_id") and universe_is_open(target):
                 return redirect(url_for("network_universe_enter", target_key=target))
@@ -570,7 +587,13 @@ def _network_after_request(response: Response) -> Response:
         or pending_target
         or ""
     ).strip().lower()
-    if target and target != current_universe_key() and universe_url(target) and universe_is_open(target):
+    if (
+        target
+        and target != current_universe_key()
+        and universe_is_configured(target)
+        and universe_url(target)
+        and universe_is_open(target)
+    ):
         response.headers["Location"] = url_for("network_universe_enter", target_key=target)
     return response
 
