@@ -47,10 +47,16 @@ Still manual (platform/registrar) — do once, then push-to-deploy is enough:
 
 ### 1. DNS & domains
 
-- [ ] `www.genesis-colonies.de` healthy on Railway
-- [ ] Apex `genesis-colonies.de` DNS finished (CNAME/ALIAS/ANAME per Railway)
-- [ ] `PUBLIC_BASE_URL=https://www.genesis-colonies.de`
-- [ ] TLS green for both hosts
+- [ ] `www.genesis-colonies.de` is the **canonical browser/auth origin** and is healthy on Railway.
+- [ ] `genesis-colonies.com` stays attached to the same authority service as the stable public/toplist entry URL.
+- [ ] `GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com` on the authority service.
+- [ ] Browser traffic hitting `.com` redirects with HTTP 308 to the same path/query on `www.genesis-colonies.de` **before session/auth hooks run**.
+- [ ] `/api/*` is deliberately exempt from alias redirects so existing vote/payment postbacks keep working even when a provider still calls the `.com` host.
+- [ ] `PUBLIC_BASE_URL=https://www.genesis-colonies.de`.
+- [ ] Discord OAuth / payment return URLs use the canonical `.de` origin. Do not start a second browser session on `.com`.
+- [ ] TLS green for both public hosts.
+
+The `.com` address may remain listed on TopG/GTop100/Arena/GameToor and other directories. Human visitors take one canonical redirect; machine callbacks under `/api/*` remain accepted directly.
 
 ### 2. Wait for CI (one toggle)
 
@@ -72,7 +78,12 @@ Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `
 | `GUNICORN_WORKERS` | **am besten unset** → SQLite `1`, PostgreSQL Production `2`; ein alter PG-Wert `1` wird automatisch auf `2` gefloort |
 | `GUNICORN_WORKER_CLASS` | `gthread` (default; `gevent` only if live WS push required) |
 | `GUNICORN_THREADS` | `4` (gthread) |
-| `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` |
+| `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` on authority; `https://genesis-colonies-u2-production.up.railway.app` on UNI1 |
+| `GC_PUBLIC_ALIAS_HOSTS` | authority: `genesis-colonies.com`; UNI1: unset |
+| `GC_UNIVERSE_KEY` | authority: `dev`; UNI1: `uni1` |
+| `GC_NETWORK_AUTHORITY_KEY` | `dev` |
+| `GC_NETWORK_AUTHORITY_URL` | `https://www.genesis-colonies.de` |
+| `GC_NETWORK_UNI1_URL` | `https://genesis-colonies-u2-production.up.railway.app` |
 | `GC_EMBEDDED_CRON` | unset or `1` (default on in production) |
 | `GC_EMBEDDED_CRON_SEC` | unset → `60` |
 | `GC_EMBEDDED_BACKUP` | unset or `1` |
@@ -134,7 +145,10 @@ Soft-Off A/B + `hold_ms` measurement: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md)
 ```bash
 curl -sS https://www.genesis-colonies.de/healthz
 curl -sS https://www.genesis-colonies.de/health
+curl -I "https://genesis-colonies.com/login?network_target=uni1"
 ```
+
+The alias smoke must return **308** with `Location: https://www.genesis-colonies.de/login?network_target=uni1`. A repeated 302/308 to the same host is a release blocker.
 
 Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK). It also exposes the safe source `revision` when Railway provides `RAILWAY_GIT_COMMIT_SHA`.  
 Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate). Verify after every performance deploy:
