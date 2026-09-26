@@ -95,7 +95,13 @@ from game import mail_hub as mail_hub_logic
 from game import discord_auth as discord_auth_logic
 
 from game.bootstrap import bootstrap_application
-from game.config import get_secret_key, is_debug_enabled, is_production, session_cookie_domain
+from game.config import (
+    canonical_public_redirect_target,
+    get_secret_key,
+    is_debug_enabled,
+    is_production,
+    session_cookie_domain,
+)
 from game.security import (
     apply_security_headers,
     check_login_rate_limit,
@@ -116,6 +122,37 @@ app.json = GenesisJSONProvider(app)
 from flask_sock import Sock
 
 sock = Sock(app)
+
+
+@app.before_request
+def _canonical_public_origin_redirect():
+    """
+    Keep browser sessions on exactly one public origin.
+
+    genesis-colonies.com is intentionally kept as a stable toplist/marketing
+    entry point, but browser traffic must move to PUBLIC_BASE_URL before any
+    auth/session hook runs. Machine callbacks under /api stay untouched so
+    historical TopG/GTop100/GameToor/Arena/PayPal endpoints do not depend on a
+    third party following redirects.
+    """
+    if not is_production():
+        return None
+
+    path = str(request.path or "/")
+    target = canonical_public_redirect_target(
+        request_host=str(request.host or ""),
+        path=path,
+        query_string=request.query_string.decode("latin-1"),
+    )
+    if not target:
+        return None
+
+    response = redirect(target, code=308)
+    # Keep the alias reversible operationally; do not let browsers pin a stale
+    # canonical-origin decision forever if domains change in the future.
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 from game.network_auth import install_network_auth
 
