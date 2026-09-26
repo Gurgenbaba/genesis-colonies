@@ -32,8 +32,15 @@ For UNI 1 launch the intended values are `10` and `259200` (72h). The bundle is 
 - `GC_NETWORK_UNI1_URL=<universe URL>`
 - `GC_NETWORK_UNI1_OPEN=0|1`
 - `GC_NETWORK_AUTH_SECRET=<shared 32+ character secret>`
+- Authority: `PUBLIC_BASE_URL=https://www.genesis-colonies.de`
+- Authority: `GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com`
+- UNI 1: `PUBLIC_BASE_URL=https://genesis-colonies-u2-production.up.railway.app`
 
 The shared auth secret must exist only in deployment secrets and must never be committed.
+
+### Public-origin rule
+
+`genesis-colonies.com` is intentionally retained as the stable public/toplist address, but it is **not a second browser session origin**. Browser/page requests on that host are canonicalized to `www.genesis-colonies.de` before Network auth or Flask session handling. API postback routes stay directly reachable on aliases so TopG/GTop100/GameToor/Arena/PayPal integrations are not coupled to redirect support.
 
 ## UNI 1 launch contract
 
@@ -63,11 +70,15 @@ Required invariants:
 
 - `GC_UNIVERSE_KEY` is explicit on every universe.
 - `GC_NETWORK_AUTH_SECRET` has at least 32 characters.
-- Authority and UNI 1 browser handoff URLs are explicit HTTPS URLs.
+- Authority and UNI 1 browser handoff URLs are explicit HTTPS URLs and use different hosts.
+- `PUBLIC_BASE_URL` must match the URL owned by the current `GC_UNIVERSE_KEY`.
+  - `dev`/authority → host must match `GC_NETWORK_AUTHORITY_URL`.
+  - `uni1` → host must match `GC_NETWORK_UNI1_URL`.
+- The canonical `PUBLIC_BASE_URL` host may not also appear in `GC_PUBLIC_ALIAS_HOSTS`.
 - An open non-authority universe has a live maintenance path:
   `GC_MAINTENANCE_WORKER=1` or `GC_EMBEDDED_CRON=1`.
 
-This prevents a Railway environment named “production” from silently running the app with development semantics or opening UNI 1 without fleet/live-ops maintenance.
+A wrong universe role on the authority deployment therefore fails during bootstrap instead of turning `/login` into a self-redirect loop. Runtime auth also retains a second fail-safe that refuses same-host authority redirects.
 
 
 ## DEV → UNI 1 promotion
