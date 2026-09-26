@@ -86,6 +86,7 @@ def test_office_ticket_sync_uses_central_ticket_api(monkeypatch):
         return True, {"ok": True, "ticket_id": 99}
 
     monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://genesis.example")
     monkeypatch.setattr(mail_hub, "_post", fake_post)
 
     ok, data = mail_hub.sync_support_ticket(
@@ -96,6 +97,7 @@ def test_office_ticket_sync_uses_central_ticket_api(monkeypatch):
         priority="high",
         player_name="Tester",
         player_email="tester@example.com",
+        player_id=42,
     )
 
     assert ok is True
@@ -105,6 +107,8 @@ def test_office_ticket_sync_uses_central_ticket_api(monkeypatch):
     assert captured["payload"]["external_ticket_id"] == "uni1:7"
     assert captured["payload"]["category"] == "bug"
     assert captured["payload"]["requester_email"] == "tester@example.com"
+    assert captured["payload"]["requester_external_id"] == "uni1:42"
+    assert captured["payload"]["reply_url"] == "https://genesis.example/api/office/support/reply"
 
 
 def test_office_ticket_message_and_status_sync(monkeypatch):
@@ -132,3 +136,12 @@ def test_office_ticket_message_and_status_sync(monkeypatch):
     assert calls[1][0] == "/api/v1/tickets/status-sync"
     assert calls[1][1]["external_ticket_id"] == "uni-test:9"
     assert calls[1][1]["status"] == "closed"
+
+
+
+def test_office_callback_key_uses_mail_hub_key(monkeypatch):
+    from game import mail_hub
+
+    monkeypatch.setenv("MAIL_HUB_API_KEY", "test-secret-key")
+    assert mail_hub.callback_key_valid("test-secret-key") is True
+    assert mail_hub.callback_key_valid("wrong") is False

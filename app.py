@@ -10094,6 +10094,26 @@ def api_support_ticket_create():
     return _support_json(support_logic.create_ticket(int(pid), payload))
 
 
+@app.route("/api/office/support/reply", methods=["POST"])
+def api_office_support_reply():
+    auth = str(request.headers.get("Authorization") or "")
+    if not auth.lower().startswith("bearer "):
+        return jsonify({"ok": False, "error": "unauthorized", "data": None}), 401
+    if not mail_hub_logic.callback_key_valid(auth[7:].strip()):
+        return jsonify({"ok": False, "error": "forbidden", "data": None}), 403
+    payload = request.get_json(silent=True) or {}
+    if str(payload.get("project") or "") != "genesis":
+        return jsonify({"ok": False, "error": "invalid_project", "data": None}), 400
+    return _support_json(
+        support_logic.office_reply_ticket(
+            str(payload.get("external_ticket_id") or ""),
+            str(payload.get("requester_external_id") or ""),
+            str(payload.get("delivery_id") or ""),
+            str(payload.get("body") or ""),
+        )
+    )
+
+
 @app.route("/api/support/tickets/<int:ticket_id>/reply", methods=["POST"])
 @require_login
 def api_support_ticket_reply(ticket_id: int):

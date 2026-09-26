@@ -213,6 +213,7 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
             priority=priority,
             player_name=player_name,
             player_email=player_email,
+            player_id=int(player_id),
         )
 
     return _ok({"ticket_id": ticket_id})
@@ -357,8 +358,15 @@ def list_all_tickets(admin_id: int, *, status: str | None = None) -> dict[str, A
 
 def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]:
     msg = _norm_text(message, 1200)
+    delivery = str(delivery_id or "").strip()
     if not msg:
         return _err("missing_message")
+    if (
+        len(delivery) < 8
+        or len(delivery) > 128
+        or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for ch in delivery)
+    ):
+        return _err("invalid_delivery")
     conn = db()
     try:
         if not _table_ready(conn):
@@ -410,6 +418,94 @@ def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]
             direction="inbound",
         )
         return _ok({"ticket_id": int(ticket_id)})
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def office_reply_ticket(
+    external_ticket_id: str,
+    requester_external_id: str,
+    delivery_id: str,
+    message: str,
+) -> dict[str, Any]:
+    """Accept an authenticated Gurgenbaba Office reply without echoing it back."""
+    msg = _norm_text(message, 1200)
+    if not msg:
+        return _err("missing_message")
+    universe = mail_hub_logic._env("GC_UNIVERSE_KEY", "uni1") or "uni1"
+    try:
+        ticket_universe, raw_ticket_id = str(external_ticket_id or "").split(":", 1)
+        player_universe, raw_player_id = str(requester_external_id or "").split(":", 1)
+        ticket_id = int(raw_ticket_id)
+        player_id = int(raw_player_id)
+    except (TypeError, ValueError):
+        return _err("invalid_target")
+    if ticket_universe != universe or player_universe != universe:
+        return _err("forbidden")
+
+    conn = db()
+    try:
+        if not _table_ready(conn):
+            return _err("support_not_ready")
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, player_id, category, discord_thread_id FROM support_tickets WHERE id = ? LIMIT 1;",
+            (ticket_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found")
+        if int(row["player_id"]) != player_id:
+            return _err("forbidden")
+
+        now = _now()
+        begin_write_transaction(conn)
+        existing_delivery = conn.execute(
+            "SELECT ticket_id FROM support_office_deliveries WHERE delivery_id = ? LIMIT 1;",
+            (delivery,),
+        ).fetchone()
+        if existing_delivery:
+            if int(existing_delivery["ticket_id"]) != ticket_id:
+                rollback(conn)
+                return _err("forbidden")
+            commit(conn)
+            return _ok({"ticket_id": ticket_id, "duplicate": True})
+        inserted = conn.execute(
+            """
+            INSERT INTO support_office_deliveries(delivery_id, ticket_id, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(delivery_id) DO NOTHING;
+            """,
+            (delivery, ticket_id, now),
+        )
+        if int(getattr(inserted, "rowcount", 0) or 0) == 0:
+            commit(conn)
+            return _ok({"ticket_id": ticket_id, "duplicate": True})
+        conn.execute(
+            """
+            INSERT INTO support_messages (ticket_id, sender_id, sender_role, message, created_at)
+            VALUES (?, NULL, 'admin', ?, ?);
+            """,
+            (ticket_id, msg, now),
+        )
+        conn.execute(
+            """
+            UPDATE support_tickets
+            SET status = 'in_progress', updated_at = ?, last_message_at = ?
+            WHERE id = ?;
+            """,
+            (now, now, ticket_id),
+        )
+        commit(conn)
+        _sync_discord_ticket_tags(
+            discord_thread_id=str(row["discord_thread_id"] or ""),
+            category=str(row["category"] or "general"),
+            status="in_progress",
+        )
+        return _ok({"ticket_id": ticket_id})
     except Exception:
         rollback(conn)
         raise
