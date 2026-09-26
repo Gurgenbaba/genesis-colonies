@@ -57,3 +57,78 @@ def test_privacy_text_documents_double_opt_in_and_separation():
     assert "Account-Mails" in de
     assert "jederzeit" in de
     assert LEGAL_TEXT_VERSION == "v2.2"
+
+
+def test_office_ticket_identity_is_universe_scoped(monkeypatch):
+    from game import mail_hub
+
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni2")
+    assert mail_hub._ticket_identity(17) == "uni2:17"
+
+
+def test_office_ticket_category_mapping():
+    from game import mail_hub
+
+    assert mail_hub._office_ticket_category("general") == "support"
+    assert mail_hub._office_ticket_category("balance") == "feature"
+    assert mail_hub._office_ticket_category("billing") == "billing"
+    assert mail_hub._office_ticket_category("unknown") == "other"
+
+
+def test_office_ticket_sync_uses_central_ticket_api(monkeypatch):
+    from game import mail_hub
+
+    captured = {}
+
+    def fake_post(path, payload):
+        captured["path"] = path
+        captured["payload"] = payload
+        return True, {"ok": True, "ticket_id": 99}
+
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
+    monkeypatch.setattr(mail_hub, "_post", fake_post)
+
+    ok, data = mail_hub.sync_support_ticket(
+        7,
+        subject="Hilfe",
+        message="Etwas ist kaputt.",
+        category="bug",
+        priority="high",
+        player_name="Tester",
+        player_email="tester@example.com",
+    )
+
+    assert ok is True
+    assert data["ticket_id"] == 99
+    assert captured["path"] == "/api/v1/tickets/intake"
+    assert captured["payload"]["project"] == "genesis"
+    assert captured["payload"]["external_ticket_id"] == "uni1:7"
+    assert captured["payload"]["category"] == "bug"
+    assert captured["payload"]["requester_email"] == "tester@example.com"
+
+
+def test_office_ticket_message_and_status_sync(monkeypatch):
+    from game import mail_hub
+
+    calls = []
+
+    def fake_post(path, payload):
+        calls.append((path, payload))
+        return True, {"ok": True}
+
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni-test")
+    monkeypatch.setattr(mail_hub, "_post", fake_post)
+
+    mail_hub.sync_support_message(
+        9,
+        message="Antwort",
+        author="Genesis Support",
+        direction="outbound",
+    )
+    mail_hub.sync_support_status(9, status="closed", priority="normal")
+
+    assert calls[0][0] == "/api/v1/tickets/message"
+    assert calls[0][1]["direction"] == "outbound"
+    assert calls[1][0] == "/api/v1/tickets/status-sync"
+    assert calls[1][1]["external_ticket_id"] == "uni-test:9"
+    assert calls[1][1]["status"] == "closed"

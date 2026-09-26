@@ -5,6 +5,7 @@ from typing import Any
 
 from .db import begin_write_transaction, commit, db, rollback, table_exists
 from .i18n import tr
+from . import mail_hub as mail_hub_logic
 
 
 def _now() -> int:
@@ -145,6 +146,7 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     ticket_id = 0
     created_at = 0
     player_name = f"Spieler #{int(player_id)}"
+    player_email = ""
     conn = db()
     try:
         if not _table_ready(conn):
@@ -153,12 +155,20 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         created_at = _now()
         cur = conn.cursor()
         cur.execute(
-            "SELECT name FROM players WHERE id = ? LIMIT 1;",
+            """
+            SELECT p.name, COALESCE(u.email, '') AS email
+            FROM players p
+            LEFT JOIN users u ON u.id = p.id
+            WHERE p.id = ?
+            LIMIT 1;
+            """,
             (int(player_id),),
         )
         prow = cur.fetchone()
         if prow and prow["name"]:
             player_name = str(prow["name"])
+        if prow and prow["email"]:
+            player_email = str(prow["email"]).strip()
         cur.execute(
             """
             INSERT INTO support_tickets
@@ -194,6 +204,16 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         )
         if thread_id:
             _persist_discord_thread_id(ticket_id, thread_id)
+        # Central Office is a mirror, never a dependency of gameplay/support.
+        mail_hub_logic.sync_support_ticket(
+            ticket_id,
+            subject=subject,
+            message=message,
+            category=category,
+            priority=priority,
+            player_name=player_name,
+            player_email=player_email,
+        )
 
     return _ok({"ticket_id": ticket_id})
 
@@ -345,7 +365,16 @@ def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]
             return _err("support_not_ready")
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, player_id, status FROM support_tickets WHERE id = ? LIMIT 1;",
+            """
+            SELECT t.id, t.player_id, t.status,
+                   COALESCE(p.name, '') AS player_name,
+                   COALESCE(u.email, '') AS player_email
+            FROM support_tickets t
+            LEFT JOIN players p ON p.id=t.player_id
+            LEFT JOIN users u ON u.id=t.player_id
+            WHERE t.id = ?
+            LIMIT 1;
+            """,
             (int(ticket_id),),
         )
         row = cur.fetchone()
@@ -373,6 +402,13 @@ def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]
             (now, now, int(ticket_id)),
         )
         commit(conn)
+        mail_hub_logic.sync_support_message(
+            int(ticket_id),
+            message=msg,
+            author=str(row["player_name"] or f"Spieler #{int(player_id)}"),
+            player_email=str(row["player_email"] or ""),
+            direction="inbound",
+        )
         return _ok({"ticket_id": int(ticket_id)})
     except Exception:
         rollback(conn)
@@ -418,8 +454,14 @@ def admin_reply_ticket(admin_id: int, ticket_id: int, message: str) -> dict[str,
             (now, now, int(ticket_id)),
         )
         commit(conn)
+        mail_hub_logic.sync_support_message(
+            int(ticket_id),
+            message=msg,
+            author="Genesis Support",
+            direction="outbound",
+        )
         cur.execute(
-            "SELECT status, category, discord_thread_id FROM support_tickets WHERE id = ? LIMIT 1;",
+            "SELECT status, category, priority, discord_thread_id FROM support_tickets WHERE id = ? LIMIT 1;",
             (int(ticket_id),),
         )
         updated = cur.fetchone()
@@ -428,6 +470,11 @@ def admin_reply_ticket(admin_id: int, ticket_id: int, message: str) -> dict[str,
                 discord_thread_id=str(updated["discord_thread_id"] or ""),
                 category=str(updated["category"] or "general"),
                 status=str(updated["status"] or "open"),
+            )
+            mail_hub_logic.sync_support_status(
+                int(ticket_id),
+                status=str(updated["status"] or "open"),
+                priority=str(updated["priority"] or "normal"),
             )
         return _ok({"ticket_id": int(ticket_id)})
     except Exception:
@@ -448,7 +495,7 @@ def change_ticket_status(player_id: int, ticket_id: int, status: str) -> dict[st
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, player_id, category, discord_thread_id
+            SELECT id, player_id, category, priority, discord_thread_id
             FROM support_tickets WHERE id = ? LIMIT 1;
             """,
             (int(ticket_id),),
@@ -490,6 +537,11 @@ def change_ticket_status(player_id: int, ticket_id: int, status: str) -> dict[st
             discord_thread_id=str(row["discord_thread_id"] or ""),
             category=str(row["category"] or "general"),
             status=next_status,
+        )
+        mail_hub_logic.sync_support_status(
+            int(ticket_id),
+            status=next_status,
+            priority=str(row["priority"] or "normal"),
         )
         return _ok({"ticket_id": int(ticket_id), "status": next_status})
     except Exception:

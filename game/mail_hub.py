@@ -116,3 +116,95 @@ def revoke_updates(user_id: int) -> Tuple[bool, Dict[str, Any]]:
             "scope": "genesis_updates",
         },
     )
+
+
+_SUPPORT_CATEGORY_MAP = {
+    "general": "support",
+    "bug": "bug",
+    "account": "account",
+    "balance": "feature",
+    "billing": "billing",
+    "report": "other",
+}
+
+
+def _ticket_identity(ticket_id: int) -> str:
+    universe = _env("GC_UNIVERSE_KEY", "uni1") or "uni1"
+    return f"{universe}:{int(ticket_id)}"
+
+
+def _office_ticket_category(category: str) -> str:
+    return _SUPPORT_CATEGORY_MAP.get(str(category or "general").strip().lower(), "other")
+
+
+def sync_support_ticket(
+    ticket_id: int,
+    *,
+    subject: str,
+    message: str,
+    category: str = "general",
+    priority: str = "normal",
+    player_name: str = "",
+    player_email: str = "",
+) -> Tuple[bool, Dict[str, Any]]:
+    """Mirror a Genesis support ticket into Gurgenbaba Office.
+
+    The local Genesis support DB remains authoritative for gameplay. This call is
+    deliberately best-effort: callers must not fail a player action when Office
+    is unavailable.
+    """
+    return _post(
+        "/api/v1/tickets/intake",
+        {
+            "project": "genesis",
+            "external_ticket_id": _ticket_identity(ticket_id),
+            "category": _office_ticket_category(category),
+            "subject": str(subject or "")[:200],
+            "body": str(message or "")[:10000],
+            "requester_name": str(player_name or "")[:160],
+            "requester_email": str(player_email or "").strip() or None,
+            "priority": str(priority or "normal"),
+        },
+    )
+
+
+def sync_support_message(
+    ticket_id: int,
+    *,
+    message: str,
+    author: str = "",
+    player_email: str = "",
+    direction: str = "inbound",
+) -> Tuple[bool, Dict[str, Any]]:
+    if direction not in {"inbound", "outbound", "internal"}:
+        direction = "internal"
+    return _post(
+        "/api/v1/tickets/message",
+        {
+            "project": "genesis",
+            "external_ticket_id": _ticket_identity(ticket_id),
+            "body": str(message or "")[:10000],
+            "author": str(author or "")[:160],
+            "requester_email": str(player_email or "").strip() or None,
+            "direction": direction,
+        },
+    )
+
+
+def sync_support_status(
+    ticket_id: int,
+    *,
+    status: str,
+    priority: str | None = None,
+) -> Tuple[bool, Dict[str, Any]]:
+    office_status = str(status or "open").strip().lower()
+    if office_status not in {"open", "in_progress", "waiting", "closed"}:
+        office_status = "open"
+    payload: Dict[str, Any] = {
+        "project": "genesis",
+        "external_ticket_id": _ticket_identity(ticket_id),
+        "status": office_status,
+    }
+    if priority in {"low", "normal", "high", "urgent"}:
+        payload["priority"] = priority
+    return _post("/api/v1/tickets/status-sync", payload)
