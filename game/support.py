@@ -465,8 +465,7 @@ def office_reply_ticket(
         conn.execute(
             """
             UPDATE support_tickets
-            SET status = CASE WHEN status = 'closed' THEN 'open' WHEN status = 'open' THEN 'in_progress' ELSE status END,
-                updated_at = ?, last_message_at = ?
+            SET status = 'in_progress', updated_at = ?, last_message_at = ?
             WHERE id = ?;
             """,
             (now, now, ticket_id),
