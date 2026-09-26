@@ -41,6 +41,8 @@ def temp_db(tmp_path, monkeypatch):
     monkeypatch.delenv("DISCORD_SUPPORT_WEBHOOK_URL", raising=False)
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     monkeypatch.delenv("DISCORD_SUPPORT_FORUM_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("MAIL_HUB_URL", raising=False)
+    monkeypatch.delenv("MAIL_HUB_API_KEY", raising=False)
     monkeypatch.setattr(dbmod, "DB_PATH", db_file)
     monkeypatch.setattr(models, "DB_PATH", db_file)
     return db_file
