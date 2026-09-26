@@ -42,7 +42,7 @@ The shared auth secret must exist only in deployment secrets and must never be c
 
 ### Public-origin rule
 
-`genesis-colonies.com` is intentionally retained as the stable public/toplist address, but it is **not a second browser session origin**. Browser/page requests on that host are canonicalized to `www.genesis-colonies.de` before Network auth or Flask session handling. API postback routes stay directly reachable on aliases so TopG/GTop100/GameToor/Arena/PayPal integrations are not coupled to redirect support.
+`dev.genesis-colonies.com` is the canonical DEV/browser/auth origin. Both `www.genesis-colonies.de` (legacy bookmarks) and `genesis-colonies.com` (public/toplist entry) remain attached to the authority service as aliases, not independent session origins. Browser/page requests on either alias are canonicalized to DEV before Network auth or Flask session handling. API postback routes stay directly reachable on aliases so TopG/GTop100/GameToor/Arena/PayPal integrations are not coupled to redirect support.
 
 
 ### Scalable universe naming
@@ -84,10 +84,9 @@ Required invariants:
 
 - `GC_UNIVERSE_KEY` is explicit on every universe.
 - `GC_NETWORK_AUTH_SECRET` has at least 32 characters.
-- Authority and UNI 1 browser handoff URLs are explicit HTTPS URLs and use different hosts.
+- Every key in `GC_NETWORK_UNIVERSES` resolves to an explicit HTTPS URL (either an override or the `uniN.<domain>` convention), and all universe hosts are distinct.
+- A non-authority `GC_UNIVERSE_KEY` must be present in `GC_NETWORK_UNIVERSES`.
 - `PUBLIC_BASE_URL` must match the URL owned by the current `GC_UNIVERSE_KEY`.
-  - `dev`/authority → host must match `GC_NETWORK_AUTHORITY_URL`.
-  - `uni1` → host must match `GC_NETWORK_UNI1_URL`.
 - The canonical `PUBLIC_BASE_URL` host may not also appear in `GC_PUBLIC_ALIAS_HOSTS`.
 - An open non-authority universe has a live maintenance path:
   `GC_MAINTENANCE_WORKER=1` or `GC_EMBEDDED_CRON=1`.
