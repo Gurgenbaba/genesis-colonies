@@ -354,6 +354,10 @@ def canonical_public_redirect_target(
     query_string: str = "",
 ) -> str:
     """Build the canonical browser URL for a configured alias, else empty."""
+    req_path = str(path or "/")
+    if req_path in {"/health", "/healthz"} or req_path.startswith("/api/"):
+        return ""
+
     incoming = _normalize_public_host(request_host)
     canonical = get_public_base_url()
     canonical_host = get_canonical_public_host()
@@ -364,7 +368,6 @@ def canonical_public_redirect_target(
     parsed = urlsplit(canonical)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return ""
-    req_path = str(path or "/")
     if not req_path.startswith("/"):
         req_path = f"/{req_path}"
     target = f"{parsed.scheme}://{parsed.netloc}{req_path}"
