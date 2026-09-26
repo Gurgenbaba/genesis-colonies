@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT_DIR / ".env"
@@ -300,9 +301,78 @@ def get_discord_support_forum_tag_id(tag_key: str) -> str:
 
 
 def get_public_base_url() -> str:
-    """Public site URL for outbound links (emails, Discord embeds)."""
+    """Canonical public site URL for browser-facing links and auth/payment returns."""
     base = str(os.environ.get("PUBLIC_BASE_URL") or os.environ.get("GC_PUBLIC_URL") or "").strip()
     return base.rstrip("/")
+
+
+def _normalize_public_host(value: str) -> str:
+    """Return a lowercase hostname from a host or URL, without a port."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = urlsplit(raw if "://" in raw else f"//{raw}")
+        return str(parsed.hostname or "").strip().lower().rstrip(".")
+    except (TypeError, ValueError):
+        return ""
+
+
+def get_canonical_public_host() -> str:
+    """Hostname owned by PUBLIC_BASE_URL."""
+    return _normalize_public_host(get_public_base_url())
+
+
+def get_public_alias_hosts() -> tuple[str, ...]:
+    """
+    Browser-facing aliases that must never own an independent login session.
+
+    Example production authority value:
+      GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com,genesis-colonies.de
+
+    API/postback routes are intentionally not redirected by the app hook so
+    third-party callbacks can keep using a historical alias while browser
+    traffic is consolidated onto PUBLIC_BASE_URL.
+    """
+    raw = _env_str("GC_PUBLIC_ALIAS_HOSTS")
+    if not raw:
+        return ()
+    hosts: list[str] = []
+    seen: set[str] = set()
+    for item in raw.replace(";", ",").split(","):
+        host = _normalize_public_host(item)
+        if host and host not in seen:
+            seen.add(host)
+            hosts.append(host)
+    return tuple(hosts)
+
+
+def canonical_public_redirect_target(
+    *,
+    request_host: str,
+    path: str,
+    query_string: str = "",
+) -> str:
+    """Build the canonical browser URL for a configured alias, else empty."""
+    req_path = str(path or "/")
+    if req_path in {"/health", "/healthz"} or req_path.startswith("/api/"):
+        return ""
+
+    incoming = _normalize_public_host(request_host)
+    canonical = get_public_base_url()
+    canonical_host = get_canonical_public_host()
+    if not incoming or not canonical or not canonical_host:
+        return ""
+    if incoming == canonical_host or incoming not in set(get_public_alias_hosts()):
+        return ""
+    parsed = urlsplit(canonical)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return ""
+    if not req_path.startswith("/"):
+        req_path = f"/{req_path}"
+    target = f"{parsed.scheme}://{parsed.netloc}{req_path}"
+    query = str(query_string or "")
+    return f"{target}?{query}" if query else target
 
 
 def canon_shop_host(host: str) -> str:
@@ -567,6 +637,39 @@ def _validate_network_runtime_config() -> list[str]:
     if (uni1_open or universe == "uni1") and not uni1_url.lower().startswith("https://"):
         errors.append(
             "UNI 1 requires an explicit HTTPS GC_NETWORK_UNI1_URL before production use."
+        )
+
+    public_base_url = get_public_base_url()
+    public_host = get_canonical_public_host()
+    authority_host = _normalize_public_host(authority_url)
+    uni1_host = _normalize_public_host(uni1_url)
+
+    if not public_base_url.lower().startswith("https://") or not public_host:
+        errors.append(
+            "Genesis Network production requires PUBLIC_BASE_URL to be an explicit HTTPS origin."
+        )
+
+    if authority_host and uni1_host and authority_host == uni1_host:
+        errors.append(
+            "GC_NETWORK_AUTHORITY_URL and GC_NETWORK_UNI1_URL must use different hosts."
+        )
+
+    expected_public_host = ""
+    if universe == authority:
+        expected_public_host = authority_host
+    elif universe == "uni1":
+        expected_public_host = uni1_host
+
+    if expected_public_host and public_host and public_host != expected_public_host:
+        errors.append(
+            "PUBLIC_BASE_URL host must match the configured URL for GC_UNIVERSE_KEY "
+            f"(universe={universe}, public={public_host}, expected={expected_public_host})."
+        )
+
+    aliases = set(get_public_alias_hosts())
+    if public_host and public_host in aliases:
+        errors.append(
+            "GC_PUBLIC_ALIAS_HOSTS must not contain the PUBLIC_BASE_URL host."
         )
 
     if universe != authority and uni1_open:
