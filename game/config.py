@@ -5,6 +5,7 @@ Genesis Colonies – central configuration from environment variables.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -328,7 +329,7 @@ def get_public_alias_hosts() -> tuple[str, ...]:
     Browser-facing aliases that must never own an independent login session.
 
     Example production authority value:
-      GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com,genesis-colonies.de
+      GC_PUBLIC_ALIAS_HOSTS=www.genesis-colonies.de,genesis-colonies.com
 
     API/postback routes are intentionally not redirected by the app hook so
     third-party callbacks can keep using a historical alias while browser
@@ -598,6 +599,40 @@ def _network_env_truthy(name: str) -> bool:
     return _env_str(name).lower() in ("1", "true", "yes", "on")
 
 
+_NETWORK_UNIVERSE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+
+
+def _network_universe_keys() -> tuple[str, ...]:
+    authority = (_env_str("GC_NETWORK_AUTHORITY_KEY") or "dev").lower()
+    raw = _env_str("GC_NETWORK_UNIVERSES") or "uni1"
+    keys: list[str] = []
+    seen: set[str] = set()
+    for item in raw.replace(";", ",").split(","):
+        key = item.strip().lower()
+        if not key or key == authority or key in seen:
+            continue
+        if _NETWORK_UNIVERSE_KEY_RE.fullmatch(key):
+            seen.add(key)
+            keys.append(key)
+    return tuple(keys)
+
+
+def _network_url_for_key(key: str, *, authority: str, authority_url: str) -> str:
+    k = str(key or "").strip().lower()
+    if not _NETWORK_UNIVERSE_KEY_RE.fullmatch(k):
+        return ""
+    if k == authority:
+        return authority_url.rstrip("/")
+    token = k.upper().replace("-", "_")
+    explicit = _env_str(f"GC_NETWORK_{token}_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    domain = (_env_str("GC_NETWORK_DOMAIN") or "genesis-colonies.com").strip().lower().strip(".")
+    if re.fullmatch(r"uni\d+", k) and domain:
+        return f"https://{k}.{domain}"
+    return ""
+
+
 def _validate_network_runtime_config() -> list[str]:
     """Fail closed for production multi-universe deployments."""
     network_names = (
@@ -605,23 +640,41 @@ def _validate_network_runtime_config() -> list[str]:
         "GC_NETWORK_AUTHORITY_KEY",
         "GC_NETWORK_AUTHORITY_URL",
         "GC_NETWORK_AUTH_SECRET",
+        "GC_NETWORK_DOMAIN",
+        "GC_NETWORK_UNIVERSES",
         "GC_NETWORK_UNI1_URL",
         "GC_NETWORK_UNI1_OPEN",
     )
-    if not any(os.environ.get(name) is not None for name in network_names):
+    if not any(os.environ.get(name) is not None for name in network_names) and not any(
+        name.startswith("GC_NETWORK_") for name in os.environ
+    ):
         return []
 
     errors: list[str] = []
     universe = (_env_str("GC_UNIVERSE_KEY") or "dev").lower()
     authority = (_env_str("GC_NETWORK_AUTHORITY_KEY") or "dev").lower()
     authority_url = _env_str("GC_NETWORK_AUTHORITY_URL")
-    uni1_url = _env_str("GC_NETWORK_UNI1_URL")
     secret = _env_str("GC_NETWORK_AUTH_SECRET")
-    uni1_open = _network_env_truthy("GC_NETWORK_UNI1_OPEN")
+    configured_universes = _network_universe_keys()
+    universe_urls = {
+        key: _network_url_for_key(key, authority=authority, authority_url=authority_url)
+        for key in configured_universes
+    }
+    current_open = (
+        True
+        if universe == authority
+        else _network_env_truthy(f"GC_NETWORK_{universe.upper().replace('-', '_')}_OPEN")
+    )
 
     if not _env_str("GC_UNIVERSE_KEY"):
         errors.append(
             "Genesis Network is configured in production but GC_UNIVERSE_KEY is not explicit."
+        )
+
+    if universe != authority and universe not in configured_universes:
+        errors.append(
+            "GC_UNIVERSE_KEY must be listed in GC_NETWORK_UNIVERSES on non-authority services "
+            f"(universe={universe})."
         )
 
     if len(secret) < 32:
@@ -634,32 +687,42 @@ def _validate_network_runtime_config() -> list[str]:
             "Genesis Network production requires an explicit HTTPS GC_NETWORK_AUTHORITY_URL."
         )
 
-    if (uni1_open or universe == "uni1") and not uni1_url.lower().startswith("https://"):
-        errors.append(
-            "UNI 1 requires an explicit HTTPS GC_NETWORK_UNI1_URL before production use."
-        )
+    all_urls = {authority: authority_url, **universe_urls}
+    all_hosts: dict[str, str] = {}
+    for key, url in all_urls.items():
+        if not str(url or "").lower().startswith("https://"):
+            token = key.upper().replace("-", "_")
+            errors.append(
+                f"Universe {key} requires an explicit HTTPS GC_NETWORK_{token}_URL "
+                "or the GC_NETWORK_DOMAIN naming convention."
+            )
+            continue
+        host = _normalize_public_host(url)
+        if not host:
+            errors.append(f"Universe {key} has an invalid public URL.")
+            continue
+        previous = all_hosts.get(host)
+        if previous and previous != key:
+            errors.append(
+                f"Genesis Network universe hosts must be distinct ({previous} and {key} both use {host})."
+            )
+        else:
+            all_hosts[host] = key
 
     public_base_url = get_public_base_url()
     public_host = get_canonical_public_host()
-    authority_host = _normalize_public_host(authority_url)
-    uni1_host = _normalize_public_host(uni1_url)
 
     if not public_base_url.lower().startswith("https://") or not public_host:
         errors.append(
             "Genesis Network production requires PUBLIC_BASE_URL to be an explicit HTTPS origin."
         )
 
-    if authority_host and uni1_host and authority_host == uni1_host:
-        errors.append(
-            "GC_NETWORK_AUTHORITY_URL and GC_NETWORK_UNI1_URL must use different hosts."
-        )
-
-    expected_public_host = ""
-    if universe == authority:
-        expected_public_host = authority_host
-    elif universe == "uni1":
-        expected_public_host = uni1_host
-
+    expected_public_url = _network_url_for_key(
+        universe,
+        authority=authority,
+        authority_url=authority_url,
+    )
+    expected_public_host = _normalize_public_host(expected_public_url)
     if expected_public_host and public_host and public_host != expected_public_host:
         errors.append(
             "PUBLIC_BASE_URL host must match the configured URL for GC_UNIVERSE_KEY "
@@ -672,7 +735,7 @@ def _validate_network_runtime_config() -> list[str]:
             "GC_PUBLIC_ALIAS_HOSTS must not contain the PUBLIC_BASE_URL host."
         )
 
-    if universe != authority and uni1_open:
+    if universe != authority and current_open:
         maintenance_ready = (
             is_maintenance_worker_sidecar_enabled() or is_embedded_cron_enabled()
         )
@@ -682,7 +745,7 @@ def _validate_network_runtime_config() -> list[str]:
                 "or GC_EMBEDDED_CRON=1 so fleet/live-ops maintenance cannot stall."
             )
 
-    if universe == "uni1" and uni1_open:
+    if universe == "uni1" and current_open:
         if _env_str("GC_UNIVERSE_SPEED_PROFILE").lower() != "x1":
             errors.append(
                 "UNI 1 launch requires GC_UNIVERSE_SPEED_PROFILE=x1."

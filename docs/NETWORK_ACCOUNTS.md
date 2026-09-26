@@ -28,19 +28,33 @@ For UNI 1 launch the intended values are `10` and `259200` (72h). The bundle is 
 
 - `GC_UNIVERSE_KEY=dev|uni1`
 - `GC_NETWORK_AUTHORITY_KEY=dev`
-- `GC_NETWORK_AUTHORITY_URL=https://www.genesis-colonies.de`
+- `GC_NETWORK_DOMAIN=genesis-colonies.com`
+- `GC_NETWORK_UNIVERSES=uni1` (later e.g. `uni1,uni2`)
+- `GC_NETWORK_AUTHORITY_URL=https://dev.genesis-colonies.com`
 - `GC_NETWORK_UNI1_URL=<universe URL>`
 - `GC_NETWORK_UNI1_OPEN=0|1`
 - `GC_NETWORK_AUTH_SECRET=<shared 32+ character secret>`
-- Authority: `PUBLIC_BASE_URL=https://www.genesis-colonies.de`
-- Authority: `GC_PUBLIC_ALIAS_HOSTS=genesis-colonies.com`
-- UNI 1: `PUBLIC_BASE_URL=https://genesis-colonies-u2-production.up.railway.app`
+- Authority: `PUBLIC_BASE_URL=https://dev.genesis-colonies.com`
+- Authority: `GC_PUBLIC_ALIAS_HOSTS=www.genesis-colonies.de,genesis-colonies.com`
+- UNI 1: `PUBLIC_BASE_URL=https://uni1.genesis-colonies.com`
 
 The shared auth secret must exist only in deployment secrets and must never be committed.
 
 ### Public-origin rule
 
-`genesis-colonies.com` is intentionally retained as the stable public/toplist address, but it is **not a second browser session origin**. Browser/page requests on that host are canonicalized to `www.genesis-colonies.de` before Network auth or Flask session handling. API postback routes stay directly reachable on aliases so TopG/GTop100/GameToor/Arena/PayPal integrations are not coupled to redirect support.
+`dev.genesis-colonies.com` is the canonical DEV/browser/auth origin. Both `www.genesis-colonies.de` (legacy bookmarks) and `genesis-colonies.com` (public/toplist entry) remain attached to the authority service as aliases, not independent session origins. Browser/page requests on either alias are canonicalized to DEV before Network auth or Flask session handling. API postback routes stay directly reachable on aliases so TopG/GTop100/GameToor/Arena/PayPal integrations are not coupled to redirect support.
+
+
+### Scalable universe naming
+
+Universe routing is convention-first:
+
+- DEV / identity authority: `https://dev.genesis-colonies.com`
+- UNI 1: `https://uni1.genesis-colonies.com`
+- UNI 2: `https://uni2.genesis-colonies.com`
+- future universes follow the same `uniN.genesis-colonies.com` pattern
+
+`GC_NETWORK_UNIVERSES` is the registry. For a future UNI 2, add `uni2` to that list on the authority and universe services, attach the matching Railway subdomain, deploy the new service with `GC_UNIVERSE_KEY=uni2`, and keep `GC_NETWORK_UNI2_OPEN=0` until launch. Core auth code does not need another hardcoded URL. An explicit `GC_NETWORK_UNI2_URL` remains available as an override.
 
 ## UNI 1 launch contract
 
@@ -70,10 +84,9 @@ Required invariants:
 
 - `GC_UNIVERSE_KEY` is explicit on every universe.
 - `GC_NETWORK_AUTH_SECRET` has at least 32 characters.
-- Authority and UNI 1 browser handoff URLs are explicit HTTPS URLs and use different hosts.
+- Every key in `GC_NETWORK_UNIVERSES` resolves to an explicit HTTPS URL (either an override or the `uniN.<domain>` convention), and all universe hosts are distinct.
+- A non-authority `GC_UNIVERSE_KEY` must be present in `GC_NETWORK_UNIVERSES`.
 - `PUBLIC_BASE_URL` must match the URL owned by the current `GC_UNIVERSE_KEY`.
-  - `dev`/authority → host must match `GC_NETWORK_AUTHORITY_URL`.
-  - `uni1` → host must match `GC_NETWORK_UNI1_URL`.
 - The canonical `PUBLIC_BASE_URL` host may not also appear in `GC_PUBLIC_ALIAS_HOSTS`.
 - An open non-authority universe has a live maintenance path:
   `GC_MAINTENANCE_WORKER=1` or `GC_EMBEDDED_CRON=1`.

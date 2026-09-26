@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from typing import Any
@@ -46,27 +47,95 @@ def authority_key() -> str:
     return (_env("GC_NETWORK_AUTHORITY_KEY", AUTHORITY_KEY_DEFAULT) or AUTHORITY_KEY_DEFAULT).lower()
 
 
+NETWORK_DOMAIN_DEFAULT = "genesis-colonies.com"
+_UNIVERSE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+
+
 def authority_url() -> str:
-    return (_env("GC_NETWORK_AUTHORITY_URL", "https://www.genesis-colonies.de")).rstrip("/")
+    return (_env("GC_NETWORK_AUTHORITY_URL", "https://dev.genesis-colonies.com")).rstrip("/")
+
+
+def network_domain() -> str:
+    domain = (_env("GC_NETWORK_DOMAIN", NETWORK_DOMAIN_DEFAULT) or NETWORK_DOMAIN_DEFAULT).lower()
+    return domain.strip().strip(".")
+
+
+def configured_universe_keys() -> tuple[str, ...]:
+    """Universe registry owned by deployment config, not application code."""
+    raw = _env("GC_NETWORK_UNIVERSES", "uni1")
+    keys: list[str] = []
+    seen: set[str] = set()
+    for item in raw.replace(";", ",").split(","):
+        key = item.strip().lower()
+        if not key or key == authority_key() or key in seen:
+            continue
+        if not _UNIVERSE_KEY_RE.fullmatch(key):
+            continue
+        seen.add(key)
+        keys.append(key)
+    return tuple(keys)
+
+
+def _universe_env_token(key: str) -> str:
+    return str(key or "").strip().upper().replace("-", "_")
 
 
 def universe_url(key: str) -> str:
     k = str(key or "").strip().lower()
+    if not _UNIVERSE_KEY_RE.fullmatch(k):
+        return ""
     if k == authority_key():
         return authority_url()
-    if k == "uni1":
-        return (_env(
-            "GC_NETWORK_UNI1_URL",
-            "https://genesis-colonies-u2-production.up.railway.app",
-        )).rstrip("/")
+
+    explicit = _env(f"GC_NETWORK_{_universe_env_token(k)}_URL")
+    if explicit:
+        return explicit.rstrip("/")
+
+    # Convention-first fallback: uni1 -> https://uni1.genesis-colonies.com,
+    # uni2 -> https://uni2.genesis-colonies.com, etc. Explicit *_URL wins.
+    if re.fullmatch(r"uni\d+", k):
+        domain = network_domain()
+        if domain:
+            return f"https://{k}.{domain}"
     return ""
+
+
+def universe_directory() -> tuple[dict[str, Any], ...]:
+    """Small server-owned directory for navigation/UI across configured universes."""
+    current = current_universe_key()
+    authority = authority_key()
+    keys = (authority, *configured_universe_keys())
+    items: list[dict[str, Any]] = []
+    for key in keys:
+        url = universe_url(key)
+        if not url:
+            continue
+        label = "DEV" if key == authority else (
+            f"UNI {key[3:]}" if re.fullmatch(r"uni\d+", key) else key.upper()
+        )
+        items.append({
+            "key": key,
+            "label": label,
+            "url": url,
+            "open": True if key == authority else universe_is_open(key),
+            "current": key == current,
+            "authority": key == authority,
+        })
+    return tuple(items)
+
+
+def universe_is_configured(key: str) -> bool:
+    k = str(key or "").strip().lower()
+    return k == authority_key() or k in set(configured_universe_keys())
 
 
 def universe_is_open(key: str) -> bool:
     k = str(key or "").strip().lower()
     if k == authority_key():
         return True
-    raw = _env(f"GC_NETWORK_{k.upper()}_OPEN", "0").lower()
+    if not universe_is_configured(k):
+        return False
+    raw = _env(f"GC_NETWORK_{_universe_env_token(k)}_OPEN", "0").lower()
     return raw in {"1", "true", "yes", "on"}
 
 
@@ -146,7 +215,11 @@ def issue_handoff(player_id: int, target_key: str) -> tuple[bool, str, str | Non
         return False, "network_auth_disabled", None
     if not is_authority():
         return False, "not_authority", None
-    if target == current_universe_key() or not universe_url(target):
+    if (
+        target == current_universe_key()
+        or not universe_is_configured(target)
+        or not universe_url(target)
+    ):
         return False, "invalid_target", None
     if not universe_is_open(target):
         return False, "universe_closed", None
@@ -486,7 +559,13 @@ def _network_before_request():
 
     if endpoint in {"login", "register"}:
         target = str(request.args.get("network_target") or "").strip().lower()
-        if request.method == "GET" and target and target != universe and universe_url(target):
+        if (
+            request.method == "GET"
+            and target
+            and target != universe
+            and universe_is_configured(target)
+            and universe_url(target)
+        ):
             session["gc_network_target"] = target
             if session.get("user_id") and universe_is_open(target):
                 return redirect(url_for("network_universe_enter", target_key=target))
@@ -508,7 +587,13 @@ def _network_after_request(response: Response) -> Response:
         or pending_target
         or ""
     ).strip().lower()
-    if target and target != current_universe_key() and universe_url(target) and universe_is_open(target):
+    if (
+        target
+        and target != current_universe_key()
+        and universe_is_configured(target)
+        and universe_url(target)
+        and universe_is_open(target)
+    ):
         response.headers["Location"] = url_for("network_universe_enter", target_key=target)
     return response
 
@@ -570,6 +655,9 @@ def install_network_auth(app) -> None:
 
     app.jinja_env.globals["GC_NETWORK_ENABLED"] = network_enabled()
     app.jinja_env.globals["GC_NETWORK_UNIVERSE_KEY"] = current_universe_key()
+    app.jinja_env.globals["GC_NETWORK_AUTHORITY_KEY"] = authority_key()
     app.jinja_env.globals["GC_NETWORK_AUTHORITY_URL"] = authority_url()
+    app.jinja_env.globals["GC_NETWORK_UNIVERSES"] = universe_directory()
+    # Compatibility globals retained while the landing page still has dedicated UNI1 copy.
     app.jinja_env.globals["GC_NETWORK_UNI1_URL"] = universe_url("uni1")
     app.jinja_env.globals["GC_NETWORK_UNI1_OPEN"] = universe_is_open("uni1")

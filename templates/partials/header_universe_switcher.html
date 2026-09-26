@@ -1,4 +1,5 @@
-{% if GC_NETWORK_ENABLED and GC_NETWORK_UNI1_OPEN and AUTH_USER and AUTH_USER.id %}
+{% set gc_open_universes = GC_NETWORK_UNIVERSES | selectattr('open') | list %}
+{% if GC_NETWORK_ENABLED and AUTH_USER and AUTH_USER.id and gc_open_universes|length > 1 %}
 <div class="gc-universe-switcher"
      data-universe="{{ GC_NETWORK_UNIVERSE_KEY }}"
      aria-label="{{ T('network_universe_switcher_label') }}">
@@ -6,13 +7,17 @@
           data-gc-hud-select
           data-gc-universe-select
           aria-label="{{ T('network_universe_switcher_label') }}">
-    {% if GC_NETWORK_UNIVERSE_KEY == 'dev' %}
-      <option value="" selected>{{ T("network_universe_dev") }}</option>
-      <option value="{{ url_for('network_universe_enter', target_key='uni1') }}">{{ T("network_universe_uni1") }}</option>
-    {% else %}
-      <option value="{{ GC_NETWORK_AUTHORITY_URL }}/overview">{{ T("network_universe_dev") }}</option>
-      <option value="" selected>{{ T("network_universe_uni1") }}</option>
-    {% endif %}
+    {% for universe in gc_open_universes %}
+      {% if universe.current %}
+        <option value="" selected>{{ universe.label }}</option>
+      {% elif universe.authority %}
+        <option value="{{ universe.url }}/overview">{{ universe.label }}</option>
+      {% elif GC_NETWORK_UNIVERSE_KEY == GC_NETWORK_AUTHORITY_KEY %}
+        <option value="{{ url_for('network_universe_enter', target_key=universe.key) }}">{{ universe.label }}</option>
+      {% else %}
+        <option value="{{ GC_NETWORK_AUTHORITY_URL }}/network/universe/{{ universe.key }}/enter">{{ universe.label }}</option>
+      {% endif %}
+    {% endfor %}
   </select>
 </div>
 
