@@ -35,3 +35,10 @@ def test_network_auth_exposes_shell_context():
         "GC_NETWORK_UNI1_OPEN",
     ):
         assert f'app.jinja_env.globals["{key}"]' in owner
+
+
+def test_landing_universe_directory_is_registry_driven():
+    landing = _read("templates/landing.html")
+    assert "{% for universe in GC_NETWORK_UNIVERSES %}" in landing
+    assert "network_target={{ universe.key }}" in landing
+    assert "universe.url" in landing
