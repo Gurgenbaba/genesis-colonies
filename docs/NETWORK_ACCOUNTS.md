@@ -54,7 +54,7 @@ Universe routing is convention-first:
 - UNI 2: `https://uni2.genesis-colonies.com`
 - future universes follow the same `uniN.genesis-colonies.com` pattern
 
-`GC_NETWORK_UNIVERSES` is the registry. For a future UNI 2, add `uni2` to that list on the authority and universe services, attach the matching Railway subdomain, deploy the new service with `GC_UNIVERSE_KEY=uni2`, and keep `GC_NETWORK_UNI2_OPEN=0` until launch. Core auth code does not need another hardcoded URL. An explicit `GC_NETWORK_UNI2_URL` remains available as an override.
+`GC_NETWORK_UNIVERSES` is the registry. The global universe switcher and landing server directory render from it automatically. For a future UNI 2, add `uni2` to that list on the authority and universe services, attach the matching Railway subdomain, deploy the new service with `GC_UNIVERSE_KEY=uni2`, and keep `GC_NETWORK_UNI2_OPEN=0` until launch. Core auth/UI code does not need another hardcoded URL. An explicit `GC_NETWORK_UNI2_URL` remains available as an override.
 
 ## UNI 1 launch contract
 
