@@ -188,9 +188,12 @@ _started_lock = threading.Lock()
 
 
 def _process_start_event_id(revision: str) -> str:
+    # Keep the process-unique suffix inside the API's 160-char event_id cap.
+    instance = instance_key()[:40]
+    revision_part = (revision or "unknown")[:64]
     return (
-        f"{instance_key()}:app.started:"
-        f"{revision or 'unknown'}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+        f"{instance}:app.started:"
+        f"{revision_part}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
     )
 
 
