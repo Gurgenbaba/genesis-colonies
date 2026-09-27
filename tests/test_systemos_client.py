@@ -73,3 +73,12 @@ def test_systemos_health_interval_is_bounded(monkeypatch):
     assert systemos._health_interval_sec() == 60
     monkeypatch.setenv("SYSTEMOS_HEALTH_INTERVAL_SEC", "99999")
     assert systemos._health_interval_sec() == 3600
+
+
+def test_systemos_process_start_ids_are_unique(monkeypatch):
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
+    first = systemos._process_start_event_id("abc123")
+    second = systemos._process_start_event_id("abc123")
+    assert first.startswith("uni1:app.started:abc123:")
+    assert second.startswith("uni1:app.started:abc123:")
+    assert first != second
