@@ -16038,7 +16038,11 @@ def _start_systemos_agent_safely() -> None:
         logger.exception("SystemOS agent failed to start")
 
 
-if __name__ != "__main__":
+if (
+    __name__ != "__main__"
+    and os.environ.get("SYSTEMOS_WEB_PROCESS", "").strip().lower()
+    in {"1", "true", "yes", "on"}
+):
     _start_systemos_agent_safely()
 
 
