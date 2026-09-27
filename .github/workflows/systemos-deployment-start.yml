@@ -1,0 +1,54 @@
+name: SystemOS Deployment Start
+
+on:
+  push:
+    branches:
+      - main
+      - u2/staging-runtime
+    paths:
+      - "game/**"
+      - "app.py"
+      - "templates/**"
+      - "static/**"
+      - "locales/**"
+      - "generated/**"
+      - "data/**"
+      - "migrations/**"
+      - "migrate.py"
+      - "scripts/docker-entrypoint.sh"
+      - "scripts/install.py"
+      - "scripts/run_uni1_prelaunch_reset.py"
+      - "scripts/run_maintenance_worker.py"
+      - "scripts/run_game_worker.py"
+      - "requirements.txt"
+      - "requirements-prod.txt"
+      - "Dockerfile"
+      - "railway.toml"
+      - ".dockerignore"
+      - "VERSION"
+      - "CHANGELOG.md"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  signal-systemos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send signed deployment start
+        shell: bash
+        env:
+          SYSTEMOS_URL: https://mail-hub-production-f6d2.up.railway.app
+          SYSTEMOS_AUDIENCE: gurgenbaba-systemos
+        run: |
+          set -euo pipefail
+          oidc_json="$(
+            curl --fail --silent --show-error               -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${SYSTEMOS_AUDIENCE}"
+          )"
+          oidc_token="$(
+            printf '%s' "${oidc_json}" |
+              python -c 'import json,sys; print(json.load(sys.stdin)["value"])'
+          )"
+          curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer ${oidc_token}"             -H "Accept: application/json"             "${SYSTEMOS_URL}/api/v1/providers/github/deployment-started"
