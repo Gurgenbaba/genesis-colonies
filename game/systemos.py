@@ -52,18 +52,18 @@ def _post(path: str, payload: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
     if not base or not token:
         return False, {"ok": False, "error": "systemos_unavailable"}
 
-    request = urllib.request.Request(
-        f"{base}{path}",
-        data=json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Genesis-Colonies/SystemOS",
-        },
-        method="POST",
-    )
     try:
+        request = urllib.request.Request(
+            f"{base}{path}",
+            data=json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Genesis-Colonies/SystemOS",
+            },
+            method="POST",
+        )
         with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT_SEC) as response:
             raw = response.read(64 * 1024)
             data = json.loads(raw.decode("utf-8")) if raw else {}
