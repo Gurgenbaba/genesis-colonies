@@ -38,6 +38,10 @@ def configured() -> bool:
     return bool(_base_url() and _token())
 
 
+def agent_enabled() -> bool:
+    return _env("SYSTEMOS_AGENT_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
+
+
 def instance_key() -> str:
     return _env("GC_UNIVERSE_KEY", "dev") or "dev"
 
@@ -193,7 +197,7 @@ def _process_start_event_id(revision: str) -> str:
 def start_agent() -> bool:
     """Start one lightweight daemon heartbeat thread per web process."""
     global _started
-    if not configured():
+    if not agent_enabled() or not configured():
         return False
     with _started_lock:
         if _started:
