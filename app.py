@@ -1169,6 +1169,13 @@ def inject_globals():
 _skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in ("1", "true", "yes")
 bootstrap_application(skip_migration_check=_skip_mig)
 
+try:
+    from game.systemos import start_agent as start_systemos_agent
+
+    start_systemos_agent()
+except Exception:
+    logger.exception("SystemOS agent failed to start")
+
 from game.player_changelog import register_player_changelog_routes
 register_player_changelog_routes(app)
 
