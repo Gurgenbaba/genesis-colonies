@@ -92,3 +92,13 @@ def test_systemos_process_start_ids_are_unique(monkeypatch):
     assert first.startswith("uni1:app.started:abc123:")
     assert second.startswith("uni1:app.started:abc123:")
     assert first != second
+
+
+def test_systemos_process_start_event_id_preserves_unique_suffix(monkeypatch):
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "u" * 80)
+    first = systemos._process_start_event_id("r" * 128)
+    second = systemos._process_start_event_id("r" * 128)
+    assert len(first) <= 160
+    assert len(second) <= 160
+    assert first != second
+    assert ":app.started:" in first
