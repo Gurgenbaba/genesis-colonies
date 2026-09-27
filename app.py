@@ -1169,13 +1169,6 @@ def inject_globals():
 _skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in ("1", "true", "yes")
 bootstrap_application(skip_migration_check=_skip_mig)
 
-try:
-    from game.systemos import start_agent as start_systemos_agent
-
-    start_systemos_agent()
-except Exception:
-    logger.exception("SystemOS agent failed to start")
-
 from game.player_changelog import register_player_changelog_routes
 register_player_changelog_routes(app)
 
@@ -16031,6 +16024,16 @@ def api_admin_audit_log():
     else:
         filters["admin_id"] = None
     return _admin_json(admin_api_logic.get_audit_log(filters))
+
+
+# SystemOS starts only after the Flask application has been fully constructed:
+# routes, cron wiring, security/session setup and all module-level initialization.
+try:
+    from game.systemos import start_agent as start_systemos_agent
+
+    start_systemos_agent()
+except Exception:
+    logger.exception("SystemOS agent failed to start")
 
 
 # --------------------------------------------------------------------------
