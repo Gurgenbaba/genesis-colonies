@@ -193,21 +193,20 @@ def start_agent() -> bool:
             return True
         _started = True
 
-    from game.config import get_app_version, get_deploy_revision
-
-    revision = get_deploy_revision() or ""
-    emit_event(
-        "app.started",
-        f"Genesis {instance_key()} web process started",
-        metadata={
-            "version": get_app_version(),
-            "commit": revision,
-            "role": "web",
-        },
-        event_id=f"{instance_key()}:app.started:{revision or uuid.uuid4().hex}",
-    )
-
     def loop() -> None:
+        from game.config import get_app_version, get_deploy_revision
+
+        revision = get_deploy_revision() or ""
+        emit_event(
+            "app.started",
+            f"Genesis {instance_key()} web process started",
+            metadata={
+                "version": get_app_version(),
+                "commit": revision,
+                "role": "web",
+            },
+            event_id=f"{instance_key()}:app.started:{revision or uuid.uuid4().hex}",
+        )
         while True:
             report_current_health()
             time.sleep(_health_interval_sec())
