@@ -205,7 +205,10 @@ def start_agent() -> bool:
                 "commit": revision,
                 "role": "web",
             },
-            event_id=f"{instance_key()}:app.started:{revision or uuid.uuid4().hex}",
+            event_id=(
+                f"{instance_key()}:app.started:"
+                f"{revision or 'unknown'}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+            ),
         )
         while True:
             report_current_health()
