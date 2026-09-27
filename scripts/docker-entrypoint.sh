@@ -151,6 +151,9 @@ case "${WORKER_CLASS}" in
 esac
 
 echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS}, worker_class=${WORKER_CLASS}, threads=${THREADS})..."
+# Only the actual HTTP process lineage may emit SystemOS web telemetry.
+# Utility/perf/smoke scripts can import app.py without inheriting this marker.
+export SYSTEMOS_WEB_PROCESS=1
 # shellcheck disable=SC2086
 exec gunicorn -k "${WORKER_CLASS}" -w "${WORKERS}" ${GUNICORN_EXTRA} -b "0.0.0.0:${PORT}" --timeout 120 \
   --access-logfile - --error-logfile - --log-level info \

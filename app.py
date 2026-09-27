@@ -16026,6 +16026,26 @@ def api_admin_audit_log():
     return _admin_json(admin_api_logic.get_audit_log(filters))
 
 
+# SystemOS starts only after the Flask application has been fully constructed.
+# Imported WSGI apps (Gunicorn/Railway) start here. Direct Werkzeug launches
+# defer until reloader state is known so the supervisor never emits telemetry.
+def _start_systemos_agent_safely() -> None:
+    try:
+        from game.systemos import start_agent as start_systemos_agent
+
+        start_systemos_agent()
+    except Exception:
+        logger.exception("SystemOS agent failed to start")
+
+
+if (
+    __name__ != "__main__"
+    and os.environ.get("SYSTEMOS_WEB_PROCESS", "").strip().lower()
+    in {"1", "true", "yes", "on"}
+):
+    _start_systemos_agent_safely()
+
+
 # --------------------------------------------------------------------------
 # RUN
 # --------------------------------------------------------------------------
@@ -16073,7 +16093,10 @@ if __name__ == "__main__":
             "falls back to polling. Set GC_FLASK_THREADED=1 to test it locally."
         )
     # One local server only: free PORT before bind (skip in production / GC_SINGLE_INSTANCE=0).
-    # With Werkzeug reloader, only the child process binds — free there.
-    if (not use_reloader) or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    # With Werkzeug reloader, only the child process binds — free there and
+    # only that serving child starts the SystemOS heartbeat.
+    serving_process = (not use_reloader) or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+    if serving_process:
         ensure_dev_port_available(port)
+        _start_systemos_agent_safely()
     app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded, use_reloader=use_reloader)
