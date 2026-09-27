@@ -10,6 +10,16 @@ def test_systemos_uses_dedicated_service_token(monkeypatch):
     assert systemos._base_url() == "https://office.example"
 
 
+def test_systemos_agent_requires_explicit_opt_in(monkeypatch):
+    monkeypatch.setenv("MAIL_HUB_URL", "https://office.example")
+    monkeypatch.setenv("SYSTEMOS_SERVICE_TOKEN", "sos_test_token")
+    monkeypatch.delenv("SYSTEMOS_AGENT_ENABLED", raising=False)
+    assert systemos.configured() is True
+    assert systemos.agent_enabled() is False
+    monkeypatch.setenv("SYSTEMOS_AGENT_ENABLED", "1")
+    assert systemos.agent_enabled() is True
+
+
 def test_systemos_event_payload_is_compact_and_versioned(monkeypatch):
     captured = {}
 
