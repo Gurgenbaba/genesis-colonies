@@ -183,6 +183,13 @@ _started = False
 _started_lock = threading.Lock()
 
 
+def _process_start_event_id(revision: str) -> str:
+    return (
+        f"{instance_key()}:app.started:"
+        f"{revision or 'unknown'}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+    )
+
+
 def start_agent() -> bool:
     """Start one lightweight daemon heartbeat thread per web process."""
     global _started
@@ -205,10 +212,7 @@ def start_agent() -> bool:
                 "commit": revision,
                 "role": "web",
             },
-            event_id=(
-                f"{instance_key()}:app.started:"
-                f"{revision or 'unknown'}:{os.getpid()}:{uuid.uuid4().hex[:12]}"
-            ),
+            event_id=_process_start_event_id(revision),
         )
         while True:
             report_current_health()
