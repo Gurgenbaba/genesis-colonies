@@ -162,16 +162,21 @@ def _compact_health_report() -> tuple[str, str, Dict[str, Any]]:
     return status, f"Genesis {instance_key()} readiness: {source_status}", metadata
 
 
-def report_current_health() -> bool:
+def _report_current_health_snapshot() -> tuple[bool, str, Dict[str, Any]]:
     if not configured():
-        return False
+        return False, "unhealthy", {}
     try:
         status, summary, metadata = _compact_health_report()
         ok, _ = report_health(status, summary=summary, metadata=metadata)
-        return ok
+        return ok, status, metadata
     except Exception:
         logger.exception("systemos health report failed")
-        return False
+        return False, "unhealthy", {}
+
+
+def report_current_health() -> bool:
+    ok, _, _ = _report_current_health_snapshot()
+    return ok
 
 
 def _health_interval_sec() -> int:
@@ -185,6 +190,12 @@ def _health_interval_sec() -> int:
 
 _started = False
 _started_lock = threading.Lock()
+
+
+def _deployment_success_event_id(revision: str) -> str:
+    deployment_id = _env("RAILWAY_DEPLOYMENT_ID")[:80]
+    stable = deployment_id or (revision or "unknown")[:80]
+    return f"{instance_key()[:40]}:deployment.succeeded:{stable}"[:160]
 
 
 def _process_start_event_id(revision: str) -> str:
@@ -211,18 +222,45 @@ def start_agent() -> bool:
         from game.config import get_app_version, get_deploy_revision
 
         revision = get_deploy_revision() or ""
+        version = get_app_version()
+        deployment_id = _env("RAILWAY_DEPLOYMENT_ID")[:120]
         emit_event(
             "app.started",
             f"Genesis {instance_key()} web process started",
             metadata={
-                "version": get_app_version(),
+                "version": version,
                 "commit": revision,
+                "deployment": deployment_id,
                 "role": "web",
             },
             event_id=_process_start_event_id(revision),
         )
+        deployment_confirmed = False
         while True:
-            report_current_health()
+            health_ok, health_status, health_metadata = _report_current_health_snapshot()
+            if (
+                not deployment_confirmed
+                and health_ok
+                and health_status in {"healthy", "degraded"}
+            ):
+                event_ok, _ = emit_event(
+                    "deployment.succeeded",
+                    f"Genesis {instance_key()} deployment reached readiness",
+                    metadata={
+                        **health_metadata,
+                        "version": version,
+                        "commit": revision,
+                        "deployment": deployment_id,
+                        "role": "web",
+                    },
+                    external_ref=(
+                        f"railway:deployment:{deployment_id}"
+                        if deployment_id
+                        else ""
+                    ),
+                    event_id=_deployment_success_event_id(revision),
+                )
+                deployment_confirmed = event_ok
             time.sleep(_health_interval_sec())
 
     thread = threading.Thread(
