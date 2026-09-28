@@ -371,15 +371,23 @@ def _season_levels_stale(conn, season_id: int) -> bool:
 
 
 def _seed_season_levels(conn, season_id: int) -> None:
+    """Idempotently publish the reward catalog.
+
+    Never DELETE+INSERT here: game-state may call this concurrently on a cold
+    launch. Ordered UPSERTs make both SQLite and PostgreSQL safe when several
+    authenticated requests observe a stale/missing catalog at the same time.
+    """
     sid = int(season_id)
-    conn.execute("DELETE FROM battle_pass_levels WHERE season_id = ?;", (sid,))
     for level in range(1, DEFAULT_MAX_LEVEL + 1):
         free, premium = _default_level_rewards(level)
         conn.execute(
             """
             INSERT INTO battle_pass_levels (
                 season_id, level, free_reward_json, premium_reward_json
-            ) VALUES (?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT (season_id, level) DO UPDATE SET
+                free_reward_json = excluded.free_reward_json,
+                premium_reward_json = excluded.premium_reward_json;
             """,
             (sid, level, _json_dumps(free), _json_dumps(premium)),
         )
@@ -416,11 +424,15 @@ def ensure_default_season(conn, *, now: Optional[float] = None) -> Optional[int]
             (ts, ts + DEFAULT_SEASON_DAYS * 86400, sid),
         )
     else:
-        cur = conn.execute(
+        # Cold-launch requests can arrive together. The unique slug is the
+        # serialization point: losing requests do nothing instead of aborting
+        # their PostgreSQL transaction with UniqueViolation.
+        conn.execute(
             """
             INSERT INTO battle_pass_seasons (
                 slug, title_key, starts_at, ends_at, xp_per_level, max_level, active, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            ON CONFLICT (slug) DO NOTHING;
             """,
             (
                 DEFAULT_SEASON_SLUG,
@@ -432,7 +444,13 @@ def ensure_default_season(conn, *, now: Optional[float] = None) -> Optional[int]
                 ts,
             ),
         )
-        sid = int(cur.lastrowid)
+        existing = conn.execute(
+            "SELECT id FROM battle_pass_seasons WHERE slug = ? LIMIT 1;",
+            (DEFAULT_SEASON_SLUG,),
+        ).fetchone()
+        if not existing:
+            return None
+        sid = int(existing["id"])
 
     if _season_levels_stale(conn, sid):
         _seed_season_levels(conn, sid)
