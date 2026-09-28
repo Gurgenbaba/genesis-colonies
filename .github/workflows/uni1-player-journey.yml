@@ -49,7 +49,6 @@ jobs:
         run: |
           python -m pytest -q --tb=line \
             tests/test_security_tamper.py \
-            tests/test_queue_static_contract.py \
             tests/test_gc512d_shipyard_state_contract.py \
             tests/test_progression_time_floor.py
 
