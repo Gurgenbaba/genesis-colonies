@@ -45,18 +45,36 @@ jobs:
           node --check static/main.js
           git diff --check
 
-      - name: Buildings research and shipyard
+      - name: Buildings research shipyard fleet and exchange
         run: |
-          python -m pytest -q --tb=line             tests/test_buildings_card_queue.py             tests/test_gc840_buildings_action_payload.py             tests/test_gc804_research_timer.py             tests/test_shipyard.py
+          python -m pytest -q --tb=line \
+            tests/test_security_tamper.py \
+            tests/test_queue_static_contract.py \
+            tests/test_gc512d_shipyard_state_contract.py \
+            tests/test_progression_time_floor.py
 
       - name: Galaxy spy attack expedition and messages
         run: |
-          python -m pytest -q --tb=line             tests/test_gc977a_galaxy_quick_spy.py             tests/test_gc977b_galaxy_quick_attack.py             tests/test_fleet_mission_locks.py             tests/test_expedition_events.py             tests/test_world_expedition.py             tests/test_messages.py
+          python -m pytest -q --tb=line \
+            tests/test_gc977a_galaxy_quick_spy.py \
+            tests/test_gc977b_galaxy_quick_attack.py \
+            tests/test_fleet_mission_locks.py \
+            tests/test_expedition_events.py \
+            tests/test_world_expedition.py \
+            tests/test_messages.py
 
       - name: Trader inventory Timekeeper and shop
         run: |
-          python -m pytest -q --tb=line             tests/test_trader_hub.py             tests/test_exchange.py             tests/test_inventory_use.py             tests/test_inventory_containers.py             tests/test_timekeeper.py             tests/test_shop_payments.py
+          python -m pytest -q --tb=line \
+            tests/test_trader_hub.py \
+            tests/test_exchange.py \
+            tests/test_inventory_use.py \
+            tests/test_inventory_containers.py \
+            tests/test_timekeeper.py \
+            tests/test_shop_payments.py
 
       - name: Mobile launch navigation
         run: |
-          python -m pytest -q --tb=line             tests/test_gc_p0_mobile_nav_drawer.py             tests/test_progression_pages.py
+          python -m pytest -q --tb=line \
+            tests/test_gc_p0_mobile_nav_drawer.py \
+            tests/test_progression_pages.py
