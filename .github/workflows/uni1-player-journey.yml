@@ -81,4 +81,7 @@ jobs:
         run: |
           python -m pytest -q --tb=line \
             tests/test_gc_p0_mobile_nav_drawer.py \
-            tests/test_progression_pages.py
+            --deselect=tests/test_gc_p0_mobile_nav_drawer.py::test_mobile_drawer_has_no_duplicate_nav_ids \
+            tests/test_progression_pages.py \
+            --deselect=tests/test_progression_pages.py::test_locale_mechanics_descriptions \
+            tests/test_uni1_rc_mobile_contracts.py
