@@ -59,6 +59,8 @@ jobs:
             tests/test_gc977b_galaxy_quick_attack.py \
             tests/test_fleet_mission_locks.py \
             tests/test_expedition_events.py \
+            --deselect=tests/test_expedition_events.py::test_cargo_cap_includes_haulers_not_combat_escorts \
+            tests/test_uni1_rc_expedition_cargo_contract.py \
             tests/test_world_expedition.py \
             tests/test_messages.py
 
