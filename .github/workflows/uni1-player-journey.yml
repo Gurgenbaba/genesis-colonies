@@ -45,6 +45,11 @@ jobs:
           node --check static/main.js
           git diff --check
 
+      - name: Register login and network auth
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_network_auth.py
+
       - name: Buildings research shipyard fleet and exchange
         run: |
           python -m pytest -q --tb=line \
@@ -71,6 +76,19 @@ jobs:
             tests/test_inventory_containers.py \
             tests/test_timekeeper.py \
             tests/test_shop_payments.py
+
+      - name: Ascension launch progression
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_mine_ascension_skilltree_ui.py \
+            tests/test_ascension_breakthrough_v2.py \
+            tests/test_research_lab_ascension.py
+
+      - name: Support and SystemOS bridge
+        run: |
+          python -m pytest -q --tb=line \
+            tests/test_support.py \
+            tests/test_systemos_client.py
 
       - name: Mobile launch navigation
         run: |
