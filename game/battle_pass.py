@@ -527,7 +527,8 @@ def _ensure_player_row(player_id: int, season_id: int, *, conn, now: float) -> D
         """
         INSERT INTO player_battle_pass (
             player_id, season_id, xp, level, premium_unlocked, premium_unlocked_at, updated_at
-        ) VALUES (?, ?, 0, 0, ?, ?, ?);
+        ) VALUES (?, ?, 0, 0, ?, ?, ?)
+        ON CONFLICT (player_id, season_id) DO NOTHING;
         """,
         (
             int(player_id),
@@ -537,14 +538,27 @@ def _ensure_player_row(player_id: int, season_id: int, *, conn, now: float) -> D
             float(now),
         ),
     )
+    # A parallel request for the same player may have won the INSERT. Read the
+    # canonical row instead of returning assumptions from this request.
+    row = conn.execute(
+        """
+        SELECT player_id, season_id, xp, level, premium_unlocked, premium_unlocked_at, updated_at
+        FROM player_battle_pass
+        WHERE player_id = ? AND season_id = ?
+        LIMIT 1;
+        """,
+        (int(player_id), int(season_id)),
+    ).fetchone()
+    if not row:
+        raise RuntimeError("battle_pass_player_row_missing_after_upsert")
     return {
-        "player_id": int(player_id),
-        "season_id": int(season_id),
-        "xp": 0,
-        "level": 0,
-        "premium_unlocked": bool(premium),
-        "premium_unlocked_at": float(now) if premium else None,
-        "updated_at": float(now),
+        "player_id": int(row["player_id"]),
+        "season_id": int(row["season_id"]),
+        "xp": int(row["xp"] or 0),
+        "level": int(row["level"] or 0),
+        "premium_unlocked": bool(row["premium_unlocked"]),
+        "premium_unlocked_at": float(row["premium_unlocked_at"]) if row["premium_unlocked_at"] else None,
+        "updated_at": float(row["updated_at"] or 0),
     }
 
 
