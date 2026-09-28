@@ -6,26 +6,14 @@ on:
       - main
       - u2/staging-runtime
     paths:
-      - "game/**"
-      - "app.py"
-      - "templates/**"
-      - "static/**"
-      - "locales/**"
-      - "generated/**"
-      - "data/**"
-      - "migrations/**"
-      - "migrate.py"
-      - "scripts/docker-entrypoint.sh"
-      - "scripts/install.py"
-      - "scripts/run_uni1_prelaunch_reset.py"
-      - "scripts/run_maintenance_worker.py"
-      - "scripts/run_game_worker.py"
-      - "requirements.txt"
-      - "requirements-prod.txt"
-      - "Dockerfile"
-      - "railway.toml"
-      - ".dockerignore"
-      - "VERSION"
+      - "**"
+      - "!docs/**"
+      - "!.cursor/**"
+      - "!.github/**"
+      - "!tests/**"
+      - "!tools/**"
+      - "!**/*.md"
+      - "!*.md"
       - "CHANGELOG.md"
 
 permissions:
@@ -52,17 +40,5 @@ jobs:
             printf '%s' "${oidc_json}" |
               python -c 'import json,sys; print(json.load(sys.stdin)["value"])'
           )"
-          payload="$(
-            python - <<'PY'
-import json, os
-from datetime import datetime, timezone
-raw = os.environ["DEPLOYMENT_OCCURRED_AT"].strip()
-occurred_at = (
-    datetime.fromtimestamp(int(raw), tz=timezone.utc).isoformat()
-    if raw.isdigit()
-    else raw
-)
-print(json.dumps({"occurred_at": occurred_at}))
-PY
-          )"
+          payload="$(python -c 'import json,os; from datetime import datetime,timezone; raw=os.environ["DEPLOYMENT_OCCURRED_AT"].strip(); occurred_at=datetime.fromtimestamp(int(raw), tz=timezone.utc).isoformat() if raw.isdigit() else raw; print(json.dumps({"occurred_at": occurred_at}))')"
           curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer ${oidc_token}"             -H "Accept: application/json"             -H "Content-Type: application/json"             --data "${payload}"             "${SYSTEMOS_URL}/api/v1/providers/github/deployment-started"
