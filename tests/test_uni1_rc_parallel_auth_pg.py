@@ -62,6 +62,11 @@ def test_uni1_rc_five_parallel_authenticated_sessions(pg_parity_db, monkeypatch)
         assert home is not None
         accounts.append((player_id, username, int(home["id"])))
 
+    shared_username = f"rcgate_shared_{uuid.uuid4().hex[:8]}"
+    ok, reason, shared_user = create_user(shared_username, password)
+    assert ok and shared_user, reason
+    shared_player_id = int(shared_user["id"])
+
     barrier = threading.Barrier(PLAYERS)
 
     def run_player(account: tuple[int, str, int]) -> dict:
@@ -140,13 +145,49 @@ def test_uni1_rc_five_parallel_authenticated_sessions(pg_parity_db, monkeypatch)
     assert 503 not in statuses
     assert 409 not in statuses
 
+    # A real browser starts several authenticated requests for the same player
+    # immediately after login. This catches SELECT->INSERT races in lazy
+    # per-player state (Battle Pass was one launch-blocking example).
+    shared_barrier = threading.Barrier(PLAYERS)
+
+    def run_shared_player() -> list[int]:
+        seen: list[int] = []
+        with app_module.app.test_client() as client:
+            login = client.post(
+                "/login",
+                data={"username": shared_username, "password": password},
+                follow_redirects=False,
+            )
+            assert login.status_code in (200, 302)
+            shared_barrier.wait(timeout=10)
+            for route in ("/api/game-state", "/overview", "/inventory", "/messages"):
+                resp = client.get(route)
+                seen.append(resp.status_code)
+                assert resp.status_code == 200, (
+                    shared_player_id,
+                    route,
+                    resp.status_code,
+                    resp.get_data(as_text=True)[:500],
+                )
+        return seen
+
+    shared_statuses: list[int] = []
+    with ThreadPoolExecutor(max_workers=PLAYERS) as executor:
+        futures = [executor.submit(run_shared_player) for _ in range(PLAYERS)]
+        for future in as_completed(futures, timeout=60):
+            shared_statuses.extend(future.result())
+
+    assert 500 not in shared_statuses
+    assert 503 not in shared_statuses
+    assert 409 not in shared_statuses
+
     # Presence is the specific #142 ownership cutover. Every successfully
     # authenticated player must have its canonical dedicated presence row.
     from game.db import db
 
     conn = db()
     try:
-        ids = [player_id for player_id, _username, _home_id in accounts]
+        ids = [player_id for player_id, _username, _home_id in accounts] + [shared_player_id]
         placeholders = ",".join("?" for _ in ids)
         rows = conn.execute(
             f"SELECT player_id, last_seen FROM player_presence "
