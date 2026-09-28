@@ -82,12 +82,7 @@ jobs:
             printf '%s' "${oidc_json}" |
               python -c 'import json,sys; print(json.load(sys.stdin)["value"])'
           )"
-          payload="$(
-            python - <<'PY'
-import json, os
-print(json.dumps({"occurred_at": os.environ["DEPLOYMENT_OCCURRED_AT"]}))
-PY
-          )"
+          payload="$(python -c 'import json,os; print(json.dumps({"occurred_at": os.environ["DEPLOYMENT_OCCURRED_AT"]}))')"
           curl --fail-with-body --silent --show-error \
             -X POST \
             -H "Authorization: Bearer ${oidc_token}" \
