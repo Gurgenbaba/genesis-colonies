@@ -42,7 +42,7 @@ jobs:
         env:
           SYSTEMOS_URL: https://mail-hub-production-f6d2.up.railway.app
           SYSTEMOS_AUDIENCE: gurgenbaba-systemos
-          DEPLOYMENT_OCCURRED_AT: ${{ github.event.head_commit.timestamp }}
+          DEPLOYMENT_OCCURRED_AT: ${{ github.event.repository.pushed_at }}
         run: |
           set -euo pipefail
           oidc_json="$(
@@ -55,7 +55,14 @@ jobs:
           payload="$(
             python - <<'PY'
 import json, os
-print(json.dumps({"occurred_at": os.environ["DEPLOYMENT_OCCURRED_AT"]}))
+from datetime import datetime, timezone
+raw = os.environ["DEPLOYMENT_OCCURRED_AT"].strip()
+occurred_at = (
+    datetime.fromtimestamp(int(raw), tz=timezone.utc).isoformat()
+    if raw.isdigit()
+    else raw
+)
+print(json.dumps({"occurred_at": occurred_at}))
 PY
           )"
           curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer ${oidc_token}"             -H "Accept: application/json"             -H "Content-Type: application/json"             --data "${payload}"             "${SYSTEMOS_URL}/api/v1/providers/github/deployment-started"
