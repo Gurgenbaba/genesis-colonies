@@ -15,7 +15,7 @@ from flask import has_request_context, session
 _I18N_PCT_RE = re.compile(r"%\(([^)]+)\)s")
 _I18N_BRACE_RE = re.compile(r"\{([^}]+)\}")
 
-from .db import column_exists, db
+from .db import column_exists, db, get_db_backend
 
 _LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
 DEFAULT_LOCALE = "de"
@@ -157,6 +157,10 @@ def _store_session_player_locale(player_id: int, locale: str) -> None:
 
 
 def ensure_locale_schema(conn=None) -> None:
+    # PostgreSQL schema is owned by migrate.py. Locale reads happen in
+    # before_request, so lazy ALTER TABLE here is unsafe under launch traffic.
+    if get_db_backend() == "postgres":
+        return
     own = conn is None
     c = conn or db()
     try:
