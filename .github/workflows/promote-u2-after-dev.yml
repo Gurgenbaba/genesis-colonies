@@ -8,10 +8,6 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
-  id-token: write
-
 concurrency:
   group: promote-uni1-manual
   cancel-in-progress: false
@@ -19,6 +15,12 @@ concurrency:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      promoted: ${{ steps.promote.outputs.promoted }}
+      deploy_relevant: ${{ steps.promote.outputs.deploy_relevant }}
+      occurred_at: ${{ steps.promote.outputs.occurred_at }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,22 +83,33 @@ jobs:
 
           deployment_occurred_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           git push origin "$target_sha:refs/heads/u2/staging-runtime"
+
           echo "promoted=true" >> "${GITHUB_OUTPUT}"
           echo "deploy_relevant=${deploy_relevant}" >> "${GITHUB_OUTPUT}"
           echo "occurred_at=${deployment_occurred_at}" >> "${GITHUB_OUTPUT}"
           echo "Manually promoted UNI1 to $target_sha (deploy_relevant=${deploy_relevant})"
 
+  signal-systemos:
+    needs: promote
+    if: needs.promote.outputs.promoted == 'true' && needs.promote.outputs.deploy_relevant == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      id-token: write
+    steps:
       - name: Signal SystemOS deployment start
-        if: steps.promote.outputs.promoted == 'true' && steps.promote.outputs.deploy_relevant == 'true'
         shell: bash
         env:
           SYSTEMOS_URL: https://mail-hub-production-f6d2.up.railway.app
           SYSTEMOS_AUDIENCE: gurgenbaba-systemos
-          DEPLOYMENT_OCCURRED_AT: ${{ steps.promote.outputs.occurred_at }}
+          DEPLOYMENT_OCCURRED_AT: ${{ needs.promote.outputs.occurred_at }}
         run: |
           set -euo pipefail
           oidc_json="$(
-            curl --fail --silent --show-error               -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${SYSTEMOS_AUDIENCE}"
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${SYSTEMOS_AUDIENCE}"
           )"
           oidc_token="$(
             printf '%s' "${oidc_json}" |
