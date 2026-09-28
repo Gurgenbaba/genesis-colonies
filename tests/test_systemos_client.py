@@ -102,3 +102,35 @@ def test_systemos_process_start_event_id_preserves_unique_suffix(monkeypatch):
     assert len(second) <= 160
     assert first != second
     assert ":app.started:" in first
+
+
+
+def test_systemos_deployment_success_id_is_stable_per_railway_deploy(monkeypatch):
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "dev")
+    monkeypatch.setenv("RAILWAY_DEPLOYMENT_ID", "deploy-123")
+    first = systemos._deployment_success_event_id("abc123")
+    second = systemos._deployment_success_event_id("different-revision")
+    assert first == "dev:deployment.succeeded:deploy-123"
+    assert second == first
+    assert len(first) <= 160
+
+
+def test_systemos_health_snapshot_returns_readiness_and_compact_metadata(monkeypatch):
+    monkeypatch.setenv("MAIL_HUB_URL", "https://office.example")
+    monkeypatch.setenv("SYSTEMOS_SERVICE_TOKEN", "sos_test_token")
+
+    monkeypatch.setattr(
+        systemos,
+        "_compact_health_report",
+        lambda: ("healthy", "ready", {"commit": "abc123", "migrations_current": True}),
+    )
+    monkeypatch.setattr(
+        systemos,
+        "report_health",
+        lambda status, summary="", metadata=None: (True, {"ok": True}),
+    )
+
+    ok, status, metadata = systemos._report_current_health_snapshot()
+    assert ok is True
+    assert status == "healthy"
+    assert metadata == {"commit": "abc123", "migrations_current": True}
