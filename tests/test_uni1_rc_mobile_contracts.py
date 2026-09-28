@@ -5,6 +5,8 @@ from pathlib import Path
 
 from tests.test_gc_p0_mobile_nav_drawer import _app_client, _create_player
 
+pytest_plugins = ("tests.test_gc_p0_mobile_nav_drawer",)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
