@@ -30,6 +30,7 @@ jobs:
         env:
           SYSTEMOS_URL: https://mail-hub-production-f6d2.up.railway.app
           SYSTEMOS_AUDIENCE: gurgenbaba-systemos
+          DEPLOYMENT_OCCURRED_AT: ${{ github.event.repository.pushed_at }}
         run: |
           set -euo pipefail
           oidc_json="$(
