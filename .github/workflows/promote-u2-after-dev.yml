@@ -33,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "promoted=false" >> "${GITHUB_OUTPUT}"
+          echo "deploy_relevant=false" >> "${GITHUB_OUTPUT}"
           git fetch origin main u2/staging-runtime --prune
 
           main_sha="$(git rev-parse origin/main)"
@@ -60,14 +61,33 @@ jobs:
             exit 1
           fi
 
+          deploy_relevant=false
+          while IFS= read -r changed_path; do
+            [[ -z "$changed_path" ]] && continue
+            case "$changed_path" in
+              CHANGELOG.md)
+                deploy_relevant=true
+                break
+                ;;
+              docs/*|.cursor/*|.github/*|tests/*|tools/*|*.md)
+                continue
+                ;;
+              *)
+                deploy_relevant=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only "$u2_sha" "$target_sha")
+
           deployment_occurred_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           git push origin "$target_sha:refs/heads/u2/staging-runtime"
           echo "promoted=true" >> "${GITHUB_OUTPUT}"
+          echo "deploy_relevant=${deploy_relevant}" >> "${GITHUB_OUTPUT}"
           echo "occurred_at=${deployment_occurred_at}" >> "${GITHUB_OUTPUT}"
-          echo "Manually promoted UNI1 to $target_sha"
+          echo "Manually promoted UNI1 to $target_sha (deploy_relevant=${deploy_relevant})"
 
       - name: Signal SystemOS deployment start
-        if: steps.promote.outputs.promoted == 'true'
+        if: steps.promote.outputs.promoted == 'true' && steps.promote.outputs.deploy_relevant == 'true'
         shell: bash
         env:
           SYSTEMOS_URL: https://mail-hub-production-f6d2.up.railway.app
