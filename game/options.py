@@ -18,6 +18,7 @@ from .db import (
     commit,
     db,
     ensure_column,
+    get_db_backend,
     rollback,
     table_columns,
     table_exists,
@@ -110,7 +111,14 @@ def check_sensitive_rate_limit(player_id: int, kind: str) -> bool:
 
 
 def ensure_account_options_schema(conn=None) -> None:
-    """Idempotent schema for tests and fresh DBs."""
+    """Idempotent schema for tests and fresh DBs.
+
+    PostgreSQL production schema is migration-owned. Never execute DDL from an
+    authenticated request: concurrent lazy ALTERs can take AccessExclusiveLock
+    and poison the request transaction after an idempotent-race error.
+    """
+    if get_db_backend() == "postgres":
+        return
     own = conn is None
     c = conn or db()
     cur = c.cursor()
@@ -490,7 +498,12 @@ def write_account_audit(
 
 
 def ensure_account_safety_schema(conn=None) -> None:
-    """Idempotent schema for account safety columns (GC-807)."""
+    """Idempotent schema for account safety columns (GC-807).
+
+    PostgreSQL columns are owned by migrations; request-time DDL is forbidden.
+    """
+    if get_db_backend() == "postgres":
+        return
     own = conn is None
     c = conn or db()
     cur = c.cursor()

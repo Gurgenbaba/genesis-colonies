@@ -9,7 +9,7 @@ import secrets
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from .db import begin_write_transaction, column_exists, commit, db, rollback, table_columns
+from .db import begin_write_transaction, column_exists, commit, db, get_db_backend, rollback, table_columns
 from .mail import send_mail
 from .models import hash_password, verify_password
 from .options import ensure_account_options_schema, validate_email, validate_new_password
@@ -53,6 +53,10 @@ def _new_token() -> str:
 
 
 def ensure_user_email_auth_schema(conn=None) -> None:
+    # PostgreSQL schema is migration-owned. Request/bootstrap helpers must not
+    # race ALTER TABLE against authenticated traffic.
+    if get_db_backend() == "postgres":
+        return
     own = conn is None
     c = conn or db()
     cur = c.cursor()

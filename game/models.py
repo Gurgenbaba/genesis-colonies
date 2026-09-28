@@ -28,6 +28,7 @@ from .db import (
     table_exists,
     column_exists,
     index_exists,
+    get_db_backend,
 )
 
 
@@ -118,9 +119,14 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
 
 def harden_planets_schema(conn: sqlite3.Connection) -> None:
     """
-    Upgrade legacy planets tables that predate player_id / is_homeworld columns.
-    Safe to call repeatedly (idempotent).
+    Upgrade legacy SQLite planets tables that predate player_id / is_homeworld.
+
+    PostgreSQL is migration-owned. This helper is reached during registration;
+    running DDL/backfill from concurrent requests can deadlock normal player
+    writes, so PostgreSQL must never self-heal schema here.
     """
+    if get_db_backend() == "postgres":
+        return
     if not table_exists(conn, "planets"):
         return
 
