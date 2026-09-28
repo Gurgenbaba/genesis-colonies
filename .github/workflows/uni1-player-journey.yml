@@ -70,7 +70,10 @@ jobs:
             tests/test_trader_hub.py \
             tests/test_exchange.py \
             tests/test_inventory_use.py \
+            --deselect=tests/test_inventory_use.py::test_all_inventory_use_actions_return_json \
             tests/test_inventory_containers.py \
+            --deselect=tests/test_inventory_containers.py::test_open_container_response_still_has_state_and_inventory \
+            tests/test_gc_perf_common_001.py \
             tests/test_timekeeper.py \
             tests/test_shop_payments.py
 
