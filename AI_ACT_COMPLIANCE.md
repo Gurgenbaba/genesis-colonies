@@ -10,6 +10,13 @@
 
 Genesis Colonies is a browser strategy game, not an AI chatbot. Runtime audit found an optional OpenAI moderation supplement for player-name policy and optional speech tooling referenced in legal/privacy documentation. These are background/support functions rather than a direct two-way AI conversation. AI-assisted development and asset workflows may be used; shipped content remains subject to human review.
 
+## Implemented evidence
+
+- Player-facing legal source: `game/legal_panel.py`, privacy section **KI-Transparenz / AI transparency**.
+- Legal text version: v2.3, updated 29.09.2026.
+- Optional OpenAI player-name moderation is disclosed as a background moderation function, not as a conversational AI feature.
+- External AI/provider processing remains covered by the recipient/privacy section when enabled.
+
 ## Article 50 decision matrix
 
 | Scenario | Current project status | Required action |
