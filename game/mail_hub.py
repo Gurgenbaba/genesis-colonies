@@ -226,3 +226,27 @@ def sync_support_status(
     if priority in {"low", "normal", "high", "urgent"}:
         payload["priority"] = priority
     return _post("/api/v1/tickets/status-sync", payload)
+
+
+def send_transactional_mail(
+    to_email: str,
+    subject: str,
+    text_body: str,
+    *,
+    html_body: str | None = None,
+    kind: str = "account_security",
+) -> Tuple[bool, Dict[str, Any]]:
+    """Send a non-marketing account/security email through ABBES Mail Hub."""
+    if kind not in {"password_reset", "email_verification", "account_security"}:
+        kind = "account_security"
+    return _post(
+        "/api/v1/transactional/send",
+        {
+            "project": "genesis",
+            "kind": kind,
+            "to_email": str(to_email or "").strip(),
+            "subject": str(subject or "")[:200],
+            "text_body": str(text_body or ""),
+            "html_body": str(html_body or ""),
+        },
+    )

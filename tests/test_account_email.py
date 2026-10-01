@@ -73,8 +73,8 @@ def app_client(temp_db, monkeypatch):
 
     sent = []
 
-    def _fake_send(to, subject, text, html=None):
-        sent.append({"to": to, "subject": subject, "text": text, "html": html})
+    def _fake_send(to, subject, text, html=None, *, kind="account_security"):
+        sent.append({"to": to, "subject": subject, "text": text, "html": html, "kind": kind})
         return True
 
     monkeypatch.setattr("game.account_email.send_mail", _fake_send)
@@ -220,8 +220,41 @@ def test_forgot_password_no_enumeration(app_client):
 
 
 def test_send_mail_without_smtp_does_not_crash(monkeypatch):
+    monkeypatch.delenv("MAIL_HUB_URL", raising=False)
+    monkeypatch.delenv("MAIL_HUB_API_KEY", raising=False)
     monkeypatch.delenv("SMTP_HOST", raising=False)
     assert send_mail("a@b.com", "subj", "body") is False
+
+
+def test_send_mail_prefers_mail_hub(monkeypatch):
+    monkeypatch.setenv("MAIL_HUB_URL", "https://office.example.test")
+    monkeypatch.setenv("MAIL_HUB_API_KEY", "test-key")
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+
+    seen = {}
+
+    def _fake_hub(to_email, subject, text_body, *, html_body=None, kind="account_security"):
+        seen.update(
+            {
+                "to": to_email,
+                "subject": subject,
+                "text": text_body,
+                "html": html_body,
+                "kind": kind,
+            }
+        )
+        return True, {"ok": True, "status": "sent"}
+
+    monkeypatch.setattr("game.mail_hub.send_transactional_mail", _fake_hub)
+    assert send_mail(
+        "a@b.com",
+        "Reset",
+        "body",
+        html="<b>body</b>",
+        kind="password_reset",
+    ) is True
+    assert seen["kind"] == "password_reset"
+    assert seen["html"] == "<b>body</b>"
 
 
 def test_resend_verification_cooldown(app_client):

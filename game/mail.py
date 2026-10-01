@@ -35,6 +35,8 @@ def send_mail(
     subject: str,
     text: str,
     html: Optional[str] = None,
+    *,
+    kind: str = "account_security",
 ) -> bool:
     """
     Send an email. Returns True on success, False if SMTP missing or send failed.
@@ -44,6 +46,29 @@ def send_mail(
     if not recipient:
         logger.warning("send_mail skipped: empty recipient")
         return False
+
+    # Canonical path: ABBES Mail Hub owns transactional delivery/SMTP secrets.
+    try:
+        from . import mail_hub
+
+        if mail_hub.configured():
+            ok, data = mail_hub.send_transactional_mail(
+                recipient,
+                subject,
+                text,
+                html_body=html,
+                kind=kind,
+            )
+            if ok:
+                logger.info("send_mail ok via mail_hub subject=%s", subject)
+                return True
+            logger.warning(
+                "send_mail mail_hub failed subject=%s error=%s; trying SMTP fallback",
+                subject,
+                data.get("error") if isinstance(data, dict) else "unknown",
+            )
+    except Exception as exc:
+        logger.warning("send_mail mail_hub exception subject=%s error=%s", subject, exc)
 
     host = _env("SMTP_HOST")
     if not host:

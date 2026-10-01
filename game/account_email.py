@@ -127,7 +127,7 @@ def _send_verification_mail(email: str, url: str) -> None:
         cta_url=url,
         footer_note="Link gültig für 1 Stunde. Wenn du das nicht warst, ignoriere diese Nachricht.",
     )
-    send_mail(email, "Genesis Colonies – E-Mail bestätigen", text, html=html)
+    send_mail(email, "Genesis Colonies – E-Mail bestätigen", text, html=html, kind="email_verification")
 
 
 def _send_reset_mail(email: str, url: str) -> None:
@@ -141,7 +141,7 @@ def _send_reset_mail(email: str, url: str) -> None:
         cta_url=url,
         footer_note="Link gültig für 1 Stunde. Wenn du das nicht warst, ändere dein Passwort in den Optionen.",
     )
-    send_mail(email, "Genesis Colonies – Passwort zurücksetzen", text, html=html)
+    send_mail(email, "Genesis Colonies – Passwort zurücksetzen", text, html=html, kind="password_reset")
 
 
 def _public_base_url() -> str:
