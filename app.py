@@ -2217,9 +2217,17 @@ def forgot_password():
 def reset_password(token: str):
     error = None
     success = False
+    token_usable = True
+
+    if request.method == "GET":
+        token_usable, token_err = account_email_logic.password_reset_token_status(token)
+        if not token_usable:
+            error = T(token_err) if token_err and T(token_err) != token_err else token_err
+
     if request.method == "POST":
         csrf_key = _auth_form_error_key()
         if csrf_key:
+            logger.info("password reset rejected reason=csrf")
             error = T(csrf_key) if T(csrf_key) != csrf_key else csrf_key
         else:
             password = request.form.get("password") or ""
@@ -2227,13 +2235,17 @@ def reset_password(token: str):
             ok, err = account_email_logic.reset_password_with_token(token, password, password2)
             if ok:
                 success = True
+                logger.info("password reset completed")
             else:
+                logger.info("password reset rejected reason=%s", err or "unknown")
+                token_usable = err not in {"account_token_invalid", "account_token_expired"}
                 error = T(err) if err and T(err) != err else err
     return render_template(
         "reset_password.html",
         error=error,
         success=success,
         token=token,
+        token_usable=token_usable,
         success_message=T("account_password_reset_ok"),
     )
 

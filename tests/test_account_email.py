@@ -21,6 +21,7 @@ from game.account_email import (
     issue_email_verification,
     register_user_with_email,
     request_password_reset,
+    password_reset_token_status,
     resend_verification_email,
     reset_account_email_rate_limits,
     reset_password_with_token,
@@ -183,6 +184,38 @@ def test_password_reset_flow(app_client):
     ok2, err2 = reset_password_with_token(token, "another1", "another1")
     assert not ok2
     assert err2 == "account_token_invalid"
+
+
+def test_reset_token_status_and_route_preflight(app_client):
+    email = f"preflight_{uuid.uuid4().hex[:6]}@example.com"
+    uname = f"pf_{uuid.uuid4().hex[:6]}"
+    register_user_with_email(uname, "oldpass99", email)
+    _close_db()
+
+    request_password_reset(email)
+    _close_db()
+    conn = db()
+    token = conn.execute(
+        "SELECT password_reset_token FROM users WHERE username = ?;",
+        (uname,),
+    ).fetchone()["password_reset_token"]
+    conn.close()
+
+    ok, err = password_reset_token_status(token)
+    assert ok is True
+    assert err == ""
+
+    valid_page = app_client.get(f"/reset-password/{token}")
+    valid_html = valid_page.get_data(as_text=True)
+    assert valid_page.status_code == 200
+    assert 'name="password"' in valid_html
+    assert 'name="password2"' in valid_html
+
+    stale_page = app_client.get("/reset-password/not-a-real-token")
+    stale_html = stale_page.get_data(as_text=True)
+    assert stale_page.status_code == 200
+    assert 'name="password"' not in stale_html
+    assert "/forgot-password" in stale_html
 
 
 def test_expired_reset_token(app_client):
