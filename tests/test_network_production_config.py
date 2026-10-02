@@ -182,13 +182,21 @@ def test_uni1_requires_https_public_url(monkeypatch):
 
 
 
-def test_uni1_launch_rejects_missing_x1_profile(monkeypatch):
+def test_uni1_launch_rejects_missing_speed_profile(monkeypatch):
     _set_network_base(monkeypatch, universe="uni1")
     _set_uni1_launch_contract(monkeypatch)
     monkeypatch.delenv("GC_UNIVERSE_SPEED_PROFILE")
     monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
     errors = _validate_network_runtime_config()
-    assert any("GC_UNIVERSE_SPEED_PROFILE=x1" in error for error in errors)
+    assert any("GC_UNIVERSE_SPEED_PROFILE" in error for error in errors)
+
+
+def test_uni1_launch_accepts_custom_speed_profile(monkeypatch):
+    _set_network_base(monkeypatch, universe="uni1")
+    _set_uni1_launch_contract(monkeypatch)
+    monkeypatch.setenv("GC_UNIVERSE_SPEED_PROFILE", "custom")
+    monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
+    assert _validate_network_runtime_config() == []
 
 
 def test_uni1_launch_rejects_old_ascension_ruleset(monkeypatch):
@@ -237,3 +245,21 @@ def test_x1_profile_overrides_all_universe_speed_domains(monkeypatch):
     ):
         assert resolved[key] == "1.0"
     assert resolved["queue_limit"] == "5"
+
+
+def test_custom_profile_preserves_admin_speed_settings(monkeypatch):
+    from game.models import _apply_universe_speed_profile
+
+    monkeypatch.setenv("GC_UNIVERSE_SPEED_PROFILE", "custom")
+    raw = {
+        "production_speed": "2",
+        "build_speed": "3",
+        "research_speed": "5",
+        "fleet_speed_war": "2",
+        "fleet_speed_holding": "3",
+        "fleet_speed_peaceful": "5",
+        "speed": "3",
+        "queue_limit": "5",
+    }
+    resolved = _apply_universe_speed_profile(raw)
+    assert resolved == raw
