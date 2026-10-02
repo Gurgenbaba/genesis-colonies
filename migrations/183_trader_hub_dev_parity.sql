@@ -4,6 +4,13 @@
 -- score-neutral values used by DEV/current runtime.
 --
 -- Player balances, exchange usage and exchange_log are intentionally untouched.
+-- Legacy migration tests may start from a partial pre-settings schema, so keep
+-- this backfill self-contained instead of assuming bootstrap already ran.
+
+CREATE TABLE IF NOT EXISTS game_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 
 INSERT INTO game_settings (key, value) VALUES
 ('exchange_enabled', '1'),
