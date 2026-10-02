@@ -746,9 +746,10 @@ def _validate_network_runtime_config() -> list[str]:
             )
 
     if universe == "uni1" and current_open:
-        if _env_str("GC_UNIVERSE_SPEED_PROFILE").lower() != "x1":
+        speed_profile = _env_str("GC_UNIVERSE_SPEED_PROFILE").lower()
+        if speed_profile not in ("x1", "custom"):
             errors.append(
-                "UNI 1 launch requires GC_UNIVERSE_SPEED_PROFILE=x1."
+                "UNI 1 requires GC_UNIVERSE_SPEED_PROFILE=x1 or custom."
             )
 
         if _env_str("GC_ENDGAME_ECONOMY_MODE").lower() != "active":
