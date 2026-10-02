@@ -55,7 +55,9 @@ def _apply_universe_speed_profile(settings: Dict[str, Any]) -> Dict[str, Any]:
     """Apply an operator-owned universe speed profile without mutating stored settings."""
     profile = str(os.environ.get("GC_UNIVERSE_SPEED_PROFILE", "") or "").strip().lower()
     out = dict(settings)
-    if not profile:
+    if not profile or profile == "custom":
+        # custom = operator-approved DB/Admin ownership. Stored game_settings
+        # remain authoritative and can be changed live from Admin → Balance.
         return out
     if profile != "x1":
         logger.warning("Unknown GC_UNIVERSE_SPEED_PROFILE=%s; ignoring profile", profile)
