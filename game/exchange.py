@@ -294,6 +294,25 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
         rates_ok, rates_reason = validate_exchange_rates(buy_cost, sell_return)
         fuel_metal = _float_setting(settings, "fuel_exchange_metal_per_unit", "3")
         fuel_crystal = _float_setting(settings, "fuel_exchange_crystal_per_unit", "2")
+        fuel_rates_ok, fuel_rates_reason = validate_score_neutral_fuel_rates(
+            fuel_metal, fuel_crystal
+        )
+        fuel_rates_corrected = False
+        if not fuel_rates_ok:
+            ref = score_neutral_exchange_reference()
+            logger.warning(
+                "[exchange] corrected unsafe fuel exchange rates metal_per=%s crystal_per=%s "
+                "-> metal_per=%s crystal_per=%s reason=%s",
+                fuel_metal,
+                fuel_crystal,
+                ref["fuel_metal_per_unit"],
+                ref["fuel_crystal_per_unit"],
+                fuel_rates_reason,
+            )
+            fuel_metal = float(ref["fuel_metal_per_unit"])
+            fuel_crystal = float(ref["fuel_crystal_per_unit"])
+            fuel_rates_corrected = True
+
         cfg_for_neutral = {
             "rate_metal_to_crystal": buy_cost,
             "fuel_metal_per_unit": fuel_metal,
@@ -310,6 +329,7 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
             "rates_valid": rates_ok,
             "rates_block_reason": rates_reason or "",
             "rates_corrected": corrected,
+            "fuel_rates_corrected": fuel_rates_corrected,
             "score_neutral": score_neutral,
             "score_neutral_block_reason": score_neutral_reason or "",
             "daily_limit_pct": _float_setting(settings, "exchange_daily_limit_pct", "80"),
