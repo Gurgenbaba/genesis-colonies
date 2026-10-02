@@ -292,11 +292,19 @@ def require_prelaunch_reset_for_open_uni1() -> None:
 def run_uni1_prelaunch_reset_once(token: str) -> Dict[str, Any]:
     """Execute the final closed-universe reset once for a unique operator token."""
     token_n = str(token or "").strip()
-    _validate_prelaunch_environment(token_n)
+    # A completed reset must stay idempotent across the CLOSED -> OPEN rollout.
+    # Keep the universe/token identity guards, then honor the durable marker
+    # before applying the closed-universe safety checks required for a new reset.
+    if str(current_universe_key() or "").lower() != "uni1":
+        raise RuntimeError("uni1_prelaunch_wrong_universe")
+    if len(token_n) < 8:
+        raise RuntimeError("uni1_prelaunch_token_too_short")
 
     previous = get_runtime_value(PRELAUNCH_TOKEN_KEY)
     if previous == token_n:
         return {"ok": True, "skipped": True, "reason": "token_already_applied", "token": token_n}
+
+    _validate_prelaunch_environment(token_n)
 
     # Commit the shared DB freeze before any destructive phase. Once #400 code
     # is already deployed closed without a token, older serving instances from
