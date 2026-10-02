@@ -193,6 +193,18 @@ def test_prelaunch_reset_preserves_humans_removes_ai_and_normalizes_starters(
     assert second["skipped"] is True
     assert second["reason"] == "token_already_applied"
 
+    # Launch rollout: once the durable marker exists, switching UNI1 OPEN must
+    # not try to execute or re-validate the destructive closed-only reset.
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setenv("GC_NETWORK_UNI1_OPEN", "1")
+        opened = run_uni1_prelaunch_reset_once(token)
+        assert opened["ok"] is True
+        assert opened["skipped"] is True
+        assert opened["reason"] == "token_already_applied"
+    finally:
+        monkeypatch.undo()
+
     conn = db()
     try:
         home_a = get_homeworld(human_a, conn=conn)
