@@ -27,7 +27,12 @@ from .models import (
 )
 from .fleet import get_planet_ships
 from .planet_evolution.constants import ASCENSION_UNLOCK_LEVEL, SPECIALIZATION_UNLOCK_LEVEL
-from .planet_evolution.repository import get_context_planet, get_planet_row
+from .planet_evolution.repository import (
+    get_context_planet,
+    get_locked_choices,
+    get_planet_research_levels,
+    get_planet_row,
+)
 from .research import RESEARCH_TECHS, resolve_buildings_for_research
 from .ship_requirements import check_ship_requirements
 from .troop_defs import ACTIVE_TROOP_KEYS, TROOP_ORDER, TROOPS, barracks_troop_capacity
@@ -641,10 +646,14 @@ def _build_troop_items(
 def _build_pe_items(planet_id: Optional[int]) -> List[Dict[str, Any]]:
     planet_level = 1
     dna_tier = 0
+    planet_research_levels: Dict[str, int] = {}
+    locked_choices: Dict[str, str] = {}
     if planet_id is not None:
         row = get_planet_row(int(planet_id)) or {}
         planet_level = max(1, int(row.get("planet_level") or 1))
         dna_tier = max(0, int(row.get("dna_reveal_tier") or 0))
+        planet_research_levels = get_planet_research_levels(int(planet_id))
+        locked_choices = get_locked_choices(int(planet_id))
 
     items: List[Dict[str, Any]] = []
     for track in PE_TRACK_DEFS:
@@ -681,6 +690,58 @@ def _build_pe_items(planet_id: Optional[int]) -> List[Dict[str, Any]]:
                 "effect_status": "active",
             }
         )
+    # Show the irreversible extraction branch directly in the global Tech-Tree.
+    automation_level = int(planet_research_levels.get("industry_t1_automation", 0) or 0)
+    mining_path_level = int(planet_research_levels.get("industry_t2_mining_path", 0) or 0)
+    selected_mining_path = str(locked_choices.get("mining_path") or "")
+    if mining_path_level > 0:
+        mining_status = "unlocked"
+    elif automation_level >= 1:
+        mining_status = "available"
+    else:
+        mining_status = "locked"
+
+    items.append(
+        {
+            "key": "industry_t2_mining_path",
+            "kind": "planet_evolution_choice",
+            "icon": PE_TRACK_ICON.get("planet_research"),
+            "label_key": "pe_industry_t2_mining_path",
+            "description_key": "desc_pe_industry_t2_mining_path",
+            "level": mining_path_level,
+            "max_level": 1,
+            "requirements": [
+                {
+                    "kind": "planet_research",
+                    "key": "industry_t1_automation",
+                    "label_key": "pe_industry_t1_automation",
+                    "required_level": 1,
+                    "current_level": automation_level,
+                    "met": automation_level >= 1,
+                }
+            ],
+            "requirements_met": automation_level >= 1,
+            "status": mining_status,
+            "effect_status": "active",
+            "choice_group": "mining_path",
+            "choice_selected": selected_mining_path or None,
+            "choice_branches": [
+                {
+                    "choice_key": "orbital_mining",
+                    "label_key": "pe_choice_orbital_mining",
+                    "unlock_label_keys": ["pe_industry_t3_orbital", "pe_orbital_t2"],
+                    "selected": selected_mining_path == "orbital_mining",
+                },
+                {
+                    "choice_key": "deep_core",
+                    "label_key": "pe_choice_deep_core",
+                    "unlock_label_keys": ["pe_industry_t3_mantle"],
+                    "selected": selected_mining_path == "deep_core",
+                },
+            ],
+            "choice_merge_label_key": "pe_industry_t4_foundry",
+        }
+    )
     return items
 
 
