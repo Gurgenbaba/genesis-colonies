@@ -11479,11 +11479,66 @@
     };
   }
 
+  let _buildingsAffordabilityRefreshInFlight = false;
+  let _buildingsAffordabilityRefreshLastAt = 0;
+  const BUILDINGS_AFFORDABILITY_REFRESH_COOLDOWN_MS = 1500;
+
+  function _buildingAffordabilityReqItems(button) {
+    if (!button) return [];
+    const raw = String(button.getAttribute("data-req-items") || "").trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  function maybeRefreshMountedBuildingAffordability(projected) {
+    if (!projected || !document.querySelector(".buildings-prog-list")) return;
+    const amounts = {
+      metal: gameplayBigInt(projected.metal),
+      crystal: gameplayBigInt(projected.crystal),
+      fuel_cells: gameplayBigInt(projected.fuelCells),
+    };
+    let crossedServerThreshold = false;
+    document
+      .querySelectorAll(".buildings-prog-list .gc-req-hover-trigger[data-action-state='warn'][data-req-items]")
+      .forEach((button) => {
+        if (crossedServerThreshold) return;
+        const items = _buildingAffordabilityReqItems(button);
+        if (!items.length) return;
+        const resourceItems = items.filter((req) => String(req?.kind || req?.type || "") === "resource");
+        if (!resourceItems.length || resourceItems.length !== items.length) return;
+        crossedServerThreshold = resourceItems.every((req) => {
+          const key = String(req?.key || "");
+          if (!(key in amounts)) return false;
+          const need = gameplayBigInt(req?.need ?? req?.required ?? 0);
+          return amounts[key] >= need;
+        });
+      });
+
+    if (!crossedServerThreshold || _buildingsAffordabilityRefreshInFlight) return;
+    const nowMs = Date.now();
+    if (nowMs - _buildingsAffordabilityRefreshLastAt < BUILDINGS_AFFORDABILITY_REFRESH_COOLDOWN_MS) return;
+    _buildingsAffordabilityRefreshLastAt = nowMs;
+    _buildingsAffordabilityRefreshInFlight = true;
+    Promise.resolve(
+      forceCanonicalGameStateRefresh("buildings_affordability", { forceResourceBar: false })
+    )
+      .catch((err) => console.debug("[GC] buildings affordability refresh failed", err))
+      .finally(() => {
+        _buildingsAffordabilityRefreshInFlight = false;
+      });
+  }
+
   function tickLiveResourceBar() {
     if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId) return;
     const projected = projectLiveResourceAmounts(getApproxServerNow());
     if (!projected) return;
     patchShellHudLiveResources(projected.metal, projected.crystal, projected.fuelCells);
+    maybeRefreshMountedBuildingAffordability(projected);
     tickBoostHudCountdown();
   }
 
