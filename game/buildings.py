@@ -2475,7 +2475,7 @@ def get_build_queue_status_for_planet(
             finish_time = float(r["finish_time"])
             start_time = float(r["start_time"] or finish_time)
 
-            remaining = max(0, int(finish_time - now))
+            remaining = max(1, int(math.ceil(finish_time - now))) if finish_time > now else 0
             total = max(1, int(finish_time - start_time))
 
             if first_remaining is None or remaining < first_remaining:
