@@ -8,9 +8,6 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
-
 concurrency:
   group: promote-uni1-manual
   cancel-in-progress: false
@@ -18,6 +15,12 @@ concurrency:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      promoted: ${{ steps.promote.outputs.promoted }}
+      deploy_relevant: ${{ steps.promote.outputs.deploy_relevant }}
+      occurred_at: ${{ steps.promote.outputs.occurred_at }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,15 +28,23 @@ jobs:
           fetch-depth: 0
 
       - name: Fast-forward UNI1 release branch
+        id: promote
         shell: bash
         env:
           INPUT_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
+          echo "promoted=false" >> "${GITHUB_OUTPUT}"
+          echo "deploy_relevant=false" >> "${GITHUB_OUTPUT}"
           git fetch origin main u2/staging-runtime --prune
 
           main_sha="$(git rev-parse origin/main)"
           target_sha="${INPUT_SHA:-$main_sha}"
+
+          if [[ "${GITHUB_REF}" != "refs/heads/main" || "${GITHUB_SHA}" != "$main_sha" ]]; then
+            echo "::error::Refusing stale/non-main promotion dispatch: workflow=${GITHUB_SHA} current-main=$main_sha ref=${GITHUB_REF}"
+            exit 1
+          fi
 
           if [[ "$target_sha" != "$main_sha" ]]; then
             echo "::error::Refusing promotion: target $target_sha is not current main $main_sha"
@@ -52,5 +63,63 @@ jobs:
             exit 1
           fi
 
+          deploy_relevant=false
+          while IFS= read -r changed_path; do
+            [[ -z "$changed_path" ]] && continue
+            case "$changed_path" in
+              CHANGELOG.md)
+                deploy_relevant=true
+                break
+                ;;
+              docs/*|.cursor/*|.github/*|tests/*|tools/*|*.md)
+                continue
+                ;;
+              *)
+                deploy_relevant=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only "$u2_sha" "$target_sha")
+
+          deployment_occurred_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           git push origin "$target_sha:refs/heads/u2/staging-runtime"
-          echo "Manually promoted UNI1 to $target_sha"
+
+          echo "promoted=true" >> "${GITHUB_OUTPUT}"
+          echo "deploy_relevant=${deploy_relevant}" >> "${GITHUB_OUTPUT}"
+          echo "occurred_at=${deployment_occurred_at}" >> "${GITHUB_OUTPUT}"
+          echo "Manually promoted UNI1 to $target_sha (deploy_relevant=${deploy_relevant})"
+
+  signal-systemos:
+    needs: promote
+    if: needs.promote.outputs.promoted == 'true' && needs.promote.outputs.deploy_relevant == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Signal SystemOS deployment start
+        shell: bash
+        env:
+          SYSTEMOS_URL: https://mail-hub-production-f6d2.up.railway.app
+          SYSTEMOS_AUDIENCE: gurgenbaba-systemos
+          DEPLOYMENT_OCCURRED_AT: ${{ needs.promote.outputs.occurred_at }}
+        run: |
+          set -euo pipefail
+          oidc_json="$(
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${SYSTEMOS_AUDIENCE}"
+          )"
+          oidc_token="$(
+            printf '%s' "${oidc_json}" |
+              python -c 'import json,sys; print(json.load(sys.stdin)["value"])'
+          )"
+          payload="$(python -c 'import json,os; print(json.dumps({"occurred_at": os.environ["DEPLOYMENT_OCCURRED_AT"]}))')"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${oidc_token}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            --data "${payload}" \
+            "${SYSTEMOS_URL}/api/v1/providers/github/deployment-started"

@@ -6,12 +6,12 @@
 <details class="pe-compact-details pe-player-guide" data-pe-guide="{{ topic }}">
   <summary class="pe-compact-details-summary">{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }} · {{ topic }}</summary>
   <div class="pe-zone-body">
-    <dl class="pe-info-popover-list">
-      <div><dt>{{ T('pe_tech_info_summary_label', 'Was ist das?') }}</dt><dd>{{ topic }}</dd></div>
-      <div><dt>{{ T('pe_tech_info_effect_label', 'Was bringt es?') }}</dt><dd>{{ benefit }}</dd></div>
-      <div><dt>{{ T('pe_research_missing', 'Was wird benötigt?') }}</dt><dd>{{ requirement }}</dd></div>
-      <div><dt>{{ T('pe_next_step', 'Was kommt als Nächstes?') }}</dt><dd>{{ next_step }}</dd></div>
-    </dl>
+    <div class="pe-guide-grid">
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_tech_info_summary_label', 'Was ist das?') }}</span><span class="pe-guide-value">{{ topic }}</span></div>
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_tech_info_effect_label', 'Was bringt es?') }}</span><span class="pe-guide-value">{{ benefit }}</span></div>
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_research_missing', 'Was wird benötigt?') }}</span><span class="pe-guide-value">{{ requirement }}</span></div>
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_next_step', 'Was kommt als Nächstes?') }}</span><span class="pe-guide-value">{{ next_step }}</span></div>
+    </div>
   </div>
 </details>
 {% endmacro %}
@@ -338,6 +338,9 @@
       {{ render_timekeeper_apply_btn(qj.owner_type|default('planet_research'), qj) }}
       {{ render_card_queue_timer(qj, qj.owner_type|default('planet_research'), 'planet_evolution') }}
     </div>
+    {% if qj.owner_type|default('planet_research') == 'planet_research' and qj.cancellable|default(false) and qj.job_id|int > 0 %}
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel" data-planet-research-cancel-id="{{ qj.job_id|int }}">{{ T('action_cancel', 'Abbrechen') }}</button>
+    {% endif %}
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"
@@ -520,6 +523,12 @@
     {% endfor %}
   {% endif %}
 
+<style>
+.pe-command-focus{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr) auto;gap:12px;align-items:center;margin:10px 0 14px;padding:12px 16px;border:1px solid rgba(119,210,231,.24);border-radius:var(--gc-radius-xs);background:linear-gradient(110deg,rgba(41,117,151,.18),rgba(10,25,44,.24))}
+.pe-command-focus>div{display:flex;flex-direction:column;gap:4px;min-width:0}.pe-command-focus small,.pe-guide-label{font-size:.7rem;letter-spacing:.07em;text-transform:uppercase;opacity:.75}.pe-command-focus strong{font-size:.93rem;line-height:1.3}.pe-command-focus span{font-size:.8rem;opacity:.8;overflow-wrap:anywhere}
+.pe-player-guide{margin:9px 0;border-radius:var(--gc-radius-xs);max-width:100%}.pe-player-guide>.pe-compact-details-summary{font-size:.78rem;min-height:34px;cursor:pointer}.pe-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.pe-guide-tile{padding:10px;border:1px solid rgba(117,198,219,.2);border-radius:var(--gc-radius-xs);background:rgba(49,115,149,.09);min-width:0;overflow-wrap:anywhere;font-size:.82rem}.pe-guide-label{margin-bottom:4px}.pe-guide-value{margin:0}.pe-guide-tile:last-child{border-color:rgba(117,198,219,.4)}
+@media(max-width:850px){.pe-command-focus{grid-template-columns:minmax(0,1fr)}.pe-command-focus>a{justify-self:start}.pe-guide-grid{grid-template-columns:minmax(0,1fr)}}
+</style>
   <div class="pe-journey pe-theater">
 
     {# ── 1. HERO THEATER (Übersicht: Kopf · L/Planet/R · Fuß) ── #}
@@ -576,30 +585,11 @@
         </div>
       </header>
 
-      {{ pe_player_guide(
-        T('pe_development_stage', 'Planet-Level und Planet-XP'),
-        T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.'),
-        T('pe_goal_benefits_research', 'Planet-Techs und weitere Planet-Aktivitäten geben Planet-XP.'),
-        T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.')
-      ) }}
-      {{ pe_player_guide(
-        T('pe_planet_bonuses_title', 'DNA und Planet-Eigenschaften'),
-        T('pe_goal_benefits_traits', 'Eigenschaften werden im Lauf der Entwicklung sichtbar und wirksam.'),
-        T('pe_dna_unknown', 'Manche Eigenschaften sind bis zur nötigen Entwicklung verborgen.'),
-        T('pe_planet_bonuses_title', 'Prüfe die aktuellen Planet-Boni und ihre tatsächlichen Effekte.')
-      ) }}
-      {{ pe_player_guide(
-        T('pe_spec', 'Spezialisierung'),
-        T('pe_goal_benefits_level', 'Die Spezialisierung legt Entwicklungspfade und Produktionsanforderungen fest.'),
-        T('pe_goal_benefits_traits', 'Eigenschaften und Entwicklung bestimmen verfügbare Spezialisierungen.'),
-        T('pe_next_step', 'Prüfe die angezeigten Optionen und ihren konkreten Nutzen.')
-      ) }}
-      {{ pe_player_guide(
-        T('pe_economy_short', 'Produktion und Spezialressourcen'),
-        T('pe_supply_source_active', 'Spezialressourcen entstehen nur in aktiven freigeschalteten Produktionsketten.'),
-        T('pe_supply_source_locked', 'Prüfe die zugehörigen Planet-Techs und die Eingangsressourcen.'),
-        T('pe_economy_help_open', 'Prüfe bei Engpässen den konkreten Bedarf und Freischaltweg.')
-      ) }}
+      <div class="pe-command-focus" aria-label="{{ T('pe_card_next_step', 'Nächster Evolutionsschritt') }}">
+        <div><small>{{ T('pe_status_label', 'Status') }}</small><strong>{% if dash.warnings %}{{ T(dash.warnings[0].label_key, dash.warnings[0].key) }}{% else %}{{ T('pe_status_stable', 'Stabil') }}{% endif %}</strong></div>
+        <div><small>{{ T('pe_next_step', 'Nächster Schritt') }}</small><strong>{{ T(action.title_key, 'Planet weiterentwickeln') }}</strong><span>{{ T(action.body_key, 'Prüfe die verfügbaren Entwicklungsschritte.') }}</span></div>
+        <a class="gc-btn gc-btn-secondary gc-btn-sm" href="#pe-section-action">{{ T('pe_card_next_step', 'Zum Entwicklungsziel') }} →</a>
+      </div>
       <div class="pe-theater-stage">
         <aside class="pe-theater-rail pe-theater-rail--left" aria-label="{{ T('pe_theater_vitals_aria', 'Planetdaten') }}">
           <div class="pe-theater-vital">
@@ -693,6 +683,18 @@
           {% else %}
           <p class="pe-hero-meta-muted hint">{{ T("pe_focus_pending", "Noch kein Fokus") }}</p>
           {% endif %}
+      {{ pe_player_guide(
+        T('pe_planet_bonuses_title', 'DNA und Planet-Eigenschaften'),
+        T('pe_goal_benefits_traits', 'Eigenschaften werden im Lauf der Entwicklung sichtbar und wirksam.'),
+        T('pe_dna_unknown', 'Manche Eigenschaften sind bis zur nötigen Entwicklung verborgen.'),
+        T('pe_planet_bonuses_title', 'Prüfe die aktuellen Planet-Boni und ihre tatsächlichen Effekte.')
+      ) }}
+      {{ pe_player_guide(
+        T('pe_spec', 'Spezialisierung'),
+        T('pe_goal_benefits_level', 'Die Spezialisierung legt Entwicklungspfade und Produktionsanforderungen fest.'),
+        T('pe_goal_benefits_traits', 'Eigenschaften und Entwicklung bestimmen verfügbare Spezialisierungen.'),
+        T('pe_next_step', 'Prüfe die angezeigten Optionen und ihren konkreten Nutzen.')
+      ) }}
           {% if spec_detail.spec_key %}
           <p class="pe-hero-spec gc-mono pe-theater-spec">{{ T(spec_detail.label_key, spec_detail.spec_key) }}</p>
           {% elif ps.level >= 8 %}
@@ -941,6 +943,12 @@
           <span class="pe-next-priority pe-next-priority-{{ action.priority or 'explore' }}">{{ T("pe_next_step", "Dein nächster Schritt") }}</span>
         </header>
         <div class="pe-goal-body">
+      {{ pe_player_guide(
+        T('pe_development_stage', 'Planet-Level und Planet-XP'),
+        T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.'),
+        T('pe_goal_benefits_research', 'Planet-Techs und weitere Planet-Aktivitäten geben Planet-XP.'),
+        T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.')
+      ) }}
           {{ pe_player_guide(
             T('pe_card_next_step', 'Nächster Evolutionsschritt'),
             T(action.body_key, 'Zeigt das aktuell wichtigste Ziel dieser Kolonie.'),

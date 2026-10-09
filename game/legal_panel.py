@@ -16,8 +16,8 @@ OPERATOR_CITY = "Breitungen"
 OPERATOR_COUNTRY = "Deutschland"
 OPERATOR_EMAIL = "r.finn2303@gmail.com"
 OPERATOR_ADDRESS_LINE = f"{OPERATOR_STREET}, {OPERATOR_POSTAL} {OPERATOR_CITY}"
-LEGAL_TEXT_VERSION = "v2.2"
-LEGAL_STAND = "26.09.2026"
+LEGAL_TEXT_VERSION = "v2.3"
+LEGAL_STAND = "29.09.2026"
 
 DOC_IMPRINT = "imprint"
 DOC_PRIVACY = "privacy"
@@ -49,6 +49,7 @@ LEGAL_DOCS: Tuple[Dict[str, Any], ...] = (
             {"title_key": "legal_privacy_rights_title", "body_key": "legal_privacy_rights_body", "open": False},
             {"title_key": "legal_privacy_retention_title", "body_key": "legal_privacy_retention_body", "open": False},
             {"title_key": "legal_privacy_marketing_title", "body_key": "legal_privacy_marketing_body", "open": False},
+            {"title_key": "legal_privacy_ai_title", "body_key": "legal_privacy_ai_body", "open": False},
         ),
     },
     {
@@ -208,6 +209,22 @@ def _de_strings() -> Dict[str, str]:
             "anonymisiert\n"
             "- **Audit-Logs (IP/UA):** werden nach festgelegten Fristen genullt bzw. gelöscht\n"
             "- **Payment-Event-Payloads:** Rohdaten nach ca. 90 Tagen entfernt (IDs bleiben)"
+        ),
+        "legal_privacy_ai_title": "KI-Transparenz",
+        "legal_privacy_ai_body": (
+            "Genesis Colonies ist **kein KI-Chatbot** und bietet Spielern derzeit keine direkte "
+            "Unterhaltung mit einem generativen KI-System. KI-gestützte Werkzeuge können bei "
+            "Entwicklung, Tests und der Erstellung oder Bearbeitung einzelner Entwürfe/Assets "
+            "eingesetzt werden; veröffentlichte Inhalte werden menschlich geprüft und freigegeben.\n\n"
+            "Optional kann eine **OpenAI-Moderationsfunktion** zur zusätzlichen Prüfung von "
+            "Spielernamen aktiviert werden. Diese arbeitet im Hintergrund und erzeugt keine "
+            "Unterhaltung oder frei formulierten Antworten an Spieler. Soweit die Funktion aktiv "
+            "ist und personenbezogene Eingaben an einen externen Anbieter übermittelt werden, "
+            "gilt ergänzend die Beschreibung unter Empfänger und Verantwortlichkeiten.\n\n"
+            "Synthetische Bild-, Audio- oder Videoinhalte werden vor Veröffentlichung darauf "
+            "geprüft, ob eine besondere Kennzeichnung erforderlich ist. Sollte künftig eine "
+            "direkte KI-Interaktion für Spieler eingeführt werden, wird dies ab Beginn der "
+            "Interaktion klar und verständlich kenntlich gemacht."
         ),
         "legal_privacy_marketing_title": "Marketing / Newsletter",
         "legal_privacy_marketing_body": (
@@ -442,6 +459,21 @@ def _en_strings() -> Dict[str, str]:
             "- **Support tickets:** for handling/proof; content anonymised on account deletion\n"
             "- **Audit logs (IP/UA):** nulled/deleted after set periods\n"
             "- **Payment event payloads:** raw data removed after ~90 days (IDs kept)"
+        ),
+        "legal_privacy_ai_title": "AI transparency",
+        "legal_privacy_ai_body": (
+            "Genesis Colonies is **not an AI chatbot** and currently does not provide players "
+            "with a direct conversation with a generative AI system. AI-assisted tools may be "
+            "used in development, testing and in creating or editing individual drafts/assets; "
+            "published content is subject to human review and release.\n\n"
+            "An optional **OpenAI moderation function** can be enabled as an additional check "
+            "for player names. It operates in the background and does not generate a conversation "
+            "or free-form replies to players. Where this function is enabled and personal input "
+            "is transferred to an external provider, the information under Recipients and roles "
+            "also applies.\n\n"
+            "Synthetic image, audio or video content is assessed before release for any specific "
+            "disclosure requirement. If direct AI interaction for players is introduced in the "
+            "future, it will be disclosed clearly from the start of the interaction."
         ),
         "legal_privacy_marketing_title": "Marketing / newsletter",
         "legal_privacy_marketing_body": (
