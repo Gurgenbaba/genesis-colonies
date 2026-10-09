@@ -2,6 +2,20 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_prog_identity with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer, render_timekeeper_apply_btn with context %}
 
+{% macro pe_player_guide(topic, benefit, requirement, next_step) %}
+<details class="pe-compact-details pe-player-guide" data-pe-guide="{{ topic }}">
+  <summary class="pe-compact-details-summary">{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }} · {{ topic }}</summary>
+  <div class="pe-zone-body">
+    <dl class="pe-info-popover-list">
+      <div><dt>{{ T('pe_tech_info_summary_label', 'Was ist das?') }}</dt><dd>{{ topic }}</dd></div>
+      <div><dt>{{ T('pe_tech_info_effect_label', 'Was bringt es?') }}</dt><dd>{{ benefit }}</dd></div>
+      <div><dt>{{ T('pe_research_missing', 'Was wird benötigt?') }}</dt><dd>{{ requirement }}</dd></div>
+      <div><dt>{{ T('pe_next_step', 'Was kommt als Nächstes?') }}</dt><dd>{{ next_step }}</dd></div>
+    </dl>
+  </div>
+</details>
+{% endmacro %}
+
 {% macro pe_history_item_label(item) -%}
   {% set tk = item.title_key|default('') %}
   {% set et = item.event_type|default('') %}
@@ -562,6 +576,30 @@
         </div>
       </header>
 
+      {{ pe_player_guide(
+        T('pe_development_stage', 'Planet-Level und Planet-XP'),
+        T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.'),
+        T('pe_goal_benefits_research', 'Planet-Techs und weitere Planet-Aktivitäten geben Planet-XP.'),
+        T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.')
+      ) }}
+      {{ pe_player_guide(
+        T('pe_planet_bonuses_title', 'DNA und Planet-Eigenschaften'),
+        T('pe_goal_benefits_traits', 'Eigenschaften werden im Lauf der Entwicklung sichtbar und wirksam.'),
+        T('pe_dna_unknown', 'Manche Eigenschaften sind bis zur nötigen Entwicklung verborgen.'),
+        T('pe_planet_bonuses_title', 'Prüfe die aktuellen Planet-Boni und ihre tatsächlichen Effekte.')
+      ) }}
+      {{ pe_player_guide(
+        T('pe_spec', 'Spezialisierung'),
+        T('pe_goal_benefits_level', 'Die Spezialisierung legt Entwicklungspfade und Produktionsanforderungen fest.'),
+        T('pe_goal_benefits_traits', 'Eigenschaften und Entwicklung bestimmen verfügbare Spezialisierungen.'),
+        T('pe_next_step', 'Prüfe die angezeigten Optionen und ihren konkreten Nutzen.')
+      ) }}
+      {{ pe_player_guide(
+        T('pe_economy_short', 'Produktion und Spezialressourcen'),
+        T('pe_supply_source_active', 'Spezialressourcen entstehen nur in aktiven freigeschalteten Produktionsketten.'),
+        T('pe_supply_source_locked', 'Prüfe die zugehörigen Planet-Techs und die Eingangsressourcen.'),
+        T('pe_economy_help_open', 'Prüfe bei Engpässen den konkreten Bedarf und Freischaltweg.')
+      ) }}
       <div class="pe-theater-stage">
         <aside class="pe-theater-rail pe-theater-rail--left" aria-label="{{ T('pe_theater_vitals_aria', 'Planetdaten') }}">
           <div class="pe-theater-vital">
@@ -835,6 +873,12 @@
     {# ── 3. PLANET-TECH + NÄCHSTES ZIEL ── #}
     <div class="pe-core-row{% if not pe_visible_tech_cards %} pe-core-row--research-idle{% endif %}">
       <section class="pe-zone pe-zone--tech gc-panel" id="pe-section-research">
+        {{ pe_player_guide(
+          T('pe_planet_research', 'Planet-Forschung'),
+          T('pe_goal_benefits_research', 'Planet-Techs geben Planet-XP und schalten Mechaniken frei.'),
+          T('pe_research_locked_guide', 'Jede Tech benötigt ihre eigenen Freischaltungen und Ressourcen. Öffne gesperrte Techs über ?.'),
+          T('pe_research_later', 'Prüfe verfügbare und später verfügbare Planet-Techs.')
+        ) }}
         <header class="pe-zone-head">
           <div class="pe-zone-head-main">
             <h3 class="pe-zone-title">{{ T("pe_planet_research", "Planet-Forschung") }}</h3>
@@ -897,6 +941,12 @@
           <span class="pe-next-priority pe-next-priority-{{ action.priority or 'explore' }}">{{ T("pe_next_step", "Dein nächster Schritt") }}</span>
         </header>
         <div class="pe-goal-body">
+          {{ pe_player_guide(
+            T('pe_card_next_step', 'Nächster Evolutionsschritt'),
+            T(action.body_key, 'Zeigt das aktuell wichtigste Ziel dieser Kolonie.'),
+            T(action.title_key, 'Dieses Ziel hängt vom aktuellen Planetenstatus ab.'),
+            T(action.cta_label_key, 'Nutze die unten angezeigte Aktion.')
+          ) }}
       {% set crisis = dash.crisis_ux if dash.crisis_ux is defined else {} %}
       {% if crisis.active %}
       <section class="pe-crisis-clarity" aria-label="{{ T('pe_crisis_clarity_title', 'Aktive Krise') }}">
@@ -1009,6 +1059,12 @@
           <p class="pe-goal-xp-line hint">{{ T('pe_goal_research_to_level', 'Noch %(count)s Forschungen bis Level-Up.', count=(goal_research_count|int)) }}</p>
           {% endif %}
           <div class="pe-goal-events" id="pe-section-events">
+            {{ pe_player_guide(
+              T('pe_events_status_stable', 'Planet-Ereignisse'),
+              T('pe_goal_benefits_activity', 'Ereignisse können zusätzliche Planet-XP und Veränderungen auslösen.'),
+              T('pe_event_urgent', 'Manche Ereignisse erfordern eine Entscheidung.'),
+              T('pe_event_choice_commit', 'Prüfe bei aktiven Ereignissen zuerst die angezeigten Folgen jeder Entscheidung.')
+            ) }}
             {% if ps.active_event %}
             <div class="pe-goal-event-active" id="pe-event-decision">
               <span class="pe-goal-event-chip pe-goal-event-chip--urgent">{{ T("pe_event_urgent", "Dringend") }} · {{ T(ps.active_event.label_key, ps.active_event.event_key) }}</span>
@@ -1045,6 +1101,12 @@
         <span class="pe-zone-meta">{{ (dash.policies_active or [])|length }}/{{ dash.policy_slots_max or 1 }}</span>
       </summary>
       <div class="pe-zone-body">
+        {{ pe_player_guide(
+          T('pe_tab_policies', 'Politik'),
+          T('pe_goal_benefits_level', 'Planet-Level schalten weitere Handlungsmöglichkeiten frei.'),
+          T('pe_policy_locked_level', 'Politik-Slots werden mit Planet-Leveln freigeschaltet.'),
+          T('pe_policy_activate', 'Prüfe die konkreten Effekte und wähle eine verfügbare Policy.')
+        ) }}
         {% if policy_ux.slots %}
           {% for slot in policy_ux.slots %}
           <div class="pe-policy-slot-card">
@@ -1060,6 +1122,20 @@
                 </button>
               </article>
               {% endfor %}
+              {% set locked_options = slot.options | rejectattr('eligible') | list %}
+              {% if locked_options %}
+              <details class="pe-compact-details pe-policy-locked-explain" data-pe-policy-locked>
+                <summary>{{ T('pe_research_later', 'Später verfügbar') }} ({{ locked_options|length }})</summary>
+                {% for opt in locked_options %}
+                <article class="pe-policy-option-card pe-tech-card--locked-req">
+                  <h4>{{ T(opt.label_key, pe_humanize_key(opt.policy_key)) }}</h4>
+                  {{ pe_impact_contract(opt.impact, true) }}
+                  <p class="hint">{{ T(opt.locked_reason_key, 'Aktuell gesperrt') }}</p>
+                  <p class="hint">{{ T('pe_next_step', 'Nächster Schritt') }}: {{ T(opt.locked_reason_key, 'Voraussetzungen erfüllen') }}</p>
+                </article>
+                {% endfor %}
+              </details>
+              {% endif %}
             </div>
           </div>
           {% endfor %}
@@ -1077,7 +1153,13 @@
         <span class="pe-zone-meta gc-mono">{{ asc.summary.count if asc.summary else 0 }}/{{ asc.summary.limit if asc.summary else 1 }}</span>
       </summary>
       <div class="pe-zone-body">
-        <p class="pe-zone-subline" id="pe-ascension-queue-compact-label" aria-live="polite">
+        {{ pe_player_guide(
+          T('pe_card_ascension_title', 'Ascension'),
+          T('pe_goal_benefits_level', 'Fortgeschrittene Entwicklung ermöglicht zusätzliche Progression.'),
+          T('pe_ascension_queue_compact_idle', 'Verfügbarkeit und Anforderungen ergeben sich aus den angezeigten Ascension-Karten.'),
+          T('pe_next_step', 'Prüfe die Effekte und Voraussetzungen der einzelnen Ascension-Karten.')
+        ) }}
+        <p class="pe-zone-subline" id="pe-ascension-queue-compact-label"' aria-live="polite">
           {% if asc.summary and asc.summary.count %}{{ T('pe_ascension_queue_compact_active', '%(count)s Ascension-Aufträge', count=(asc.summary.count|int)) }}
           {% else %}{{ T('pe_ascension_queue_compact_idle', 'Keine Ascension-Aufträge') }}{% endif %}
         </p>
