@@ -853,3 +853,41 @@ def test_pick_event_key_respects_event_pool_flag(evo_db):
     key_without_pool = PlanetEventEngine._pick_event_key(pid, planet, conn, float(roll_day * 86400))
     assert key_without_pool != 'science_breakthrough'
     conn.close()
+
+
+def test_quantum_supply_requires_real_chain_and_counts_usable_local_output(evo_db):
+    """No 0/5 phantom import deficit once a real, fed Quantum Data chain runs."""
+    from game.planet_evolution.economy import compute_import_deficits
+    conn = db()
+    try:
+        uid = _ensure_test_player(9791, conn=conn)
+        pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+        ensure_planet_evolution(pid, conn)
+        conn.execute("UPDATE planets SET metal=100000, crystal=100000 WHERE id=?", (pid,))
+        conn.execute(
+            """
+            INSERT INTO planet_import_demands (planet_id, resource_key, required_per_hour)
+            VALUES (?, 'quantum_data', 5)
+            ON CONFLICT(planet_id, resource_key) DO UPDATE
+            SET required_per_hour=excluded.required_per_hour;
+            """,
+            (pid,),
+        )
+        conn.commit()
+        missing = [d for d in compute_import_deficits(pid, conn) if d["resource_key"] == "quantum_data"]
+        assert len(missing) == 1
+        assert missing[0]["received"] == 0
+
+        _activate_production_chain(conn, pid, "quantum_data")
+        conn.commit()
+        assert not any(d["resource_key"] == "quantum_data" for d in compute_import_deficits(pid, conn))
+        result = tick_special_resources(pid, 1.0, conn)
+        assert result["produced"].get("quantum_data", 0) >= 5
+
+        conn.execute("UPDATE planets SET crystal=0 WHERE id=?", (pid,))
+        conn.commit()
+        depleted = [d for d in compute_import_deficits(pid, conn) if d["resource_key"] == "quantum_data"]
+        assert len(depleted) == 1
+        assert depleted[0]["received"] == 0
+    finally:
+        conn.close()
