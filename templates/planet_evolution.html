@@ -583,7 +583,7 @@
       </header>
 
       <div class="pe-command-focus" aria-label="{{ T('pe_card_next_step', 'Nächster Evolutionsschritt') }}">
-        <div><small>{{ T('pe_planet_status', 'Planetenstatus') }}</small><strong>{% if dash.warnings %}{{ T(dash.warnings[0].label_key, dash.warnings[0].key) }}{% else %}{{ T('pe_development_stable', 'Entwicklung stabil') }}{% endif %}</strong></div>
+        <div><small>{{ T('pe_status_label', 'Status') }}</small><strong>{% if dash.warnings %}{{ T(dash.warnings[0].label_key, dash.warnings[0].key) }}{% else %}{{ T('pe_status_stable', 'Stabil') }}{% endif %}</strong></div>
         <div><small>{{ T('pe_next_step', 'Nächster Schritt') }}</small><strong>{{ T(action.title_key, 'Planet weiterentwickeln') }}</strong><span>{{ T(action.body_key, 'Prüfe die verfügbaren Entwicklungsschritte.') }}</span></div>
         <a class="gc-btn gc-btn-secondary gc-btn-sm" href="#pe-section-action">{{ T('pe_card_next_step', 'Zum Entwicklungsziel') }} →</a>
       </div>
