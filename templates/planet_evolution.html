@@ -941,12 +941,42 @@
             <p class="pe-goal-supply-values gc-mono">{{ action.deficit.received|int }} / {{ action.deficit.required|int }}</p>
           </div>
           {% elif action.priority == 'economy' and action.deficit %}
+          {# GC-PE-SUPPLY-TRUTH: backend describes actual active chains and DB unlock requirements. #}
+          {% set source = action.deficit.supply_source if action.deficit.supply_source is defined else {} %}
           <details class="pe-economy-explanation">
-            <summary>{{ T('pe_economy_help_open', 'Warum blockiert das meinen Planeten? Was kann ich tun?') }}</summary>
-            <p>{{ T('pe_economy_help_intro', 'Eine Produktionskette benötigt mehr von dieser Ressource, als aktuell geliefert wird. Dadurch entsteht ein Versorgungsengpass.') }}</p>
-            <p>{{ T('pe_economy_help_numbers', 'Geliefert / benötigt zeigt die aktuelle Versorgung im Verhältnis zum Bedarf. 100 % bedeutet: Der gemeldete Bedarf ist gedeckt.') }}</p>
-            <p>{{ T('pe_economy_help_action', 'Öffne Wirtschaft: Prüfe die betroffene Produktionskette, ihre Eingangsressourcen und Handelsrouten. Steigere die Zuführung oder reduziere vorübergehend den Verbrauch.') }}</p>
-            <p><a href="/empire">{{ T('pe_economy_help_link', 'Wirtschaft und Produktion ansehen →') }}</a></p>
+            <summary>{{ T('pe_economy_help_open', 'Warum fehlt die Ressource? Wie bekomme ich sie?') }}</summary>
+            <p>{{ T('pe_economy_help_numbers', 'Geliefert / benötigt bedeutet verfügbare Versorgung pro Stunde gegenüber dem stündlichen Bedarf. Die Anzeige berücksichtigt aktive lokale Ketten und ankommende Handelsrouten.') }}</p>
+            {% if source.defined %}
+              {% if source.active %}
+                <p>{{ T('pe_supply_source_active', 'Die Produktionskette ist hier freigeschaltet. Reichen die gelieferten Mengen trotzdem nicht, prüfe die Eingangsressourcen und aktive Lieferungen.') }}</p>
+              {% elif source.unlock_steps %}
+                <p>{{ T('pe_supply_source_locked', 'Diese Ressource kann auf deinem Planeten noch nicht hergestellt werden. Dafür fehlen folgende Freischaltungen:') }}</p>
+                <ol class="pe-supply-unlock-steps">
+                  {% for step in source.unlock_steps %}
+                  <li>
+                    {{ T(step.label_key, pe_humanize_key(step.label_key)) }}
+                    {% if step.kind == 'building' %}{{ T('pe_supply_step_level', 'auf Stufe %(level)s', level=step.level|int) }}{% endif %}
+                  </li>
+                  {% endfor %}
+                </ol>
+              {% elif source.research_complete %}
+                <p>{{ T('pe_supply_source_inactive', 'Die erforderliche Forschung ist abgeschlossen, aber die Produktionskette ist derzeit nicht aktiv. Das ist ein Statusfehler; bitte über Support melden.') }}</p>
+              {% else %}
+                <p>{{ T('pe_supply_source_unknown', 'Diese Produktionskette ist momentan nicht aktiv. Eine direkt ausführbare Freischaltung ist für diesen Planeten nicht hinterlegt.') }}</p>
+              {% endif %}
+              {% if source.inputs %}
+              <p class="hint">{{ T('pe_supply_inputs', 'Die aktive Kette benötigt pro Stunde:') }}
+                {% for item in source.inputs %}
+                  {{ T(item.label_key, pe_humanize_key(item.label_key)) }} {{ item.amount_per_hour }}{% if not loop.last %} · {% endif %}
+                {% endfor %}
+                · {{ T('pe_supply_base_output', 'Basisproduktion') }} {{ source.base_output_per_hour }} / h
+              </p>
+              {% endif %}
+            {% else %}
+              <p>{{ T('pe_supply_no_source', 'Für diese Ressource ist aktuell keine lokale Produktionskette in den Spieldefinitionen hinterlegt. Sie lässt sich hier nicht direkt herstellen.') }}</p>
+            {% endif %}
+            <p>{{ T('pe_economy_help_action', 'Alternativ kann ein anderer eigener Planet die Ressource liefern – aber nur, wenn dort eine Produktionskette aktiv und eine Handelsroute eingerichtet ist.') }}</p>
+            <p><a href="#pe-section-research">{{ T('pe_economy_help_link', 'Planetare Forschung und Freischaltungen ansehen →') }}</a></p>
           </details>
           {% elif action.priority == 'explore' %}
           <button type="button"
