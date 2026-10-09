@@ -24,3 +24,11 @@ def test_buildings_page_does_not_authorize_upgrade_locally():
     assert "30000" in js
     assert ".disabled = false" not in js
     assert 'data-action-state="go"' not in js
+
+
+def test_resource_hud_changes_trigger_fast_reconcile():
+    js = (ROOT / "static/js/pages/buildings.js").read_text(encoding="utf-8")
+    assert "new MutationObserver(scheduleTick)" in js
+    assert "observer.disconnect()" in js
+    assert "requestAnimationFrame" in js
+    assert "global.setInterval(tick, 750)" in js
