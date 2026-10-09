@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Mapping, Optional
 from ..models import get_planet_buildings
 from .constants import LEVEL_UNLOCKS, MAX_PLANET_LEVEL, SPECIALIZATION_UNLOCK_LEVEL, IDENTITY_TEASER_MIN_LEVEL
 from .expansion_gates import build_expansion_unlock_block
-from .definitions import get_event, get_policy, get_policies as get_policy_definitions, get_research_def, get_trait
+from .definitions import get_chains, get_research_defs, get_event, get_policy, get_policies as get_policy_definitions, get_research_def, get_trait
 from .policies import evaluate_policy_gate
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
@@ -150,6 +150,86 @@ def _progression_milestones(level: int) -> List[Dict[str, Any]]:
     return milestones
 
 
+def _supply_source_plan(
+    resource_key: str,
+    *,
+    active_chains: set[str],
+    planet_research: Mapping[str, int],
+    buildings: Mapping[str, int],
+) -> Dict[str, Any]:
+    """Describe only production paths that exist in current DB definitions.
+
+    No invented buildings, production buttons or trading shortcuts. Research
+    prerequisites are resolved transitively using the same definitions that
+    validate planet tech unlocks.
+    """
+    chain_key = ""
+    chain_def: Dict[str, Any] = {}
+    for key, cfg in get_chains().items():
+        if str(cfg.get("output_resource_key") or key) == resource_key:
+            chain_key, chain_def = str(key), cfg
+            break
+    if not chain_key:
+        return {"defined": False, "active": False, "unlock_steps": [], "inputs": []}
+
+    research_defs = get_research_defs()
+    unlock_key = ""
+    for tech_key, cfg in research_defs.items():
+        mech = cfg.get("mechanics") or {}
+        unlocks = mech.get("unlocks") or []
+        if (
+            str(mech.get("unlock_chain") or "") == chain_key
+            or f"chain:{chain_key}" in unlocks
+        ):
+            unlock_key = str(tech_key)
+            break
+
+    steps: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    def add_research_steps(tech_key: str, min_level: int = 1) -> None:
+        if tech_key in seen:
+            return
+        seen.add(tech_key)
+        if int(planet_research.get(tech_key, 0) or 0) >= min_level:
+            return
+        cfg = research_defs.get(tech_key) or {}
+        req = cfg.get("requirements") or {}
+        for prerequisite, need in (req.get("planet_research") or {}).items():
+            add_research_steps(str(prerequisite), int(need))
+        for building_key, need in (req.get("buildings") or {}).items():
+            if int(buildings.get(building_key, 0) or 0) < int(need):
+                steps.append({
+                    "kind": "building",
+                    "label_key": f"building_{building_key}",
+                    "level": int(need),
+                })
+        steps.append({
+            "kind": "research",
+            "label_key": cfg.get("label_key") or f"pe_{tech_key}",
+            "level": int(min_level),
+            "tech_key": tech_key,
+        })
+
+    if unlock_key and chain_key not in active_chains:
+        add_research_steps(unlock_key)
+
+    return {
+        "defined": True,
+        "active": chain_key in active_chains,
+        "chain_key": chain_key,
+        "chain_label_key": chain_def.get("label_key") or f"chain_{chain_key}",
+        "unlock_tech_key": unlock_key,
+        "unlock_tech_label_key": (research_defs.get(unlock_key) or {}).get("label_key") if unlock_key else "",
+        "research_complete": bool(unlock_key and int(planet_research.get(unlock_key, 0) or 0) > 0),
+        "unlock_steps": steps,
+        "inputs": [
+            {"label_key": f"resource_{key}", "amount_per_hour": value}
+            for key, value in (chain_def.get("inputs") or {}).items()
+        ],
+        "base_output_per_hour": chain_def.get("base_output_per_hour") or 0,
+    }
+
+
 def _economy_flow(planet_id: int, mechanics: Dict[str, Any], conn: sqlite3.Connection) -> Dict[str, Any]:
     exports = []
     for ex in mechanics.get("export_slots") or []:
@@ -172,7 +252,11 @@ def _economy_flow(planet_id: int, mechanics: Dict[str, Any], conn: sqlite3.Conne
         )
 
     deficits = []
-    for d in mechanics.get("import_deficits") or []:
+    active_keys = {str(c) for c in mechanics.get("active_chains") or []}
+    demand_rows = mechanics.get("import_deficits") or []
+    tech_levels = get_planet_research_levels(planet_id, conn=conn) if demand_rows else {}
+    buildings = get_planet_buildings(planet_id, conn=conn) if demand_rows else {}
+    for d in demand_rows:
         try:
             received = Decimal(str(d.get("received") or 0))
             required = Decimal(str(d.get("required") or 0))
@@ -204,6 +288,12 @@ def _economy_flow(planet_id: int, mechanics: Dict[str, Any], conn: sqlite3.Conne
                 "required": required,
                 "pct": min(100, pct),
                 "status": "critical" if pct < 50 else "warn",
+                "supply_source": _supply_source_plan(
+                    str(d.get("resource_key") or ""),
+                    active_chains=active_keys,
+                    planet_research=tech_levels,
+                    buildings=buildings,
+                ),
             }
         )
 
@@ -816,6 +906,19 @@ def _next_action(
 
     deficits = economy.get("deficits") or []
     if deficits:
+        deficit = dict(deficits[0])
+        source = deficit.get("supply_source") or {}
+        if source.get("defined") and not source.get("active") and source.get("unlock_steps"):
+            return _cta(
+                priority="economy",
+                title_key="pe_supply_unlock_title",
+                body_key="pe_supply_unlock_body",
+                cta_label_key="pe_action_research_cta",
+                cta_target="research",
+                cta_action="focus_tab",
+                cta_highlight="pe-section-research",
+                deficit=deficit,
+            )
         return _cta(
             priority="economy",
             title_key="pe_action_economy_title",
@@ -824,7 +927,7 @@ def _next_action(
             cta_target="economy",
             cta_action="focus_section",
             cta_highlight="pe-section-economy",
-            deficit=dict(deficits[0]),
+            deficit=deficit,
         )
 
     if any(w.get("key") == "stability" for w in warnings):
