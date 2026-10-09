@@ -9,7 +9,8 @@ def test_buildings_page_detects_cost_threshold_without_new_state_poller():
     assert '.res-value.' in js
     assert '.gc-cost-' in js
     assert 'metal >= needMetal && crystal >= needCrystal' in js
-    assert 'GC.refreshGameState("queue_timer_zero")' in js
+    assert 'GC.reloadCurrentPage({ force: true })' in js
+    assert '[data-bld-stage-card-source] .buildings-tab-panels' in js
     assert 'GC.registerCleanup' in js
     assert 'global.clearInterval(interval)' in js
     assert '/api/game-state' not in js
