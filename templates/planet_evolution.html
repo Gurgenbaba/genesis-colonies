@@ -1094,7 +1094,6 @@
       </section>
     </div>
 
-    {% if ps.level >= 5 %}
     <details class="pe-compact-details pe-zone--policies" id="pe-section-policies">
       <summary class="pe-compact-details-summary">
         <span>{{ T("pe_tab_policies", "Politik") }}</span>
@@ -1144,9 +1143,7 @@
         {% endif %}
       </div>
     </details>
-    {% endif %}
 
-    {% if ps.level >= 25 or asc.queue_count or asc.completed_key %}
     <details class="pe-compact-details pe-zone--ascension" id="pe-section-ascension">
       <summary class="pe-compact-details-summary">
         <span>{{ T("pe_card_ascension_title", "Ascension") }}</span>
@@ -1185,8 +1182,10 @@
         </div>
         {% endif %}
       </div>
+      {% if ps.level < 25 and not asc.ascensions %}
+      <p class="pe-zone-empty">{{ T('pe_card_ascension_title', 'Ascension') }}: {{ T('pe_at_level', 'Ab Stufe') }} 25</p>
+      {% endif %}
     </details>
-    {% endif %}
 
     {% if history_items %}
     <div id="pe-chronicle-modal"
