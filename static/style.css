@@ -22697,6 +22697,12 @@ a.gc-ranking-alliance:hover{
     padding-bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 12px);
   }
 
+  /* body is only 100vh tall, so its padding never clears the fixed bottom nav;
+     reserve the space on the layout that actually holds the page content. */
+  .gc-body-ingame .gc-layout{
+    padding-bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 12px);
+  }
+
   /* Hide desktop sidebar; use bottom nav */
   .gc-sidebar-desktop{ display: none !important; }
 
