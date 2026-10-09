@@ -594,6 +594,12 @@
         T('pe_goal_benefits_traits', 'Eigenschaften und Entwicklung bestimmen verfügbare Spezialisierungen.'),
         T('pe_next_step', 'Prüfe die angezeigten Optionen und ihren konkreten Nutzen.')
       ) }}
+      {{ pe_player_guide(
+        T('pe_economy_short', 'Produktion und Spezialressourcen'),
+        T('pe_supply_source_active', 'Spezialressourcen entstehen nur in aktiven freigeschalteten Produktionsketten.'),
+        T('pe_supply_source_locked', 'Prüfe die zugehörigen Planet-Techs und die Eingangsressourcen.'),
+        T('pe_economy_help_open', 'Prüfe bei Engpässen den konkreten Bedarf und Freischaltweg.')
+      ) }}
       <div class="pe-theater-stage">
         <aside class="pe-theater-rail pe-theater-rail--left" aria-label="{{ T('pe_theater_vitals_aria', 'Planetdaten') }}">
           <div class="pe-theater-vital">
@@ -1053,6 +1059,12 @@
           <p class="pe-goal-xp-line hint">{{ T('pe_goal_research_to_level', 'Noch %(count)s Forschungen bis Level-Up.', count=(goal_research_count|int)) }}</p>
           {% endif %}
           <div class="pe-goal-events" id="pe-section-events">
+            {{ pe_player_guide(
+              T('pe_events_status_stable', 'Planet-Ereignisse'),
+              T('pe_goal_benefits_activity', 'Ereignisse können zusätzliche Planet-XP und Veränderungen auslösen.'),
+              T('pe_event_urgent', 'Manche Ereignisse erfordern eine Entscheidung.'),
+              T('pe_event_choice_commit', 'Prüfe bei aktiven Ereignissen zuerst die angezeigten Folgen jeder Entscheidung.')
+            ) }}
             {% if ps.active_event %}
             <div class="pe-goal-event-active" id="pe-event-decision">
               <span class="pe-goal-event-chip pe-goal-event-chip--urgent">{{ T("pe_event_urgent", "Dringend") }} · {{ T(ps.active_event.label_key, ps.active_event.event_key) }}</span>
