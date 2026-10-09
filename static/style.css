@@ -22697,6 +22697,12 @@ a.gc-ranking-alliance:hover{
     padding-bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 12px);
   }
 
+  /* body is only 100vh tall, so its padding never clears the fixed bottom nav;
+     reserve the space on the layout that actually holds the page content. */
+  .gc-body-ingame .gc-layout{
+    padding-bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 12px);
+  }
+
   /* Hide desktop sidebar; use bottom nav */
   .gc-sidebar-desktop{ display: none !important; }
 
@@ -30690,6 +30696,8 @@ button.pe-hero-planet-hint:focus-visible {
   flex-direction: column;
   gap: 0.75rem;
   min-width: 0;
+  position: relative;
+  z-index: 2; /* keep rail text/toggles above the holo pedestal overflow */
 }
 .planet-evolution-page .pe-theater-rail--left {
   align-items: flex-start;
@@ -31397,7 +31405,7 @@ button.pe-hero-planet-hint:focus-visible {
   display: inline-block;
   margin-top: 0.15rem;
   padding: 0.05rem 0.35rem;
-  border-radius: 999px;
+  border-radius: var(--gc-radius-xs);
   font-size: 0.66rem;
   line-height: 1.3;
   color: var(--gc-text-dim);
@@ -31552,7 +31560,7 @@ button.pe-hero-planet-hint:focus-visible {
   width: 1.35rem;
   height: 1.35rem;
   padding: 0;
-  border-radius: 50%;
+  border-radius: var(--gc-radius-xs);
   border: 1px solid rgba(120, 190, 255, 0.22);
   background: rgba(0, 0, 0, 0.22);
   color: var(--gc-text-dim);

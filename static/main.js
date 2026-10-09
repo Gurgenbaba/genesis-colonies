@@ -11510,6 +11510,8 @@
         const items = _buildingAffordabilityReqItems(button);
         if (!items.length) return;
         const resourceItems = items.filter((req) => String(req?.kind || req?.type || "") === "resource");
+        // Do not guess building/research requirements in the browser. Only use
+        // server-supplied resource thresholds as a signal to request fresh state.
         if (!resourceItems.length || resourceItems.length !== items.length) return;
         crossedServerThreshold = resourceItems.every((req) => {
           const key = String(req?.key || "");

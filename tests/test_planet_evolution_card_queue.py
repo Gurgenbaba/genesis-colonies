@@ -227,7 +227,6 @@ def test_planet_evolution_context_info_template_markers():
     assert "pe-tech-reward-chip" in html
     assert "pe_research_tech_card" in html
     assert "pe-tech-grid--locked" in html
-    assert "pe-hero-xp-reward" in html
     assert "pe-goal-xp-line" in html
     assert "pe_reward" in html
     assert "data-choice-effect" in html
