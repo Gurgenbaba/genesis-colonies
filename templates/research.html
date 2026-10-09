@@ -302,4 +302,5 @@
 
 {% block extra_scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/pages/research_live_requirements.js') }}?v={{ GC_ASSET_VERSION }}"></script>
 {% endblock %}
