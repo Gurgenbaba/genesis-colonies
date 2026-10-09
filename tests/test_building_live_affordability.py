@@ -32,3 +32,15 @@ def test_resource_hud_changes_trigger_fast_reconcile():
     assert "observer.disconnect()" in js
     assert "requestAnimationFrame" in js
     assert "global.setInterval(tick, 750)" in js
+
+
+def test_resource_only_warning_becomes_action_without_waiting_for_pjax():
+    js = (ROOT / "static/js/pages/buildings.js").read_text(encoding="utf-8")
+    assert 'function enableAffordableAction(container, key)' in js
+    assert 'item.kind !== "resource"' in js
+    assert 'Number(item.need)' in js
+    assert 'button.replaceWith(link)' in js
+    assert 'data-bld-stage-actions' in js
+    assert 'enableAffordableAction(card, key)' in js
+    assert 'link.setAttribute("data-action-state", "go")' in js
+    assert 'GC.reloadCurrentPage({ force: true })' in js
