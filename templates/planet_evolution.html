@@ -252,13 +252,11 @@
     <div class="pe-tech-card-info">
       <div class="pe-tech-card-name-row">
         <h4 class="pe-tech-card-name">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</h4>
-        {% if variant != 'locked' %}
         <button type="button"
                 class="pe-tech-info-btn pe-info-trigger"
                 aria-label="{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }}"
                 aria-expanded="false"
                 aria-controls="pe-tech-info-{{ tech.tech_key }}">?</button>
-        {% endif %}
       </div>
       <p class="pe-tech-card-meta gc-mono">
         {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }} · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
@@ -284,10 +282,8 @@
         {%- endfor -%}
       </p>
       {% endif %}
-      {# GC-PERF-PJAX-BYTES-HEAVY-001: locked cards skip pe_tech_info_source (~3KB each). #}
-      {% if variant != 'locked' %}
+      {# All techs, including future/locked entries, deserve accessible explanations. #}
       {{ pe_tech_info_source(tech) }}
-      {% endif %}
     </div>
     <div class="pe-tech-card-action">{{ pe_research_card_actions(tech, planet_id, queue_has_room) }}</div>
   </div>
@@ -868,6 +864,7 @@
         {% set pe_next_locked = rdx.locked[0] if rdx.locked else none %}
         <div class="pe-research-idle-guide">
           <p class="pe-zone-empty">{{ T("pe_research_empty", "Keine Forschung verfügbar — baue deinen Planeten weiter aus.") }}</p>
+          <p class="hint">{{ T('pe_research_locked_guide', 'Die nächste Planet-Tech ist noch gesperrt. Öffne unten „Später verfügbar“, um ihren Nutzen, die benötigte Planet-Eigenschaft und weitere Voraussetzungen zu sehen. Planet-Level und Eigenschaften entwickeln sich durch Planet-XP, Forschungen und Ereignisse.') }}</p>
           {% if pe_next_locked %}
           <div class="pe-research-next-unlock">
             <strong class="pe-research-next-name">{{ T(pe_next_locked.label_key, pe_next_locked.tech_key) }}</strong>
@@ -943,6 +940,44 @@
             </div>
             <p class="pe-goal-supply-values gc-mono">{{ action.deficit.received|int }} / {{ action.deficit.required|int }}</p>
           </div>
+          {% elif action.priority == 'economy' and action.deficit %}
+          {# GC-PE-SUPPLY-TRUTH: backend describes actual active chains and DB unlock requirements. #}
+          {% set source = action.deficit.supply_source if action.deficit.supply_source is defined else {} %}
+          <details class="pe-economy-explanation">
+            <summary>{{ T('pe_economy_help_open', 'Warum fehlt die Ressource? Wie bekomme ich sie?') }}</summary>
+            <p>{{ T('pe_economy_help_numbers', 'Geliefert / benötigt bedeutet verfügbare Versorgung pro Stunde gegenüber dem stündlichen Bedarf. Die Anzeige berücksichtigt aktive lokale Ketten und ankommende Handelsrouten.') }}</p>
+            {% if source.defined %}
+              {% if source.active %}
+                <p>{{ T('pe_supply_source_active', 'Die Produktionskette ist hier freigeschaltet. Reichen die gelieferten Mengen trotzdem nicht, prüfe die Eingangsressourcen und aktive Lieferungen.') }}</p>
+              {% elif source.unlock_steps %}
+                <p>{{ T('pe_supply_source_locked', 'Diese Ressource kann auf deinem Planeten noch nicht hergestellt werden. Dafür fehlen folgende Freischaltungen:') }}</p>
+                <ol class="pe-supply-unlock-steps">
+                  {% for step in source.unlock_steps %}
+                  <li>
+                    {{ T(step.label_key, pe_humanize_key(step.label_key)) }}
+                    {% if step.kind == 'building' %}{{ T('pe_supply_step_level', 'auf Stufe %(level)s', level=step.level|int) }}{% endif %}
+                  </li>
+                  {% endfor %}
+                </ol>
+              {% elif source.research_complete %}
+                <p>{{ T('pe_supply_source_inactive', 'Die erforderliche Forschung ist abgeschlossen, aber die Produktionskette ist derzeit nicht aktiv. Das ist ein Statusfehler; bitte über Support melden.') }}</p>
+              {% else %}
+                <p>{{ T('pe_supply_source_unknown', 'Diese Produktionskette ist momentan nicht aktiv. Eine direkt ausführbare Freischaltung ist für diesen Planeten nicht hinterlegt.') }}</p>
+              {% endif %}
+              {% if source.inputs %}
+              <p class="hint">{{ T('pe_supply_inputs', 'Die aktive Kette benötigt pro Stunde:') }}
+                {% for item in source.inputs %}
+                  {{ T(item.label_key, pe_humanize_key(item.label_key)) }} {{ item.amount_per_hour }}{% if not loop.last %} · {% endif %}
+                {% endfor %}
+                · {{ T('pe_supply_base_output', 'Basisproduktion') }} {{ source.base_output_per_hour }} / h
+              </p>
+              {% endif %}
+            {% else %}
+              <p>{{ T('pe_supply_no_source', 'Für diese Ressource ist aktuell keine lokale Produktionskette in den Spieldefinitionen hinterlegt. Sie lässt sich hier nicht direkt herstellen.') }}</p>
+            {% endif %}
+            <p>{{ T('pe_economy_help_action', 'Alternativ kann ein anderer eigener Planet die Ressource liefern – aber nur, wenn dort eine Produktionskette aktiv und eine Handelsroute eingerichtet ist.') }}</p>
+            <p><a href="#pe-section-research">{{ T('pe_economy_help_link', 'Planetare Forschung und Freischaltungen ansehen →') }}</a></p>
+          </details>
           {% elif action.priority == 'explore' %}
           <button type="button"
                   class="pe-goal-benefits-btn pe-info-trigger"
