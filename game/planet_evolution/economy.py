@@ -128,6 +128,57 @@ def _culture_chain_mult(planet_id: int, chain_key: str, conn: sqlite3.Connection
     return mult
 
 
+def _active_local_supply_rates(
+    planet_id: int,
+    wanted: set[str],
+    delta_hours: Decimal,
+    conn: sqlite3.Connection,
+) -> Dict[str, Decimal]:
+    """Projected *usable* local chain output, not stale special-resource rate columns.
+
+    A chain only supplies an import demand if it is active and its ordinary
+    resource inputs can be paid for this interval. The same active-chain,
+    efficiency and culture multipliers as tick_special_resources are used.
+    This is read-only and does not credit resources or start a production job.
+    """
+    active = get_production_chains(planet_id, conn=conn)
+    if not active or not wanted:
+        return {}
+    planet = get_planet_row(planet_id, conn=conn) or {}
+    available = {
+        "metal": _decimal_value(planet.get("metal") or 0),
+        "crystal": _decimal_value(planet.get("crystal") or 0),
+    }
+    rates: Dict[str, Decimal] = {}
+    for row in active:
+        if not int(row.get("is_active") or 0):
+            continue
+        key = str(row.get("chain_key") or "")
+        chain = get_chain(key) or {}
+        output_key = str(chain.get("output_resource_key") or key)
+        if not chain or output_key not in wanted:
+            continue
+        inputs = chain.get("inputs") or {}
+        if any(
+            res not in available or available[res] < _decimal_value(hourly) * delta_hours
+            for res, hourly in inputs.items()
+        ):
+            continue
+        base = _decimal_value(chain.get("base_output_per_hour") or 0)
+        efficiency = _decimal_value(row.get("efficiency") or 1.0, "1")
+        mult = _decimal_value(_culture_chain_mult(planet_id, key, conn, output_key=output_key), "1")
+        with localcontext() as ctx:
+            ctx.prec = _decimal_precision(base, efficiency, mult, delta_hours)
+            rate = max(Decimal(0), base * efficiency * mult)
+        if rate <= 0:
+            continue
+        # One resource budget must not fund multiple chains simultaneously.
+        for res, hourly in inputs.items():
+            available[res] -= _decimal_value(hourly) * delta_hours
+        rates[output_key] = rates.get(output_key, Decimal(0)) + rate
+    return rates
+
+
 def compute_import_deficits(
     planet_id: int,
     conn: sqlite3.Connection,
@@ -147,13 +198,19 @@ def compute_import_deficits(
     delta_h = _decimal_value(delta_hours, "1")
     if delta_h <= 0:
         return deficits
+    local_chain_rates = _active_local_supply_rates(
+        planet_id, {str(d["resource_key"]) for d in demands}, delta_h, conn
+    )
 
     for demand in demands:
         key = str(demand["resource_key"])
         required_rate = _decimal_value(demand["required_per_hour"])
         incoming_rate = _decimal_value(routes_in.get(key, Decimal(0)))
-        local_rate = _decimal_value(
-            (resources.get(key) or {}).get("production_per_hour") or 0
+        # Legacy production_per_hour is a stored snapshot. Actual chain output
+        # is produced by tick_special_resources and was never reflected here.
+        local_rate = max(
+            _decimal_value((resources.get(key) or {}).get("production_per_hour") or 0),
+            local_chain_rates.get(key, Decimal(0)),
         )
         with localcontext() as ctx:
             ctx.prec = _decimal_precision(
