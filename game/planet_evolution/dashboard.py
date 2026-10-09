@@ -906,6 +906,19 @@ def _next_action(
 
     deficits = economy.get("deficits") or []
     if deficits:
+        deficit = dict(deficits[0])
+        source = deficit.get("supply_source") or {}
+        if source.get("defined") and not source.get("active") and source.get("unlock_steps"):
+            return _cta(
+                priority="economy",
+                title_key="pe_supply_unlock_title",
+                body_key="pe_supply_unlock_body",
+                cta_label_key="pe_action_research_cta",
+                cta_target="research",
+                cta_action="focus_tab",
+                cta_highlight="pe-section-research",
+                deficit=deficit,
+            )
         return _cta(
             priority="economy",
             title_key="pe_action_economy_title",
@@ -914,7 +927,7 @@ def _next_action(
             cta_target="economy",
             cta_action="focus_section",
             cta_highlight="pe-section-economy",
-            deficit=dict(deficits[0]),
+            deficit=deficit,
         )
 
     if any(w.get("key") == "stability" for w in warnings):
