@@ -2,8 +2,8 @@
  * GC-LIVE-BUILD-AFFORD-001 — refresh server-authoritative building actions
  * when live HUD balances cross a cost threshold.
  *
- * No second game-state poller and no client-side building decisions:
- * this only asks the existing refresh pipeline to reconcile the panel.
+ * No second game-state poller or local unlock. Stage cards are cloned from SSR
+ * sources, so a canonical PJAX page reconcile is required to update both.
  */
 (function (global) {
   "use strict";
@@ -27,8 +27,8 @@
   }
 
   function watchAffordability() {
-    var page = document.querySelector(".buildings-tab-panels");
-    if (!page || typeof GC.refreshGameState !== "function") return function () {};
+    var page = document.querySelector("[data-bld-stage-card-source] .buildings-tab-panels, [data-bld-cards-panel] .buildings-tab-panels");
+    if (!page || typeof GC.reloadCurrentPage !== "function") return function () {};
 
     var previous = new Map();
     var lastRequested = new Map();
@@ -46,6 +46,8 @@
         var card = cards[i];
         var key = card.getAttribute("data-building-row");
         var warn = card.querySelector('.btn-upgrade[data-action-state="warn"]');
+        // Stage overlays clone the head action outside their hidden source cards.
+        // The source remains the authoritative SSR catalog for costs.
         var needMetal = cost(card, "metal");
         var needCrystal = cost(card, "crystal");
         if (!key || !warn || needMetal === null || needCrystal === null) {
@@ -62,12 +64,12 @@
         // server while requirements or a full queue legitimately block build.
         var now = Date.now();
         var recent = lastRequested.get(key);
-        if (recent && recent.signature === signature && now - recent.at < 30000) continue;
+        if (recent && recent.signature === signature && now - recent.at < 45000) continue;
         if (old && old.signature === signature && old.affordable && recent) continue;
         lastRequested.set(key, { signature: signature, at: now });
         refreshing = true;
         try {
-          Promise.resolve(GC.refreshGameState("queue_timer_zero"))
+          Promise.resolve(GC.reloadCurrentPage({ force: true }))
             .catch(function () {})
             .finally(function () { refreshing = false; });
         } catch (_) {
@@ -78,7 +80,7 @@
     }
 
     tick();
-    var interval = global.setInterval(tick, 1500);
+    var interval = global.setInterval(tick, 750);
     return function () {
       stopped = true;
       global.clearInterval(interval);
