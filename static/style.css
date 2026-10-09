@@ -30690,6 +30690,8 @@ button.pe-hero-planet-hint:focus-visible {
   flex-direction: column;
   gap: 0.75rem;
   min-width: 0;
+  position: relative;
+  z-index: 2; /* keep rail text/toggles above the holo pedestal overflow */
 }
 .planet-evolution-page .pe-theater-rail--left {
   align-items: flex-start;
