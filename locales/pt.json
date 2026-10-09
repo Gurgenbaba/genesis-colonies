@@ -9238,5 +9238,20 @@
   "mail_updates_prompt_enable": "Ativar atualizações",
   "mail_updates_prompt_later": "Mais tarde",
   "mail_updates_prompt_privacy": "Opcional · double opt-in · cancelar a qualquer momento",
-  "mail_updates_prompt_kicker": "GENESIS SIGNAL"
+  "mail_updates_prompt_kicker": "GENESIS SIGNAL",
+  "pe_economy_help_open": "Porque falta este recurso e como posso obtê-lo?",
+  "pe_economy_help_numbers": "Recebido / necessário compara o fornecimento por hora com a procura por hora. Só contam cadeias locais ativas e rotas comerciais de entrada.",
+  "pe_supply_source_active": "Esta cadeia de produção está ativa neste planeta. Se o fornecimento continuar insuficiente, verifica os insumos e as entregas.",
+  "pe_supply_source_locked": "Este recurso ainda não pode ser produzido neste planeta. Faltam os seguintes desbloqueios:",
+  "pe_supply_step_level": "até ao nível %(level)s",
+  "pe_supply_source_inactive": "A pesquisa terminou, mas a cadeia de produção está inativa. Comunica esta inconsistência ao suporte.",
+  "pe_supply_source_unknown": "Não existe atualmente um caminho de desbloqueio direto identificado para esta cadeia.",
+  "pe_supply_inputs": "Insumos da cadeia por hora:",
+  "pe_supply_base_output": "Produção base",
+  "pe_supply_no_source": "Não existe uma cadeia de produção local para este recurso nas definições atuais do jogo. Não pode ser produzido aqui.",
+  "pe_economy_help_action": "Outra colónia tua só o pode fornecer se realmente o produzir e tiver uma rota comercial configurada.",
+  "pe_economy_help_link": "Ver pesquisa planetária e requisitos →",
+  "pe_research_locked_guide": "Não há pesquisas disponíveis: abre «Disponível mais tarde» e os ícones de informação para ver efeitos e requisitos reais.",
+  "pe_supply_unlock_title": "Desbloqueia primeiro o fornecimento",
+  "pe_supply_unlock_body": "O recurso especial necessário ainda não pode ser produzido neste planeta. Desbloqueia primeiro a tecnologia planetária correspondente."
 }
