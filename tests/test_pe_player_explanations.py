@@ -14,8 +14,27 @@ def test_locked_planet_tech_has_same_info_explanation_as_available_tech():
 
 def test_economy_step_explains_supply_and_next_action():
     html = TEMPLATE.read_text(encoding="utf-8")
-    assert "pe_economy_help_intro" in html
+    assert "pe_supply_source_locked" in html
+    assert "pe_supply_source_active" in html
+    assert "pe_supply_source_inactive" in html
+    assert "source.unlock_steps" in html
     assert "pe_economy_help_numbers" in html
     assert "pe_economy_help_action" in html
-    assert 'href="/empire"' in html
+    assert 'href="#pe-section-research"' in html
     assert "pe_research_locked_guide" in html
+
+
+def test_economy_import_deficit_uses_active_local_chain_rates():
+    src = (TEMPLATE.parent.parent / "game/planet_evolution/economy.py").read_text(encoding="utf-8")
+    assert "def _active_local_supply_rates(" in src
+    assert "local_chain_rates = _active_local_supply_rates(" in src
+    assert "local_chain_rates.get(key, Decimal(0))" in src
+
+
+def test_supply_unlock_steps_are_derived_from_actual_definitions():
+    src = (TEMPLATE.parent.parent / "game/planet_evolution/dashboard.py").read_text(encoding="utf-8")
+    assert "def _supply_source_plan(" in src
+    assert "get_chains()" in src
+    assert "get_research_defs()" in src
+    assert "planet_research.get(tech_key, 0)" in src
+    assert "pe_supply_unlock_title" in src
