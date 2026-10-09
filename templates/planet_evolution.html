@@ -1122,6 +1122,20 @@
                 </button>
               </article>
               {% endfor %}
+              {% set locked_options = slot.options | rejectattr('eligible') | list %}
+              {% if locked_options %}
+              <details class="pe-compact-details pe-policy-locked-explain" data-pe-policy-locked>
+                <summary>{{ T('pe_research_later', 'Später verfügbar') }} ({{ locked_options|length }})</summary>
+                {% for opt in locked_options %}
+                <article class="pe-policy-option-card pe-tech-card--locked-req">
+                  <h4>{{ T(opt.label_key, pe_humanize_key(opt.policy_key)) }}</h4>
+                  {{ pe_impact_contract(opt.impact, true) }}
+                  <p class="hint">{{ T(opt.locked_reason_key, 'Aktuell gesperrt') }}</p>
+                  <p class="hint">{{ T('pe_next_step', 'Nächster Schritt') }}: {{ T(opt.locked_reason_key, 'Voraussetzungen erfüllen') }}</p>
+                </article>
+                {% endfor %}
+              </details>
+              {% endif %}
             </div>
           </div>
           {% endfor %}
