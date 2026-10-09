@@ -20,3 +20,11 @@ def test_research_and_economy_use_existing_live_data():
     assert "tech.impact.rows" in html
     assert "action.deficit.supply_source" in html
     assert "source.unlock_steps" in html
+
+
+def test_locked_policies_explain_existing_server_gate():
+    html = TEMPLATE.read_text(encoding="utf-8")
+    assert "data-pe-policy-locked" in html
+    assert "opt.locked_reason_key" in html
+    assert "rejectattr('eligible')" in html
+    assert "pe_impact_contract(opt.impact, true)" in html
