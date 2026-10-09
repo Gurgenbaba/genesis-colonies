@@ -26,6 +26,39 @@
     return integerText(card.querySelector(".gc-bld-card-costs .gc-cost-" + key + " .gc-cost-val"));
   }
 
+  // Resource warnings are SSR snapshots. Replace only pure resource locks;
+  // missing tech/level requirements and queue locks must stay disabled.
+  function enableAffordableAction(container, key) {
+    if (!container) return false;
+    var button = container.querySelector('.btn-upgrade[data-action-state="warn"][data-req-items]');
+    if (!button) return false;
+    var items;
+    try { items = JSON.parse(button.getAttribute("data-req-items") || "[]"); }
+    catch (_) { return false; }
+    if (!Array.isArray(items) || !items.length ||
+        items.some(function (item) { return !item || item.kind !== "resource"; })) return false;
+    var metal = balance("metal"), crystal = balance("crystal");
+    if (metal === null || crystal === null) return false;
+    var amounts = { metal: metal, crystal: crystal };
+    if (!items.every(function (item) {
+      return Object.prototype.hasOwnProperty.call(amounts, item.key) &&
+        Number.isFinite(Number(item.need)) && amounts[item.key] >= Number(item.need);
+    })) return false;
+    var link = document.createElement("a");
+    link.className = "gc-bld-head-action-btn gc-bld-head-action-btn--go gc-bld-head-action-btn--plus-one btn-upgrade";
+    link.setAttribute("data-building", key);
+    link.setAttribute("data-action-state", "go");
+    link.href = "/upgrade/" + encodeURIComponent(key) + "?src=buildings";
+    link.title = "+1";
+    link.setAttribute("aria-label", "+1");
+    var label = document.createElement("span");
+    label.className = "gc-bld-head-action-label";
+    label.textContent = "+1";
+    link.appendChild(label);
+    button.replaceWith(link);
+    return true;
+  }
+
   function watchAffordability() {
     var page = document.querySelector("[data-bld-stage-card-source] .buildings-tab-panels, [data-bld-cards-panel] .buildings-tab-panels");
     if (!page || typeof GC.reloadCurrentPage !== "function") return function () {};
@@ -59,6 +92,12 @@
         var old = previous.get(key);
         previous.set(key, { signature: signature, affordable: affordable });
         if (!affordable) continue;
+        // Make the existing +1 action usable immediately, before the slower
+        // canonical PJAX refresh rebuilds the full MAX preview and Stage props.
+        enableAffordableAction(card, key);
+        document.querySelectorAll("[data-bld-stage-actions]").forEach(function (actions) {
+          if (actions.getAttribute("data-building") === key) enableAffordableAction(actions, key);
+        });
 
         // Initial stale SSR state is also eligible. Do not repeatedly hit the
         // server while requirements or a full queue legitimately block build.
