@@ -583,7 +583,7 @@
       </header>
 
       <div class="pe-command-focus" aria-label="{{ T('pe_card_next_step', 'Nächster Evolutionsschritt') }}">
-        <div><small>{{ T('pe_events_status_stable', 'Planetenstatus') }}</small><strong>{% if dash.warnings %}{{ T(dash.warnings[0].label_key, dash.warnings[0].key) }}{% else %}{{ T('pe_events_status_stable', 'Entwicklung stabil') }}{% endif %}</strong></div>
+        <div><small>{{ T('pe_planet_status', 'Planetenstatus') }}</small><strong>{% if dash.warnings %}{{ T(dash.warnings[0].label_key, dash.warnings[0].key) }}{% else %}{{ T('pe_development_stable', 'Entwicklung stabil') }}{% endif %}</strong></div>
         <div><small>{{ T('pe_next_step', 'Nächster Schritt') }}</small><strong>{{ T(action.title_key, 'Planet weiterentwickeln') }}</strong><span>{{ T(action.body_key, 'Prüfe die verfügbaren Entwicklungsschritte.') }}</span></div>
         <a class="gc-btn gc-btn-secondary gc-btn-sm" href="#pe-section-action">{{ T('pe_card_next_step', 'Zum Entwicklungsziel') }} →</a>
       </div>
@@ -705,12 +705,6 @@
       </div>
 
       <footer class="pe-theater-foot">
-      {{ pe_player_guide(
-        T('pe_development_stage', 'Planet-Level und Planet-XP'),
-        T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.'),
-        T('pe_goal_benefits_research', 'Planet-Techs und weitere Planet-Aktivitäten geben Planet-XP.'),
-        T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.')
-      ) }}
         <div class="pe-hero-xp-block{% if (prog.xp_pct or 0)|int >= 100 or not prog.next_level %} pe-hero-xp-block--capped{% endif %}">
           {% if prog.next_level and (prog.xp_pct or 0)|int < 100 %}
           <div class="pe-xp-labels build-progress-label">
@@ -946,6 +940,12 @@
           <span class="pe-next-priority pe-next-priority-{{ action.priority or 'explore' }}">{{ T("pe_next_step", "Dein nächster Schritt") }}</span>
         </header>
         <div class="pe-goal-body">
+      {{ pe_player_guide(
+        T('pe_development_stage', 'Planet-Level und Planet-XP'),
+        T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.'),
+        T('pe_goal_benefits_research', 'Planet-Techs und weitere Planet-Aktivitäten geben Planet-XP.'),
+        T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.')
+      ) }}
           {{ pe_player_guide(
             T('pe_card_next_step', 'Nächster Evolutionsschritt'),
             T(action.body_key, 'Zeigt das aktuell wichtigste Ziel dieser Kolonie.'),
