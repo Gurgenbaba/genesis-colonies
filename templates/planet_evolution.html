@@ -338,6 +338,9 @@
       {{ render_timekeeper_apply_btn(qj.owner_type|default('planet_research'), qj) }}
       {{ render_card_queue_timer(qj, qj.owner_type|default('planet_research'), 'planet_evolution') }}
     </div>
+    {% if qj.owner_type|default('planet_research') == 'planet_research' and qj.cancellable|default(false) and qj.job_id|int > 0 %}
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel" data-planet-research-cancel-id="{{ qj.job_id|int }}">{{ T('action_cancel', 'Abbrechen') }}</button>
+    {% endif %}
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"
