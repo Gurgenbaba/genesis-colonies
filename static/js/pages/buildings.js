@@ -79,11 +79,30 @@
       }
     }
 
+    // HUD resources are already updated by the canonical game-state loop.
+    // React to their DOM changes immediately instead of waiting up to 750ms.
+    var hud = document.querySelector("#resource-bar");
+    var scheduled = false;
+    var observer = null;
+    function scheduleTick() {
+      if (stopped || scheduled) return;
+      scheduled = true;
+      global.requestAnimationFrame(function () {
+        scheduled = false;
+        tick();
+      });
+    }
+    if (hud && typeof MutationObserver !== "undefined") {
+      observer = new MutationObserver(scheduleTick);
+      observer.observe(hud, { subtree: true, characterData: true, childList: true, attributes: true, attributeFilter: ["title"] });
+    }
     tick();
+    // Fallback for resource HUD implementations that update without DOM mutation.
     var interval = global.setInterval(tick, 750);
     return function () {
       stopped = true;
       global.clearInterval(interval);
+      if (observer) observer.disconnect();
       previous.clear();
       lastRequested.clear();
     };
