@@ -252,13 +252,11 @@
     <div class="pe-tech-card-info">
       <div class="pe-tech-card-name-row">
         <h4 class="pe-tech-card-name">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</h4>
-        {% if variant != 'locked' %}
         <button type="button"
                 class="pe-tech-info-btn pe-info-trigger"
                 aria-label="{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }}"
                 aria-expanded="false"
                 aria-controls="pe-tech-info-{{ tech.tech_key }}">?</button>
-        {% endif %}
       </div>
       <p class="pe-tech-card-meta gc-mono">
         {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }} · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
@@ -284,10 +282,8 @@
         {%- endfor -%}
       </p>
       {% endif %}
-      {# GC-PERF-PJAX-BYTES-HEAVY-001: locked cards skip pe_tech_info_source (~3KB each). #}
-      {% if variant != 'locked' %}
+      {# All techs, including future/locked entries, deserve accessible explanations. #}
       {{ pe_tech_info_source(tech) }}
-      {% endif %}
     </div>
     <div class="pe-tech-card-action">{{ pe_research_card_actions(tech, planet_id, queue_has_room) }}</div>
   </div>
@@ -868,6 +864,7 @@
         {% set pe_next_locked = rdx.locked[0] if rdx.locked else none %}
         <div class="pe-research-idle-guide">
           <p class="pe-zone-empty">{{ T("pe_research_empty", "Keine Forschung verfügbar — baue deinen Planeten weiter aus.") }}</p>
+          <p class="hint">{{ T('pe_research_locked_guide', 'Die nächste Planet-Tech ist noch gesperrt. Öffne unten „Später verfügbar“, um ihren Nutzen, die benötigte Planet-Eigenschaft und weitere Voraussetzungen zu sehen. Planet-Level und Eigenschaften entwickeln sich durch Planet-XP, Forschungen und Ereignisse.') }}</p>
           {% if pe_next_locked %}
           <div class="pe-research-next-unlock">
             <strong class="pe-research-next-name">{{ T(pe_next_locked.label_key, pe_next_locked.tech_key) }}</strong>
@@ -943,6 +940,14 @@
             </div>
             <p class="pe-goal-supply-values gc-mono">{{ action.deficit.received|int }} / {{ action.deficit.required|int }}</p>
           </div>
+          {% elif action.priority == 'economy' and action.deficit %}
+          <details class="pe-economy-explanation">
+            <summary>{{ T('pe_economy_help_open', 'Warum blockiert das meinen Planeten? Was kann ich tun?') }}</summary>
+            <p>{{ T('pe_economy_help_intro', 'Eine Produktionskette benötigt mehr von dieser Ressource, als aktuell geliefert wird. Dadurch entsteht ein Versorgungsengpass.') }}</p>
+            <p>{{ T('pe_economy_help_numbers', 'Geliefert / benötigt zeigt die aktuelle Versorgung im Verhältnis zum Bedarf. 100 % bedeutet: Der gemeldete Bedarf ist gedeckt.') }}</p>
+            <p>{{ T('pe_economy_help_action', 'Öffne Wirtschaft: Prüfe die betroffene Produktionskette, ihre Eingangsressourcen und Handelsrouten. Steigere die Zuführung oder reduziere vorübergehend den Verbrauch.') }}</p>
+            <p><a href="/empire">{{ T('pe_economy_help_link', 'Wirtschaft und Produktion ansehen →') }}</a></p>
+          </details>
           {% elif action.priority == 'explore' %}
           <button type="button"
                   class="pe-goal-benefits-btn pe-info-trigger"
