@@ -588,8 +588,14 @@ def map_planet_research_queue_to_card_jobs(
         if target_level is not None:
             job["current_level"] = max(0, int(target_level) - 1)
         # Only a persisted job that has not reached its finish time can be
-        # cancelled (a due job is completed server-side, never refunded).
-        job["cancellable"] = bool(_safe_int(raw.get("id"), 0) > 0 and finish > ts)
+        # cancelled (a due job is completed server-side, never refunded). Use
+        # the same epsilon as finish_planet_research_jobs so the button never
+        # outlives the server's notion of "due".
+        from .queue_poll import DUE_TIME_EPSILON_SEC
+
+        job["cancellable"] = bool(
+            _safe_int(raw.get("id"), 0) > 0 and finish > ts + float(DUE_TIME_EPSILON_SEC)
+        )
         out.append(job)
     return reconcile_card_queue_jobs(out, now=ts)
 
