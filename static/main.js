@@ -16708,7 +16708,8 @@
           GC.applyActionState(res, "companion_mission_sync");
         }
         if (res && res.ok) {
-          const companions = res.state?.overview?.status?.companions;
+          // Fastlane mission responses carry `companions` (no full `state`, #362).
+          const companions = res.state?.overview?.status?.companions || res.companions;
           if (companions) applyCompanionState(companions);
           // Without companions, do not re-render from stale hotspot attrs.
         }
@@ -16880,7 +16881,7 @@
           GC.applyActionState(res, res.ok ? "companion_mission" : "companion_mission_error");
         }
         if (res && res.ok) {
-          const companions = res.state?.overview?.status?.companions;
+          const companions = res.state?.overview?.status?.companions || res.companions;
           if (companions) applyCompanionState(companions);
           if (action === "claim") {
             const failed = res.mission && res.mission.success === false;

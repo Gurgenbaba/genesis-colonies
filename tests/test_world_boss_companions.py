@@ -488,15 +488,34 @@ def test_admin_gets_max_titan_slots_without_purchase(wb_db):
         conn.close()
 
 
-def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
-    """Mission POST returns the authoritative mission payload (fastlane, #362).
+class _FixedRoll:
+    """Stand-in for random.Random() inside the mission resolution."""
 
-    The generic game-state is intentionally not rebuilt for these responses; the client
-    works from ``mission`` and closes/re-renders its popover without ``state``.
+    def __init__(self, value: float) -> None:
+        self._value = value
+
+    def random(self) -> float:
+        return self._value
+
+
+def _companion_slot(body: dict, boss_key: str = "planet_eater") -> dict:
+    companions = body.get("companions")
+    assert companions and companions.get("ready"), body.keys()
+    return next(s for s in companions["slots"] if s["boss_key"] == boss_key)
+
+
+def _run_mission_roundtrip(wb_db, monkeypatch, *, roll: float, expect_success: bool) -> None:
+    """start -> (expire) -> sync -> claim through the HTTP API with a fixed outcome roll.
+
+    The patrol variant fails 10% of the time; the roll is pinned so the test never flakes.
+    The mission responses are a fastlane (#362: no full game-state), so the immediate
+    overview update comes from the ``companions`` field, which the client applies.
     """
     import importlib
+    from unittest.mock import patch
 
     import app as app_module
+    import game.world_boss_companions as wbc
 
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
@@ -507,12 +526,7 @@ def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
         begin_write_transaction(conn)
         event = _spawn_phase3(conn, "planet_eater")
         credit(uid, CATCH_COST_SEC, "test", conn=conn)
-
-        class _Ok:
-            def random(self):
-                return 0.0
-
-        tame = attempt_tame(uid, int(event["id"]), conn=conn, rng=_Ok())
+        tame = attempt_tame(uid, int(event["id"]), conn=conn, rng=_FixedRoll(0.0))
         assert tame["ok"] and tame["success"]
         commit(conn)
     finally:
@@ -522,30 +536,35 @@ def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
     with client.session_transaction() as sess:
         sess["user_id"] = uid
 
-    start = client.post(
-        "/api/world-boss/companion/mission",
-        json={
-            "action": "start",
-            "boss_key": "planet_eater",
-            "variant_key": "patrol",
-            "request_id": "cmp-start-1",
-        },
-        headers={
-            "Accept": "application/json",
-            "X-Request-Id": "cmp-start-1",
-            "X-GC-Page": "overview",
-        },
-    )
+    def post(payload: dict, request_id: str | None = None):
+        headers = {"Accept": "application/json", "X-GC-Page": "overview"}
+        if request_id:
+            headers["X-Request-Id"] = request_id
+        return client.post("/api/world-boss/companion/mission", json=payload, headers=headers)
+
+    start_req = {
+        "action": "start",
+        "boss_key": "planet_eater",
+        "variant_key": "patrol",
+        "request_id": "cmp-start-1",
+    }
+    start = post(start_req, "cmp-start-1")
     assert start.status_code == 200, start.get_data(as_text=True)
     start_body = start.get_json()
     assert start_body["ok"] is True
     started = start_body["mission"]
-    assert started["ok"] is True
-    assert started["boss_key"] == "planet_eater"
-    assert started["variant_key"] == "patrol"
+    assert started["ok"] is True and started["variant_key"] == "patrol"
     assert started["duration_sec"] > 0 and started["reward_tokens"] > 0
     assert started["mission"]["status"] == "away"
-    assert started["mission"]["ends_at"] > started["mission"]["started_at"]
+    # Immediate UI contract: the slot is marked away and cannot start another mission.
+    slot = _companion_slot(start_body)
+    assert slot["status"] == "away"
+    assert slot["mission"]["can_start"] is False
+
+    # Replaying the same request id must not start a second mission and still returns fresh slots.
+    replay = post(start_req, "cmp-start-1")
+    assert replay.status_code == 200
+    assert _companion_slot(replay.get_json())["status"] == "away"
 
     conn = db()
     try:
@@ -558,38 +577,50 @@ def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
     finally:
         conn.close()
 
-    sync = client.post(
-        "/api/world-boss/companion/mission",
-        json={"action": "sync", "boss_key": "planet_eater"},
-        headers={"Accept": "application/json", "X-GC-Page": "overview"},
-    )
+    with patch.object(wbc.random, "Random", return_value=_FixedRoll(roll)):
+        sync = post({"action": "sync", "boss_key": "planet_eater"})
     assert sync.status_code == 200, sync.get_data(as_text=True)
     sync_body = sync.get_json()
     assert sync_body["ok"] is True
     synced = sync_body["mission"]
-    assert synced["ok"] is True
-    assert synced["status"] == "ready"  # the expired mission is now claimable
-    assert synced["mission"]["status"] == "ready"
-    assert synced["mission"]["outcome"] in ("success", "failed")
+    assert synced["status"] == "ready"
+    assert synced["mission"]["outcome"] == ("success" if expect_success else "fail")
+    sync_slot = _companion_slot(sync_body)
+    assert sync_slot["status"] == "ready"
+    assert sync_slot["mission"]["can_claim"] is True
 
-    claim = client.post(
-        "/api/world-boss/companion/mission",
-        json={
-            "action": "claim",
-            "boss_key": "planet_eater",
-            "request_id": "cmp-claim-1",
-        },
-        headers={
-            "Accept": "application/json",
-            "X-Request-Id": "cmp-claim-1",
-            "X-GC-Page": "overview",
-        },
+    claim = post(
+        {"action": "claim", "boss_key": "planet_eater", "request_id": "cmp-claim-1"},
+        "cmp-claim-1",
     )
     assert claim.status_code == 200, claim.get_data(as_text=True)
     claim_body = claim.get_json()
     assert claim_body["ok"] is True
     claimed = claim_body["mission"]
-    assert claimed["ok"] is True
-    assert claimed["success"] is True and claimed["tokens_granted"] > 0
-    assert claimed["mission"]["status"] == "idle"  # slot is free for the next mission
-    assert claimed["mission"]["request_id"] is None
+    assert claimed["success"] is expect_success
+    if expect_success:
+        assert claimed["tokens_granted"] > 0
+    else:
+        assert claimed["tokens_granted"] == 0
+    assert claimed["mission"]["status"] == "idle"
+    claim_slot = _companion_slot(claim_body)
+    assert claim_slot["status"] == "idle"
+    assert claim_slot["mission"]["can_start"] is True
+
+
+def test_api_companion_mission_success_roundtrip_updates_overview(wb_db, monkeypatch):
+    _run_mission_roundtrip(wb_db, monkeypatch, roll=0.99, expect_success=True)
+
+
+def test_api_companion_mission_failed_roundtrip_updates_overview(wb_db, monkeypatch):
+    _run_mission_roundtrip(wb_db, monkeypatch, roll=0.0, expect_success=False)
+
+
+def test_overview_client_applies_companions_from_fastlane_responses():
+    """Mission responses carry `companions` (not `state`); every handler must consume it."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+    assert js.count("res.state?.overview?.status?.companions || res.companions") == 2
+    # the polling sync handler (start/claim handler and watcher) must not rely on `state` only
+    assert "const companions = res.state?.overview?.status?.companions;" not in js
