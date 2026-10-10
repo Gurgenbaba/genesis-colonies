@@ -55,7 +55,10 @@ def test_gc838_queue_panel_refresh_coalesced():
         "\n  }\n", 1
     )[0]
     assert "_queuePanelRefreshInFlight" in canonical
-    assert "if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight" in canonical
+    # Single-flight guard: a second request shares the running fetch unless it is an
+    # exclusive (planet-switch) refresh, which must not coalesce onto a pre-switch fetch.
+    assert "if (_queuePanelRefreshInFlight && !exclusive)" in canonical
+    assert "return _queuePanelRefreshInFlight" in canonical
 
 
 def test_gc838_no_double_refresh_on_timer_zero():
@@ -99,7 +102,9 @@ def test_gc838_production_completion_uses_game_state_not_pjax():
     canonical_refresh = src.split("async function forceCanonicalGameStateRefresh(reason, opts)")[1].split(
         "\n  }\n", 1
     )[0]
-    assert 'GC.fetchJSON("/api/game-state' in canonical_refresh
+    # The include_panel fetch is built as panelUrl (page/tab scoped) and sent via GC.fetchJSON.
+    assert '"/api/game-state?include_panel=1"' in canonical_refresh
+    assert "GC.fetchJSON(panelUrl" in canonical_refresh
 
 
 def test_gc838_finish_refresh_debounce_tightened():
