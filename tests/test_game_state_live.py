@@ -603,6 +603,7 @@ def test_logic_normalize_queue_job_timer_fields():
     assert fields["next_countdown_at"] == int(ts) + 30
 
 
+@pytest.mark.usefixtures("game_client")  # migrated, isolated DB (was the shared default DB)
 def test_build_queue_payload_includes_remaining_seconds():
     """GC-642: queue items expose canonical remaining_seconds for live header timers."""
     from game.buildings import get_build_queue_status_for_planet
@@ -628,6 +629,7 @@ def test_build_queue_payload_includes_remaining_seconds():
     assert isinstance(payload.get("card_jobs_by_owner"), dict)
 
 
+@pytest.mark.usefixtures("game_client")  # migrated, isolated DB (was the shared default DB)
 def test_global_queue_hud_payload_includes_jobs():
     """GC-643: lightweight game-state exposes unified queue HUD slice."""
     from game.live_state import global_queue_hud_for_game_state

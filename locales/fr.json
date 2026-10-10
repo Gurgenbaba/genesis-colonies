@@ -9114,6 +9114,8 @@
   "landing_server_choose": "Choisir un serveur",
   "auth_universe_dev_note": "Progression DEV existante",
   "auth_universe_uni1_note": "Nouveau départ · progression séparée",
+  "auth_universe_choice_label": "Se connecter à",
+  "auth_universe_last_played": "dernier joué",
   "nodebuster_title": "Ascension",
   "nodebuster_run_level": "Niveau de run {level}",
   "nodebuster_ap_short": "PA",
