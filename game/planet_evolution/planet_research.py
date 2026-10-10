@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
 from ..models import (
@@ -297,6 +297,11 @@ def cancel_planet_research_job(
         lock_planet_for_update(conn, int(planet_id))
         cur = conn.cursor()
         now = time.time()
+        # A job that is already due must complete, not be cancelled: a cancel
+        # would delete it with a 0% refund and the player would lose the tech.
+        # Settle due work under the planet lock first; the lookup below then
+        # reports it as gone.
+        finish_planet_research_jobs(conn, int(planet_id), now)
         cur.execute(
             """
             SELECT id, tech_key, target_level, start_at, finish_at
@@ -308,7 +313,8 @@ def cancel_planet_research_job(
         )
         row = cur.fetchone()
         if not row:
-            rollback(conn)
+            # commit keeps any jobs that were just completed above
+            commit(conn)
             return False, "job_not_found"
         from ..queue_refund import refund_planet_evolution_research_job
 

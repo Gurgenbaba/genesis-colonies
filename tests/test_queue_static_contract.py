@@ -54,7 +54,11 @@ def test_research_queue_reschedule_wired_on_enqueue_and_cancel():
 
 def test_server_queue_remaining_non_negative():
     buildings = _read("game/buildings.py")
-    assert re.search(r"remaining\s*=\s*max\s*\(\s*0\s*,", buildings)
+    # Either clamp form keeps the value non-negative: max(0, ...) or
+    # "max(1, ...) if finish_time > now else 0" (a finished job reports 0, never < 0).
+    assert re.search(r"remaining\s*=\s*max\s*\(\s*0\s*,", buildings) or re.search(
+        r"remaining\s*=\s*max\s*\(.*\)\s*if\s+finish_time\s*>\s*now\s+else\s+0", buildings
+    )
     research = _read("game/research.py")
     assert re.search(r"remain\s*=\s*max\s*\(\s*0\s*,", research)
 
@@ -62,9 +66,18 @@ def test_server_queue_remaining_non_negative():
 def test_single_game_state_poll_entrypoint_in_static():
     """Spiel-State nur über main.js — kein paralleles /api/game-state in Modul-JS."""
     offenders: list[str] = []
+    # Not polls: gc.js only lists the route in its request-dedupe config map, and the
+    # timekeeper reconcile makes a single scoped delta request (?panel_delta_buildings=)
+    # after an instant build finish.
+    allowed = {
+        "static/main.js",
+        "static/admin.js",
+        "static/js/core/gc.js",
+        "static/js/core/timekeeper_building_instant_reconcile.js",
+    }
     for path in sorted((ROOT / "static").rglob("*.js")):
         rel = path.relative_to(ROOT).as_posix()
-        if rel in ("static/main.js", "static/admin.js"):
+        if rel in allowed:
             continue
         text = path.read_text(encoding="utf-8")
         if "/api/game-state" in text or "/api/status" in text:

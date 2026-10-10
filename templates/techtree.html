@@ -162,6 +162,31 @@
                     <p class="tech-card-desc">{{ T(item.description_key) }}</p>
                   {% endif %}
 
+                  {% if item.choice_branches is defined and item.choice_branches %}
+                    <div class="tech-card-reqs tech-card-choice-paths">
+                      <span class="tech-card-reqs-label">{{ T("techtree_choice_paths", "Folgepfade") }}</span>
+                      <ul class="tech-req-list">
+                        {% for branch in item.choice_branches %}
+                          <li class="{% if branch.selected %}tech-req-met{% endif %}">
+                            <strong>{{ T(branch.label_key, branch.choice_key) }}</strong>
+                            {% if branch.unlock_label_keys %}
+                              → {% for unlock_key in branch.unlock_label_keys %}{{ T(unlock_key, unlock_key) }}{% if not loop.last %} + {% endif %}{% endfor %}
+                            {% endif %}
+                            {% if branch.selected %}
+                              <span class="tech-req-current">({{ T("techtree_choice_selected", "gewählt") }})</span>
+                            {% endif %}
+                          </li>
+                        {% endfor %}
+                      </ul>
+                      {% if item.choice_merge_label_key %}
+                        <div class="tech-card-effect">
+                          <span class="tech-card-reqs-label">{{ T("techtree_choice_merge", "Beide Pfade führen danach zu") }}</span>
+                          <span class="tech-card-effect-val">{{ T(item.choice_merge_label_key, item.choice_merge_label_key) }}</span>
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+
                   {% if item.effect_preview is defined and item.effect_preview %}
                     {% set ep = item.effect_preview %}
                     {% set ep_metric = T(ep.effect_metric_key, T("buildings_effect_bonus", "Bonus")) %}

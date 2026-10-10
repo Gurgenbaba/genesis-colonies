@@ -4,6 +4,7 @@ Gebäude-Logik für Genesis Colonies.
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from dataclasses import dataclass, field
@@ -22,6 +23,8 @@ from .models import (
     get_planet_owner_id,
 )
 from .db import begin_write_transaction, commit, rollback, lock_planet_for_update
+
+logger = logging.getLogger(__name__)
 from .research import RESEARCH_TECHS
 from .effects import EffectResolver, get_effect_resolver
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
@@ -2475,7 +2478,7 @@ def get_build_queue_status_for_planet(
             finish_time = float(r["finish_time"])
             start_time = float(r["start_time"] or finish_time)
 
-            remaining = max(0, int(finish_time - now))
+            remaining = max(1, int(math.ceil(finish_time - now))) if finish_time > now else 0
             total = max(1, int(finish_time - start_time))
 
             if first_remaining is None or remaining < first_remaining:

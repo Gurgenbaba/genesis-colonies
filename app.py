@@ -8625,6 +8625,26 @@ def api_world_boss_catch():
     return jsonify(body), status
 
 
+def _companion_overview_snapshot(player_id: int) -> Optional[Dict[str, Any]]:
+    """Companion slots for the overview landscape only (same builder as the overview page).
+
+    The mission responses are a fastlane (#362: no full game-state rebuild), but the overview
+    client still needs the refreshed slots to mark a companion away/ready/idle immediately,
+    and the regular game-state poll does not carry them.
+    """
+    try:
+        from game.world_boss_companions import build_overview_companions
+
+        conn = db()
+        try:
+            return build_overview_companions(int(player_id), conn=conn)
+        finally:
+            conn.close()
+    except Exception:
+        app.logger.exception("companion overview snapshot failed player_id=%s", player_id)
+        return None
+
+
 @app.route("/api/world-boss/companion/mission", methods=["POST"])
 @require_login_api
 def api_world_boss_companion_mission():
@@ -8637,7 +8657,12 @@ def api_world_boss_companion_mission():
     if request_id:
         cached = get_idempotent_action(int(player_id), request_id)
         if cached is not None:
-            return jsonify(cached)
+            replay = dict(cached)
+            if replay.get("ok"):
+                snapshot = _companion_overview_snapshot(int(player_id))
+                if snapshot is not None:
+                    replay["companions"] = snapshot
+            return jsonify(replay)
 
     boss_key = str(data.get("boss_key") or "").strip()
     action = str(data.get("action") or "start").strip().lower()
@@ -8691,6 +8716,11 @@ def api_world_boss_companion_mission():
     status = 200 if result.get("ok") else 400
     if request_id and result.get("ok") and action != "sync":
         save_idempotent_action(int(player_id), request_id, body)
+    if result.get("ok"):
+        # Fresh snapshot (not stored with the idempotent body, so a replay never serves a stale one).
+        snapshot = _companion_overview_snapshot(int(player_id))
+        if snapshot is not None:
+            body["companions"] = snapshot
     return jsonify(body), status
 
 
@@ -13242,7 +13272,7 @@ def api_dev_combat_simulate_spy():
             spy_metadata=spy_meta,
         )
     except Exception:
-        current_app.logger.exception("dev combat simulate-spy failed user_id=%s", user_id)
+        app.logger.exception("dev combat simulate-spy failed user_id=%s", user_id)
         return jsonify(fleet_err("combat_sim_failed")), 500
 
     return jsonify(fleet_ok({"metadata": metadata, "simulated": True}))

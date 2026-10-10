@@ -7,6 +7,7 @@ Does not mutate DB, schedule jobs, or replace queue_engine / *_for_client owners
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -59,6 +60,14 @@ def _safe_float(value: Any) -> float:
     if parsed != parsed:  # NaN
         return 0.0
     return parsed
+
+
+def _remaining_seconds_until(finish_at: Any, now: float) -> int:
+    """Keep a future queue job visible until its actual finish timestamp."""
+    finish = _safe_float(finish_at)
+    if finish <= 0 or finish <= float(now):
+        return 0
+    return max(1, int(math.ceil(finish - float(now))))
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -120,7 +129,7 @@ def normalize_card_queue_job(
     if remaining_seconds is not None:
         remaining = max(0, int(remaining_seconds))
     elif finish > 0:
-        remaining = max(0, int(finish - ts))
+        remaining = _remaining_seconds_until(finish, ts)
     else:
         remaining = 0
 
@@ -258,7 +267,7 @@ def _apply_queued_wait_remaining(job: Dict[str, Any], *, finish_at: Any, now: fl
         return
     finish_f = _safe_float(finish_at)
     if finish_f > 0:
-        job["remaining_seconds"] = max(0, int(finish_f - now))
+        job["remaining_seconds"] = _remaining_seconds_until(finish_f, now)
     job["progress_pct"] = 0
 
 
@@ -295,7 +304,7 @@ def reconcile_card_queue_jobs(
         finish = _safe_float(job.get("finish_at"))
         if is_active:
             if finish > 0:
-                rem = max(0, int(finish - ts))
+                rem = _remaining_seconds_until(finish, ts)
             else:
                 rem = max(0, _safe_int(job.get("remaining_seconds"), 0))
             job["remaining_seconds"] = rem
@@ -445,7 +454,7 @@ def map_troop_queue_to_card_jobs(
             order_total = max(1, int(finish - start))
         remaining = _safe_int(raw.get("remaining_seconds"), 0)
         if remaining <= 0 and finish > ts:
-            remaining = max(0, int(finish - ts))
+            remaining = _remaining_seconds_until(finish, ts)
         job = normalize_card_queue_job(
             owner_type=OWNER_TROOPS,
             owner_key=owner_key,
@@ -578,6 +587,15 @@ def map_planet_research_queue_to_card_jobs(
         _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         if target_level is not None:
             job["current_level"] = max(0, int(target_level) - 1)
+        # Only a persisted job that has not reached its finish time can be
+        # cancelled (a due job is completed server-side, never refunded). Use
+        # the same epsilon as finish_planet_research_jobs so the button never
+        # outlives the server's notion of "due".
+        from .queue_poll import DUE_TIME_EPSILON_SEC
+
+        job["cancellable"] = bool(
+            _safe_int(raw.get("id"), 0) > 0 and finish > ts + float(DUE_TIME_EPSILON_SEC)
+        )
         out.append(job)
     return reconcile_card_queue_jobs(out, now=ts)
 

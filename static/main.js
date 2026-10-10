@@ -3614,6 +3614,7 @@
       unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
       unknown_building: t("msg_unknown_building", "Unbekanntes Gebäude."),
       not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
+      job_not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
       max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
       level_too_low: t("buildings_mine_evo_err_level", "Mine noch nicht bereit für Ascension."),
@@ -8946,7 +8947,7 @@
       block.appendChild(bar);
     }
 
-    if (jobId > 0 && domain !== "ascension") {
+    if (jobId > 0 && domain !== "ascension" && (domain !== "planet_research" || queueJob.cancellable === true)) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
       cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel";
@@ -11479,11 +11480,68 @@
     };
   }
 
+  let _buildingsAffordabilityRefreshInFlight = false;
+  let _buildingsAffordabilityRefreshLastAt = 0;
+  const BUILDINGS_AFFORDABILITY_REFRESH_COOLDOWN_MS = 1500;
+
+  function _buildingAffordabilityReqItems(button) {
+    if (!button) return [];
+    const raw = String(button.getAttribute("data-req-items") || "").trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  function maybeRefreshMountedBuildingAffordability(projected) {
+    if (!projected || !document.querySelector(".buildings-prog-list")) return;
+    const amounts = {
+      metal: gameplayBigInt(projected.metal),
+      crystal: gameplayBigInt(projected.crystal),
+      fuel_cells: gameplayBigInt(projected.fuelCells),
+    };
+    let crossedServerThreshold = false;
+    document
+      .querySelectorAll(".buildings-prog-list .gc-req-hover-trigger[data-action-state='warn'][data-req-items]")
+      .forEach((button) => {
+        if (crossedServerThreshold) return;
+        const items = _buildingAffordabilityReqItems(button);
+        if (!items.length) return;
+        const resourceItems = items.filter((req) => String(req?.kind || req?.type || "") === "resource");
+        // Do not guess building/research requirements in the browser. Only use
+        // server-supplied resource thresholds as a signal to request fresh state.
+        if (!resourceItems.length || resourceItems.length !== items.length) return;
+        crossedServerThreshold = resourceItems.every((req) => {
+          const key = String(req?.key || "");
+          if (!(key in amounts)) return false;
+          const need = gameplayBigInt(req?.need ?? req?.required ?? 0);
+          return amounts[key] >= need;
+        });
+      });
+
+    if (!crossedServerThreshold || _buildingsAffordabilityRefreshInFlight) return;
+    const nowMs = Date.now();
+    if (nowMs - _buildingsAffordabilityRefreshLastAt < BUILDINGS_AFFORDABILITY_REFRESH_COOLDOWN_MS) return;
+    _buildingsAffordabilityRefreshLastAt = nowMs;
+    _buildingsAffordabilityRefreshInFlight = true;
+    Promise.resolve(
+      forceCanonicalGameStateRefresh("buildings_affordability", { forceResourceBar: false })
+    )
+      .catch((err) => console.debug("[GC] buildings affordability refresh failed", err))
+      .finally(() => {
+        _buildingsAffordabilityRefreshInFlight = false;
+      });
+  }
+
   function tickLiveResourceBar() {
     if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId) return;
     const projected = projectLiveResourceAmounts(getApproxServerNow());
     if (!projected) return;
     patchShellHudLiveResources(projected.metal, projected.crystal, projected.fuelCells);
+    maybeRefreshMountedBuildingAffordability(projected);
     tickBoostHudCountdown();
   }
 
@@ -16650,7 +16708,8 @@
           GC.applyActionState(res, "companion_mission_sync");
         }
         if (res && res.ok) {
-          const companions = res.state?.overview?.status?.companions;
+          // Fastlane mission responses carry `companions` (no full `state`, #362).
+          const companions = res.state?.overview?.status?.companions || res.companions;
           if (companions) applyCompanionState(companions);
           // Without companions, do not re-render from stale hotspot attrs.
         }
@@ -16822,7 +16881,7 @@
           GC.applyActionState(res, res.ok ? "companion_mission" : "companion_mission_error");
         }
         if (res && res.ok) {
-          const companions = res.state?.overview?.status?.companions;
+          const companions = res.state?.overview?.status?.companions || res.companions;
           if (companions) applyCompanionState(companions);
           if (action === "claim") {
             const failed = res.mission && res.mission.success === false;
@@ -41223,18 +41282,23 @@
       });
     });
   };
+  // Shared by bindWorldBossAttackCooldownUnlock() and initWorldBossPage(): the live
+  // poll tick lives in the page module and used to reference a binder-local helper
+  // (ReferenceError, so the poll never rescheduled itself).
+  function buildWorldBossLivePollUrl(root) {
+    const ids = Array.from(root.querySelectorAll(".gc-world-boss-card[data-wb-event-id]"))
+      .map((card) => Math.trunc(Number(card.getAttribute("data-wb-event-id") || 0)))
+      .filter((id) => id > 0)
+      .slice(0, 8);
+    const params = new URLSearchParams({ live: "1" });
+    if (ids.length) params.set("event_ids", ids.join(","));
+    return `/api/world-boss?${params.toString()}`;
+  }
+
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
 
-    const wbLivePollUrl = () => {
-      const ids = Array.from(root.querySelectorAll(".gc-world-boss-card[data-wb-event-id]"))
-        .map((card) => Math.trunc(Number(card.getAttribute("data-wb-event-id") || 0)))
-        .filter((id) => id > 0)
-        .slice(0, 8);
-      const params = new URLSearchParams({ live: "1" });
-      if (ids.length) params.set("event_ids", ids.join(","));
-      return `/api/world-boss?${params.toString()}`;
-    };
+    const wbLivePollUrl = () => buildWorldBossLivePollUrl(root);
 
     const wbFlushAutoUntilFired = (card, { attemptsLeft = 1 } = {}) => {
       if (!card || !card.isConnected || attemptsLeft <= 0) return;
@@ -42167,6 +42231,8 @@
       return false;
     };
     GC.consumeWorldBossAutoPresentation = wbConsumeAutoPresentation;
+
+    const wbLivePollUrl = () => buildWorldBossLivePollUrl(root);
 
     // Live HP + auto FX while on the World Boss page (own strikes and other players).
     const wbLivePollTick = () => {
@@ -45371,6 +45437,40 @@
         } finally {
           setProgressionActionBusy(researchCancelBtn, false);
         }
+      }
+
+      const planetResearchCancelBtn = e.target.closest("[data-planet-research-cancel-id]");
+      if (planetResearchCancelBtn) {
+        e.preventDefault();
+        if (planetResearchCancelBtn.dataset.busy === "1") return;
+        setProgressionActionBusy(planetResearchCancelBtn, true);
+        try {
+          const planetId = Math.floor(
+            Number(
+              GC.lastState?.active_planet_id ||
+                (typeof GC.getDomPlanetId === "function" ? GC.getDomPlanetId() : 0) ||
+                document.querySelector(".planet-evolution-page")?.dataset?.planetId ||
+                0
+            )
+          );
+          const jobId = Number(planetResearchCancelBtn.dataset.planetResearchCancelId || 0);
+          if (!(planetId > 0) || !(jobId > 0)) return;
+          const json = await GC.fetchGameAction(`/api/planets/${planetId}/research/cancel`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ job_id: jobId }),
+          });
+          applyActionState(json, json.ok ? "planet_research_cancel_success" : "planet_research_cancel_error");
+          if (!json.ok) {
+            showNotify(mapActionError(json.reason, json.payload), "error");
+          }
+        } catch (err) {
+          console.error("Planet research cancel AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          setProgressionActionBusy(planetResearchCancelBtn, false);
+        }
+        return;
       }
     });
   }

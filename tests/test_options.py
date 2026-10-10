@@ -654,3 +654,13 @@ def test_orphan_fleet_movements_do_not_block_account_safety(temp_db):
     active_remaining = conn.execute("\n        SELECT COUNT(*) AS c FROM fleet_movements\n        WHERE player_id = ? AND status IN ('outbound', 'holding', 'returning');\n        ", (pid,)).fetchone()['c']
     conn.close()
     assert int(active_remaining) == 0
+
+
+def test_options_module_bootstraps_account_safety_after_export():
+    """Hard /options loads main.js before options.js; the module must self-init."""
+    options_js = open(ROOT / 'static' / 'js' / 'options.js', encoding='utf-8').read()
+    export = 'GC.initOptionsAccountSafety = bindOptionsAccountSafety;'
+    assert export in options_js
+    tail = options_js.split(export, 1)[1]
+    assert 'document.getElementById("options-page")' in tail
+    assert 'initOptionsPage();' in tail

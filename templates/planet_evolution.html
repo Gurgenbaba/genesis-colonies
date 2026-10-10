@@ -2,6 +2,20 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_prog_identity with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer, render_timekeeper_apply_btn with context %}
 
+{% macro pe_player_guide(topic, benefit, requirement, next_step) %}
+<details class="pe-compact-details pe-player-guide" data-pe-guide="{{ topic }}">
+  <summary class="pe-compact-details-summary">{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }} · {{ topic }}</summary>
+  <div class="pe-zone-body">
+    <div class="pe-guide-grid">
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_tech_info_summary_label', 'Was ist das?') }}</span><span class="pe-guide-value">{{ topic }}</span></div>
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_tech_info_effect_label', 'Was bringt es?') }}</span><span class="pe-guide-value">{{ benefit }}</span></div>
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_research_missing', 'Was wird benötigt?') }}</span><span class="pe-guide-value">{{ requirement }}</span></div>
+      <div class="pe-guide-tile"><span class="pe-guide-label">{{ T('pe_next_step', 'Was kommt als Nächstes?') }}</span><span class="pe-guide-value">{{ next_step }}</span></div>
+    </div>
+  </div>
+</details>
+{% endmacro %}
+
 {% macro pe_history_item_label(item) -%}
   {% set tk = item.title_key|default('') %}
   {% set et = item.event_type|default('') %}
@@ -252,13 +266,11 @@
     <div class="pe-tech-card-info">
       <div class="pe-tech-card-name-row">
         <h4 class="pe-tech-card-name">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</h4>
-        {% if variant != 'locked' %}
         <button type="button"
                 class="pe-tech-info-btn pe-info-trigger"
                 aria-label="{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }}"
                 aria-expanded="false"
                 aria-controls="pe-tech-info-{{ tech.tech_key }}">?</button>
-        {% endif %}
       </div>
       <p class="pe-tech-card-meta gc-mono">
         {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }} · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
@@ -284,10 +296,8 @@
         {%- endfor -%}
       </p>
       {% endif %}
-      {# GC-PERF-PJAX-BYTES-HEAVY-001: locked cards skip pe_tech_info_source (~3KB each). #}
-      {% if variant != 'locked' %}
+      {# All techs, including future/locked entries, deserve accessible explanations. #}
       {{ pe_tech_info_source(tech) }}
-      {% endif %}
     </div>
     <div class="pe-tech-card-action">{{ pe_research_card_actions(tech, planet_id, queue_has_room) }}</div>
   </div>
@@ -328,6 +338,9 @@
       {{ render_timekeeper_apply_btn(qj.owner_type|default('planet_research'), qj) }}
       {{ render_card_queue_timer(qj, qj.owner_type|default('planet_research'), 'planet_evolution') }}
     </div>
+    {% if qj.owner_type|default('planet_research') == 'planet_research' and qj.cancellable|default(false) and qj.job_id|int > 0 %}
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel" data-planet-research-cancel-id="{{ qj.job_id|int }}">{{ T('action_cancel', 'Abbrechen') }}</button>
+    {% endif %}
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"
@@ -510,6 +523,12 @@
     {% endfor %}
   {% endif %}
 
+<style>
+.pe-command-focus{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr) auto;gap:12px;align-items:center;margin:10px 0 14px;padding:12px 16px;border:1px solid rgba(119,210,231,.24);border-radius:var(--gc-radius-xs);background:linear-gradient(110deg,rgba(41,117,151,.18),rgba(10,25,44,.24))}
+.pe-command-focus>div{display:flex;flex-direction:column;gap:4px;min-width:0}.pe-command-focus small,.pe-guide-label{font-size:.7rem;letter-spacing:.07em;text-transform:uppercase;opacity:.75}.pe-command-focus strong{font-size:.93rem;line-height:1.3}.pe-command-focus span{font-size:.8rem;opacity:.8;overflow-wrap:anywhere}
+.pe-player-guide{margin:9px 0;border-radius:var(--gc-radius-xs);max-width:100%}.pe-player-guide>.pe-compact-details-summary{font-size:.78rem;min-height:34px;cursor:pointer}.pe-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.pe-guide-tile{padding:10px;border:1px solid rgba(117,198,219,.2);border-radius:var(--gc-radius-xs);background:rgba(49,115,149,.09);min-width:0;overflow-wrap:anywhere;font-size:.82rem}.pe-guide-label{margin-bottom:4px}.pe-guide-value{margin:0}.pe-guide-tile:last-child{border-color:rgba(117,198,219,.4)}
+@media(max-width:850px){.pe-command-focus{grid-template-columns:minmax(0,1fr)}.pe-command-focus>a{justify-self:start}.pe-guide-grid{grid-template-columns:minmax(0,1fr)}}
+</style>
   <div class="pe-journey pe-theater">
 
     {# ── 1. HERO THEATER (Übersicht: Kopf · L/Planet/R · Fuß) ── #}
@@ -566,6 +585,11 @@
         </div>
       </header>
 
+      <div class="pe-command-focus" aria-label="{{ T('pe_card_next_step', 'Nächster Evolutionsschritt') }}">
+        <div><small>{{ T('pe_status_label', 'Status') }}</small><strong>{% if dash.warnings %}{{ T(dash.warnings[0].label_key, dash.warnings[0].key) }}{% else %}{{ T('pe_status_stable', 'Stabil') }}{% endif %}</strong></div>
+        <div><small>{{ T('pe_next_step', 'Nächster Schritt') }}</small><strong>{{ T(action.title_key, 'Planet weiterentwickeln') }}</strong><span>{{ T(action.body_key, 'Prüfe die verfügbaren Entwicklungsschritte.') }}</span></div>
+        <a class="gc-btn gc-btn-secondary gc-btn-sm" href="#pe-section-action">{{ T('pe_card_next_step', 'Zum Entwicklungsziel') }} →</a>
+      </div>
       <div class="pe-theater-stage">
         <aside class="pe-theater-rail pe-theater-rail--left" aria-label="{{ T('pe_theater_vitals_aria', 'Planetdaten') }}">
           <div class="pe-theater-vital">
@@ -659,6 +683,18 @@
           {% else %}
           <p class="pe-hero-meta-muted hint">{{ T("pe_focus_pending", "Noch kein Fokus") }}</p>
           {% endif %}
+      {{ pe_player_guide(
+        T('pe_planet_bonuses_title', 'DNA und Planet-Eigenschaften'),
+        T('pe_goal_benefits_traits', 'Eigenschaften werden im Lauf der Entwicklung sichtbar und wirksam.'),
+        T('pe_dna_unknown', 'Manche Eigenschaften sind bis zur nötigen Entwicklung verborgen.'),
+        T('pe_planet_bonuses_title', 'Prüfe die aktuellen Planet-Boni und ihre tatsächlichen Effekte.')
+      ) }}
+      {{ pe_player_guide(
+        T('pe_spec', 'Spezialisierung'),
+        T('pe_goal_benefits_level', 'Die Spezialisierung legt Entwicklungspfade und Produktionsanforderungen fest.'),
+        T('pe_goal_benefits_traits', 'Eigenschaften und Entwicklung bestimmen verfügbare Spezialisierungen.'),
+        T('pe_next_step', 'Prüfe die angezeigten Optionen und ihren konkreten Nutzen.')
+      ) }}
           {% if spec_detail.spec_key %}
           <p class="pe-hero-spec gc-mono pe-theater-spec">{{ T(spec_detail.label_key, spec_detail.spec_key) }}</p>
           {% elif ps.level >= 8 %}
@@ -839,6 +875,12 @@
     {# ── 3. PLANET-TECH + NÄCHSTES ZIEL ── #}
     <div class="pe-core-row{% if not pe_visible_tech_cards %} pe-core-row--research-idle{% endif %}">
       <section class="pe-zone pe-zone--tech gc-panel" id="pe-section-research">
+        {{ pe_player_guide(
+          T('pe_planet_research', 'Planet-Forschung'),
+          T('pe_goal_benefits_research', 'Planet-Techs geben Planet-XP und schalten Mechaniken frei.'),
+          T('pe_research_locked_guide', 'Jede Tech benötigt ihre eigenen Freischaltungen und Ressourcen. Öffne gesperrte Techs über ?.'),
+          T('pe_research_later', 'Prüfe verfügbare und später verfügbare Planet-Techs.')
+        ) }}
         <header class="pe-zone-head">
           <div class="pe-zone-head-main">
             <h3 class="pe-zone-title">{{ T("pe_planet_research", "Planet-Forschung") }}</h3>
@@ -868,6 +910,7 @@
         {% set pe_next_locked = rdx.locked[0] if rdx.locked else none %}
         <div class="pe-research-idle-guide">
           <p class="pe-zone-empty">{{ T("pe_research_empty", "Keine Forschung verfügbar — baue deinen Planeten weiter aus.") }}</p>
+          <p class="hint">{{ T('pe_research_locked_guide', 'Die nächste Planet-Tech ist noch gesperrt. Öffne unten „Später verfügbar“, um ihren Nutzen, die benötigte Planet-Eigenschaft und weitere Voraussetzungen zu sehen. Planet-Level und Eigenschaften entwickeln sich durch Planet-XP, Forschungen und Ereignisse.') }}</p>
           {% if pe_next_locked %}
           <div class="pe-research-next-unlock">
             <strong class="pe-research-next-name">{{ T(pe_next_locked.label_key, pe_next_locked.tech_key) }}</strong>
@@ -900,6 +943,18 @@
           <span class="pe-next-priority pe-next-priority-{{ action.priority or 'explore' }}">{{ T("pe_next_step", "Dein nächster Schritt") }}</span>
         </header>
         <div class="pe-goal-body">
+      {{ pe_player_guide(
+        T('pe_development_stage', 'Planet-Level und Planet-XP'),
+        T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.'),
+        T('pe_goal_benefits_research', 'Planet-Techs und weitere Planet-Aktivitäten geben Planet-XP.'),
+        T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.')
+      ) }}
+          {{ pe_player_guide(
+            T('pe_card_next_step', 'Nächster Evolutionsschritt'),
+            T(action.body_key, 'Zeigt das aktuell wichtigste Ziel dieser Kolonie.'),
+            T(action.title_key, 'Dieses Ziel hängt vom aktuellen Planetenstatus ab.'),
+            T(action.cta_label_key, 'Nutze die unten angezeigte Aktion.')
+          ) }}
       {% set crisis = dash.crisis_ux if dash.crisis_ux is defined else {} %}
       {% if crisis.active %}
       <section class="pe-crisis-clarity" aria-label="{{ T('pe_crisis_clarity_title', 'Aktive Krise') }}">
@@ -943,6 +998,44 @@
             </div>
             <p class="pe-goal-supply-values gc-mono">{{ action.deficit.received|int }} / {{ action.deficit.required|int }}</p>
           </div>
+          {% elif action.priority == 'economy' and action.deficit %}
+          {# GC-PE-SUPPLY-TRUTH: backend describes actual active chains and DB unlock requirements. #}
+          {% set source = action.deficit.supply_source if action.deficit.supply_source is defined else {} %}
+          <details class="pe-economy-explanation">
+            <summary>{{ T('pe_economy_help_open', 'Warum fehlt die Ressource? Wie bekomme ich sie?') }}</summary>
+            <p>{{ T('pe_economy_help_numbers', 'Geliefert / benötigt bedeutet verfügbare Versorgung pro Stunde gegenüber dem stündlichen Bedarf. Die Anzeige berücksichtigt aktive lokale Ketten und ankommende Handelsrouten.') }}</p>
+            {% if source.defined %}
+              {% if source.active %}
+                <p>{{ T('pe_supply_source_active', 'Die Produktionskette ist hier freigeschaltet. Reichen die gelieferten Mengen trotzdem nicht, prüfe die Eingangsressourcen und aktive Lieferungen.') }}</p>
+              {% elif source.unlock_steps %}
+                <p>{{ T('pe_supply_source_locked', 'Diese Ressource kann auf deinem Planeten noch nicht hergestellt werden. Dafür fehlen folgende Freischaltungen:') }}</p>
+                <ol class="pe-supply-unlock-steps">
+                  {% for step in source.unlock_steps %}
+                  <li>
+                    {{ T(step.label_key, pe_humanize_key(step.label_key)) }}
+                    {% if step.kind == 'building' %}{{ T('pe_supply_step_level', 'auf Stufe %(level)s', level=step.level|int) }}{% endif %}
+                  </li>
+                  {% endfor %}
+                </ol>
+              {% elif source.research_complete %}
+                <p>{{ T('pe_supply_source_inactive', 'Die erforderliche Forschung ist abgeschlossen, aber die Produktionskette ist derzeit nicht aktiv. Das ist ein Statusfehler; bitte über Support melden.') }}</p>
+              {% else %}
+                <p>{{ T('pe_supply_source_unknown', 'Diese Produktionskette ist momentan nicht aktiv. Eine direkt ausführbare Freischaltung ist für diesen Planeten nicht hinterlegt.') }}</p>
+              {% endif %}
+              {% if source.inputs %}
+              <p class="hint">{{ T('pe_supply_inputs', 'Die aktive Kette benötigt pro Stunde:') }}
+                {% for item in source.inputs %}
+                  {{ T(item.label_key, pe_humanize_key(item.label_key)) }} {{ item.amount_per_hour }}{% if not loop.last %} · {% endif %}
+                {% endfor %}
+                · {{ T('pe_supply_base_output', 'Basisproduktion') }} {{ source.base_output_per_hour }} / h
+              </p>
+              {% endif %}
+            {% else %}
+              <p>{{ T('pe_supply_no_source', 'Für diese Ressource ist aktuell keine lokale Produktionskette in den Spieldefinitionen hinterlegt. Sie lässt sich hier nicht direkt herstellen.') }}</p>
+            {% endif %}
+            <p>{{ T('pe_economy_help_action', 'Alternativ kann ein anderer eigener Planet die Ressource liefern – aber nur, wenn dort eine Produktionskette aktiv und eine Handelsroute eingerichtet ist.') }}</p>
+            <p><a href="#pe-section-research">{{ T('pe_economy_help_link', 'Planetare Forschung und Freischaltungen ansehen →') }}</a></p>
+          </details>
           {% elif action.priority == 'explore' %}
           <button type="button"
                   class="pe-goal-benefits-btn pe-info-trigger"
@@ -974,6 +1067,12 @@
           <p class="pe-goal-xp-line hint">{{ T('pe_goal_research_to_level', 'Noch %(count)s Forschungen bis Level-Up.', count=(goal_research_count|int)) }}</p>
           {% endif %}
           <div class="pe-goal-events" id="pe-section-events">
+            {{ pe_player_guide(
+              T('pe_events_status_stable', 'Planet-Ereignisse'),
+              T('pe_goal_benefits_activity', 'Ereignisse können zusätzliche Planet-XP und Veränderungen auslösen.'),
+              T('pe_event_urgent', 'Manche Ereignisse erfordern eine Entscheidung.'),
+              T('pe_event_choice_commit', 'Prüfe bei aktiven Ereignissen zuerst die angezeigten Folgen jeder Entscheidung.')
+            ) }}
             {% if ps.active_event %}
             <div class="pe-goal-event-active" id="pe-event-decision">
               <span class="pe-goal-event-chip pe-goal-event-chip--urgent">{{ T("pe_event_urgent", "Dringend") }} · {{ T(ps.active_event.label_key, ps.active_event.event_key) }}</span>
@@ -1003,13 +1102,18 @@
       </section>
     </div>
 
-    {% if ps.level >= 5 %}
     <details class="pe-compact-details pe-zone--policies" id="pe-section-policies">
       <summary class="pe-compact-details-summary">
         <span>{{ T("pe_tab_policies", "Politik") }}</span>
         <span class="pe-zone-meta">{{ (dash.policies_active or [])|length }}/{{ dash.policy_slots_max or 1 }}</span>
       </summary>
       <div class="pe-zone-body">
+        {{ pe_player_guide(
+          T('pe_tab_policies', 'Politik'),
+          T('pe_goal_benefits_level', 'Planet-Level schalten weitere Handlungsmöglichkeiten frei.'),
+          T('pe_policy_locked_level', 'Politik-Slots werden mit Planet-Leveln freigeschaltet.'),
+          T('pe_policy_activate', 'Prüfe die konkreten Effekte und wähle eine verfügbare Policy.')
+        ) }}
         {% if policy_ux.slots %}
           {% for slot in policy_ux.slots %}
           <div class="pe-policy-slot-card">
@@ -1025,6 +1129,20 @@
                 </button>
               </article>
               {% endfor %}
+              {% set locked_options = slot.options | rejectattr('eligible') | list %}
+              {% if locked_options %}
+              <details class="pe-compact-details pe-policy-locked-explain" data-pe-policy-locked>
+                <summary>{{ T('pe_research_later', 'Später verfügbar') }} ({{ locked_options|length }})</summary>
+                {% for opt in locked_options %}
+                <article class="pe-policy-option-card pe-tech-card--locked-req">
+                  <h4>{{ T(opt.label_key, pe_humanize_key(opt.policy_key)) }}</h4>
+                  {{ pe_impact_contract(opt.impact, true) }}
+                  <p class="hint">{{ T(opt.locked_reason_key, 'Aktuell gesperrt') }}</p>
+                  <p class="hint">{{ T('pe_next_step', 'Nächster Schritt') }}: {{ T(opt.locked_reason_key, 'Voraussetzungen erfüllen') }}</p>
+                </article>
+                {% endfor %}
+              </details>
+              {% endif %}
             </div>
           </div>
           {% endfor %}
@@ -1033,16 +1151,20 @@
         {% endif %}
       </div>
     </details>
-    {% endif %}
 
-    {% if ps.level >= 25 or asc.queue_count or asc.completed_key %}
     <details class="pe-compact-details pe-zone--ascension" id="pe-section-ascension">
       <summary class="pe-compact-details-summary">
         <span>{{ T("pe_card_ascension_title", "Ascension") }}</span>
         <span class="pe-zone-meta gc-mono">{{ asc.summary.count if asc.summary else 0 }}/{{ asc.summary.limit if asc.summary else 1 }}</span>
       </summary>
       <div class="pe-zone-body">
-        <p class="pe-zone-subline" id="pe-ascension-queue-compact-label" aria-live="polite">
+        {{ pe_player_guide(
+          T('pe_card_ascension_title', 'Ascension'),
+          T('pe_goal_benefits_level', 'Fortgeschrittene Entwicklung ermöglicht zusätzliche Progression.'),
+          T('pe_ascension_queue_compact_idle', 'Verfügbarkeit und Anforderungen ergeben sich aus den angezeigten Ascension-Karten.'),
+          T('pe_next_step', 'Prüfe die Effekte und Voraussetzungen der einzelnen Ascension-Karten.')
+        ) }}
+        <p class="pe-zone-subline" id="pe-ascension-queue-compact-label"' aria-live="polite">
           {% if asc.summary and asc.summary.count %}{{ T('pe_ascension_queue_compact_active', '%(count)s Ascension-Aufträge', count=(asc.summary.count|int)) }}
           {% else %}{{ T('pe_ascension_queue_compact_idle', 'Keine Ascension-Aufträge') }}{% endif %}
         </p>
@@ -1068,8 +1190,10 @@
         </div>
         {% endif %}
       </div>
+      {% if ps.level < 25 and not asc.ascensions %}
+      <p class="pe-zone-empty">{{ T('pe_card_ascension_title', 'Ascension') }}: {{ T('pe_at_level', 'Ab Stufe') }} 25</p>
+      {% endif %}
     </details>
-    {% endif %}
 
     {% if history_items %}
     <div id="pe-chronicle-modal"

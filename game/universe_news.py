@@ -327,7 +327,9 @@ def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]
     release_ts = int(release_dates.get(current_release) or 0)
     dev_commits = 0
     if release_ts:
-        for commit in commits:
+        # Same commit set as commit_count (HEAD). Counting every ref (all branches / open PR
+        # branches) here could report more "commits since release" than commits exist.
+        for commit in _collect_git_log(root, all_refs=False):
             if _date_to_ts(commit.get("date") or "") > release_ts:
                 dev_commits += 1
 
@@ -1937,12 +1939,14 @@ def sidebar_release_nav(*, conn: sqlite3.Connection | None = None) -> Dict[str, 
               AND audience = ?
               AND TRIM(COALESCE(version_tag, '')) <> ''
               AND COALESCE(category, '') <> 'EVENT'
-              AND COALESCE(source_ref, '') NOT LIKE 'world_boss:%'
-              AND COALESCE(source_ref, '') NOT LIKE 'pirate%'
+              AND COALESCE(source_ref, '') NOT LIKE ?
+              AND COALESCE(source_ref, '') NOT LIKE ?
             ORDER BY published_at DESC, id DESC
             LIMIT 500;
             """,
-            (AUDIENCE_PLAYER,),
+            # Patterns are bound, not inline: psycopg treats a literal ``%`` in the
+            # query text as a placeholder once parameters are passed (PostgreSQL 500).
+            (AUDIENCE_PLAYER, "world_boss:%", "pirate%"),
         ).fetchall()
 
         published = [

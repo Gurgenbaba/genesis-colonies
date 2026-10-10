@@ -791,8 +791,8 @@
     }
     bindBuildingsUiControls();
     if (page) {
-      setNotifySoundToggleUi("attack", readNotifySoundMode(page, "attack"));
-      setNotifySoundToggleUi("message", readNotifySoundMode(page, "message"));
+      setNotifySoundSliderUi("attack", readNotifySoundVolume(page, "attack"));
+      setNotifySoundSliderUi("message", readNotifySoundVolume(page, "message"));
       setSpyProbeInputUi(readSpyProbeCount(page));
     }
     bindResendVerification();
@@ -1236,4 +1236,12 @@
   }
 
   GC.initOptionsAccountSafety = bindOptionsAccountSafety;
+
+  // main.js is loaded before this page module. On a hard /options load its
+  // initial page lifecycle can therefore run before GC.initOptionsPage exists.
+  // Bootstrap once after every Options API/function has been exported; future
+  // PJAX inits remain owned by the central lifecycle.
+  if (document.getElementById("options-page")) {
+    initOptionsPage();
+  }
 })();

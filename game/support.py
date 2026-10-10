@@ -358,15 +358,8 @@ def list_all_tickets(admin_id: int, *, status: str | None = None) -> dict[str, A
 
 def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]:
     msg = _norm_text(message, 1200)
-    delivery = str(delivery_id or "").strip()
     if not msg:
         return _err("missing_message")
-    if (
-        len(delivery) < 8
-        or len(delivery) > 128
-        or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for ch in delivery)
-    ):
-        return _err("invalid_delivery")
     conn = db()
     try:
         if not _table_ready(conn):
@@ -433,8 +426,15 @@ def office_reply_ticket(
 ) -> dict[str, Any]:
     """Accept an authenticated Gurgenbaba Office reply without echoing it back."""
     msg = _norm_text(message, 1200)
+    delivery = str(delivery_id or "").strip()
     if not msg:
         return _err("missing_message")
+    if (
+        len(delivery) < 8
+        or len(delivery) > 128
+        or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for ch in delivery)
+    ):
+        return _err("invalid_delivery")
     universe = mail_hub_logic._env("GC_UNIVERSE_KEY", "uni1") or "uni1"
     try:
         ticket_universe, raw_ticket_id = str(external_ticket_id or "").split(":", 1)
