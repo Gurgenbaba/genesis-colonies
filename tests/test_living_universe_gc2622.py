@@ -36,6 +36,9 @@ def test_gc2622_planner_threads_target_scale_without_parallel_systems():
 
     build_result = {"ok": True, "job_id": 7, "building_type": "metal_mine", "target_level": 2, "duration": 60}
     with patch("game.auto_empire._finish_due", return_value={}), patch(
+        # the planner now checks the build queue first; the test passes a bare object() as conn
+        "game.auto_empire._queue_has_building", return_value=False
+    ), patch(
         "game.auto_empire.try_enqueue_building", return_value=build_result
     ) as enqueue:
         out = plan_passive_planet_tick(

@@ -10,14 +10,18 @@ def test_landing_has_explicit_universe_selector():
     assert 'id="landing-universes"' in text
     assert "landing_server_dev_name" in text
     assert "landing_server_uni1_name" in text
-    assert "https://www.genesis-colonies.de" in text
-    assert "https://genesis-colonies-u2-production.up.railway.app" in text
+    # The universe cards are config driven now (network directory) instead of hard-coded URLs.
+    assert "GC_NETWORK_UNIVERSES" in text
+    assert "GC_NETWORK_UNI1_URL" in text
+    assert "https://www.genesis-colonies.de" not in text
 
 
 def test_uni1_is_visible_but_locked_until_release():
     text = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8")
 
-    assert "{% set uni1_open = false %}" in text
+    # UNI1 is released: whether it is open is a deployment setting, the locked card stays
+    # available for environments where it is still closed.
+    assert "{% set uni1_open = GC_NETWORK_UNI1_OPEN %}" in text
     assert "landing-server-disabled" in text
     assert 'aria-disabled="true"' in text
     assert "landing_server_soon" in text

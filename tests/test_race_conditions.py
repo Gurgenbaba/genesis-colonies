@@ -121,6 +121,10 @@ def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "DB_PATH", db_file)
     _install_race_test_db(monkeypatch)
     models.init_db()
+    # create_user writes columns that only migrations add (e.g. users.notify_attack_sound, 131).
+    import migrate
+
+    migrate.main()
     ok, err, info = models.create_user("race_tester", "secret123")
     assert ok, err
     uid = int(info["id"])
@@ -410,8 +414,10 @@ def test_research_enqueue_recalculates_stale_follower(isolated_db):
     now = time.time()
 
     conn = models.db()
+    # Queue slots come from research_lab_ascension: max(2, lab_level // 10). Three jobs need
+    # Research Lab 30 (the old "lab 4 = 3 slots" rule no longer exists).
     conn.execute(
-        "UPDATE planet_buildings SET research_lab = 4 WHERE planet_id = ?;",
+        "UPDATE planet_buildings SET research_lab = 30 WHERE planet_id = ?;",
         (int(planet["id"]),),
     )
     conn.commit()

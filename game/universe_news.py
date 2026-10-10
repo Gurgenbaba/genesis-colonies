@@ -327,7 +327,9 @@ def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]
     release_ts = int(release_dates.get(current_release) or 0)
     dev_commits = 0
     if release_ts:
-        for commit in commits:
+        # Same commit set as commit_count (HEAD). Counting every ref (all branches / open PR
+        # branches) here could report more "commits since release" than commits exist.
+        for commit in _collect_git_log(root, all_refs=False):
             if _date_to_ts(commit.get("date") or "") > release_ts:
                 dev_commits += 1
 
