@@ -83,7 +83,7 @@
           <span>{{ join_label }}</span>
         </a>
 
-        <a href="{{ url_for('overview') }}"
+        <a href="{{ overview_href if overview_href is defined and overview_href else url_for('overview') }}"
            class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary auth-welcome-overview-btn">
           {{ overview_label }}
         </a>

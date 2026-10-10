@@ -154,7 +154,14 @@ def _canonical_public_origin_redirect():
     return response
 
 
-from game.network_auth import install_network_auth
+from game.network_auth import (
+    current_universe_key,
+    finish_authority_login,
+    install_network_auth,
+    stash_oauth_target,
+    take_oauth_target,
+    universe_entry_path,
+)
 
 install_network_auth(app)
 
@@ -1964,6 +1971,9 @@ def auth_discord_start():
         str(request.args.get("mail_updates") or "").strip() == "1"
     )
 
+    # Genesis Network: remember the universe picked on the sign-in page (signed session only).
+    stash_oauth_target(request.args.get("network_target"))
+
     state = discord_auth_logic.start_oauth_session(session, link=False)
     return redirect(discord_auth_logic.build_authorize_url(state))
 
@@ -1979,10 +1989,10 @@ def auth_discord_link_start():
     return redirect(discord_auth_logic.build_authorize_url(state))
 
 
-def _discord_callback_redirect_on_error(is_link: bool):
+def _discord_callback_redirect_on_error(is_link: bool, target: str = ""):
     if is_link and session.get("user_id"):
         return redirect(url_for("options_view"))
-    return redirect(url_for("login"))
+    return redirect(url_for("login", network_target=target) if target else url_for("login"))
 
 
 @app.route("/auth/discord/callback")
@@ -1993,19 +2003,21 @@ def auth_discord_callback():
 
     received_state = str(request.args.get("state") or "")
     valid, is_link = discord_auth_logic.consume_oauth_session(session, received_state)
+    # Always consumed here so a stale choice can never leak into a later sign-in.
+    oauth_target = take_oauth_target()
     if not valid:
         flash(T("discord_oauth_state_invalid"), "error")
-        return _discord_callback_redirect_on_error(is_link)
+        return _discord_callback_redirect_on_error(is_link, oauth_target)
 
     oauth_error = str(request.args.get("error") or "").strip()
     if oauth_error:
         flash(T("discord_oauth_denied"), "error")
-        return _discord_callback_redirect_on_error(is_link)
+        return _discord_callback_redirect_on_error(is_link, oauth_target)
 
     code = str(request.args.get("code") or "").strip()
     if not code:
         flash(T("discord_oauth_failed"), "error")
-        return _discord_callback_redirect_on_error(is_link)
+        return _discord_callback_redirect_on_error(is_link, oauth_target)
 
     if is_link:
         user_id = session.get("user_id")
@@ -2033,8 +2045,8 @@ def auth_discord_callback():
         msg = T(err_key) if err_key and T(err_key) != err_key else T("discord_oauth_failed")
         flash(msg, "error")
         if err_key == "discord_register_ack_required":
-            return redirect(url_for("register"))
-        return redirect(url_for("login"))
+            return redirect(url_for("register", network_target=oauth_target) if oauth_target else url_for("register"))
+        return redirect(url_for("login", network_target=oauth_target) if oauth_target else url_for("login"))
 
     login_user(user)
     if err_key == "discord_register_ok":
@@ -2052,9 +2064,16 @@ def auth_discord_callback():
             except Exception:
                 logger.exception("mail hub opt-in request failed after Discord register")
         flash(T("msg_discord_register_success"), "success")
-        return redirect(url_for("discord_welcome"))
+        # The one-time welcome page stays on the authority; its "open overview" button
+        # carries the chosen universe on to the existing hand-off.
+        welcome = (
+            url_for("discord_welcome", network_target=oauth_target)
+            if oauth_target and oauth_target != current_universe_key()
+            else url_for("discord_welcome")
+        )
+        return finish_authority_login(redirect(welcome))
     flash(T("msg_discord_login_success"), "success")
-    return redirect(url_for("overview"))
+    return finish_authority_login(redirect(url_for("overview")), oauth_target)
 
 
 @app.route("/welcome/discord")
@@ -2073,6 +2092,7 @@ def discord_welcome():
         "discord_welcome.html",
         commander_name=commander_name,
         discord_display=discord_auth_logic.discord_display_name(discord_row),
+        overview_href=universe_entry_path(request.args.get("network_target")) or url_for("overview"),
     )
 
 

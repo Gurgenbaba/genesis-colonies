@@ -96,7 +96,7 @@
       {% if DISCORD_OAUTH_ENABLED %}
         {% set discord_label = T("register_btn_discord") %}
         {% if discord_label == "register_btn_discord" %}{% set discord_label = "Mit Discord registrieren" %}{% endif %}
-        <a href="{{ url_for('auth_discord_start') }}"
+        <a href="{{ url_for('auth_discord_start', network_target=auth_choice.selected) if auth_choice and auth_choice.options else url_for('auth_discord_start') }}"
            class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary"
            data-no-pjax
            data-auth-discord-register>
@@ -221,7 +221,7 @@
       </form>
 
       <footer class="auth-footer">
-        <span>{{ have_acc }} <a href="{{ url_for('login') }}">{{ to_login }}</a></span>
+        <span>{{ have_acc }} <a href="{{ url_for('login', network_target=auth_choice.selected) if auth_choice and auth_choice.options else url_for('login') }}" data-auth-switch-link>{{ to_login }}</a></span>
         <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
         <span class="auth-legal-links">
           <a href="{{ url_for('legal_view', doc='imprint') }}">{{ T("legal_tab_imprint", "Impressum") }}</a>
