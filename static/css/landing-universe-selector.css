@@ -255,3 +255,77 @@
     align-items: flex-start;
   }
 }
+
+/* Sign-in target chooser (identity authority only). Square corners, same palette as the badge. */
+.auth-universe-choice {
+  width: min(100%, 420px);
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.auth-universe-choice-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid rgba(91, 244, 225, 0.28);
+  border-left: 3px solid rgba(91, 244, 225, 0.5);
+  border-radius: 0;
+  background: rgba(5, 24, 34, 0.72);
+  cursor: pointer;
+}
+
+.auth-universe-choice-option--uni {
+  border-color: rgba(155, 133, 255, 0.3);
+  border-left-color: rgba(155, 133, 255, 0.5);
+  background: rgba(19, 16, 48, 0.72);
+}
+
+.auth-universe-choice-option.is-selected,
+.auth-universe-choice-option:has(input:checked) {
+  border-left-color: rgba(91, 244, 225, 0.95);
+  background: rgba(8, 40, 54, 0.9);
+}
+
+.auth-universe-choice-option--uni.is-selected,
+.auth-universe-choice-option--uni:has(input:checked) {
+  border-left-color: rgba(155, 133, 255, 0.95);
+  background: rgba(30, 24, 74, 0.9);
+}
+
+.auth-universe-choice-option input {
+  accent-color: rgba(91, 244, 225, 0.95);
+  margin: 0;
+}
+
+.auth-universe-choice-code {
+  flex: 0 0 auto;
+  min-width: 52px;
+  font: 800 0.8rem/1 var(--gc-font-mono, monospace);
+  letter-spacing: 0.09em;
+}
+
+.auth-universe-choice-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.auth-universe-choice-tag {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 217, 138, 0.5);
+  border-radius: 0;
+  font: 700 0.64rem/1.2 var(--gc-font-mono, monospace);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 217, 138, 0.95);
+}
+
+.auth-universe-choice-option:focus-within {
+  outline: 2px solid rgba(91, 244, 225, 0.65);
+  outline-offset: 2px;
+}

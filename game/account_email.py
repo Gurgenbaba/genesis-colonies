@@ -310,6 +310,38 @@ def request_password_reset(email: str, *, ip: Optional[str] = None) -> Tuple[boo
         conn.close()
 
 
+def password_reset_token_status(token: str) -> Tuple[bool, str]:
+    """Validate reset-token usability without consuming or mutating it."""
+    tok = str(token or "").strip()
+    if not tok or len(tok) < 16:
+        return False, "account_token_invalid"
+
+    conn = db()
+    try:
+        ensure_user_email_auth_schema(conn)
+        row = conn.execute(
+            """
+            SELECT password_reset_expires_at
+            FROM users
+            WHERE password_reset_token = ?
+            LIMIT 1;
+            """,
+            (tok,),
+        ).fetchone()
+        if not row:
+            return False, "account_token_invalid"
+
+        expires = int(row["password_reset_expires_at"] or 0)
+        if expires <= _now_ts():
+            return False, "account_token_expired"
+        return True, ""
+    except Exception:
+        logger.exception("password reset token status check failed")
+        return False, "account_token_invalid"
+    finally:
+        conn.close()
+
+
 def reset_password_with_token(
     token: str,
     new_password: str,
@@ -360,6 +392,7 @@ def reset_password_with_token(
         return True, "account_password_reset_ok"
     except Exception:
         rollback(conn)
+        logger.exception("password reset persistence failed")
         return False, "account_token_invalid"
     finally:
         conn.close()
