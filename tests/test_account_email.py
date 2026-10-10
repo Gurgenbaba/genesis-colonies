@@ -102,6 +102,9 @@ def test_register_with_email(app_client):
             "email": email,
             "password": "secret123",
             "password2": "secret123",
+            # the register form requires the age and legal acknowledgements
+            "age_ok": "1",
+            "legal_ack": "1",
         },
         follow_redirects=False,
     )
@@ -392,3 +395,41 @@ def test_mail_template_has_html_cta(app_client):
     assert "Click" in html
     assert "Genesis Colonies" in html
 
+
+
+def test_reset_link_expired_shows_notice_without_form_and_valid_link_still_resets(app_client):
+    email = f"expired_{uuid.uuid4().hex[:6]}@example.com"
+    uname = f"ex_{uuid.uuid4().hex[:6]}"
+    register_user_with_email(uname, "oldpass99", email)
+    _close_db()
+    request_password_reset(email)
+    _close_db()
+
+    conn = db()
+    token = conn.execute(
+        "SELECT password_reset_token FROM users WHERE username = ?;", (uname,)
+    ).fetchone()["password_reset_token"]
+    conn.close()
+
+    # a valid link renders the form and the token is NOT consumed by the preflight GET
+    page = app_client.get(f"/reset-password/{token}")
+    assert 'name="password"' in page.get_data(as_text=True)
+    ok, _err = password_reset_token_status(token)
+    assert ok is True
+
+    # expire it: the preflight reports expired and the page offers a new request, no form
+    conn = db()
+    conn.execute(
+        "UPDATE users SET password_reset_expires_at = ? WHERE username = ?;",
+        (1, uname),
+    )
+    conn.commit()
+    conn.close()
+    ok, err = password_reset_token_status(token)
+    assert (ok, err) == (False, "account_token_expired")
+    stale = app_client.get(f"/reset-password/{token}")
+    html = stale.get_data(as_text=True)
+    assert stale.status_code == 200
+    assert 'name="password"' not in html
+    assert "/forgot-password" in html
+    assert token not in html.replace(f"/reset-password/{token}", "")  # token is never echoed back
