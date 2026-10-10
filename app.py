@@ -13230,7 +13230,7 @@ def api_dev_combat_simulate_spy():
             spy_metadata=spy_meta,
         )
     except Exception:
-        current_app.logger.exception("dev combat simulate-spy failed user_id=%s", user_id)
+        app.logger.exception("dev combat simulate-spy failed user_id=%s", user_id)
         return jsonify(fleet_err("combat_sim_failed")), 500
 
     return jsonify(fleet_ok({"metadata": metadata, "simulated": True}))

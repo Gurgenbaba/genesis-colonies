@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
 from ..models import (
