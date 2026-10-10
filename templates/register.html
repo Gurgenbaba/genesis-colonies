@@ -69,6 +69,9 @@
 
     <div class="auth-hero">
       <p class="auth-eyebrow">Genesis Colonies</p>
+      {# With the sign-in chooser (authority) the form itself names the target universe. #}
+      {% set auth_choice = gc_login_universe_choice() if gc_login_universe_choice is defined else none %}
+      {% if not (auth_choice and auth_choice.options) %}
       <div class="auth-universe-badge{% if auth_is_uni1 %} auth-universe-badge--uni1{% endif %}" aria-label="{{ auth_universe_name }}">
         <span class="auth-universe-code">{{ auth_universe_code }}</span>
         <span class="auth-universe-copy">
@@ -76,6 +79,7 @@
           <small>{{ auth_universe_note }}</small>
         </span>
       </div>
+      {% endif %}
       <h1 class="auth-hero-title">{{ ttl }}</h1>
       <p class="auth-hero-sub">{{ subtitle }}</p>
     </div>
@@ -110,6 +114,7 @@
         {{ csrf_input() }}
 
         <div class="auth-form-scroll">
+          {% include "partials/auth_universe_choice.html" %}
           <label class="auth-label" for="username">{{ lbl_user }}</label>
           <input
             id="username"

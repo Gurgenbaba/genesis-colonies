@@ -148,6 +148,56 @@ def is_authority() -> bool:
     return current_universe_key() == authority_key()
 
 
+LAST_UNIVERSE_COOKIE = "gc_last_universe"
+_LAST_UNIVERSE_MAX_AGE = 365 * 24 * 3600
+
+
+def _selectable_universe_keys() -> list[str]:
+    """Universes a player can sign in to from the authority: itself plus every open, routable one."""
+    return [str(item["key"]) for item in universe_directory() if item.get("open")]
+
+
+def login_universe_choice() -> dict[str, Any]:
+    """Preselection for the sign-in / register form on the identity authority.
+
+    Only a convenience: the chosen key is posted as ``network_target`` and handled by the
+    existing hand-off, so credentials, sessions and game data stay per universe. Priority:
+    explicit choice (form on re-render, then ``?network_target=``) > last entered universe
+    (cookie) > the authority itself. Empty ``options`` means "do not render a chooser".
+    """
+    empty: dict[str, Any] = {"options": [], "selected": "", "last": ""}
+    if not (network_enabled() and is_authority()):
+        return empty
+    options = [dict(item) for item in universe_directory() if item.get("open")]
+    if len(options) < 2:
+        return empty
+    keys = {str(item["key"]) for item in options}
+
+    def _known(value: Any) -> str:
+        key = str(value or "").strip().lower()
+        return key if key in keys else ""
+
+    posted = _known(request.form.get("network_target")) if request.method == "POST" else ""
+    requested = _known(request.args.get("network_target"))
+    last = _known(request.cookies.get(LAST_UNIVERSE_COOKIE))
+    return {"options": options, "selected": posted or requested or last or authority_key(), "last": last}
+
+
+def remember_universe(response: Response, key: str) -> Response:
+    """Remember the last entered universe so the chooser can preselect it next time."""
+    k = str(key or "").strip().lower()
+    if k and k in _selectable_universe_keys():
+        response.set_cookie(
+            LAST_UNIVERSE_COOKIE,
+            k,
+            max_age=_LAST_UNIVERSE_MAX_AGE,
+            httponly=True,
+            samesite="Lax",
+            secure=bool(request.is_secure),
+        )
+    return response
+
+
 def schema_ready(conn) -> bool:
     return table_exists(conn, NETWORK_LINK_TABLE) and table_exists(conn, NETWORK_NONCE_TABLE)
 
@@ -595,7 +645,8 @@ def _network_after_request(response: Response) -> Response:
         and universe_is_open(target)
     ):
         response.headers["Location"] = url_for("network_universe_enter", target_key=target)
-    return response
+        return remember_universe(response, target)
+    return remember_universe(response, current_universe_key())
 
 
 def _universe_enter(target_key: str):
@@ -613,7 +664,10 @@ def _universe_enter(target_key: str):
         return (f"Universe handoff unavailable: {reason}", status)
 
     target_base = universe_url(target)
-    return redirect(f"{target_base}/network/handoff?{urlencode({'token': token})}", code=302)
+    return remember_universe(
+        redirect(f"{target_base}/network/handoff?{urlencode({'token': token})}", code=302),
+        target,
+    )
 
 
 def _network_handoff():
@@ -658,6 +712,7 @@ def install_network_auth(app) -> None:
     app.jinja_env.globals["GC_NETWORK_AUTHORITY_KEY"] = authority_key()
     app.jinja_env.globals["GC_NETWORK_AUTHORITY_URL"] = authority_url()
     app.jinja_env.globals["GC_NETWORK_UNIVERSES"] = universe_directory()
+    app.jinja_env.globals["gc_login_universe_choice"] = login_universe_choice
     # Compatibility globals retained while the landing page still has dedicated UNI1 copy.
     app.jinja_env.globals["GC_NETWORK_UNI1_URL"] = universe_url("uni1")
     app.jinja_env.globals["GC_NETWORK_UNI1_OPEN"] = universe_is_open("uni1")

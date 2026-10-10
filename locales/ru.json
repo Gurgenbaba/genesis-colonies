@@ -9114,6 +9114,8 @@
   "landing_server_choose": "Выбрать сервер",
   "auth_universe_dev_note": "Существующий прогресс DEV",
   "auth_universe_uni1_note": "Новый старт · отдельный прогресс",
+  "auth_universe_choice_label": "Войти в",
+  "auth_universe_last_played": "последний раз",
   "nodebuster_title": "Вознесение",
   "nodebuster_run_level": "Уровень забега {level}",
   "nodebuster_ap_short": "AP",
