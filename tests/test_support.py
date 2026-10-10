@@ -147,6 +147,41 @@ def test_office_reply_lands_in_player_ticket_without_mail(support_db, monkeypatc
     assert len(replay_ticket["messages"]) == message_count
 
 
+def test_player_reply_to_own_ticket_appends_message_and_rejects_foreign_ticket(support_db, monkeypatch):
+    """reply_ticket() raised NameError (stray delivery validation) so players could not reply."""
+    from game.support import reply_ticket
+
+    player_id, _ = _create_player()
+    created = create_ticket(
+        player_id, {"subject": "Frage", "category": "general", "message": "Erste Nachricht."}
+    )
+    ticket_id = int(created["data"]["ticket_id"])
+
+    sent = reply_ticket(player_id, ticket_id, "Zweite Nachricht vom Spieler.")
+    assert sent["ok"] is True, sent
+
+    ticket = next(
+        item for item in list_tickets(player_id)["data"]["tickets"] if int(item["id"]) == ticket_id
+    )
+    assert ticket["messages"][-1]["sender_role"] == "player"
+    assert ticket["messages"][-1]["message"] == "Zweite Nachricht vom Spieler."
+
+    assert reply_ticket(player_id, ticket_id, "   ")["ok"] is False  # empty message
+    assert reply_ticket(player_id + 999, ticket_id, "fremd")["ok"] is False  # not the owner
+
+
+def test_office_reply_rejects_malformed_delivery_id(support_db, monkeypatch):
+    player_id, _ = _create_player()
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
+    created = create_ticket(
+        player_id, {"subject": "Ingame", "category": "general", "message": "Bitte antworten."}
+    )
+    ticket_id = int(created["data"]["ticket_id"])
+    for bad in ("short", "has space in it", "ünicode-delivery-id"):
+        res = office_reply_ticket(f"uni1:{ticket_id}", f"uni1:{player_id}", bad, "Antwort")
+        assert res["ok"] is False and res.get("error") == "invalid_delivery", (bad, res)
+
+
 def test_create_ticket_creates_forum_thread(support_db, monkeypatch):
     player_id, username = _create_player()
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "bot-token-test")

@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-prod.txt pytest
+          pip install -r requirements-prod.txt pytest pyflakes
       - name: LOC report (advisory)
         run: python tools/loc_report.py
       - name: Smoke tests (deploy + cron)
@@ -74,7 +74,11 @@ jobs:
             tests/test_inventory_booster_visibility.py::test_use_duration_booster_creates_active_entry \
             tests/test_inventory_booster_visibility.py::test_production_booster_tier_ladder_25_then_50 \
             tests/test_alliance.py::test_project_start_consumes_alliance_pool \
-            tests/test_alliance.py::test_project_start_tech_uses_resource_binder
+            tests/test_alliance.py::test_project_start_tech_uses_resource_binder \
+            tests/test_gc_no_undefined_names.py \
+            tests/test_support.py \
+            tests/test_gc_pirate_destroy_rewards.py \
+            tests/test_game_state_live.py::test_api_notifications_summary_unread_after_message
 
   big-score:
     name: big-score-ranking

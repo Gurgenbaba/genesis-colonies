@@ -1192,6 +1192,7 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
     Must not run queue finish or full live refresh (client polls ~12s).
     GC-PERF-RADAR-001: Threat Net contributes fingerprint/counts, not contact rows.
     """
+    from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
 
     uid = int(user_id)
