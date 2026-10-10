@@ -125,7 +125,7 @@ def test_discord_callback_registers_new_user(app_client, monkeypatch):
         "email": "bobby@example.com",
     }
 
-    def fake_complete(code: str):
+    def fake_complete(code: str, *, allow_register: bool = False):
         assert code == "good-code"
         ok, err, user = create_user_from_discord(profile)
         assert ok, err
@@ -159,7 +159,7 @@ def test_discord_callback_logs_in_existing_user(app_client, monkeypatch):
     assert ok, err
     user_id = int(user["id"])
 
-    def fake_complete(code: str):
+    def fake_complete(code: str, *, allow_register: bool = False):
         row = get_user_by_discord_id(profile["id"])
         return True, "discord_login_ok", dict(row)
 
@@ -237,7 +237,7 @@ def test_discord_welcome_page_after_register(app_client, monkeypatch):
         "email": "welcome@example.com",
     }
 
-    def fake_complete(code: str):
+    def fake_complete(code: str, *, allow_register: bool = False):
         ok, err, user = create_user_from_discord(profile)
         assert ok, err
         return True, "discord_register_ok", user
@@ -383,7 +383,7 @@ def test_complete_discord_callback_exchanges_code(temp_db, discord_env, monkeypa
         ),
     )
 
-    ok, err, user = discord_auth.complete_discord_callback("auth-code")
+    ok, err, user = discord_auth.complete_discord_callback("auth-code", allow_register=True)
     assert ok, err
     assert user is not None
     assert get_user_by_discord_id("123456789012345678") is not None
