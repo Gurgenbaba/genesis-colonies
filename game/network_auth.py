@@ -157,13 +157,24 @@ def _selectable_universe_keys() -> list[str]:
     return [str(item["key"]) for item in universe_directory() if item.get("open")]
 
 
+PENDING_TARGET_SESSION_KEY = "gc_network_target"
+OAUTH_TARGET_SESSION_KEY = "gc_oauth_network_target"
+
+
+def _open_universe_key(value: Any) -> str:
+    """The key of an open, routable universe (the authority included), else ``""``."""
+    key = str(value or "").strip().lower()
+    return key if key in _selectable_universe_keys() else ""
+
+
 def login_universe_choice() -> dict[str, Any]:
     """Preselection for the sign-in / register form on the identity authority.
 
     Only a convenience: the chosen key is posted as ``network_target`` and handled by the
     existing hand-off, so credentials, sessions and game data stay per universe. Priority:
-    explicit choice (form on re-render, then ``?network_target=``) > last entered universe
-    (cookie) > the authority itself. Empty ``options`` means "do not render a chooser".
+    explicit choice (form on re-render, then ``?network_target=``) > the pending target kept in
+    the session while moving between the auth pages > last entered universe (cookie) > the
+    authority itself. Empty ``options`` means "do not render a chooser".
     """
     empty: dict[str, Any] = {"options": [], "selected": "", "last": ""}
     if not (network_enabled() and is_authority()):
@@ -179,8 +190,65 @@ def login_universe_choice() -> dict[str, Any]:
 
     posted = _known(request.form.get("network_target")) if request.method == "POST" else ""
     requested = _known(request.args.get("network_target"))
+    pending = _known(session.get(PENDING_TARGET_SESSION_KEY))
     last = _known(request.cookies.get(LAST_UNIVERSE_COOKIE))
-    return {"options": options, "selected": posted or requested or last or authority_key(), "last": last}
+    return {
+        "options": options,
+        "selected": posted or requested or pending or last or authority_key(),
+        "last": last,
+    }
+
+
+def stash_oauth_target(raw: Any = "") -> str:
+    """Keep the universe picked on the sign-in page across the Discord OAuth round trip.
+
+    The key lives in the signed session only: it is never part of the OAuth ``state``, the
+    redirect URI or the Discord request. Resolved like the chooser (explicit value > pending
+    target > last entered universe) and limited to open universes. Authority only.
+    """
+    session.pop(OAUTH_TARGET_SESSION_KEY, None)
+    if not (network_enabled() and is_authority()):
+        return ""
+    target = (
+        _open_universe_key(raw)
+        or _open_universe_key(session.get(PENDING_TARGET_SESSION_KEY))
+        or _open_universe_key(request.cookies.get(LAST_UNIVERSE_COOKIE))
+    )
+    if target:
+        session[OAUTH_TARGET_SESSION_KEY] = target
+    return target
+
+
+def take_oauth_target() -> str:
+    """Pop the stashed Discord target (always, so it can never go stale); re-check it is open."""
+    stored = session.pop(OAUTH_TARGET_SESSION_KEY, "")
+    if not (network_enabled() and is_authority()):
+        return ""
+    return _open_universe_key(stored)
+
+
+def universe_entry_path(target: Any) -> str:
+    """Internal hand-off path for an open universe other than this one, else ``""``."""
+    key = _open_universe_key(target)
+    if network_enabled() and is_authority() and key and key != current_universe_key() and universe_url(key):
+        return url_for("network_universe_enter", target_key=key)
+    return ""
+
+
+def finish_authority_login(response: Response, target: str = "") -> Response:
+    """Close a sign-in that did not go through the classic form (Discord) like the form does.
+
+    A target other than the authority becomes the existing signed hand-off
+    (``/network/universe/<key>/enter``, an internal path, never a caller-supplied URL); the
+    universe is remembered either way. Closed or unknown targets fall back to ``response``.
+    """
+    if not (network_enabled() and is_authority()):
+        return response
+    session.pop(PENDING_TARGET_SESSION_KEY, None)
+    entry = universe_entry_path(target)
+    if entry:
+        return remember_universe(redirect(entry, code=302), _open_universe_key(target))
+    return remember_universe(response, current_universe_key())
 
 
 def remember_universe(response: Response, key: str) -> Response:
@@ -616,9 +684,12 @@ def _network_before_request():
             and universe_is_configured(target)
             and universe_url(target)
         ):
-            session["gc_network_target"] = target
+            session[PENDING_TARGET_SESSION_KEY] = target
             if session.get("user_id") and universe_is_open(target):
                 return redirect(url_for("network_universe_enter", target_key=target))
+        elif request.method == "GET" and target == universe:
+            # an explicit "stay on the authority" overrides a target kept from an earlier visit
+            session.pop(PENDING_TARGET_SESSION_KEY, None)
     return None
 
 
@@ -630,7 +701,7 @@ def _network_after_request(response: Response) -> Response:
     if not session.get("user_id") or response.status_code not in {301, 302, 303, 307, 308}:
         return response
 
-    pending_target = session.pop("gc_network_target", "")
+    pending_target = session.pop(PENDING_TARGET_SESSION_KEY, "")
     target = str(
         request.args.get("network_target")
         or request.form.get("network_target")

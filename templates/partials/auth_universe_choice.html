@@ -19,4 +19,19 @@
     </label>
   {% endfor %}
 </fieldset>
+<script>
+  (() => {
+    if (window.gcAuthUniverseChoiceBound) return;
+    window.gcAuthUniverseChoiceBound = true;
+    document.addEventListener('change', (ev) => {
+      const radio = ev.target;
+      if (!radio || radio.name !== 'network_target' || !radio.checked) return;
+      document.querySelectorAll('[data-auth-discord-link], [data-auth-discord-register], [data-auth-switch-link]').forEach((link) => {
+        const url = new URL(link.getAttribute('href'), window.location.origin);
+        url.searchParams.set('network_target', radio.value);
+        link.setAttribute('href', url.pathname + url.search);
+      });
+    });
+  })();
+</script>
 {% endif %}
