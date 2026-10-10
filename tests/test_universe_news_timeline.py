@@ -219,12 +219,29 @@ def test_development_stream_timeline_label(timeline_db):
     assert dev_block["version_label"] == "Ongoing Development"
 
 
+def _expected_latest_release() -> tuple[str, str, str]:
+    """(label, anchor href, dd.mm.yyyy) of the highest release heading in CHANGELOG.md."""
+    import re
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[1] / "CHANGELOG.md").read_text(encoding="utf-8")
+    best = None
+    for m in re.finditer(r"^## (v(\d+(?:\.\d+)*)) .*?\((?:[^)]*?)(\d{4})-(\d{2})-(\d{2})\)", text, re.M):
+        key = tuple(int(x) for x in m.group(2).split("."))
+        if best is None or key > best[0]:
+            best = (key, m.group(1), f"{m.group(5)}.{m.group(4)}.{m.group(3)}")
+    assert best is not None, "no release heading found in CHANGELOG.md"
+    label = best[1]
+    return label, "/news#version-" + label.replace(".", "-"), best[2]
+
+
 def test_sidebar_release_nav_falls_back_to_changelog_not_build_version(timeline_db):
     from game.config import get_app_version
 
+    label, href, _date = _expected_latest_release()
     nav = sidebar_release_nav()
-    assert nav["label"] == "v0.9"
-    assert nav["href"] == "/news#version-v0-9"
+    assert nav["label"] == label
+    assert nav["href"] == href
     build = str(get_app_version() or "").strip()
     assert build.startswith("0.")
     assert nav["label"] != f"v{build}"
@@ -237,7 +254,7 @@ def test_ensure_changelog_seeded_idempotent(timeline_db):
     assert int((first.get("import") or {}).get("inserted") or 0) >= 1
 
     nav = sidebar_release_nav()
-    assert nav["label"] == "v0.9"
+    assert nav["label"] == _expected_latest_release()[0]
 
     second = ensure_changelog_seeded()
     assert second["ok"] is True
@@ -421,7 +438,7 @@ def test_sync_release_dates_updates_rows(timeline_db):
 
 
 def test_latest_changelog_version_picks_highest_not_last_in_file(timeline_db):
-    assert _latest_changelog_version() == "v0.9"
+    assert _latest_changelog_version() == _expected_latest_release()[0]
 
 
 def test_repository_history_audit(timeline_db):
@@ -431,8 +448,9 @@ def test_repository_history_audit(timeline_db):
     assert audit["changelog_exists"] is True
     assert audit["commit_count"] > 0
     assert audit["first_commit_date"] == "2026-05-25"
-    assert audit["current_release"] == "v0.9"
-    assert audit["current_release_date"] == "31.07.2026"
+    label, _href, date = _expected_latest_release()
+    assert audit["current_release"] == label
+    assert audit["current_release_date"] == date
     assert audit["development_commits_since_release"] < audit["commit_count"]
     nav = sidebar_release_nav()
     assert nav["label"].startswith("v")

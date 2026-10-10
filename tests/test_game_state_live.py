@@ -219,7 +219,9 @@ def test_api_game_state_single_finish_via_coerce(game_client):
 
     from unittest.mock import patch
 
-    from game.queue_engine import finish_due_work_once as real_finish
+    # finish_due_work is the single owner of "complete due queue jobs"; the request must
+    # reach it exactly once (not once per queue domain or per helper).
+    from game.queue_engine import finish_due_work as real_finish
 
     calls: list[str] = []
 
@@ -227,11 +229,27 @@ def test_api_game_state_single_finish_via_coerce(game_client):
         calls.append("finish")
         return real_finish(*args, **kwargs)
 
-    with patch("game.queue_engine.finish_due_work_once", side_effect=counting):
+    with patch("game.queue_engine.finish_due_work", side_effect=counting):
         r = client.get("/api/game-state")
         assert r.status_code == 200
         assert r.get_json()["ok"] is True
         assert len(calls) == 1
+
+    # ...and the due job really finished: level 1 -> 2, queue empty.
+    from game.db import db
+
+    conn = db()
+    try:
+        level = conn.execute(
+            "SELECT metal_mine FROM planet_buildings WHERE planet_id = ?;", (int(planet["id"]),)
+        ).fetchone()
+        queued = conn.execute(
+            "SELECT COUNT(*) AS n FROM build_queue WHERE planet_id = ?;", (int(planet["id"]),)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert int(level["metal_mine"]) == 2
+    assert int(queued["n"]) == 0
 
 
 def test_api_build_cancel_returns_fresh_queue_times(game_client):
