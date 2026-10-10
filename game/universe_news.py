@@ -1937,12 +1937,14 @@ def sidebar_release_nav(*, conn: sqlite3.Connection | None = None) -> Dict[str, 
               AND audience = ?
               AND TRIM(COALESCE(version_tag, '')) <> ''
               AND COALESCE(category, '') <> 'EVENT'
-              AND COALESCE(source_ref, '') NOT LIKE 'world_boss:%'
-              AND COALESCE(source_ref, '') NOT LIKE 'pirate%'
+              AND COALESCE(source_ref, '') NOT LIKE ?
+              AND COALESCE(source_ref, '') NOT LIKE ?
             ORDER BY published_at DESC, id DESC
             LIMIT 500;
             """,
-            (AUDIENCE_PLAYER,),
+            # Patterns are bound, not inline: psycopg treats a literal ``%`` in the
+            # query text as a placeholder once parameters are passed (PostgreSQL 500).
+            (AUDIENCE_PLAYER, "world_boss:%", "pirate%"),
         ).fetchall()
 
         published = [
