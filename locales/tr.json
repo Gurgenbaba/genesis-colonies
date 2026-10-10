@@ -9114,6 +9114,8 @@
   "landing_server_choose": "Sunucu seç",
   "auth_universe_dev_note": "Mevcut DEV ilerlemesi",
   "auth_universe_uni1_note": "Yeni başlangıç · ayrı ilerleme",
+  "auth_universe_choice_label": "Giriş yapılacak evren",
+  "auth_universe_last_played": "son oynanan",
   "nodebuster_title": "Yükseliş",
   "nodebuster_run_level": "Koşu seviyesi {level}",
   "nodebuster_ap_short": "AP",

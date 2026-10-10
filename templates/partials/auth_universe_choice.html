@@ -1,0 +1,24 @@
+{# Sign-in target on the identity authority (DEV). Only a preselection: the chosen universe is
+   posted as network_target and entered through the existing hand-off; each universe keeps its
+   own game data. Rendered only when at least one other universe is open. #}
+{% set uc = gc_login_universe_choice() if gc_login_universe_choice is defined else none %}
+{% if uc and uc.options %}
+{% set uc_label = T("auth_universe_choice_label") %}
+{% if uc_label == "auth_universe_choice_label" %}{% set uc_label = "Anmelden in" %}{% endif %}
+{% set uc_last = T("auth_universe_last_played") %}
+{% if uc_last == "auth_universe_last_played" %}{% set uc_last = "zuletzt gespielt" %}{% endif %}
+<fieldset class="auth-universe-choice" data-auth-universe-choice>
+  <legend class="auth-label">{{ uc_label }}</legend>
+  {% for u in uc.options %}
+    {% if u.key == 'uni1' %}{% set uc_name = T("landing_server_uni1_name") %}
+    {% elif u.authority %}{% set uc_name = T("landing_server_dev_name") %}
+    {% else %}{% set uc_name = u.label %}{% endif %}
+    <label class="auth-universe-choice-option{% if u.key == uc.selected %} is-selected{% endif %}{% if not u.authority %} auth-universe-choice-option--uni{% endif %}">
+      <input type="radio" name="network_target" value="{{ u.key }}"{% if u.key == uc.selected %} checked{% endif %}>
+      <span class="auth-universe-choice-code">{{ u.label }}</span>
+      <span class="auth-universe-choice-name">{{ uc_name }}</span>
+      {% if u.key == uc.last %}<span class="auth-universe-choice-tag">{{ uc_last }}</span>{% endif %}
+    </label>
+  {% endfor %}
+</fieldset>
+{% endif %}
