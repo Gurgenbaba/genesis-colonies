@@ -107,8 +107,11 @@ def test_dna_seed_fits_sqlite_signed_integer(evo_db):
                     assert 0 <= int(dna['dna_seed']) <= MAX_SQLITE_SIGNED_INT
 
 def test_colonize_planet_never_overflows_dna_seed(evo_db):
-    uid = _ensure_test_player(901, name='Colonist', slots=8)
-    for attempt in range(8):
+    # Imperial Mandates cap free expansion slots at ARK_SLOT_MAX; beyond that
+    # colonize_planet() correctly returns imperial_mandate_required.
+    from game.planet_evolution.imperial_mandates import ARK_SLOT_MAX
+    uid = _ensure_test_player(901, name='Colonist', slots=ARK_SLOT_MAX)
+    for attempt in range(ARK_SLOT_MAX):
         ok, reason, extra = colonize_planet(uid, name=f'Outpost_{attempt}', galaxy=1, system=100 + attempt, position=1 + attempt % 8, allow_legacy_coordinates=True, source='test')
         assert ok is True, reason
         conn = db()

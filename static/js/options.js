@@ -791,8 +791,8 @@
     }
     bindBuildingsUiControls();
     if (page) {
-      setNotifySoundToggleUi("attack", readNotifySoundMode(page, "attack"));
-      setNotifySoundToggleUi("message", readNotifySoundMode(page, "message"));
+      setNotifySoundSliderUi("attack", readNotifySoundVolume(page, "attack"));
+      setNotifySoundSliderUi("message", readNotifySoundVolume(page, "message"));
       setSpyProbeInputUi(readSpyProbeCount(page));
     }
     bindResendVerification();

@@ -386,8 +386,9 @@ def test_pe_ssr_boot_history_limit_and_locked_card_template():
         encoding="utf-8"
     )
     card_macro = tpl.split("{% macro pe_research_tech_card")[1].split("{% endmacro %}")[0]
-    assert "variant != 'locked'" in card_macro
-    assert "GC-PERF-PJAX-BYTES-HEAVY-001" in card_macro
+    # #496: locked/future techs now also carry their in-game explanation, so the
+    # info source is rendered for every variant (no longer omitted when locked).
+    assert "variant != 'locked'" not in card_macro
     assert "pe_tech_info_source(tech)" in card_macro
 
     app_src = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")

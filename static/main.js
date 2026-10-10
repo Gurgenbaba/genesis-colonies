@@ -3614,6 +3614,7 @@
       unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
       unknown_building: t("msg_unknown_building", "Unbekanntes Gebäude."),
       not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
+      job_not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
       max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
       level_too_low: t("buildings_mine_evo_err_level", "Mine noch nicht bereit für Ascension."),
@@ -8946,7 +8947,7 @@
       block.appendChild(bar);
     }
 
-    if (jobId > 0 && domain !== "ascension") {
+    if (jobId > 0 && domain !== "ascension" && (domain !== "planet_research" || queueJob.cancellable === true)) {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
       cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel";
@@ -41280,18 +41281,23 @@
       });
     });
   };
+  // Shared by bindWorldBossAttackCooldownUnlock() and initWorldBossPage(): the live
+  // poll tick lives in the page module and used to reference a binder-local helper
+  // (ReferenceError, so the poll never rescheduled itself).
+  function buildWorldBossLivePollUrl(root) {
+    const ids = Array.from(root.querySelectorAll(".gc-world-boss-card[data-wb-event-id]"))
+      .map((card) => Math.trunc(Number(card.getAttribute("data-wb-event-id") || 0)))
+      .filter((id) => id > 0)
+      .slice(0, 8);
+    const params = new URLSearchParams({ live: "1" });
+    if (ids.length) params.set("event_ids", ids.join(","));
+    return `/api/world-boss?${params.toString()}`;
+  }
+
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
 
-    const wbLivePollUrl = () => {
-      const ids = Array.from(root.querySelectorAll(".gc-world-boss-card[data-wb-event-id]"))
-        .map((card) => Math.trunc(Number(card.getAttribute("data-wb-event-id") || 0)))
-        .filter((id) => id > 0)
-        .slice(0, 8);
-      const params = new URLSearchParams({ live: "1" });
-      if (ids.length) params.set("event_ids", ids.join(","));
-      return `/api/world-boss?${params.toString()}`;
-    };
+    const wbLivePollUrl = () => buildWorldBossLivePollUrl(root);
 
     const wbFlushAutoUntilFired = (card, { attemptsLeft = 1 } = {}) => {
       if (!card || !card.isConnected || attemptsLeft <= 0) return;
@@ -42224,6 +42230,8 @@
       return false;
     };
     GC.consumeWorldBossAutoPresentation = wbConsumeAutoPresentation;
+
+    const wbLivePollUrl = () => buildWorldBossLivePollUrl(root);
 
     // Live HP + auto FX while on the World Boss page (own strikes and other players).
     const wbLivePollTick = () => {
@@ -45428,6 +45436,40 @@
         } finally {
           setProgressionActionBusy(researchCancelBtn, false);
         }
+      }
+
+      const planetResearchCancelBtn = e.target.closest("[data-planet-research-cancel-id]");
+      if (planetResearchCancelBtn) {
+        e.preventDefault();
+        if (planetResearchCancelBtn.dataset.busy === "1") return;
+        setProgressionActionBusy(planetResearchCancelBtn, true);
+        try {
+          const planetId = Math.floor(
+            Number(
+              GC.lastState?.active_planet_id ||
+                (typeof GC.getDomPlanetId === "function" ? GC.getDomPlanetId() : 0) ||
+                document.querySelector(".planet-evolution-page")?.dataset?.planetId ||
+                0
+            )
+          );
+          const jobId = Number(planetResearchCancelBtn.dataset.planetResearchCancelId || 0);
+          if (!(planetId > 0) || !(jobId > 0)) return;
+          const json = await GC.fetchGameAction(`/api/planets/${planetId}/research/cancel`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ job_id: jobId }),
+          });
+          applyActionState(json, json.ok ? "planet_research_cancel_success" : "planet_research_cancel_error");
+          if (!json.ok) {
+            showNotify(mapActionError(json.reason, json.payload), "error");
+          }
+        } catch (err) {
+          console.error("Planet research cancel AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          setProgressionActionBusy(planetResearchCancelBtn, false);
+        }
+        return;
       }
     });
   }
