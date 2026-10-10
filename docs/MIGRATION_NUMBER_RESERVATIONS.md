@@ -19,4 +19,7 @@ The same applies to merges in the opposite direction (`u2/staging-runtime` ->
 
 New migrations on `main` use **185 or higher**, which UNI1 receives with the next
 `main` -> `u2/staging-runtime` sync. `tests/test_migration_number_reservations.py`
-enforces this on both branches.
+checks the target branch: it **rejects both actual UNI1-only filenames on `main`**, and
+requires those exact files on `u2/staging-runtime`. The CI smoke workflow runs
+this guard on pull requests and pushes. For a detached local checkout, set
+`GC_MIGRATION_TEST_BRANCH=u2/staging-runtime` only when testing the UNI1 tree.
