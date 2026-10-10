@@ -41281,18 +41281,23 @@
       });
     });
   };
+  // Shared by bindWorldBossAttackCooldownUnlock() and initWorldBossPage(): the live
+  // poll tick lives in the page module and used to reference a binder-local helper
+  // (ReferenceError, so the poll never rescheduled itself).
+  function buildWorldBossLivePollUrl(root) {
+    const ids = Array.from(root.querySelectorAll(".gc-world-boss-card[data-wb-event-id]"))
+      .map((card) => Math.trunc(Number(card.getAttribute("data-wb-event-id") || 0)))
+      .filter((id) => id > 0)
+      .slice(0, 8);
+    const params = new URLSearchParams({ live: "1" });
+    if (ids.length) params.set("event_ids", ids.join(","));
+    return `/api/world-boss?${params.toString()}`;
+  }
+
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
 
-    const wbLivePollUrl = () => {
-      const ids = Array.from(root.querySelectorAll(".gc-world-boss-card[data-wb-event-id]"))
-        .map((card) => Math.trunc(Number(card.getAttribute("data-wb-event-id") || 0)))
-        .filter((id) => id > 0)
-        .slice(0, 8);
-      const params = new URLSearchParams({ live: "1" });
-      if (ids.length) params.set("event_ids", ids.join(","));
-      return `/api/world-boss?${params.toString()}`;
-    };
+    const wbLivePollUrl = () => buildWorldBossLivePollUrl(root);
 
     const wbFlushAutoUntilFired = (card, { attemptsLeft = 1 } = {}) => {
       if (!card || !card.isConnected || attemptsLeft <= 0) return;
@@ -42225,6 +42230,8 @@
       return false;
     };
     GC.consumeWorldBossAutoPresentation = wbConsumeAutoPresentation;
+
+    const wbLivePollUrl = () => buildWorldBossLivePollUrl(root);
 
     // Live HP + auto FX while on the World Boss page (own strikes and other players).
     const wbLivePollTick = () => {
