@@ -37,7 +37,7 @@ from game.expedition_events import (
     split_expedition_pirate_fleets,
     virtual_pirate_fleet,
 )
-from game.fleet_defs import ship_score_value
+from game.fleet_defs import SHIPS, ship_score_value
 
 _ODYSSEY_KEY = "solar_skiff"
 _ODYSSEY_FLEET_VALUE = expedition_ship_fleet_value(_ODYSSEY_KEY)
@@ -309,7 +309,7 @@ def test_cargo_cap_includes_haulers_not_combat_escorts():
     with_hauler = calculate_expedition_loot_cap({_ODYSSEY_KEY: 1, "atlas_hauler": 2})
     assert solo == 2000
     assert with_escort == solo
-    assert with_hauler == 2000 + 2 * 25000
+    assert with_hauler == 2000 + 2 * int(SHIPS["atlas_hauler"]["cargo"])
 
 
 def test_combat_value_includes_escorts_not_haulers():
