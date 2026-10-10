@@ -154,6 +154,10 @@ def test_world_boss_small_hangar_builds_instead_of_one_ship_poke():
     ), patch(
         "game.world_boss.combat_ships_from_hangar", return_value={"falcon_interceptor": 1}
     ), patch(
+        # defender lookup reads the boss definition table; this test only cares about the
+        # small-hangar decision, not the boss data.
+        "game.world_boss.defender_ships_for_event", return_value={}
+    ), patch(
         "game.auto_empire.try_build_ships",
         return_value={"ok": True, "ship_key": "falcon_interceptor", "amount": 8},
     ) as build, patch("game.world_boss.execute_instant_attack") as attack:

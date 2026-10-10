@@ -489,7 +489,11 @@ def test_admin_gets_max_titan_slots_without_purchase(wb_db):
 
 
 def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
-    """Mission POST must include overview.status.companions for live hotspot patches."""
+    """Mission POST returns the authoritative mission payload (fastlane, #362).
+
+    The generic game-state is intentionally not rebuilt for these responses; the client
+    works from ``mission`` and closes/re-renders its popover without ``state``.
+    """
     import importlib
 
     import app as app_module
@@ -535,13 +539,13 @@ def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
     assert start.status_code == 200, start.get_data(as_text=True)
     start_body = start.get_json()
     assert start_body["ok"] is True
-    companions = (start_body.get("state") or {}).get("overview", {}).get("status", {}).get(
-        "companions"
-    )
-    assert companions and companions.get("ready")
-    slot = next(s for s in companions["slots"] if s["boss_key"] == "planet_eater")
-    assert slot["status"] == "away"
-    assert slot["mission"]["can_start"] is False
+    started = start_body["mission"]
+    assert started["ok"] is True
+    assert started["boss_key"] == "planet_eater"
+    assert started["variant_key"] == "patrol"
+    assert started["duration_sec"] > 0 and started["reward_tokens"] > 0
+    assert started["mission"]["status"] == "away"
+    assert started["mission"]["ends_at"] > started["mission"]["started_at"]
 
     conn = db()
     try:
@@ -562,12 +566,11 @@ def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
     assert sync.status_code == 200, sync.get_data(as_text=True)
     sync_body = sync.get_json()
     assert sync_body["ok"] is True
-    sync_companions = (sync_body.get("state") or {}).get("overview", {}).get("status", {}).get(
-        "companions"
-    )
-    sync_slot = next(s for s in sync_companions["slots"] if s["boss_key"] == "planet_eater")
-    assert sync_slot["status"] == "ready"
-    assert sync_slot["mission"]["can_claim"] is True
+    synced = sync_body["mission"]
+    assert synced["ok"] is True
+    assert synced["status"] == "ready"  # the expired mission is now claimable
+    assert synced["mission"]["status"] == "ready"
+    assert synced["mission"]["outcome"] in ("success", "failed")
 
     claim = client.post(
         "/api/world-boss/companion/mission",
@@ -585,9 +588,8 @@ def test_api_companion_mission_returns_overview_companions(wb_db, monkeypatch):
     assert claim.status_code == 200, claim.get_data(as_text=True)
     claim_body = claim.get_json()
     assert claim_body["ok"] is True
-    claim_companions = (claim_body.get("state") or {}).get("overview", {}).get("status", {}).get(
-        "companions"
-    )
-    claim_slot = next(s for s in claim_companions["slots"] if s["boss_key"] == "planet_eater")
-    assert claim_slot["status"] == "idle"
-    assert claim_slot["mission"]["can_start"] is True
+    claimed = claim_body["mission"]
+    assert claimed["ok"] is True
+    assert claimed["success"] is True and claimed["tokens_granted"] > 0
+    assert claimed["mission"]["status"] == "idle"  # slot is free for the next mission
+    assert claimed["mission"]["request_id"] is None
