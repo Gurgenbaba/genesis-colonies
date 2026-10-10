@@ -975,6 +975,7 @@ def _grant_destroy_rewards(conn, base: Mapping[str, Any], *, now: float) -> None
     for row in rows:
         pid = int(row["player_id"])
         contribution = max(0, int(row["damage"] or 0))
+        share = contribution / total_dmg  # this player's fraction of all damage dealt
         metal = mul_div_floor(pool_metal, contribution, total_dmg)
         crystal = mul_div_floor(pool_crystal, contribution, total_dmg)
         if metal <= 0 and crystal <= 0:
