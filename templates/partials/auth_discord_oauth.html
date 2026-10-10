@@ -1,5 +1,5 @@
 {% if DISCORD_OAUTH_ENABLED %}
-  <a href="{{ url_for('auth_discord_start') }}"
+  <a href="{{ url_for('auth_discord_start', network_target=auth_choice.selected) if auth_choice is defined and auth_choice and auth_choice.options else url_for('auth_discord_start') }}"
      class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary"
      data-no-pjax
      data-auth-discord-link>
