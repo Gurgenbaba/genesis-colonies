@@ -1,6 +1,4 @@
-{# Sign-in target on the identity authority (DEV). Only a preselection: the chosen universe is
-   posted as network_target and entered through the existing hand-off; each universe keeps its
-   own game data. Rendered only when at least one other universe is open. #}
+{# Sign-in target chooser on the identity authority: a preselection only, handled by network_target. #}
 {% set uc = gc_login_universe_choice() if gc_login_universe_choice is defined else none %}
 {% if uc and uc.options %}
 {% set uc_label = T("auth_universe_choice_label") %}
