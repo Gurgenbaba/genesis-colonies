@@ -1,0 +1,133 @@
+/* GC-VOTE-ARCA-001 — image-free compact voting layout, PJAX-safe in base shell. */
+#vote-center-page .vote-center-header { margin-bottom: 14px; }
+#vote-center-page .vote-center-hint { max-width: 64ch; margin: 4px 0 0; }
+#vote-center-page .vote-center-panel { margin-bottom: 14px; }
+#vote-center-page .vote-center-providers-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+#vote-center-page .vote-center-provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  min-height: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--gc-border, rgba(167, 196, 227, .19));
+  border-radius: 10px;
+  background: var(--gc-panel-bg, rgba(18, 28, 41, .75));
+  background-image: none !important;
+  box-shadow: none;
+}
+#vote-center-page .vote-center-provider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0;
+}
+#vote-center-page .vote-center-provider-name {
+  margin: 0;
+  font-size: .95rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+#vote-center-page .vote-center-provider-vote-count {
+  flex-shrink: 0;
+  font-size: .72rem;
+  font-weight: 500;
+  opacity: .75;
+  padding: 0;
+  position: static;
+  background: none;
+  border: 0;
+}
+#vote-center-page .vote-center-provider-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  min-height: 0;
+}
+#vote-center-page .vote-center-provider-meta {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+}
+#vote-center-page .vote-center-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: .73rem;
+  line-height: 1.45;
+}
+#vote-center-page .vote-center-status-row dt {
+  flex-shrink: 0;
+  font-weight: 500;
+  opacity: .72;
+}
+#vote-center-page .vote-center-status-row dd {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+#vote-center-page .vote-center-status-dd { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+#vote-center-page .vote-center-provider-reward-status { font-size: .71rem; }
+#vote-center-page .vote-center-provider-cooldown { font-size: .71rem; }
+#vote-center-page .vote-center-provider-hint {
+  margin: 0;
+  min-height: 0;
+  line-height: 1.25;
+  font-size: .71rem;
+}
+#vote-center-page .vote-center-provider-hint[hidden] { display: none !important; }
+#vote-center-page .vote-center-vote-btn {
+  width: 100%;
+  margin-top: auto;
+  min-height: 32px;
+  text-align: center;
+  justify-content: center;
+}
+#vote-center-page .vote-center-rewards-header { display: flex; align-items: center; gap: 12px; }
+#vote-center-page .vote-center-rewards-actions { margin: 0 0 8px; }
+#vote-center-page .vote-center-rewards-list { display: grid; gap: 8px; }
+#vote-center-page .vote-center-reward-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--gc-border, rgba(167, 196, 227, .19));
+  border-radius: 8px;
+  background-image: none !important;
+}
+#vote-center-page .vote-center-reward-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  min-width: 0;
+}
+#vote-center-page .vote-center-reward-title,
+#vote-center-page .vote-center-reward-provider,
+#vote-center-page .vote-center-reward-type { margin: 0; font-size: .78rem; }
+#vote-center-page .vote-center-reward-visual,
+#vote-center-page .vote-center-reward-item-img,
+#vote-center-page .vote-center-provider-hero { display: none !important; }
+#vote-center-page .vote-center-claim-btn { flex-shrink: 0; }
+@media (max-width: 560px) {
+  #vote-center-page .vote-center-providers-list { grid-template-columns: 1fr; }
+  #vote-center-page .vote-center-reward-card { flex-wrap: wrap; }
+  #vote-center-page .vote-center-claim-btn { width: 100%; }
+}

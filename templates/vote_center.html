@@ -1,15 +1,12 @@
 {% extends "base.html" %}
-{% set _loot_fallback = url_for('static', filename='img/lootboxes/Generic_Supply_Container.png') %}
 
 {% block content %}
 {% set vc = vote_center if vote_center is defined and vote_center else {'ready': false, 'providers': [], 'pending_rewards': [], 'pending_count': 0} %}
 {% set providers = vc.providers if vc.providers is defined else [] %}
 {% set pending_count = vc.pending_count if vc.pending_count is defined else (vc.pending_rewards|length if vc.pending_rewards is defined else 0) %}
 
-<div class="gc-page vote-center-page" id="vote-center-page"
-     data-vote-center
+<div class="gc-page vote-center-page" id="vote-center-page" data-vote-center
      data-ready="{{ '1' if vc.ready else '0' }}">
-
   {% if vc.ready %}
   <script type="application/json" id="vote-center-page-state">{{ vc | tojson }}</script>
   {% endif %}
@@ -33,99 +30,69 @@
     </div>
     <div class="vote-center-providers-list" data-vote-providers-list>
       {% for p in providers %}
-      {% set _provider_img = url_for('static', filename=p.card_image) if p.card_image is defined and p.card_image else '' %}
-      {% set _provider_webp = _provider_img|webp_static if _provider_img else '' %}
       <article class="vote-center-provider-card" data-vote-provider="{{ p.provider_key }}">
-        {% if _provider_img %}
-        <div class="vote-center-provider-hero"
-             style="--vote-banner: url('{{ _provider_img }}');{% if _provider_webp %} --vote-banner-webp: url('{{ _provider_webp }}');{% endif %}"
-             role="img"
-             aria-label="{{ p.display_name }}">
-          <div class="vote-center-provider-hero-overlay">
-            <h2 class="vote-center-provider-name">{{ p.display_name }}</h2>
-          </div>
-          <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero vote-center-provider-vote-count gc-mono"
-                data-vote-provider-count="{{ p.provider_key }}"
-                title="{{ T('vote_center_vote_count', 'Votes gesamt') }}">
-            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }}
-          </span>
-        </div>
-        {% else %}
         <div class="vote-center-provider-head">
           <h2 class="vote-center-provider-name">{{ p.display_name }}</h2>
-          <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero vote-center-provider-vote-count gc-mono"
+          <span class="vote-center-provider-vote-count gc-mono"
                 data-vote-provider-count="{{ p.provider_key }}"
                 title="{{ T('vote_center_vote_count', 'Votes gesamt') }}">
-            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }}
+            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }} {{ T('vote_center_vote_count', 'Votes gesamt') }}
           </span>
         </div>
-        {% endif %}
+
         <div class="vote-center-provider-body">
-        {% if p.subtitle_key is defined and p.subtitle_key %}
-        <p class="vote-center-provider-subtitle" data-vote-provider-subtitle="{{ p.provider_key }}">
-          {{ T(p.subtitle_key, "") }}
-        </p>
-        {% endif %}
-        <dl class="vote-center-provider-meta">
-          <div class="vote-center-status-row">
-            <dt>{{ T("vote_center_last_vote", "Letzter Vote") }}</dt>
-            <dd class="gc-mono" data-vote-provider-last="{{ p.provider_key }}">
-              {% if p.last_vote_at %}{{ p.last_vote_at }}{% else %}{{ T("vote_center_never", "Noch nie") }}{% endif %}
-            </dd>
-          </div>
-          <div class="vote-center-status-row vote-center-status-row--reward">
-            <dt>{{ T("vote_center_status_title", "Status") }}</dt>
-            <dd class="vote-center-status-dd">
-              <span class="vote-center-provider-reward-status" data-vote-provider-reward-status="{{ p.provider_key }}">
-                {% if p.reward_status_key is defined and p.reward_status_key %}
-                  {{ T(p.reward_status_key, "") }}
-                {% elif p.rewards_active is defined and p.rewards_active %}
-                  {{ T("vote_provider_topg_reward_active", "Belohnung: aktiv") }}
-                {% else %}
-                  {{ T("vote_provider_gametoor_reward_soon", "Automatische Belohnung: bald") }}
-                {% endif %}
-              </span>
-              <span class="vote-center-provider-cooldown gc-mono" data-vote-provider-next="{{ p.provider_key }}">
-                {% if p.can_vote_hint is defined and p.can_vote_hint %}
-                  {{ T("vote_center_ready_to_vote", "Bereit zum Voten") }}
-                {% elif p.cooldown_remaining_sec is defined and p.cooldown_remaining_sec > 0 %}
-                  …
-                {% else %}
-                  {{ T("vote_center_now", "Jetzt") }}
-                {% endif %}
-              </span>
-            </dd>
-          </div>
-        </dl>
-        <p class="vote-center-provider-hint {% if p.can_vote_hint %}vote-center-hint-ready{% else %}vote-center-hint-wait{% endif %}"
-           data-vote-provider-hint="{{ p.provider_key }}"
-           data-vote-provider-cooldown="{{ p.cooldown_remaining_sec if p.cooldown_remaining_sec is defined else 0 }}"
-           {% if not p.can_vote_hint and p.cooldown_remaining_sec is defined and p.cooldown_remaining_sec > 0 %}hidden{% endif %}>
-          {% if p.postback_enabled is defined and not p.postback_enabled %}
-            {% if p.no_auto_reward_key is defined and p.no_auto_reward_key %}
-              {{ T(p.no_auto_reward_key, "") }}
-            {% else %}
-              {{ T("vote_provider_gametoor_no_auto_reward", "GameToor-Votes werden aktuell noch nicht automatisch belohnt.") }}
+          <dl class="vote-center-provider-meta">
+            <div class="vote-center-status-row">
+              <dt>{{ T("vote_center_last_vote", "Letzter Vote") }}</dt>
+              <dd class="gc-mono" data-vote-provider-last="{{ p.provider_key }}">
+                {% if p.last_vote_at %}{{ p.last_vote_at }}{% else %}{{ T("vote_center_never", "Noch nie") }}{% endif %}
+              </dd>
+            </div>
+            <div class="vote-center-status-row vote-center-status-row--reward">
+              <dt>{{ T("vote_center_status_title", "Status") }}</dt>
+              <dd class="vote-center-status-dd">
+                <span class="vote-center-provider-reward-status" data-vote-provider-reward-status="{{ p.provider_key }}">
+                  {% if p.reward_status_key is defined and p.reward_status_key %}
+                    {{ T(p.reward_status_key, "") }}
+                  {% elif p.rewards_active is defined and p.rewards_active %}
+                    {{ T("vote_provider_topg_reward_active", "Belohnung: aktiv") }}
+                  {% else %}
+                    {{ T("vote_provider_gametoor_reward_soon", "Automatische Belohnung: bald") }}
+                  {% endif %}
+                </span>
+                <span class="vote-center-provider-cooldown gc-mono" data-vote-provider-next="{{ p.provider_key }}">
+                  {% if p.can_vote_hint %}{{ T("vote_center_ready_to_vote", "Bereit zum Voten") }}
+                  {% elif p.cooldown_remaining_sec is defined and p.cooldown_remaining_sec > 0 %}…
+                  {% else %}{{ T("vote_center_now", "Jetzt") }}{% endif %}
+                </span>
+              </dd>
+            </div>
+          </dl>
+          <p class="vote-center-provider-hint {% if p.can_vote_hint %}vote-center-hint-ready{% else %}vote-center-hint-wait{% endif %}"
+             data-vote-provider-hint="{{ p.provider_key }}"
+             data-vote-provider-cooldown="{{ p.cooldown_remaining_sec if p.cooldown_remaining_sec is defined else 0 }}"
+             {% if not p.can_vote_hint and p.cooldown_remaining_sec is defined and p.cooldown_remaining_sec > 0 %}hidden{% endif %}>
+            {% if p.postback_enabled is defined and not p.postback_enabled %}
+              {{ T(p.no_auto_reward_key, "") if p.no_auto_reward_key is defined and p.no_auto_reward_key else T("vote_provider_gametoor_no_auto_reward", "Keine automatische Belohnung") }}
+            {% elif p.can_vote_hint %}
+              {{ T("vote_center_can_vote", "Du kannst jetzt voten.") }}
             {% endif %}
-          {% elif p.can_vote_hint %}
-            {{ T("vote_center_can_vote", "Du kannst jetzt voten.") }}
-          {% endif %}
-        </p>
-        <a href="{{ p.vote_url }}" target="_blank" rel="noopener"
-           class="gc-btn gc-btn-secondary gc-btn-sm vote-center-vote-btn"
-           data-vote-provider-link="{{ p.provider_key }}">
-          {% if p.provider_key == 'topg' %}
-            {{ T("vote_center_vote_btn_topg", "Auf TopG voten") }}
-          {% elif p.provider_key == 'gtop100' %}
-            {{ T("vote_center_vote_btn_gtop100", "Auf GTop100 voten") }}
-          {% elif p.provider_key == 'gametoor' %}
-            {{ T("vote_center_vote_btn_gametoor", "Auf GameToor voten") }}
-          {% elif p.provider_key == 'arena_top100' %}
-            {{ T("vote_center_vote_btn_arena_top100", "Auf Arena-Top100 voten") }}
-          {% else %}
-            {{ T("vote_center_vote_btn_short", "Voten") }}
-          {% endif %}
-        </a>
+          </p>
+          <a href="{{ p.vote_url }}" target="_blank" rel="noopener noreferrer" class="gc-btn gc-btn-secondary gc-btn-sm vote-center-vote-btn" data-vote-provider-link="{{ p.provider_key if p.provider_key != 'arcavote' else '' }}" data-arcavote-link="{{ '1' if p.provider_key == 'arcavote' else '' }}">
+            {% if p.provider_key == 'arcavote' %}
+              {{ T("vote_center_vote_btn_short", "Voten") }}
+            {% elif p.provider_key == 'topg' %}
+              {{ T("vote_center_vote_btn_topg", "Auf TopG voten") }}
+            {% elif p.provider_key == 'gtop100' %}
+              {{ T("vote_center_vote_btn_gtop100", "Auf GTop100 voten") }}
+            {% elif p.provider_key == 'gametoor' %}
+              {{ T("vote_center_vote_btn_gametoor", "Auf GameToor voten") }}
+            {% elif p.provider_key == 'arena_top100' %}
+              {{ T("vote_center_vote_btn_arena_top100", "Auf Arena-Top100 voten") }}
+            {% else %}
+              {{ T("vote_center_vote_btn_short", "Voten") }}
+            {% endif %}
+          </a>
         </div>
       </article>
       {% endfor %}
@@ -138,10 +105,8 @@
       <span class="vote-center-pending-badge gc-mono" data-vote-pending-count>{{ pending_count }}</span>
     </div>
     <div class="vote-center-rewards-actions">
-      <button type="button"
-              class="gc-btn gc-btn-secondary vote-center-claim-all-btn"
-              data-vote-claim-all
-              {% if pending_count <= 0 %}disabled{% endif %}>
+      <button type="button" class="gc-btn gc-btn-secondary vote-center-claim-all-btn"
+              data-vote-claim-all {% if pending_count <= 0 %}disabled{% endif %}>
         {{ T("vote_center_claim_all_btn", "Alle Belohnungen abholen") }}
       </button>
     </div>
@@ -149,32 +114,16 @@
       {% if vc.pending_rewards %}
         {% for r in vc.pending_rewards %}
         <article class="vote-center-reward-card" data-vote-reward-id="{{ r.id }}">
-          {% if r.display_items is defined and r.display_items %}
-          <div class="vote-center-reward-visual" data-vote-reward-visual="{{ r.id }}">
-            {% for item in r.display_items %}
-            <div class="vote-center-reward-item vote-center-reward-item--{{ item.kind }}{% if item.resource_key is defined %} vote-center-reward-item--{{ item.resource_key }}{% endif %}">
-              <img class="vote-center-reward-item-img"
-                   src="{{ item.image if item.image is defined else _loot_fallback }}"
-                   alt="{{ T(item.name_key, item.name_fallback) }}"
-                   loading="lazy"
-                   decoding="async"
-                   onerror="this.onerror=null;this.src='{{ _loot_fallback }}';">
-              <div class="vote-center-reward-item-meta">
-                <span class="vote-center-reward-item-name">{{ T(item.name_key, item.name_fallback) }}</span>
-                <span class="vote-center-reward-item-amount gc-mono">× {{ item.amount|fmt_int }}</span>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
           <div class="vote-center-reward-info">
-            <span class="vote-center-reward-title">{{ T("vote_reward_title", "Vote Belohnung") }}</span>
+            <span class="vote-center-reward-title">{{ T("vote_reward_title", "Vote-Belohnung") }}</span>
             <span class="vote-center-reward-provider">{{ r.provider_name if r.provider_name is defined else r.provider }}</span>
             <span class="vote-center-reward-type" data-vote-reward-type="{{ r.reward_type if r.reward_type is defined else 'standard_box' }}">
               {{ T(r.reward_type_label_key if r.reward_type_label_key is defined else "vote_reward_type_standard_box", "Standard-Box") }}
+              × {{ r.amount|default(1)|fmt_int }}
             </span>
           </div>
-          <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm vote-center-claim-btn" data-vote-claim="{{ r.id }}">
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm vote-center-claim-btn"
+                  data-vote-claim="{{ r.id }}">
             {{ T("vote_center_claim_btn", "Belohnung abholen") }}
           </button>
         </article>
@@ -184,7 +133,6 @@
       {% endif %}
     </div>
   </section>
-
   {% endif %}
 </div>
 {% endblock %}

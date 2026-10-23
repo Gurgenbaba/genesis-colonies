@@ -1232,3 +1232,170 @@ def test_arena_vote_end_respects_postback_reset(vote_db):
     assert cd["can_vote"] is False
     assert cd["cooldown_remaining_sec"] == 6 * 3600
     conn.close()
+
+
+# GC-VOTE-ARCA-001 — ARCAVOTE signature, identity, replay, and unsigned bypasses.
+def _arcavote_test_config(monkeypatch):
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
+    monkeypatch.setenv("ARCAVOTE_GAME_URL", "https://arcavote.com/game/test-genesis")
+    monkeypatch.setenv("ARCAVOTE_GAME_ID", "1138")
+    monkeypatch.setenv("ARCAVOTE_CALLBACK_SECRET", "arcavote-test-secret")
+
+
+def _arcavote_signed_form(uid, *, timestamp=None, game_id="1138", name=None, ip="198.51.100.31"):
+    import hashlib
+    import hmac
+
+    data = {
+        "game_id": game_id,
+        "name": name if name is not None else f"GCUNI1{uid}",
+        "ip": ip,
+        "time": str(timestamp if timestamp is not None else int(time.time())),
+    }
+    data["signature"] = hmac.new(
+        b"arcavote-test-secret",
+        "|".join(data[key] for key in ("game_id", "name", "ip", "time")).encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return data
+
+
+def test_arcavote_is_not_offered_until_all_runtime_config_is_set(vote_db, monkeypatch):
+    from game.vote_rewards import ARCAVOTE_PROVIDER
+
+    for key in ("ARCAVOTE_GAME_URL", "ARCAVOTE_GAME_ID", "ARCAVOTE_CALLBACK_SECRET"):
+        monkeypatch.delenv(key, raising=False)
+    conn = db()
+    assert ARCAVOTE_PROVIDER not in {p["provider_key"] for p in list_enabled_providers(conn=conn)}
+    _arcavote_test_config(monkeypatch)
+    providers = list_enabled_providers(conn=conn)
+    assert ARCAVOTE_PROVIDER in {p["provider_key"] for p in providers}
+    uid = _player()
+    state = get_vote_center_state(uid, conn=conn)
+    arcavote = next(p for p in state["providers"] if p["provider_key"] == ARCAVOTE_PROVIDER)
+    assert arcavote["vote_url"] == f"https://arcavote.com/game/test-genesis?name=GCUNI1{uid}"
+    assert arcavote["postback_enabled"] is True
+    conn.close()
+
+
+def test_arcavote_signed_callback_pending_reward_and_replay(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    client, uid, _ = _login_client(vote_db, monkeypatch)
+    form = _arcavote_signed_form(uid)
+    callback = "/api/vote/arcavote/callback"
+
+    res = client.post(callback, data=form)
+    assert res.status_code == 200
+    assert res.get_json() == {"ok": True, "created": True}
+
+    again = client.post(callback, data=form)
+    assert again.status_code == 200
+    assert again.get_json() == {"ok": True, "created": False}
+
+    conn = db()
+    rows = conn.execute(
+        "SELECT id, status, provider, provider_ref FROM vote_rewards WHERE user_id = ?;",
+        (uid,),
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["provider"] == "arcavote"
+    assert rows[0]["provider_ref"] == f"arcavote:{form['signature']}"
+    conn.close()
+
+    claimed = client.post("/api/vote/rewards/claim", json={"reward_id": rows[0]["id"]})
+    assert claimed.status_code == 200
+    assert claimed.get_json()["ok"] is True
+
+
+def test_arcavote_rejects_tamper_stale_wrong_game_and_unconfigured(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    client, uid, _ = _login_client(vote_db, monkeypatch)
+    callback = "/api/vote/arcavote/callback"
+
+    forged = _arcavote_signed_form(uid)
+    forged["name"] = f"GCUNI1{uid + 1}"
+    assert client.post(callback, data=forged).status_code == 403
+
+    wrong_game = _arcavote_signed_form(uid, game_id="9999")
+    assert client.post(callback, data=wrong_game).status_code == 403
+
+    stale = _arcavote_signed_form(uid, timestamp=int(time.time()) - 301)
+    assert client.post(callback, data=stale).status_code == 403
+
+    invalid_name = _arcavote_signed_form(uid, name="Hacker_Name!")
+    assert client.post(callback, data=invalid_name).status_code == 400
+
+    from werkzeug.datastructures import MultiDict
+
+    duplicate = MultiDict(list(_arcavote_signed_form(uid).items()))
+    duplicate.add("name", "GCUNI1999")
+    assert client.post(callback, data=duplicate).status_code == 400
+    assert client.post(callback, json=_arcavote_signed_form(uid)).status_code == 400
+
+    conn = db()
+    assert conn.execute("SELECT COUNT(*) FROM vote_rewards").fetchone()[0] == 0
+    conn.close()
+
+    monkeypatch.delenv("ARCAVOTE_CALLBACK_SECRET")
+    assert client.post(callback, data=_arcavote_signed_form(uid)).status_code == 503
+
+
+def test_arcavote_unsigned_generic_endpoint_and_link_click_never_grant(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    client, uid, _ = _login_client(vote_db, monkeypatch)
+
+    generic = client.get(f"/api/vote/postback/arcavote?user_id={uid}&ip=198.51.100.1")
+    assert generic.status_code == 403
+
+    clicked = client.post("/api/vote/visit", json={"provider_key": "arcavote"})
+    assert clicked.status_code == 200
+    assert clicked.get_json()["created"] is False
+    assert clicked.get_json()["reason"] == "awaiting_callback"
+
+    conn = db()
+    assert conn.execute("SELECT COUNT(*) FROM vote_rewards WHERE provider = 'arcavote'").fetchone()[0] == 0
+    conn.close()
+
+
+def test_arcavote_compact_page_has_no_provider_or_reward_images(vote_db, monkeypatch):
+    from pathlib import Path
+    template = (Path(__file__).resolve().parents[1] / "templates" / "vote_center.html").read_text()
+    assert "<img" not in template
+    assert "vote-center-provider-hero" not in template
+    assert "data-arcavote-link" in template
+    assert "data-vote-claim-all" in template
+    assert "data-vote-provider-link" in template
+
+
+def test_arcavote_callback_and_url_are_universe_scoped(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    from game.vote_rewards import arcavote_player_name, parse_arcavote_callback
+
+    assert arcavote_player_name(42) == "GCUNI142"
+    valid_uni1 = _arcavote_signed_form(42, name="GCUNI142")
+    assert parse_arcavote_callback(valid_uni1)[0] is True
+
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "dev")
+    assert arcavote_player_name(42) == "GCDEV42"
+    assert parse_arcavote_callback(valid_uni1)[0] is False
+    valid_dev = _arcavote_signed_form(42, name="GCDEV42")
+    assert parse_arcavote_callback(valid_dev)[0] is True
+
+
+def test_arcavote_signed_test_callback_acknowledged_without_grant(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    client, uid, _ = _login_client(vote_db, monkeypatch)
+    signed_test = _arcavote_signed_form(uid, name="TEST")
+
+    ok = client.post("/api/vote/arcavote/callback", data=signed_test)
+    assert ok.status_code == 200
+    assert ok.get_json() == {"ok": True, "created": False}
+
+    invalid = dict(signed_test)
+    invalid["signature"] = "0" * 64
+    assert client.post("/api/vote/arcavote/callback", data=invalid).status_code == 403
+
+    conn = db()
+    assert conn.execute("SELECT COUNT(*) FROM vote_rewards").fetchone()[0] == 0
+    conn.close()

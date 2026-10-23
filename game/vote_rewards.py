@@ -7,8 +7,11 @@ with one rolled reward each; players claim them in the Vote Center.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
+import re
 import os
 import random
 import socket
@@ -23,6 +26,16 @@ from .inventory_catalog import container_image_path, item_catalog_entry
 logger = logging.getLogger(__name__)
 
 VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
+    "arcavote": {
+        "display_name": "ARCAVOTE",
+        "card_image": "",
+        "vote_url_template": "",
+        "cooldown_seconds": 12 * 60 * 60,
+        "postback_enabled": True,
+        "sort_order": 5,
+        "subtitle_key": "",
+        "reward_status_key": "vote_provider_topg_reward_active",
+    },
     "topg": {
         "display_name": "TopG",
         "card_image": "img/vote/TopG.png",
@@ -87,6 +100,43 @@ STANDARD_VOTE_REWARD_PAYLOAD: Dict[str, Any] = {
 }
 VOTE_SKIP_IP_CHECK_ENV = "GC_VOTE_SKIP_IP_CHECK"
 TOPG_STRICT_IP_CHECK_ENV = "TOPG_STRICT_IP_CHECK"
+
+ARCAVOTE_PROVIDER = "arcavote"
+ARCAVOTE_GAME_URL_ENV = "ARCAVOTE_GAME_URL"
+ARCAVOTE_GAME_ID_ENV = "ARCAVOTE_GAME_ID"
+ARCAVOTE_CALLBACK_SECRET_ENV = "ARCAVOTE_CALLBACK_SECRET"
+
+def arcavote_game_url() -> str:
+    """Only allow the configured canonical ARCAVOTE game page, never a placeholder."""
+    url = os.environ.get(ARCAVOTE_GAME_URL_ENV, "").strip().rstrip("/")
+    if not re.fullmatch(r"https://arcavote\.com/game/[a-zA-Z0-9][a-zA-Z0-9_-]*", url):
+        return ""
+    return url
+
+
+def arcavote_universe_prefix() -> str:
+    """Different numeric account spaces must never collide across DEV and UNI1."""
+    universe = os.environ.get("GC_UNIVERSE_KEY", "dev").strip().upper()
+    return f"GC{universe}" if re.fullmatch(r"[A-Z0-9]{1,16}", universe) else ""
+
+
+def arcavote_ready() -> bool:
+    return bool(
+        arcavote_game_url()
+        and arcavote_universe_prefix()
+        and os.environ.get(ARCAVOTE_GAME_ID_ENV, "").strip()
+        and os.environ.get(ARCAVOTE_CALLBACK_SECRET_ENV, "").strip()
+    )
+
+
+def arcavote_player_name(user_id: int) -> str:
+    """Stable alphanumeric, universe-scoped name; independent of player display name."""
+    uid = int(user_id)
+    prefix = arcavote_universe_prefix()
+    if uid <= 0 or not prefix:
+        raise ValueError("invalid ARCAVOTE universe or user ID")
+    return f"{prefix}{uid}"
+
 
 TOPG_SERVER_ID = 683112
 TOPG_PROVIDER = "topg"
@@ -169,6 +219,10 @@ def _apply_canonical_provider_config(provider: Dict[str, Any]) -> Dict[str, Any]
         return provider
     out = dict(provider)
     out["display_name"] = str(canon.get("display_name") or out.get("display_name") or key)
+    if key == ARCAVOTE_PROVIDER:
+        out["vote_url_template"] = (
+            f"{arcavote_game_url()}?name={{arcavote_name}}" if arcavote_ready() else ""
+        )
     out["vote_url_template"] = str(canon.get("vote_url_template") or out.get("vote_url_template") or "")
     out["cooldown_sec"] = int(canon.get("cooldown_seconds") or out.get("cooldown_sec") or VOTE_COOLDOWN_SEC)
     out["postback_enabled"] = bool(canon.get("postback_enabled"))
@@ -185,7 +239,9 @@ def _apply_canonical_provider_config(provider: Dict[str, Any]) -> Dict[str, Any]
 def resolve_vote_url(template: str, user_id: int) -> str:
     t = str(template or "").strip()
     uid = str(int(user_id))
-    if "{user_id}" in t:
+    if "{arcavote_name}" in t:
+        url = t.replace("{arcavote_name}", arcavote_player_name(int(user_id)))
+    elif "{user_id}" in t:
         url = t.replace("{user_id}", uid)
     elif "server-683112" in t and f"server-683112-{uid}" not in t:
         url = t.replace("server-683112", f"server-683112-{uid}")
@@ -335,6 +391,8 @@ def list_enabled_providers(*, conn) -> List[Dict[str, Any]]:
     )
     out: List[Dict[str, Any]] = []
     for row in cur.fetchall():
+        if str(row["provider_key"]) == ARCAVOTE_PROVIDER and not arcavote_ready():
+            continue
         out.append(
             _apply_canonical_provider_config(
                 {
@@ -397,6 +455,9 @@ def _reward_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
 def _serialize_pending_reward(row: Any, *, conn, provider_names: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     payload = _parse_reward_payload(_row_str(row, "reward_payload_json"))
     summary = _reward_summary(payload)
+    # Vote Center is text-only; omit display_items to prevent the PJAX client
+    # from generating <img> elements after a state refresh or reward claim.
+    summary.pop("display_items", None)
     provider_key = str(row["provider"])
     if provider_names and provider_key in provider_names:
         provider_name = provider_names[provider_key]
@@ -785,6 +846,8 @@ def count_vote_center_attention(user_id: int, *, conn, now: Optional[int] = None
     voteable = 0
     for row in rows:
         provider_key = str(row["provider_key"] or "")
+        if provider_key == ARCAVOTE_PROVIDER and not arcavote_ready():
+            continue
         if not provider_key:
             continue
         canonical = VOTE_PROVIDERS.get(provider_key) or {}
@@ -855,6 +918,85 @@ def get_vote_center_state(user_id: int, *, conn) -> Dict[str, Any]:
         out["can_vote_hint"] = topg["can_vote_hint"]
         out["can_vote_now"] = topg["can_vote_now"]
     return out
+
+
+def parse_arcavote_callback(
+    form_data: Mapping[str, Any],
+    *,
+    now: Optional[int] = None,
+) -> Tuple[bool, str, Optional[int], Optional[str], Optional[str]]:
+    """Verify ARCAVOTE's exact form-encoded HMAC-SHA256 contract.
+
+    Signed fields: game_id|name|ip|time. No proxy-IP comparison: ip is the
+    voter's address sent by ARCAVOTE, not the sender's network address.
+    """
+    if not arcavote_ready():
+        return False, "not_configured", None, None, None
+
+    fields = ("game_id", "name", "ip", "time", "signature")
+    if any(not isinstance(form_data.get(field), str) for field in fields):
+        return False, "invalid_vote_data", None, None, None
+
+    game_id, name, vote_ip, timestamp, signature = (
+        str(form_data[field]) for field in fields
+    )
+    expected_game_id = os.environ.get(ARCAVOTE_GAME_ID_ENV, "").strip()
+    secret = os.environ.get(ARCAVOTE_CALLBACK_SECRET_ENV, "").strip()
+    if not hmac.compare_digest(game_id, expected_game_id):
+        return False, "forbidden", None, None, None
+
+    if not re.fullmatch(r"[0-9]{1,15}", timestamp):
+        return False, "invalid_vote_data", None, None, None
+    ts = int(timestamp)
+    current = int(now if now is not None else time.time())
+    if abs(current - ts) > 300:
+        return False, "forbidden", None, None, None
+
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", signature):
+        return False, "forbidden", None, None, None
+    payload = "|".join((game_id, name, vote_ip, timestamp))
+    check = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(check, signature.lower()):
+        return False, "forbidden", None, None, None
+
+    # ARCAVOTE's operator connectivity wizard sends a signed name=TEST event.
+    # ACK that diagnostic without ever granting a reward to a dummy account.
+    if name == "TEST":
+        return True, "test_ping", None, vote_ip, signature.lower()
+
+    # Only our immutable numeric account reference is accepted. This prevents
+    # username normalization collisions, impersonation and account rename bugs.
+    prefix = arcavote_universe_prefix()
+    match = re.fullmatch(re.escape(prefix) + r"([1-9][0-9]{0,17})", name)
+    if not match:
+        return False, "invalid_vote_data", None, None, None
+    return True, "ok", int(match.group(1)), vote_ip, signature.lower()
+
+
+def handle_arcavote_callback(
+    form_data: Mapping[str, Any],
+    *,
+    conn,
+    now: Optional[int] = None,
+) -> Tuple[bool, bool, str]:
+    allowed, reason, uid, ip, signature = parse_arcavote_callback(form_data, now=now)
+    if not allowed:
+        return False, False, reason
+    if reason == "test_ping":
+        return True, False, "test_ping"
+    assert uid is not None and signature is not None
+    result = process_provider_vote(
+        ARCAVOTE_PROVIDER,
+        uid,
+        ip,
+        conn=conn,
+        now=now,
+        # Same signed event must stay unique even after a cooldown expires.
+        provider_ref_override=f"arcavote:{signature}",
+    )
+    if not result["success"]:
+        return False, False, result["error"]
+    return True, bool(result["created"]), "ok"
 
 
 def get_gtop100_pingback_key() -> str:
@@ -1296,6 +1438,9 @@ def parse_provider_postback(
     remote_addr: Optional[str] = None,
     conn,
 ) -> Tuple[bool, str, Optional[int], Optional[str]]:
+    # The generic legacy postback must never bypass ARCAVOTE's signed route.
+    if str(provider_key) == ARCAVOTE_PROVIDER:
+        return False, "forbidden", None, None
     provider = _get_provider(provider_key, conn=conn)
     if not provider or not provider["enabled"]:
         return False, "provider_disabled", None, None
@@ -1402,6 +1547,11 @@ def handle_vote_visit(
     uid = int(user_id)
     if uid <= 0 or not _user_exists(uid, conn=conn):
         return False, False, "invalid_user", 0
+
+    if provider_key == ARCAVOTE_PROVIDER:
+        # ARCAVOTE rewards are minted exclusively by a verified signed callback.
+        # Never grant a reward for clicking an outbound link.
+        return True, False, "awaiting_callback", 0
 
     ts = int(now if now is not None else time.time())
     result = process_provider_vote(str(provider_key), uid, None, conn=conn, now=ts)
