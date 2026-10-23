@@ -1236,6 +1236,7 @@ def test_arena_vote_end_respects_postback_reset(vote_db):
 
 # GC-VOTE-ARCA-001 — ARCAVOTE signature, identity, replay, and unsigned bypasses.
 def _arcavote_test_config(monkeypatch):
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "uni1")
     monkeypatch.setenv("ARCAVOTE_GAME_URL", "https://arcavote.com/game/test-genesis")
     monkeypatch.setenv("ARCAVOTE_GAME_ID", "1138")
     monkeypatch.setenv("ARCAVOTE_CALLBACK_SECRET", "arcavote-test-secret")
@@ -1247,7 +1248,7 @@ def _arcavote_signed_form(uid, *, timestamp=None, game_id="1138", name=None, ip=
 
     data = {
         "game_id": game_id,
-        "name": name if name is not None else f"GC{uid}",
+        "name": name if name is not None else f"GCUNI1{uid}",
         "ip": ip,
         "time": str(timestamp if timestamp is not None else int(time.time())),
     }
@@ -1272,7 +1273,7 @@ def test_arcavote_is_not_offered_until_all_runtime_config_is_set(vote_db, monkey
     uid = _player()
     state = get_vote_center_state(uid, conn=conn)
     arcavote = next(p for p in state["providers"] if p["provider_key"] == ARCAVOTE_PROVIDER)
-    assert arcavote["vote_url"] == f"https://arcavote.com/game/test-genesis?name=GC{uid}"
+    assert arcavote["vote_url"] == f"https://arcavote.com/game/test-genesis?name=GCUNI1{uid}"
     assert arcavote["postback_enabled"] is True
     conn.close()
 
@@ -1313,7 +1314,7 @@ def test_arcavote_rejects_tamper_stale_wrong_game_and_unconfigured(vote_db, monk
     callback = "/api/vote/arcavote/callback"
 
     forged = _arcavote_signed_form(uid)
-    forged["name"] = f"GC{uid + 1}"
+    forged["name"] = f"GCUNI1{uid + 1}"
     assert client.post(callback, data=forged).status_code == 403
 
     wrong_game = _arcavote_signed_form(uid, game_id="9999")
@@ -1326,7 +1327,7 @@ def test_arcavote_rejects_tamper_stale_wrong_game_and_unconfigured(vote_db, monk
     assert client.post(callback, data=invalid_name).status_code == 400
 
     duplicate = list(_arcavote_signed_form(uid).items())
-    duplicate.append(("name", "GC999"))
+    duplicate.append(("name", "GCUNI1999"))
     assert client.post(callback, data=duplicate).status_code == 400
     assert client.post(callback, json=_arcavote_signed_form(uid)).status_code == 400
 
@@ -1363,3 +1364,18 @@ def test_arcavote_compact_page_has_no_provider_or_reward_images(vote_db, monkeyp
     assert "data-arcavote-link" in template
     assert "data-vote-claim-all" in template
     assert "data-vote-provider-link" in template
+
+
+def test_arcavote_callback_and_url_are_universe_scoped(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    from game.vote_rewards import arcavote_player_name, parse_arcavote_callback
+
+    assert arcavote_player_name(42) == "GCUNI142"
+    valid_uni1 = _arcavote_signed_form(42, name="GCUNI142")
+    assert parse_arcavote_callback(valid_uni1)[0] is True
+
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "dev")
+    assert arcavote_player_name(42) == "GCDEV42"
+    assert parse_arcavote_callback(valid_uni1)[0] is False
+    valid_dev = _arcavote_signed_form(42, name="GCDEV42")
+    assert parse_arcavote_callback(valid_dev)[0] is True
