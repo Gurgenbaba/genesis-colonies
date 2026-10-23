@@ -1,4 +1,13 @@
-/* GC-VOTE-ARCA-001 — image-free compact voting layout, PJAX-safe in base shell. */
+/* GC-VOTE-ARCA-001 — image-free, square-corner voting layout; PJAX-safe in base shell. */
+/* Keep Genesis Vote Center strictly angular even when shared panels/buttons/badges
+   use global pill or rounded-corner styles (including pseudo-elements). */
+#vote-center-page,
+#vote-center-page *,
+#vote-center-page *::before,
+#vote-center-page *::after {
+  border-radius: 0 !important;
+}
+
 #vote-center-page .vote-center-header { margin-bottom: 14px; }
 #vote-center-page .vote-center-hint { max-width: 64ch; margin: 4px 0 0; }
 #vote-center-page .vote-center-panel { margin-bottom: 14px; }
@@ -16,7 +25,7 @@
   min-height: 0;
   padding: 13px 14px;
   border: 1px solid var(--gc-border, rgba(167, 196, 227, .19));
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--gc-panel-bg, rgba(18, 28, 41, .75));
   background-image: none !important;
   box-shadow: none;
@@ -109,7 +118,7 @@
   min-height: 0;
   padding: 10px 12px;
   border: 1px solid var(--gc-border, rgba(167, 196, 227, .19));
-  border-radius: 8px;
+  border-radius: 0;
   background-image: none !important;
 }
 #vote-center-page .vote-center-reward-info {

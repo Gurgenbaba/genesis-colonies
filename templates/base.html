@@ -27,7 +27,7 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
   {# Vote Center is PJAX-routed; its minimal UI CSS must survive shell swaps. #}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/vote_center_compact.css') }}?v={{ GC_ASSET_VERSION }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vote_center_compact.css') }}?v={{ GC_ASSET_VERSION }}-sharp1">
   {# GC-PE-UX-02: shell-owned so Planet Evolution stays styled across PJAX navigation. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planet_evolution_clarity.css') }}?v={{ GC_ASSET_VERSION }}">
   {# GC-ASC-PJAX-001: Ascension tree is a PJAX page; keep its styling in the persistent shell. #}
