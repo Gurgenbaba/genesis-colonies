@@ -5481,6 +5481,45 @@ def api_vote_provider_postback(provider_key: str):
     return _vote_postback_response(str(provider_key or "").strip().lower())
 
 
+@app.route("/api/vote/arcavote/callback", methods=["POST"])
+def api_vote_arcavote_callback():
+    """Signed ARCAVOTE webhook; no session, link-click credit or JSON fallback."""
+    from game.vote_rewards import handle_arcavote_callback
+
+    if request.content_length is not None and request.content_length > 4096:
+        return jsonify({"ok": False, "reason": "invalid_vote_data"}), 413
+
+    required = ("game_id", "name", "ip", "time", "signature")
+    # Reject missing, repeated or ambiguous form fields before signature verification.
+    if not request.mimetype == "application/x-www-form-urlencoded" or any(
+        len(request.form.getlist(field)) != 1 for field in required
+    ):
+        return jsonify({"ok": False, "reason": "invalid_vote_data"}), 400
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, created, reason = handle_arcavote_callback(dict(request.form), conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("arcavote callback processing failed")
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    if not ok:
+        status = 403 if reason == "forbidden" else (
+            400 if reason in ("invalid_vote_data", "invalid_user") else 503
+        )
+        return jsonify({"ok": False, "reason": reason}), status
+    # 2xx for duplicate callbacks; ARCAVOTE can safely stop retrying.
+    return jsonify({"ok": True, "created": bool(created)}), 200
+
+
 @app.route("/api/vote/topg/postback", methods=["GET"])
 def api_vote_topg_postback():
     return _vote_postback_response("topg")
