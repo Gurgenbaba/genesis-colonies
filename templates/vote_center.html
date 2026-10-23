@@ -78,9 +78,7 @@
               {{ T("vote_center_can_vote", "Du kannst jetzt voten.") }}
             {% endif %}
           </p>
-          <a href="{{ p.vote_url }}" target="_blank" rel="noopener noreferrer"
-             class="gc-btn gc-btn-secondary gc-btn-sm vote-center-vote-btn"
-             data-vote-provider-link="{{ p.provider_key if p.provider_key != 'arcavote' else '' }}" data-arcavote-link="{{ '1' if p.provider_key == 'arcavote' else '' }}">
+          <a href="{{ p.vote_url }}" target="_blank" rel="noopener noreferrer" class="gc-btn gc-btn-secondary gc-btn-sm vote-center-vote-btn" data-vote-provider-link="{{ p.provider_key if p.provider_key != 'arcavote' else '' }}" data-arcavote-link="{{ '1' if p.provider_key == 'arcavote' else '' }}">
             {% if p.provider_key == 'arcavote' %}
               {{ T("vote_center_vote_btn_short", "Voten") }}
             {% elif p.provider_key == 'topg' %}
