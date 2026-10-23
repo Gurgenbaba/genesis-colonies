@@ -1273,9 +1273,54 @@ def test_arcavote_is_not_offered_until_all_runtime_config_is_set(vote_db, monkey
     uid = _player()
     state = get_vote_center_state(uid, conn=conn)
     arcavote = next(p for p in state["providers"] if p["provider_key"] == ARCAVOTE_PROVIDER)
-    assert arcavote["vote_url"] == f"https://arcavote.com/game/test-genesis?name=GCUNI1{uid}"
+    from urllib.parse import parse_qs, urlparse
+    signed = urlparse(arcavote["vote_url"])
+    params = parse_qs(signed.query)
+    assert signed.scheme == "https"
+    assert signed.netloc == "arcavote.com"
+    assert signed.path == "/game/test-genesis"
+    assert params["name"] == [f"GCUNI1{uid}"]
+    assert abs(int(params["vote_ts"][0]) - int(time.time())) <= 5
+    assert len(params["vote_auth"][0]) == 64
     assert arcavote["postback_enabled"] is True
     conn.close()
+
+
+def test_arcavote_launch_link_is_signed_and_universe_bound(vote_db, monkeypatch):
+    import hashlib
+    import hmac
+    from urllib.parse import parse_qs, urlparse
+
+    _arcavote_test_config(monkeypatch)
+    from game.vote_rewards import arcavote_signed_vote_url, resolve_vote_url
+
+    def verify(url, expected_name, timestamp):
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        assert params["name"] == [expected_name]
+        assert params["vote_ts"] == [str(timestamp)]
+        expected = hmac.new(
+            b"arcavote-test-secret",
+            f"arcavote-launch-v1|1138|{expected_name}|{timestamp}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        assert params["vote_auth"] == [expected]
+        assert "arcavote-test-secret" not in url
+        return params
+
+    uni = arcavote_signed_vote_url(8, now=1760000000)
+    params = verify(uni, "GCUNI18", 1760000000)
+    assert resolve_vote_url("https://arcavote.com/game/test-genesis?name={arcavote_name}", 8).startswith(
+        "https://arcavote.com/game/test-genesis?name=GCUNI18&vote_ts="
+    )
+    tampered = hmac.new(
+        b"arcavote-test-secret",
+        b"arcavote-launch-v1|1138|GCUNI19|1760000000",
+        hashlib.sha256,
+    ).hexdigest()
+    assert params["vote_auth"][0] != tampered
+    monkeypatch.setenv("GC_UNIVERSE_KEY", "dev")
+    verify(arcavote_signed_vote_url(8, now=1760000000), "GCDEV8", 1760000000)
 
 
 def test_arcavote_signed_callback_pending_reward_and_replay(vote_db, monkeypatch):
