@@ -959,6 +959,11 @@ def parse_arcavote_callback(
     if not hmac.compare_digest(check, signature.lower()):
         return False, "forbidden", None, None, None
 
+    # ARCAVOTE's operator connectivity wizard sends a signed name=TEST event.
+    # ACK that diagnostic without ever granting a reward to a dummy account.
+    if name == "TEST":
+        return True, "test_ping", None, vote_ip, signature.lower()
+
     # Only our immutable numeric account reference is accepted. This prevents
     # username normalization collisions, impersonation and account rename bugs.
     prefix = arcavote_universe_prefix()
@@ -977,6 +982,8 @@ def handle_arcavote_callback(
     allowed, reason, uid, ip, signature = parse_arcavote_callback(form_data, now=now)
     if not allowed:
         return False, False, reason
+    if reason == "test_ping":
+        return True, False, "test_ping"
     assert uid is not None and signature is not None
     result = process_provider_vote(
         ARCAVOTE_PROVIDER,
