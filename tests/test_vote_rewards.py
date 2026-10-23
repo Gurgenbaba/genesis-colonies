@@ -1399,3 +1399,25 @@ def test_arcavote_signed_test_callback_acknowledged_without_grant(vote_db, monke
     conn = db()
     assert conn.execute("SELECT COUNT(*) FROM vote_rewards").fetchone()[0] == 0
     conn.close()
+
+
+def test_vote_center_square_corners_are_enforced_for_cards_controls_and_badges():
+    """Global rounded/pill tokens must never leak into the compact Vote Center."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    css = (root / "static" / "css" / "vote_center_compact.css").read_text(encoding="utf-8")
+    shell = (root / "templates" / "base.html").read_text(encoding="utf-8")
+
+    # The complete subtree (and its pseudo-elements) overrides legacy pills.
+    for selector in (
+        "#vote-center-page,",
+        "#vote-center-page *,",
+        "#vote-center-page *::before,",
+        "#vote-center-page *::after {",
+    ):
+        assert selector in css
+    assert "border-radius: 0 !important;" in css
+    assert "border-radius: 10px" not in css
+    assert "border-radius: 8px" not in css
+    assert "vote_center_compact.css') }}?v={{ GC_ASSET_VERSION }}-sharp1" in shell
