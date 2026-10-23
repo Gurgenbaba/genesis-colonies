@@ -1326,8 +1326,10 @@ def test_arcavote_rejects_tamper_stale_wrong_game_and_unconfigured(vote_db, monk
     invalid_name = _arcavote_signed_form(uid, name="Hacker_Name!")
     assert client.post(callback, data=invalid_name).status_code == 400
 
-    duplicate = list(_arcavote_signed_form(uid).items())
-    duplicate.append(("name", "GCUNI1999"))
+    from werkzeug.datastructures import MultiDict
+
+    duplicate = MultiDict(list(_arcavote_signed_form(uid).items()))
+    duplicate.add("name", "GCUNI1999")
     assert client.post(callback, data=duplicate).status_code == 400
     assert client.post(callback, json=_arcavote_signed_form(uid)).status_code == 400
 
