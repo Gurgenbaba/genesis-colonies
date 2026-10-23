@@ -447,6 +447,9 @@ def _reward_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
 def _serialize_pending_reward(row: Any, *, conn, provider_names: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     payload = _parse_reward_payload(_row_str(row, "reward_payload_json"))
     summary = _reward_summary(payload)
+    # Vote Center is text-only; omit display_items to prevent the PJAX client
+    # from generating <img> elements after a state refresh or reward claim.
+    summary.pop("display_items", None)
     provider_key = str(row["provider"])
     if provider_names and provider_key in provider_names:
         provider_name = provider_names[provider_key]
