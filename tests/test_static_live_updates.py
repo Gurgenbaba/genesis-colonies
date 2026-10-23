@@ -2804,7 +2804,7 @@ def test_gc551_card_artwork_dirs_png_only_no_svg():
 
 
 def test_gc555_asset_audit_and_webp_loading():
-    """GC-555: WebP tooling, picture macro, vote banner CSS, landscape webp var."""
+    """GC-555: WebP tooling, image-free Vote Center, landscape webp var."""
     audit = _read("tools/audit_assets.py")
     convert = _read("tools/convert_webp.py")
     doc = _read("docs/GC-555_ASSET_AUDIT.md")
@@ -2823,7 +2823,9 @@ def test_gc555_asset_audit_and_webp_loading():
     assert "render_raster_picture" in progression
     assert "<picture>" in progression
     assert "webp_static" in progression
-    assert "--vote-banner" in vote_tpl
+    assert "--vote-banner" not in vote_tpl
+    assert "<img" not in vote_tpl
+    assert "vote_center_compact.css" in base
     assert "vote-center-provider-hero-img" not in vote_tpl
     assert "--planet-landscape-webp" in base
     assert "image-set" in css.split("vote-center-provider-hero")[1][:400]

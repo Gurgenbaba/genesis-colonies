@@ -276,10 +276,64 @@ Multi-Provider-Voting: Konfiguration in `vote_providers`, Postback erzeugt **pen
 | Claim | `POST /api/vote/rewards/claim` | `game/vote_rewards.py` |
 | Claim all | `POST /api/vote/rewards/claim-all` | `game/vote_rewards.py` |
 
+### ARCAVOTE — signierter Callback (GC-VOTE-ARCA-001)
+
+ARCAVOTE nutzt den bestehenden Vote-Owner `game/vote_rewards.py` und denselben
+**pending → claim**-Inventarablauf. Ein reiner Link-Klick vergibt **keine**
+Belohnung; ausschließlich ein gültiger `application/x-www-form-urlencoded`
+POST an `/api/vote/arcavote/callback` erzeugt eine ausstehende Standard-Box.
+Die generische unsignierte Route `/api/vote/postback/arcavote` wird blockiert.
+
+Die beiden aktiven Genesis-Umgebungen haben **unabhängige Spieler-IDs und
+Datenbanken**:
+
+| Umgebung | Railway-Service | Callback-URL | ARCAVOTE-Name |
+|----------|----------------|--------------|---------------|
+| DEV | `genesis-colonies` | `https://dev.genesis-colonies.com/api/vote/arcavote/callback` | `GCDEV123` |
+| UNI1 | `genesis-colonies-u2` | `https://uni1.genesis-colonies.com/api/vote/arcavote/callback` | `GCUNI1123` |
+
+Der Namenspräfix wird automatisch aus `GC_UNIVERSE_KEY` abgeleitet;
+er bleibt alphanumerisch und die Account-ID unveränderlich.
+**Ein ARCAVOTE-Listing kann nur eine Callback-URL besitzen.**
+Darum **UNI1 zuerst produktiv** als eigene ARCAVOTE-Spielanlage konfigurieren;
+DEV nur mit einer eigenen **Test-Spielanlage** (eigene Game-ID, eigenes Secret,
+eigene Callback-URL und idealerweise deaktivierte öffentliche Listung).
+UNI1-Callbacks werden auf DEV allein schon wegen des Namenspräfixes abgewiesen.
+Niemals die echte UNI1-Callback-URL auf den DEV-Service richten.
+
+Die drei notwendigen Umgebungsvariablen sind pro Service **getrennt** zu setzen:
+
+```env
+ARCAVOTE_GAME_URL=https://arcavote.com/game/<wirklich-veroeffentlichter-slug>
+ARCAVOTE_GAME_ID=<game-id-aus-dem-arcavote-dashboard>
+ARCAVOTE_CALLBACK_SECRET=<secret-aus-dem-arcavote-dashboard>
+```
+
+Ohne alle drei echten Werte erscheint der ARCAVOTE-Button im Spiel nicht.
+Das Secret niemals in Git, JS, Logs oder URL-Parametern veröffentlichen.
+Link pro Benutzer: `<ARCAVOTE_GAME_URL>?name=GC<UNIVERSE_KEY><account_id>`.
+
+ARCAVOTE signiert die fünf Formfelder `game_id`, `name`, `ip`,
+`time` und `signature`; die HMAC-SHA256-Eingabe ist exakt
+`game_id|name|ip|time`. Der Server prüft Game-ID,
+konstante Signaturvergleichszeit, ±300 Sekunden Zeitfenster und
+aktuelle Universe-/Account-Zuordnung. Replay-Signaturen sind über
+`provider_ref` eindeutig, zusätzlich gilt ein serverseitiger 12h-Cooldown
+pro Konto. Doppelte bzw. zu schnelle gültige Callbacks antworten 200
+ohne neue Belohnung. Der ARCAVOTE-Verbindungstest `name=TEST` bekommt nach
+korrekter HMAC-Prüfung 200 **ohne Auszahlung**. Ungültige Callbacks liefern
+4xx, fehlende Konfiguration 503.
+Pro erfolgreichem Vote: genau **eine Standard-Supply-Box**, via Claim.
+
+UI: kleine bildfreie Provider-Cards und bildfreie Reward-Zeilen;
+auch die PJAX-State-Aktualisierung bekommt keine Reward-Bilddaten.
+Migration: `999_arcavote_vote_provider.sql` (idempotenter Seed).
+
 ### Provider (Seed)
 
 | Key | Vote-URL | Postback |
 |-----|----------|----------|
+| `arcavote` | `ARCAVOTE_GAME_URL?name=GC{universe}{user_id}` (env-konfiguriert) | 12h, signed HMAC-SHA256 POST only |
 | `topg` | `https://topg.org/ogame-private-servers/server-683112-{user_id}#vote` | 6h Cooldown; `p_resp`, `ip` |
 | `gtop100` | `https://gtop100.com/Ogame/server-106142?vote=1&pingUsername={user_id}` | 12h Cooldown; JSON/Form Pingback; `GTOP100_PINGBACK_KEY`, `siteid=106142`, `success=0` |
 | `gametoor` | `http://gametoor.com/in/3277/{user_id}` | IVN + Klick; `GAMETOOR_IVN_KEY`; 12h Cooldown |
