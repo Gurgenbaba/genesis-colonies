@@ -80,7 +80,7 @@
           </p>
           <a href="{{ p.vote_url }}" target="_blank" rel="noopener noreferrer"
              class="gc-btn gc-btn-secondary gc-btn-sm vote-center-vote-btn"
-             data-vote-provider-link="{{ p.provider_key }}">
+             {% if p.provider_key == "arcavote" %}data-arcavote-link{% else %}data-vote-provider-link="{{ p.provider_key }}"{% endif %}>
             {% if p.provider_key == 'arcavote' %}
               ARCAVOTE ↗
             {% elif p.provider_key == 'topg' %}
