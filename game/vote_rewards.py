@@ -1422,6 +1422,9 @@ def parse_provider_postback(
     remote_addr: Optional[str] = None,
     conn,
 ) -> Tuple[bool, str, Optional[int], Optional[str]]:
+    # The generic legacy postback must never bypass ARCAVOTE's signed route.
+    if str(provider_key) == ARCAVOTE_PROVIDER:
+        return False, "forbidden", None, None
     provider = _get_provider(provider_key, conn=conn)
     if not provider or not provider["enabled"]:
         return False, "provider_disabled", None, None
