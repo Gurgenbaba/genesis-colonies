@@ -236,11 +236,31 @@ def _apply_canonical_provider_config(provider: Dict[str, Any]) -> Dict[str, Any]
     return out
 
 
+def arcavote_signed_vote_url(user_id: int, *, now: Optional[int] = None) -> str:
+    """Authenticated, short-lived launch into ARCAVOTE, not an editable name.
+
+    Uses the existing server-to-server callback secret with domain-separated
+    HMAC material. The secret itself never enters a browser or game template.
+    """
+    if not arcavote_ready():
+        raise ValueError("ARCAVOTE is not configured")
+    name = arcavote_player_name(user_id)
+    timestamp = int(time.time() if now is None else now)
+    game_id = os.environ.get(ARCAVOTE_GAME_ID_ENV, "").strip()
+    secret = os.environ.get(ARCAVOTE_CALLBACK_SECRET_ENV, "").strip()
+    material = f"arcavote-launch-v1|{game_id}|{name}|{timestamp}"
+    signature = hmac.new(secret.encode("utf-8"), material.encode("utf-8"), hashlib.sha256).hexdigest()
+    separator = "&" if "?" in arcavote_game_url() else "?"
+    return f"{arcavote_game_url()}{separator}name={name}&vote_ts={timestamp}&vote_auth={signature}"
+
+
 def resolve_vote_url(template: str, user_id: int) -> str:
     t = str(template or "").strip()
     uid = str(int(user_id))
     if "{arcavote_name}" in t:
-        url = t.replace("{arcavote_name}", arcavote_player_name(int(user_id)))
+        # The player is authenticated inside the Genesis Vote Center; a bare
+        # ?name=GCUNI1... link can be altered and must never be trusted.
+        return arcavote_signed_vote_url(int(user_id))
     elif "{user_id}" in t:
         url = t.replace("{user_id}", uid)
     elif "server-683112" in t and f"server-683112-{uid}" not in t:
