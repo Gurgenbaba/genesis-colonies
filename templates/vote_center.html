@@ -36,7 +36,7 @@
           <span class="vote-center-provider-vote-count gc-mono"
                 data-vote-provider-count="{{ p.provider_key }}"
                 title="{{ T('vote_center_vote_count', 'Votes gesamt') }}">
-            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }} Votes
+            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }} {{ T('vote_center_vote_count', 'Votes gesamt') }}
           </span>
         </div>
 
@@ -80,9 +80,9 @@
           </p>
           <a href="{{ p.vote_url }}" target="_blank" rel="noopener noreferrer"
              class="gc-btn gc-btn-secondary gc-btn-sm vote-center-vote-btn"
-             {% if p.provider_key == "arcavote" %}data-arcavote-link{% else %}data-vote-provider-link="{{ p.provider_key }}"{% endif %}>
+             data-vote-provider-link="{{ p.provider_key if p.provider_key != 'arcavote' else '' }}" data-arcavote-link="{{ '1' if p.provider_key == 'arcavote' else '' }}">
             {% if p.provider_key == 'arcavote' %}
-              ARCAVOTE ↗
+              {{ T("vote_center_vote_btn_short", "Voten") }}
             {% elif p.provider_key == 'topg' %}
               {{ T("vote_center_vote_btn_topg", "Auf TopG voten") }}
             {% elif p.provider_key == 'gtop100' %}
