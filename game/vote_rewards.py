@@ -114,20 +114,28 @@ def arcavote_game_url() -> str:
     return url
 
 
+def arcavote_universe_prefix() -> str:
+    """Different numeric account spaces must never collide across DEV and UNI1."""
+    universe = os.environ.get("GC_UNIVERSE_KEY", "dev").strip().upper()
+    return f"GC{universe}" if re.fullmatch(r"[A-Z0-9]{1,16}", universe) else ""
+
+
 def arcavote_ready() -> bool:
     return bool(
         arcavote_game_url()
+        and arcavote_universe_prefix()
         and os.environ.get(ARCAVOTE_GAME_ID_ENV, "").strip()
         and os.environ.get(ARCAVOTE_CALLBACK_SECRET_ENV, "").strip()
     )
 
 
 def arcavote_player_name(user_id: int) -> str:
-    """Stable A-Z/0-9 identity, unlike changeable or punctuation-bearing nicknames."""
+    """Stable alphanumeric, universe-scoped name; independent of player display name."""
     uid = int(user_id)
-    if uid <= 0:
-        raise ValueError("user_id must be positive")
-    return f"GC{uid}"
+    prefix = arcavote_universe_prefix()
+    if uid <= 0 or not prefix:
+        raise ValueError("invalid ARCAVOTE universe or user ID")
+    return f"{prefix}{uid}"
 
 
 TOPG_SERVER_ID = 683112
@@ -953,7 +961,8 @@ def parse_arcavote_callback(
 
     # Only our immutable numeric account reference is accepted. This prevents
     # username normalization collisions, impersonation and account rename bugs.
-    match = re.fullmatch(r"GC([1-9][0-9]{0,17})", name)
+    prefix = arcavote_universe_prefix()
+    match = re.fullmatch(re.escape(prefix) + r"([1-9][0-9]{0,17})", name)
     if not match:
         return False, "invalid_vote_data", None, None, None
     return True, "ok", int(match.group(1)), vote_ip, signature.lower()
