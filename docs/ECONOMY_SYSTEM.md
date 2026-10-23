@@ -276,10 +276,48 @@ Multi-Provider-Voting: Konfiguration in `vote_providers`, Postback erzeugt **pen
 | Claim | `POST /api/vote/rewards/claim` | `game/vote_rewards.py` |
 | Claim all | `POST /api/vote/rewards/claim-all` | `game/vote_rewards.py` |
 
+### ARCAVOTE — signed callback (GC-VOTE-ARCA-001)
+
+ARCAVOTE uses the existing `game/vote_rewards.py` domain owner and the normal
+**pending → claim** inventory flow, but rewards are minted **only after the
+signed form-encoded POST** to `/api/vote/arcavote/callback`. The old
+`/api/vote/visit` never credits ARCAVOTE; the legacy generic
+`/api/vote/postback/arcavote` is explicitly rejected.
+
+Required environment variables **on the selected universe service**:
+
+- `ARCAVOTE_GAME_URL=https://arcavote.com/game/<actual-published-slug>`
+- `ARCAVOTE_GAME_ID=<actual-id-from-ARCAVOTE>`
+- `ARCAVOTE_CALLBACK_SECRET=<secret-from-ARCAVOTE>`
+
+Only a valid, fully configured published URL + game ID + secret makes the ARCAVOTE
+card visible. No guessed slug or blank secret is accepted. **Never commit a
+real secret.** In the ARCAVOTE dashboard, enter the production callback URL,
+for example **`https://uni1.genesis-colonies.com/api/vote/arcavote/callback`**
+for UNI1; a single callback goes to only that universe's player database.
+For DEV/other universes, register a separate listing/callback or design an
+explicit universe dispatcher rather than reusing numeric player IDs.
+
+Outbound link: `<ARCAVOTE_GAME_URL>?name=GC<account_id>` (example `GC123`).
+This is an immutable alphanumeric vote identity, not a mutable screen name.
+The callback signature is HMAC-SHA256 over
+`game_id|name|ip|time` using the exact raw values supplied by ARCAVOTE,
+with a constant-time comparison, matching game_id, an absolute timestamp
+skew <= 300 seconds, and an account-id mapping (must exist in local DB).
+Duplicate or cooldown-locked callbacks return HTTP 200 but never award twice.
+Invalid/untrusted callbacks return 4xx; missing configuration returns 503.
+The provider uses a 12h server-side cooldown and awards **one standard supply
+container**, claimable in the Vote Center.
+
+UI: text-only provider cards and pending rewards; no provider banners and no
+reward-image metadata delivered to the Vote Center's PJAX renderer.
+Migration: `999_arcavote_vote_provider.sql` (idempotent seed).
+
 ### Provider (Seed)
 
 | Key | Vote-URL | Postback |
 |-----|----------|----------|
+| `arcavote` | `ARCAVOTE_GAME_URL?name=GC{user_id}` (env-configured) | 12h, signed HMAC-SHA256 POST only |
 | `topg` | `https://topg.org/ogame-private-servers/server-683112-{user_id}#vote` | 6h Cooldown; `p_resp`, `ip` |
 | `gtop100` | `https://gtop100.com/Ogame/server-106142?vote=1&pingUsername={user_id}` | 12h Cooldown; JSON/Form Pingback; `GTOP100_PINGBACK_KEY`, `siteid=106142`, `success=0` |
 | `gametoor` | `http://gametoor.com/in/3277/{user_id}` | IVN + Klick; `GAMETOOR_IVN_KEY`; 12h Cooldown |
