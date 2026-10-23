@@ -320,7 +320,9 @@ konstante Signaturvergleichszeit, ±300 Sekunden Zeitfenster und
 aktuelle Universe-/Account-Zuordnung. Replay-Signaturen sind über
 `provider_ref` eindeutig, zusätzlich gilt ein serverseitiger 12h-Cooldown
 pro Konto. Doppelte bzw. zu schnelle gültige Callbacks antworten 200
-ohne neue Belohnung, ungültige 4xx, fehlende Konfiguration 503.
+ohne neue Belohnung. Der ARCAVOTE-Verbindungstest `name=TEST` bekommt nach
+korrekter HMAC-Prüfung 200 **ohne Auszahlung**. Ungültige Callbacks liefern
+4xx, fehlende Konfiguration 503.
 Pro erfolgreichem Vote: genau **eine Standard-Supply-Box**, via Claim.
 
 UI: kleine bildfreie Provider-Cards und bildfreie Reward-Zeilen;
