@@ -1379,3 +1379,21 @@ def test_arcavote_callback_and_url_are_universe_scoped(vote_db, monkeypatch):
     assert parse_arcavote_callback(valid_uni1)[0] is False
     valid_dev = _arcavote_signed_form(42, name="GCDEV42")
     assert parse_arcavote_callback(valid_dev)[0] is True
+
+
+def test_arcavote_signed_test_callback_acknowledged_without_grant(vote_db, monkeypatch):
+    _arcavote_test_config(monkeypatch)
+    client, uid, _ = _login_client(vote_db, monkeypatch)
+    signed_test = _arcavote_signed_form(uid, name="TEST")
+
+    ok = client.post("/api/vote/arcavote/callback", data=signed_test)
+    assert ok.status_code == 200
+    assert ok.get_json() == {"ok": True, "created": False}
+
+    invalid = dict(signed_test)
+    invalid["signature"] = "0" * 64
+    assert client.post("/api/vote/arcavote/callback", data=invalid).status_code == 403
+
+    conn = db()
+    assert conn.execute("SELECT COUNT(*) FROM vote_rewards").fetchone()[0] == 0
+    conn.close()
