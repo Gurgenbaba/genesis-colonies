@@ -1234,3 +1234,30 @@ def test_asteroid_preview_uses_effective_ship_map_and_fuel(ast_db):
         assert preview["can_send"] is True
     finally:
         conn.close()
+
+def test_active_asteroid_coord_is_unique_even_across_tiers(ast_db):
+    uid = _player()
+    _, galaxy, system, _ = _home(uid)
+    position = _free_slot_near(galaxy, system)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        first = insert_asteroid(
+            conn=conn, galaxy=galaxy, system=system, position=position,
+            asteroid_key="mixed_belt", now=time.time(),
+        )
+        duplicate = insert_asteroid(
+            conn=conn, galaxy=galaxy, system=system, position=position,
+            asteroid_key="mega_belt", tier="mega", now=time.time(),
+        )
+        assert first["ok"] is True
+        assert duplicate == {"ok": False, "error": "already_active"}
+        rows = conn.execute(
+            "SELECT COUNT(*) AS n FROM asteroid_fields WHERE galaxy=? AND system=? "
+            "AND position=? AND status='active'",
+            (galaxy, system, position),
+        ).fetchone()
+        assert int(rows["n"]) == 1
+        commit(conn)
+    finally:
+        conn.close()
