@@ -2761,6 +2761,8 @@ ATTACK_LIMIT_COUNT_STATUSES = ("outbound", "returning", "completed", "holding")
 
 # Fair-attack / noob protection — attacks only when both scores within this factor (GC-XXX).
 NOOB_PROTECTION_FACTOR = 5
+# Inactive very-low-score empires keep the factor-5 shield; established ones stay farmable.
+NOOB_PROTECTION_INACTIVE_SCORE_FLOOR = 10_000
 
 
 def _player_score_total(player_id: int, *, conn) -> int:
@@ -2802,7 +2804,8 @@ def get_noob_protection_status(
     min_def = ((atk_score + fac - 1) // fac) if atk_score > 0 else 0
     max_def = int(atk_score * fac)
     defender_inactive = is_player_id_inactive(def_id, conn=conn)
-    allowed = defender_inactive or (min_def <= def_score <= max_def)
+    inactive_bypass = defender_inactive and def_score > NOOB_PROTECTION_INACTIVE_SCORE_FLOOR
+    allowed = inactive_bypass or (min_def <= def_score <= max_def)
     return {
         "factor": fac,
         "attacker_score": atk_score,
@@ -2810,6 +2813,7 @@ def get_noob_protection_status(
         "min_defender_score": min_def,
         "max_defender_score": max_def,
         "defender_inactive": defender_inactive,
+        "inactive_bypass": inactive_bypass,
         "allowed": allowed,
     }
 
@@ -2838,10 +2842,10 @@ def noob_attack_strength_by_defender_ids(
     inactive = inactive_player_ids(targets, conn=conn)
     out: Dict[int, Optional[str]] = {}
     for def_id in targets:
-        if def_id in inactive:
+        def_score = int(def_scores.get(def_id, 0))
+        if def_id in inactive and def_score > NOOB_PROTECTION_INACTIVE_SCORE_FLOOR:
             out[def_id] = None
             continue
-        def_score = int(def_scores.get(def_id, 0))
         if min_def <= def_score <= max_def:
             out[def_id] = None
         elif def_score > max_def:
