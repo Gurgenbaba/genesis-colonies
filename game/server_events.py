@@ -20,6 +20,7 @@ import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .db import db, table_exists
@@ -1335,13 +1336,40 @@ def compute_schedule_window(
     if not weekdays and kind == RRULE_WEEKLY:
         weekdays = [4]  # Friday default
 
-    local_now = datetime.fromtimestamp(ts, tz=timezone.utc) + timedelta(minutes=offset)
+    # Built-in weekly calendar rules are Berlin-local wall-clock schedules.
+    # The stored legacy UTC+2 offset must not shift events in wintertime.
+    berlin_template = (
+        int(rule.get("id") or 0) in (1, 2, 3, 4, 5)
+        and rule.get("created_by") is None
+        and offset in (60, 120)
+    )
+    try:
+        berlin_tz = ZoneInfo("Europe/Berlin") if berlin_template else None
+    except ZoneInfoNotFoundError:
+        berlin_tz = None
+    local_now = (
+        datetime.fromtimestamp(ts, tz=berlin_tz)
+        if berlin_tz is not None
+        else datetime.fromtimestamp(ts, tz=timezone.utc) + timedelta(minutes=offset)
+    )
 
     def _window_for_local_day(day_local: datetime) -> Tuple[int, int, str]:
         start_local = day_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        start_utc = int((start_local - timedelta(minutes=offset)).timestamp())
+        start_utc = int(
+            start_local.astimezone(timezone.utc).timestamp()
+            if berlin_tz is not None
+            else (start_local - timedelta(minutes=offset)).timestamp()
+        )
         if duration_sec > 0:
             end_utc = start_utc + duration_sec
+        elif preset and berlin_tz is not None and preset.get("duration") == DURATION_UNTIL_SUNDAY_2000:
+            days_to_sunday = (6 - start_local.weekday()) % 7
+            sunday = (start_local + timedelta(days=days_to_sunday)).replace(
+                hour=20, minute=0, second=0, microsecond=0
+            )
+            if sunday <= start_local:
+                sunday += timedelta(days=7)
+            end_utc = int(sunday.astimezone(timezone.utc).timestamp())
         elif preset:
             _s, end_utc = resolve_preset_window(
                 preset.get("duration"),
