@@ -1063,7 +1063,8 @@ def insert_asteroid(
             asteroid_key, galaxy, system, position,
             metal, crystal, fuel_cells, status,
             spawned_at, expires_at, tier
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING RETURNING id;
         """,
         (
             key,
@@ -1079,7 +1080,10 @@ def insert_asteroid(
             tier_eff,
         ),
     )
-    aid = int(cur.lastrowid)
+    inserted = cur.fetchone()
+    if not inserted:
+        return {"ok": False, "error": "already_active"}
+    aid = int(inserted["id"])
     row = conn.execute(
         "SELECT * FROM asteroid_fields WHERE id = ? LIMIT 1;", (aid,)
     ).fetchone()
@@ -1108,7 +1112,8 @@ def spawn_asteroid_belt(
     systems_limit_eff = int(systems_limit)
     if int(systems_limit) == int(BELT_SYSTEMS_PER_WAVE):
         systems_limit_eff = int(schedule.get("systems_limit") or BELT_SYSTEMS_PER_WAVE)
-    active = list_active_asteroids(conn=conn, now=ts, limit=max_concurrent + 20)
+    active = [item for item in list_active_asteroids(conn=conn, now=ts, limit=max_concurrent + 20)
+              if str(item.get("tier") or TIER_STANDARD) == TIER_STANDARD]
     room = int(max_concurrent) - len(active)
     if room <= 0 and not force:
         return {
@@ -1180,7 +1185,9 @@ def spawn_asteroid_belt(
 
 def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
     ts = float(now if now is not None else _now())
-    active = list_active_asteroids(conn=conn, now=ts) if asteroid_schema_ready(conn) else []
+    active = ([item for item in list_active_asteroids(conn=conn, now=ts)
+               if str(item.get("tier") or TIER_STANDARD) == TIER_STANDARD]
+              if asteroid_schema_ready(conn) else [])
     last_spawn: Optional[float] = None
     if asteroid_schema_ready(conn):
         raw = get_runtime_value(SPAWN_RUNTIME_KEY, conn=conn)
@@ -1260,7 +1267,8 @@ def ensure_asteroids_present(*, conn, now: Optional[float] = None) -> Dict[str, 
     if not asteroid_schema_ready(conn):
         return {"ok": False, "error": "schema_not_ready", "spawned": []}
     ts = float(now if now is not None else _now())
-    active = list_active_asteroids(conn=conn, now=ts)
+    active = [item for item in list_active_asteroids(conn=conn, now=ts)
+              if str(item.get("tier") or TIER_STANDARD) == TIER_STANDARD]
     if active:
         return {"ok": True, "spawned": [], "skipped": True, "active_count": len(active)}
     result = spawn_asteroid_belt(conn=conn, now=ts)

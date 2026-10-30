@@ -178,7 +178,7 @@ def test_noob_protection_status_at_factor_boundary(noob_db):
     conn.close()
 
 
-def test_noob_protection_allows_attack_on_inactive_weak_defender(noob_db):
+def test_noob_protection_keeps_low_score_inactive_defender_protected(noob_db):
     atk = _player()
     def_id, _, _ = _foreign_player()
     conn = db()
@@ -189,8 +189,9 @@ def test_noob_protection_allows_attack_on_inactive_weak_defender(noob_db):
     conn.commit()
     assert is_player_id_inactive(def_id, conn=conn) is True
     ok, info = check_noob_protection(atk, def_id, conn=conn)
-    assert ok is True
+    assert ok is False
     assert info["defender_inactive"] is True
+    assert info["inactive_bypass"] is False
     conn.close()
 
 
@@ -201,7 +202,7 @@ def test_noob_protection_allows_attack_on_inactive_strong_defender(noob_db):
     _set_active(atk, conn=conn)
     _set_inactive(def_id, conn=conn)
     _set_score(atk, 1000, conn=conn)
-    _set_score(def_id, 10000, conn=conn)
+    _set_score(def_id, 10001, conn=conn)
     conn.commit()
     ok, info = check_noob_protection(atk, def_id, conn=conn)
     assert ok is True
@@ -244,8 +245,8 @@ def test_send_fleet_allows_attack_on_inactive_defender(noob_db):
     att_pid, _ = _fund_and_seed(attacker_id, conn=conn)
     _set_active(attacker_id, conn=conn)
     _set_inactive(defender_id, conn=conn)
-    _set_score(attacker_id, 50000, conn=conn)
-    _set_score(defender_id, 2000, conn=conn)
+    _set_score(attacker_id, 100000, conn=conn)
+    _set_score(defender_id, 12000, conn=conn)
     conn.commit()
 
     ok, reason, extra = send_fleet(
@@ -299,8 +300,8 @@ def test_preview_allows_attack_on_inactive_defender(noob_db):
     att_pid, _ = _fund_and_seed(attacker_id, conn=conn)
     _set_active(attacker_id, conn=conn)
     _set_inactive(defender_id, conn=conn)
-    _set_score(attacker_id, 50000, conn=conn)
-    _set_score(defender_id, 2000, conn=conn)
+    _set_score(attacker_id, 100000, conn=conn)
+    _set_score(defender_id, 12000, conn=conn)
     conn.commit()
     origin = dict(conn.execute("SELECT * FROM planets WHERE id = ?;", (att_pid,)).fetchone())
     preview = build_fleet_send_preview(
@@ -364,4 +365,18 @@ def test_noob_protection_arbitrary_precision_score_math(noob_db):
     assert info["min_defender_score"] == (huge + NOOB_PROTECTION_FACTOR - 1) // NOOB_PROTECTION_FACTOR
     assert info["max_defender_score"] == huge * NOOB_PROTECTION_FACTOR
     assert info["allowed"] is True
+    conn.close()
+
+def test_inactive_low_score_galaxy_marker_matches_server_gate(noob_db):
+    from game.fleet import noob_attack_strength_by_defender_ids
+    attacker = _player()
+    defender, _, _ = _foreign_player()
+    conn = db()
+    _set_active(attacker, conn=conn)
+    _set_inactive(defender, conn=conn)
+    _set_score(attacker, 100_000, conn=conn)
+    _set_score(defender, 2_000, conn=conn)
+    conn.commit()
+    assert check_noob_protection(attacker, defender, conn=conn)[0] is False
+    assert noob_attack_strength_by_defender_ids(attacker, [defender], conn=conn)[defender] == "too_weak"
     conn.close()

@@ -817,8 +817,8 @@ def test_schedule_schema_and_seed(events_db):
     ids = {s["preset_id"] for s in schedules}
     assert "weekend_prod_expo" in ids
     assert "asteroid_storm_48h" in ids
-    # Live-safe: seeds must not auto-fire until an admin enables them.
-    assert all(s["enabled"] is False for s in schedules if s["id"] <= 5)
+    # New launch default: only non-shop, non-farm gameplay weekends are enabled.
+    assert {s["id"] for s in schedules if s["enabled"] and s["id"] <= 5} == {1, 3, 4}
     conn.close()
 
 
@@ -1013,3 +1013,14 @@ def test_admin_schedule_api(events_db, monkeypatch):
     assert "admin-events-schedule-table" in html
     assert "admin-events-preset-grid" in html
     assert "gc-overflow-visible" not in html.split('id="admin-tab-events"')[1].split("</section>")[0]
+
+def test_default_calendar_berlin_wintertime(events_db):
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from game.server_events import compute_schedule_window, list_schedules
+    rule = next(s for s in list_schedules() if s["id"] == 3)
+    at = datetime(2026, 10, 30, 19, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+    start, end, key = compute_schedule_window(rule, now=at.timestamp())
+    assert start == int(datetime(2026, 10, 30, 19, 0, tzinfo=timezone.utc).timestamp())
+    assert end - start == 48 * 3600
+    assert key.startswith("3:")
