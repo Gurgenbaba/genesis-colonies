@@ -118,10 +118,12 @@ def _create_populated_legacy_db(path: Path) -> list[dict[str, int]]:
             """
         )
 
-        # Pretend the database has already received every numbered migration
-        # before 154. This makes the real runner execute exactly migration 154.
+        # This isolated legacy fixture has only the score schema, not the full
+        # galaxy/fleet/event tables. Mark every unrelated migration as applied:
+        # the real runner must execute exactly migration 154, even as newer
+        # migrations are introduced in the production repository.
         prior = sorted(
-            p.name for p in MIGRATIONS_DIR.glob("*.sql") if p.name < MIGRATION_NAME
+            p.name for p in MIGRATIONS_DIR.glob("*.sql") if p.name != MIGRATION_NAME
         )
         conn.executemany(
             "INSERT INTO migration_history (name, applied_at) VALUES (?, 1770000000);",
