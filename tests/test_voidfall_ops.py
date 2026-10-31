@@ -211,7 +211,9 @@ def test_voidfall_http_page_and_csrf_claim(voidfall_db, monkeypatch):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="voidfall-ops"' in html
-    assert html.count('data-voidfall-form') >= 4
+    assert html.count('data-voidfall-form') >= 7
+    assert 'id="voidfall-community-title"' in html
+    assert "gc-voidfall__discovery" in html
 
     bad = client.post("/voidfall/claim", json={"claim_key": "welcome"})
     assert bad.status_code == 403
