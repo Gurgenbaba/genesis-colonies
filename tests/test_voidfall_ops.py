@@ -729,3 +729,31 @@ def test_voidfall_guidance_all_eight_locales_and_template_contract():
     # Render-only update; no new images, polling intervals, timers or mutation routes.
     assert "<img" not in daily and "<img" not in community
     assert "setInterval" not in daily and "setInterval" not in community
+
+
+# GC-VOIDFALL-008: UTC rollover metadata and one-shot PJAX recovery.
+
+def test_voidfall_utc_rollover_uses_server_day_boundary(voidfall_db):
+    uid = _player()
+    conn = db()
+    _enable_event(conn)
+    for ts in (float(START_AT), float(START_AT + 86399), float(END_AT)):
+        state = get_state(uid, conn=conn, now=ts)
+        assert state["server_now"] == ts
+        assert state["next_reset_at"] == (int(ts // 86400) + 1) * 86400
+        assert state["next_reset_at"] > ts
+    conn.close()
+
+
+def test_voidfall_rollover_browser_contract_without_extra_polling():
+    template = (ROOT / "templates/partials/voidfall_daily_ops.html").read_text(encoding="utf-8")
+    script = (ROOT / "static/js/voidfall_claim.js").read_text(encoding="utf-8")
+    assert "data-voidfall-server-now" in template
+    assert "data-voidfall-next-reset" in template
+    assert "data-voidfall-success" in template
+    assert "visibilitychange" in script and "MutationObserver" in script
+    assert "window.GC.reloadCurrentPage({ force: true })" in script
+    assert "window.setTimeout(scheduleRollover" in script
+    assert "window.setInterval(" not in script
+    assert "granted = true" in script and "if (!granted)" in script
+    assert "window.location.reload(" not in script
