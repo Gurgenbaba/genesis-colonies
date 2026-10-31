@@ -31,71 +31,22 @@ MISSION_CATALOG = (
 )
 WELCOME_ITEMS = (("container_rare", 1), ("booster_research_15m", 1))
 
-COPY = {
-    "de": {
-        "subtitle": "Die Anomalie ist geöffnet. Schließe tägliche Aufträge ab und sichere Event-Beute. Reset: 00:00 UTC.",
-        "welcome": "Willkommensversorgung", "welcome_hint": "Einmal pro Commander im Eventzeitraum – für neue und bestehende Konten.",
-        "expeditions": "Riss-Erkundung", "construction": "Kolonie verstärken", "operations": "Einsatzbereitschaft",
-        "claim": "Belohnung abholen", "claimed": "Abgeholt", "locked": "Noch nicht erfüllt",
-        "ended": "Event derzeit nicht aktiv", "success": "Belohnung im Inventar!", "failed": "Abholung nicht möglich.",
-        "remaining": "Fortschritt", "reward": "Belohnung", "until": "Endet am 7. November, 23:59 UTC",
-    },
-    "en": {
-        "subtitle": "The rift is open. Complete daily objectives for event loot. Reset: 00:00 UTC.",
-        "welcome": "Welcome supplies", "welcome_hint": "Once per Commander during the event – new and existing accounts.",
-        "expeditions": "Rift exploration", "construction": "Fortify your colony", "operations": "Operational readiness",
-        "claim": "Claim reward", "claimed": "Claimed", "locked": "Not yet completed",
-        "ended": "Event currently inactive", "success": "Reward delivered to inventory!", "failed": "Claim unavailable.",
-        "remaining": "Progress", "reward": "Reward", "until": "Ends November 7, 23:59 UTC",
-    },
-    "fr": {
-        "subtitle": "La faille est ouverte. Terminez les missions quotidiennes pour gagner du butin. Réinitialisation : 00:00 UTC.",
-        "welcome": "Ravitaillement de bienvenue", "welcome_hint": "Une fois par commandant, nouveau ou ancien.",
-        "expeditions": "Exploration de la faille", "construction": "Renforcer la colonie", "operations": "Préparation opérationnelle",
-        "claim": "Récupérer", "claimed": "Récupéré", "locked": "Pas encore terminé",
-        "ended": "Événement inactif", "success": "Récompense dans l'inventaire !", "failed": "Récompense indisponible.",
-        "remaining": "Progression", "reward": "Récompense", "until": "Fin le 7 novembre à 23:59 UTC",
-    },
-    "es": {
-        "subtitle": "La grieta está abierta. Completa misiones diarias para ganar botín. Reinicio: 00:00 UTC.",
-        "welcome": "Suministros de bienvenida", "welcome_hint": "Una vez por comandante, nuevo o veterano.",
-        "expeditions": "Explorar la grieta", "construction": "Reforzar la colonia", "operations": "Preparación operativa",
-        "claim": "Reclamar recompensa", "claimed": "Reclamado", "locked": "Aún sin completar",
-        "ended": "Evento inactivo", "success": "¡Recompensa en el inventario!", "failed": "Recompensa no disponible.",
-        "remaining": "Progreso", "reward": "Recompensa", "until": "Termina el 7 de noviembre, 23:59 UTC",
-    },
-    "pl": {
-        "subtitle": "Szczelina jest otwarta. Wykonuj codzienne zadania po nagrody. Reset: 00:00 UTC.",
-        "welcome": "Pakiet powitalny", "welcome_hint": "Raz na dowódcę, dla nowych i obecnych graczy.",
-        "expeditions": "Badanie szczeliny", "construction": "Wzmocnij kolonię", "operations": "Gotowość operacyjna",
-        "claim": "Odbierz nagrodę", "claimed": "Odebrano", "locked": "Jeszcze nieukończone",
-        "ended": "Wydarzenie nieaktywne", "success": "Nagroda w ekwipunku!", "failed": "Nie można odebrać nagrody.",
-        "remaining": "Postęp", "reward": "Nagroda", "until": "Koniec 7 listopada, 23:59 UTC",
-    },
-    "pt": {
-        "subtitle": "A fenda está aberta. Completa missões diárias para ganhar prémios. Reinício: 00:00 UTC.",
-        "welcome": "Suprimentos de boas-vindas", "welcome_hint": "Uma vez por comandante, novo ou antigo.",
-        "expeditions": "Explorar a fenda", "construction": "Fortificar a colónia", "operations": "Prontidão operacional",
-        "claim": "Recolher prémio", "claimed": "Recolhido", "locked": "Ainda não concluído",
-        "ended": "Evento inativo", "success": "Prémio no inventário!", "failed": "Prémio indisponível.",
-        "remaining": "Progresso", "reward": "Prémio", "until": "Termina a 7 de novembro, 23:59 UTC",
-    },
-    "ru": {
-        "subtitle": "Разлом открыт. Выполняйте ежедневные задания ради наград. Сброс: 00:00 UTC.",
-        "welcome": "Приветственный набор", "welcome_hint": "Один раз на командира, для новых и старых игроков.",
-        "expeditions": "Исследование разлома", "construction": "Укрепление колонии", "operations": "Боевая готовность",
-        "claim": "Забрать награду", "claimed": "Получено", "locked": "Ещё не выполнено",
-        "ended": "Событие неактивно", "success": "Награда в инвентаре!", "failed": "Награда недоступна.",
-        "remaining": "Прогресс", "reward": "Награда", "until": "До 7 ноября, 23:59 UTC",
-    },
-    "tr": {
-        "subtitle": "Yarık açıldı. Etkinlik ödülleri için günlük görevleri tamamla. Sıfırlama: 00:00 UTC.",
-        "welcome": "Hoş geldin erzakları", "welcome_hint": "Yeni ve mevcut her komutan için etkinlik boyunca bir kez.",
-        "expeditions": "Yarık keşfi", "construction": "Koloniyi güçlendir", "operations": "Operasyon hazırlığı",
-        "claim": "Ödülü al", "claimed": "Alındı", "locked": "Henüz tamamlanmadı",
-        "ended": "Etkinlik etkin değil", "success": "Ödül envantere eklendi!", "failed": "Ödül alınamıyor.",
-        "remaining": "İlerleme", "reward": "Ödül", "until": "7 Kasım, 23:59 UTC'de sona erer",
-    },
+LABEL_KEYS = {
+    "subtitle": "voidfall_subtitle",
+    "welcome": "voidfall_welcome",
+    "welcome_hint": "voidfall_welcome_hint",
+    "expeditions": "voidfall_expeditions",
+    "construction": "voidfall_construction",
+    "operations": "voidfall_operations",
+    "claim": "voidfall_claim",
+    "claimed": "voidfall_claimed",
+    "locked": "voidfall_locked",
+    "ended": "voidfall_ended",
+    "success": "voidfall_success",
+    "failed": "voidfall_failed",
+    "remaining": "voidfall_remaining",
+    "reward": "voidfall_reward",
+    "until": "voidfall_until",
 }
 
 
@@ -150,9 +101,9 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
     ts = float(time.time() if now is None else now)
     if not schema_ready(conn) or int(player_id) <= 0:
         return {"ready": False, "visible": False, "active": False}
-    from .i18n import current_locale
+    from .i18n import current_locale, tr
     loc = (locale or current_locale()).lower()
-    copy = COPY.get(loc, COPY["en"])
+    labels = {name: tr(key, locale=loc) for name, key in LABEL_KEYS.items()}
     visible, active = _event_status(conn, ts)
     if not visible:
         return {"ready": True, "visible": False, "active": False}
@@ -178,7 +129,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
         progress = min(target, sum(counts.get(src, 0) for src in sources))
         has_claimed = _claim_key(key, ts) in claimed
         missions.append({
-            "key": key, "title": copy[key], "icon": icon,
+            "key": key, "title": labels[key], "icon": icon,
             "progress": progress, "target": target,
             "claimed": has_claimed, "claimable": active and progress >= target and not has_claimed,
             "rewards": _reward_preview(rewards),
@@ -187,7 +138,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
     return {
         "ready": True, "visible": True, "active": active,
         "slug": SLUG, "day": date, "ends_at": END_AT,
-        "labels": copy,
+        "labels": labels,
         "welcome": {
             "key": WELCOME_KEY, "claimed": welcomed, "claimable": active and not welcomed,
             "rewards": _reward_preview(WELCOME_ITEMS),
