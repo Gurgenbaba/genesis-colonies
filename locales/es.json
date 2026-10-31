@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Recompensa no disponible.",
   "voidfall_remaining": "Progreso",
   "voidfall_reward": "Recompensa",
-  "voidfall_until": "Termina el 7 de noviembre, 23:59 UTC"
+  "voidfall_until": "Termina el 7 de noviembre, 23:59 UTC",
+  "voidfall_community_title": "Convergencia galáctica",
+  "voidfall_community_hint": "Cada misión diaria reclamada suma una señal a tu universo. Máximo 3 señales por comandante y día UTC.",
+  "voidfall_community_signals": "Señales globales",
+  "voidfall_community_eligibility": "Reclama al menos una misión diaria para obtener premios comunitarios.",
+  "voidfall_community_breach": "Primera brecha",
+  "voidfall_community_stabilize": "Estabilización de la grieta",
+  "voidfall_community_contain": "Contener el abismo",
+  "voidfall_discovery_title": "Descubrimientos raros de la grieta",
+  "voidfall_discovery_hint": "Cada misión diaria reclamada da un 5 % de probabilidad de hallazgo. Máximo dos por comandante, sin importar los planetas.",
+  "voidfall_discovery_echo": "Eco de la grieta",
+  "voidfall_discovery_relic": "Reliquia olvidada",
+  "voidfall_discovery_artifact": "Artefacto del Vacío prohibido",
+  "voidfall_discovery_none": "Todavía no hay hallazgos raros.",
+  "voidfall_discovery_found": "Descubrimiento raro obtenido"
 }
