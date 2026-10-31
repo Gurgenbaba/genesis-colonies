@@ -75,12 +75,12 @@ def get_community_state(player_id: int, *, conn, active: bool) -> dict:
         SELECT claim_key, reward_json, claimed_at
         FROM voidfall_reward_claims
         WHERE user_id = ?
-          AND (claim_key LIKE 'voidfall2026:community:%'
-               OR claim_key LIKE 'voidfall2026:discovery:%'
-               OR claim_key = 'voidfall2026:alignment')
+          AND (claim_key LIKE ?
+               OR claim_key LIKE ?
+               OR claim_key = ?)
         ORDER BY claimed_at, claim_key;
         """,
-        (pid,),
+        (pid, f"{COMMUNITY_PREFIX}%", f"{DISCOVERY_PREFIX}%", ALIGNMENT_CLAIM_KEY),
     ).fetchall()
     receipts = {str(r["claim_key"]): r for r in own_rows}
     milestones = []
@@ -166,9 +166,9 @@ def maybe_award_discovery(player_id: int, *, conn, now: float | None = None) -> 
     existing = conn.execute(
         """
         SELECT claim_key FROM voidfall_reward_claims
-        WHERE user_id = ? AND claim_key LIKE 'voidfall2026:discovery:%';
+        WHERE user_id = ? AND claim_key LIKE ?;
         """,
-        (pid,),
+        (pid, f"{DISCOVERY_PREFIX}%"),
     ).fetchall()
     claimed = {str(row["claim_key"]) for row in existing}
     sequence = next(

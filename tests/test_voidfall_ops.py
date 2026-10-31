@@ -526,3 +526,41 @@ def test_alignment_ui_and_pjax_contract():
     assert "csrf_input()" in template
     assert "GC.navigateTo" in js
     assert "force: true" in js
+
+
+# GC-VOIDFALL-005: PostgreSQL psycopg rejects unescaped '%' in SQL literals.
+
+def test_voidfall_all_claim_pattern_reads_bind_like_wildcards(voidfall_db, monkeypatch):
+    """Exercise both real SQLite read paths and reject PostgreSQL-unsafe literal LIKE patterns."""
+    import re
+    import game.voidfall_community as community
+
+    user_id = _player()
+    connection = db()
+    _enable_event(connection)
+
+    class PgSafeSqlGuard:
+        def __init__(self, wrapped):
+            self.wrapped = wrapped
+            self.seen_like = []
+
+        def execute(self, sql, params=()):
+            if "voidfall_reward_claims" in sql and "LIKE" in sql:
+                # psycopg's percent placeholder parser sees literal '%' as a malformed
+                # placeholder even within quoted SQL string literals.
+                assert not re.search(r"\bLIKE\s*'[^']*%[^']*'", sql, flags=re.I)
+                assert "LIKE ?" in sql
+                self.seen_like.append((sql, tuple(params)))
+            return self.wrapped.execute(sql, params)
+
+    guarded = PgSafeSqlGuard(connection)
+    state = community.get_community_state(user_id, conn=guarded, active=True)
+    assert state["signals"] == 0
+    # Avoid inventory mutations: this exercises discovery's SQL read path.
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
+    assert community.maybe_award_discovery(user_id, conn=guarded, now=START_AT + 3600) is None
+    assert len(guarded.seen_like) == 2
+    assert all(all("%" in str(p) for p in params[1:-1])
+               for sql, params in guarded.seen_like[:1])
+    assert guarded.seen_like[1][1][-1] == f"{community.DISCOVERY_PREFIX}%"
+    connection.close()
