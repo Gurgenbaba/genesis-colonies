@@ -86,3 +86,19 @@
 .gc-voidfall__discovery-alert{margin-top:12px!important;padding:9px 11px;border:1px solid rgba(100,221,195,.5);background:rgba(31,130,109,.22);color:#caffea!important;font-weight:750;font-size:13px!important;text-shadow:0 0 14px rgba(88,255,201,.23);}
 @media(max-width:990px){.gc-voidfall__milestones{grid-template-columns:1fr 1fr;}}
 @media(max-width:580px){.gc-voidfall__convergence-head{align-items:flex-start;}.gc-voidfall__signal{min-width:70px;}.gc-voidfall__milestones{grid-template-columns:1fr;}.gc-voidfall__discovery{padding:13px;gap:10px;}.gc-voidfall__discovery-mark{width:34px;height:34px;flex-basis:34px;}}
+
+/* VOIDFALL Release 4 — choice of one Rift alignment. CSS only; no assets. */
+.gc-voidfall__alignment{margin-top:18px;padding:20px;border:1px solid rgba(171,130,255,.43);background:linear-gradient(115deg,rgba(66,37,105,.32),rgba(12,17,34,.94));box-shadow:inset 3px 0 0 #ad81ff;}
+.gc-voidfall__alignment-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;}
+.gc-voidfall__alignment-head h3{font:750 clamp(16px,2.1vw,22px)/1.3 "Orbitron",sans-serif;color:#efe2ff;margin:5px 0 8px;}
+.gc-voidfall__alignment-head p{font-size:12px;color:#bbc1d7;line-height:1.6;max-width:630px;margin:0;}
+.gc-voidfall__alignment-goals{display:flex;flex-direction:column;gap:7px;text-align:right;flex-shrink:0;color:#d6bdff;font-size:12px;}
+.gc-voidfall__alignment-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.gc-voidfall__alignment-option{min-width:0;padding:16px;display:flex;flex-direction:column;align-items:flex-start;gap:11px;border:1px solid rgba(167,142,212,.35);background:rgba(12,16,37,.75);}
+.gc-voidfall__alignment-option--chosen{border-color:rgba(97,228,181,.72);box-shadow:inset 0 2px rgba(97,228,181,.4);}
+.gc-voidfall__alignment-icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid #805eca;color:#e1d2ff;font-size:20px;}
+.gc-voidfall__alignment-option h4{font:750 13px/1.4 "Orbitron",sans-serif;color:#f0e9ff;margin:0;}
+.gc-voidfall__alignment-option .gc-voidfall__rewards{margin-top:auto;}
+.gc-voidfall__alignment-option form,.gc-voidfall__alignment-option button{width:100%;}
+@media(max-width:990px){.gc-voidfall__alignment-grid{grid-template-columns:1fr;}}
+@media(max-width:580px){.gc-voidfall__alignment{padding:14px;}.gc-voidfall__alignment-head{align-items:flex-start;flex-direction:column;}.gc-voidfall__alignment-goals{text-align:left;}}

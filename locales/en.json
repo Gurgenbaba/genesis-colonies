@@ -9288,5 +9288,13 @@
   "voidfall_discovery_relic": "Forgotten Rift Relic",
   "voidfall_discovery_artifact": "Forbidden Void Artifact",
   "voidfall_discovery_none": "No rare signal discovered yet.",
-  "voidfall_discovery_found": "Rare discovery secured"
+  "voidfall_discovery_found": "Rare discovery secured",
+  "voidfall_alignment_title": "Rift Alignment",
+  "voidfall_alignment_hint": "At 65 community signals and 3 of your own daily claims, choose one path. Your decision is final.",
+  "voidfall_alignment_global": "Community",
+  "voidfall_alignment_personal": "Your contribution",
+  "voidfall_alignment_industry": "Forge Protocol",
+  "voidfall_alignment_science": "Archive Protocol",
+  "voidfall_alignment_exploration": "Pathfinder Protocol",
+  "voidfall_alignment_chosen": "Chosen"
 }

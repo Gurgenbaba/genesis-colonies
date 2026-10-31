@@ -9288,5 +9288,13 @@
   "voidfall_discovery_relic": "Reliquia olvidada",
   "voidfall_discovery_artifact": "Artefacto del Vacío prohibido",
   "voidfall_discovery_none": "Todavía no hay hallazgos raros.",
-  "voidfall_discovery_found": "Descubrimiento raro obtenido"
+  "voidfall_discovery_found": "Descubrimiento raro obtenido",
+  "voidfall_alignment_title": "Alineación de la Grieta",
+  "voidfall_alignment_hint": "Con 65 señales comunitarias y 3 misiones diarias reclamadas por ti, elige un camino una sola vez. La decisión es definitiva.",
+  "voidfall_alignment_global": "Comunidad",
+  "voidfall_alignment_personal": "Tu contribución",
+  "voidfall_alignment_industry": "Protocolo de Forja",
+  "voidfall_alignment_science": "Protocolo de Archivo",
+  "voidfall_alignment_exploration": "Protocolo Explorador",
+  "voidfall_alignment_chosen": "Elegido"
 }
