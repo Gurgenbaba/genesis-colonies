@@ -1,3 +1,4 @@
+-- GC-BACKEND: postgres
 -- VOIDFALL Release 1: time-boxed, gameplay-only rift opening.
 -- Extends the canonical server_events / EffectResolver hooks.
 -- UTC 2026-10-31 00:00:00 through 2026-11-07 23:59:59.
