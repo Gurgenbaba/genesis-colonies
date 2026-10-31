@@ -76,7 +76,10 @@ def test_event_requires_existing_server_event_and_schema(voidfall_db):
     conn.close()
 
 
-def test_all_daily_missions_finish_with_one_planet(voidfall_db):
+def test_all_daily_missions_finish_with_one_planet(voidfall_db, monkeypatch):
+    # A rare discovery is separately tested; suppress its random extra loot here.
+    import game.voidfall_community as community
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
     user_id = _player()
     conn = db()
     _enable_event(conn)
