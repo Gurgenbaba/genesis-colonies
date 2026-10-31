@@ -16,7 +16,7 @@ This is a **per-universe event**: the same migration ships separately to DEV (`m
 
 Both modifiers use the canonical `game/server_events.py` hooks. Existing weekend effects multiply normally: weekend expedition stay ×0.75 combined with VOIDFALL ×0.85 yields ×0.6375 stay time while both events are active; VOIDFALL does **not** add production, shop discounts or passive-farm multipliers. Research ×1.10 applies to newly evaluated timing; existing queue times are not retroactively shortened.
 
-Migration 186 is INSERT-only, guarded by event slug; rerunning it cannot re-enable an event an operator paused. No resets, grants, Timekeeper claims or new economy tables. Event automatically stops affecting gameplay at the end timestamp. No periodic task is needed.
+Migration 186 is PostgreSQL-only (the two live universes use PostgreSQL), so local SQLite test databases do not inherit a time-limited live campaign. It is INSERT-only, guarded by event slug; rerunning it cannot re-enable an event an operator paused. No resets, grants, Timekeeper claims or new economy tables. Event automatically stops affecting gameplay at the end timestamp. No periodic task is needed.
 
 ## Verification (both environments)
 
