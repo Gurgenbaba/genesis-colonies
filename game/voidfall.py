@@ -54,6 +54,14 @@ LABEL_NAMES = (
     "community_breach",
     "community_stabilize",
     "community_contain",
+    "alignment_title",
+    "alignment_hint",
+    "alignment_global",
+    "alignment_personal",
+    "alignment_industry",
+    "alignment_science",
+    "alignment_exploration",
+    "alignment_chosen",
     "discovery_title",
     "discovery_hint",
     "discovery_echo",
@@ -171,9 +179,14 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
         return False, "unavailable", None
     if not (START_AT <= ts <= END_AT):
         return False, "event_ended", None
-    from .voidfall_community import COMMUNITY_MILESTONES, community_claim_key, maybe_award_discovery
+    from .voidfall_community import (
+        ALIGNMENT_CLAIM_KEY, ALIGNMENT_OPTIONS, COMMUNITY_MILESTONES,
+        community_claim_key, maybe_award_discovery,
+    )
+    mission_keys = tuple(m[0] for m in MISSION_CATALOG)
     community_keys = tuple(m[0] for m in COMMUNITY_MILESTONES)
-    allowed = (WELCOME_KEY,) + tuple(m[0] for m in MISSION_CATALOG) + community_keys
+    alignment_keys = tuple(option[0] for option in ALIGNMENT_OPTIONS)
+    allowed = (WELCOME_KEY,) + mission_keys + community_keys + alignment_keys
     if key not in allowed:
         return False, "unknown_claim", None
     state = get_state(int(player_id), conn=conn, now=ts)
@@ -185,6 +198,9 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
     elif key in community_keys:
         target = next(m for m in state["community"]["milestones"] if m["key"] == key)
         rewards = next(m[2] for m in COMMUNITY_MILESTONES if m[0] == key)
+    elif key in alignment_keys:
+        target = next(o for o in state["community"]["alignment"]["options"] if o["key"] == key)
+        rewards = next(o[1] for o in ALIGNMENT_OPTIONS if o[0] == key)
     else:
         target = next(m for m in state["missions"] if m["key"] == key)
         rewards = next(m[3] for m in MISSION_CATALOG if m[0] == key)
@@ -193,7 +209,10 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
     if not target["claimable"]:
         return False, "objective_incomplete", None
 
-    claim_key = community_claim_key(key) if key in community_keys else _claim_key(key, ts)
+    claim_key = (
+        ALIGNMENT_CLAIM_KEY if key in alignment_keys else
+        community_claim_key(key) if key in community_keys else _claim_key(key, ts)
+    )
     for item_key, amount in rewards:
         if not grant_inventory_item(
             int(player_id), item_key, amount, conn=conn,
@@ -201,13 +220,16 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
         ):
             return False, "grant_failed", None
 
-    payload = [{"item_key": k, "amount": n} for k, n in rewards]
+    payload = [
+        {"item_key": k, "amount": n, **({"path": key} if key in alignment_keys else {})}
+        for k, n in rewards
+    ]
     conn.execute(
         "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at) VALUES (?, ?, ?, ?);",
         (int(player_id), claim_key, json.dumps(payload, separators=(",", ":")), ts),
     )
     result = {"claim_key": claim_key, "rewards": _reward_preview(rewards)}
-    if key != WELCOME_KEY and key not in community_keys:
+    if key in mission_keys:
         discovery = maybe_award_discovery(int(player_id), conn=conn, now=ts)
         if discovery is not None:
             result["discovery"] = discovery

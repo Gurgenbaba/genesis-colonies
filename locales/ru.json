@@ -9288,5 +9288,13 @@
   "voidfall_discovery_relic": "Забытая реликвия",
   "voidfall_discovery_artifact": "Запретный артефакт Пустоты",
   "voidfall_discovery_none": "Редкие сигналы пока не обнаружены.",
-  "voidfall_discovery_found": "Редкая находка получена"
+  "voidfall_discovery_found": "Редкая находка получена",
+  "voidfall_alignment_title": "Выбор пути Разлома",
+  "voidfall_alignment_hint": "После 65 сигналов сообщества и 3 лично полученных наград за ежедневные задания выбери один путь. Изменить выбор нельзя.",
+  "voidfall_alignment_global": "Сообщество",
+  "voidfall_alignment_personal": "Твой вклад",
+  "voidfall_alignment_industry": "Протокол Кузницы",
+  "voidfall_alignment_science": "Протокол Архива",
+  "voidfall_alignment_exploration": "Протокол Следопыта",
+  "voidfall_alignment_chosen": "Выбрано"
 }

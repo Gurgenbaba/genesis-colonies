@@ -410,3 +410,119 @@ def test_release3_page_renders_and_expired_milestones_lock(voidfall_db):
     assert 'id="voidfall-community-title"' in template
     assert "voidfall_discovery" in template and "csrf_input()" in template
     assert "milestone.progress" in template
+
+
+# GC-VOIDFALL-004: account-scoped, irreversible Rift alignment.
+
+def test_alignment_requires_65_global_and_3_personal_signals(voidfall_db, monkeypatch):
+    import game.voidfall_community as community
+
+    calls = {"rolls": 0}
+
+    def no_discovery(n):
+        calls["rolls"] += 1
+        return n - 1
+
+    monkeypatch.setattr(community.secrets, "randbelow", no_discovery)
+    user_id = _player()
+    outsiders = [_player() for _ in range(3)]
+    newcomer = _player()
+    low_user = _player()
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    _activity(conn, user_id, "expedition", ts=ts, n=2)
+    _activity(conn, user_id, "building_finish", ts=ts)
+    for key in ("expeditions", "construction", "operations"):
+        assert claim(user_id, key, conn=conn, now=ts)[0]
+    assert get_state(user_id, conn=conn, now=ts)["community"]["my_signals"] == 3
+    assert claim(user_id, "alignment_science", conn=conn, now=ts)[:2] == (
+        False, "objective_incomplete"
+    )
+
+    # Release-2-style historical receipts: three daily claims/account/day.
+    from datetime import datetime, timedelta, timezone
+    base = datetime(2026, 10, 31, tzinfo=timezone.utc)
+    for other in outsiders:
+        for day in range(8):
+            label = (base + timedelta(days=day)).strftime("%Y-%m-%d")
+            for mission in ("expeditions", "construction", "operations"):
+                conn.execute(
+                    "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at)"
+                    " VALUES (?, ?, ?, ?)",
+                    (other, f"voidfall2026:{label}:{mission}", "[]", ts),
+                )
+
+    state = get_state(user_id, conn=conn, now=ts)
+    assert state["community"]["signals"] == 75
+    assert state["community"]["alignment"]["available"] is True
+    assert len(state["community"]["alignment"]["options"]) == 3
+    assert claim(newcomer, "alignment_industry", conn=conn, now=ts)[:2] == (
+        False, "objective_incomplete"
+    )
+    _activity(conn, low_user, "building_finish", ts=ts)
+    assert claim(low_user, "construction", conn=conn, now=ts)[0]
+    assert claim(low_user, "alignment_industry", conn=conn, now=ts)[:2] == (
+        False, "objective_incomplete"
+    )
+    count_before = calls["rolls"]
+    ok, reason, result = claim(user_id, "alignment_science", conn=conn, now=ts)
+    assert ok, reason
+    assert calls["rolls"] == count_before  # no rarity reroll on alignment
+    assert result["claim_key"] == community.ALIGNMENT_CLAIM_KEY
+    assert inventory_amount(user_id, "booster_research_15m", conn=conn) == 2
+    for other_key in ("alignment_industry", "alignment_science", "alignment_exploration"):
+        assert claim(user_id, other_key, conn=conn, now=ts)[:2] == (
+            False, "already_claimed"
+        )
+    chosen = get_state(user_id, conn=conn, now=ts)["community"]["alignment"]
+    assert chosen["chosen"] is True and chosen["selected_path"] == "alignment_science"
+    assert all(not option["claimable"] for option in chosen["options"])
+    assert sum(option["selected"] for option in chosen["options"]) == 1
+    # One more verified daily mission adds one signal; the choice itself adds none.
+    assert get_state(user_id, conn=conn, now=ts)["community"]["signals"] == 76
+    conn.commit()
+    conn.close()
+
+
+def test_alignment_failed_grant_writes_no_receipt(voidfall_db, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from game.voidfall_community import ALIGNMENT_CLAIM_KEY
+    import game.voidfall as vf
+
+    user_id = _player()
+    others = [_player() for _ in range(3)]
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    for pid in [user_id] + others:
+        for d in range(8):
+            label = (datetime(2026, 10, 31, tzinfo=timezone.utc)
+                     + timedelta(days=d)).strftime("%Y-%m-%d")
+            for key in ("expeditions", "construction", "operations"):
+                conn.execute(
+                    "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at)"
+                    " VALUES (?, ?, ?, ?)",
+                    (pid, f"voidfall2026:{label}:{key}", "[]", ts),
+                )
+    monkeypatch.setattr(vf, "grant_inventory_item", lambda *args, **kwargs: False)
+    assert claim(user_id, "alignment_industry", conn=conn, now=ts)[:2] == (
+        False, "grant_failed"
+    )
+    count = conn.execute(
+        "SELECT COUNT(*) AS n FROM voidfall_reward_claims "
+        "WHERE user_id = ? AND claim_key = ?", (user_id, ALIGNMENT_CLAIM_KEY)
+    ).fetchone()["n"]
+    assert int(count) == 0
+    assert inventory_amount(user_id, "booster_build_15m", conn=conn) == 0
+    conn.close()
+
+
+def test_alignment_ui_and_pjax_contract():
+    template = (ROOT / "templates/partials/voidfall_community.html").read_text(encoding="utf-8")
+    js = (ROOT / "static/js/voidfall_claim.js").read_text(encoding="utf-8")
+    assert "data-voidfall-alignment" in template
+    assert "vf.community.alignment.options" in template
+    assert "csrf_input()" in template
+    assert "GC.navigateTo" in js
+    assert "force: true" in js

@@ -21,6 +21,16 @@ COMMUNITY_MILESTONES = (
     ("community_contain", 150, (("container_relic", 1),)),
 )
 
+# Release 4: an irreversible, one-time account-wide choice.
+ALIGNMENT_CLAIM_KEY = "voidfall2026:alignment"
+ALIGNMENT_UNLOCK_SIGNALS = 65
+ALIGNMENT_PERSONAL_SIGNALS = 3
+ALIGNMENT_OPTIONS = (
+    ("alignment_industry", (("booster_build_15m", 2),), "⚒"),
+    ("alignment_science", (("booster_research_15m", 2),), "⌬"),
+    ("alignment_exploration", (("booster_expedition_loot_25_24h", 1),), "🚀"),
+)
+
 # Limited to two discoveries per account throughout the event.
 # 5% roll per legitimately claimed daily mission, with no paid rerolls.
 DISCOVERY_CHANCE_PER_10000 = 500
@@ -66,7 +76,8 @@ def get_community_state(player_id: int, *, conn, active: bool) -> dict:
         FROM voidfall_reward_claims
         WHERE user_id = ?
           AND (claim_key LIKE 'voidfall2026:community:%'
-               OR claim_key LIKE 'voidfall2026:discovery:%')
+               OR claim_key LIKE 'voidfall2026:discovery:%'
+               OR claim_key = 'voidfall2026:alignment')
         ORDER BY claimed_at, claim_key;
         """,
         (pid,),
@@ -86,6 +97,39 @@ def get_community_state(player_id: int, *, conn, active: bool) -> dict:
             "claimable": active and reached and own >= 1 and not has_claimed,
             "rewards": _reward_preview(rewards),
         })
+
+    alignment_receipt = receipts.get(ALIGNMENT_CLAIM_KEY)
+    selected_path = None
+    if alignment_receipt is not None:
+        try:
+            saved = json.loads(str(alignment_receipt["reward_json"] or "[]"))
+        except (TypeError, ValueError):
+            saved = []
+        if isinstance(saved, list) and saved and isinstance(saved[0], dict):
+            candidate = saved[0].get("path")
+            if candidate in {option[0] for option in ALIGNMENT_OPTIONS}:
+                selected_path = candidate
+    alignment_available = (
+        active and total >= ALIGNMENT_UNLOCK_SIGNALS
+        and own >= ALIGNMENT_PERSONAL_SIGNALS and alignment_receipt is None
+    )
+    alignment = {
+        "unlocked": total >= ALIGNMENT_UNLOCK_SIGNALS,
+        "available": alignment_available,
+        "chosen": alignment_receipt is not None,
+        "selected_path": selected_path,
+        "required_global": ALIGNMENT_UNLOCK_SIGNALS,
+        "required_personal": ALIGNMENT_PERSONAL_SIGNALS,
+        "options": [
+            {
+                "key": key, "icon": icon, "rewards": _reward_preview(rewards),
+                "claimable": alignment_available,
+                "claimed": alignment_receipt is not None,
+                "selected": selected_path == key,
+            }
+            for key, rewards, icon in ALIGNMENT_OPTIONS
+        ],
+    }
 
     discoveries = []
     for seq in range(1, DISCOVERY_MAX_PER_ACCOUNT + 1):
@@ -109,6 +153,7 @@ def get_community_state(player_id: int, *, conn, active: bool) -> dict:
         "signals": total,
         "my_signals": own,
         "milestones": milestones,
+        "alignment": alignment,
         "discoveries": discoveries,
         "discovery_count": len(discoveries),
         "discovery_max": DISCOVERY_MAX_PER_ACCOUNT,

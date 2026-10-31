@@ -9288,5 +9288,13 @@
   "voidfall_discovery_relic": "Zapomniany relikt",
   "voidfall_discovery_artifact": "Zakazany artefakt pustki",
   "voidfall_discovery_none": "Nie odkryto jeszcze rzadkiego sygnału.",
-  "voidfall_discovery_found": "Zdobyto rzadkie odkrycie"
+  "voidfall_discovery_found": "Zdobyto rzadkie odkrycie",
+  "voidfall_alignment_title": "Wyrównanie Szczeliny",
+  "voidfall_alignment_hint": "Po osiągnięciu 65 sygnałów społeczności i odebraniu 3 własnych misji dziennych wybierz jedną ścieżkę. Wybór jest ostateczny.",
+  "voidfall_alignment_global": "Społeczność",
+  "voidfall_alignment_personal": "Twój wkład",
+  "voidfall_alignment_industry": "Protokół Kuźni",
+  "voidfall_alignment_science": "Protokół Archiwum",
+  "voidfall_alignment_exploration": "Protokół Odkrywcy",
+  "voidfall_alignment_chosen": "Wybrano"
 }

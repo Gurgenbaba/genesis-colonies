@@ -9288,5 +9288,13 @@
   "voidfall_discovery_relic": "Vergessene Riss-Reliquie",
   "voidfall_discovery_artifact": "Verbotenes Void-Artefakt",
   "voidfall_discovery_none": "Noch kein seltenes Signal entdeckt.",
-  "voidfall_discovery_found": "Seltene Entdeckung gesichert"
+  "voidfall_discovery_found": "Seltene Entdeckung gesichert",
+  "voidfall_alignment_title": "Riss-Ausrichtung",
+  "voidfall_alignment_hint": "Ab 65 Gemeinschaftssignalen und 3 eigenen Tagesaufträgen wählst du einmalig einen Pfad. Die Entscheidung ist endgültig.",
+  "voidfall_alignment_global": "Gemeinschaft",
+  "voidfall_alignment_personal": "Dein Beitrag",
+  "voidfall_alignment_industry": "Schmiede-Protokoll",
+  "voidfall_alignment_science": "Archiv-Protokoll",
+  "voidfall_alignment_exploration": "Pfadfinder-Protokoll",
+  "voidfall_alignment_chosen": "Gewählt"
 }
