@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Abholung nicht möglich.",
   "voidfall_remaining": "Fortschritt",
   "voidfall_reward": "Belohnung",
-  "voidfall_until": "Endet am 7. November, 23:59 UTC"
+  "voidfall_until": "Endet am 7. November, 23:59 UTC",
+  "voidfall_community_title": "Galaktische Konvergenz",
+  "voidfall_community_hint": "Jeder abgeholte Tagesauftrag zählt als ein Signal für dein Universum. Maximal 3 Signale je Commander und UTC-Tag.",
+  "voidfall_community_signals": "Globale Signale",
+  "voidfall_community_eligibility": "Für Community-Belohnungen musst du mindestens einen Tagesauftrag selbst abgeholt haben.",
+  "voidfall_community_breach": "Die erste Bresche",
+  "voidfall_community_stabilize": "Riss-Stabilisierung",
+  "voidfall_community_contain": "Den Abgrund bändigen",
+  "voidfall_discovery_title": "Seltene Riss-Entdeckungen",
+  "voidfall_discovery_hint": "Jeder erfolgreich abgeholte Tagesauftrag hat 5 % Entdeckungschance. Maximal zwei Entdeckungen pro Commander – unabhängig von der Anzahl der Planeten.",
+  "voidfall_discovery_echo": "Echo aus dem Riss",
+  "voidfall_discovery_relic": "Vergessene Riss-Reliquie",
+  "voidfall_discovery_artifact": "Verbotenes Void-Artefakt",
+  "voidfall_discovery_none": "Noch kein seltenes Signal entdeckt.",
+  "voidfall_discovery_found": "Seltene Entdeckung gesichert"
 }
