@@ -1,0 +1,83 @@
+{% if vf.community is defined and vf.community %}
+<section class="gc-voidfall__convergence" aria-labelledby="voidfall-community-title">
+  <div class="gc-voidfall__convergence-head">
+    <div>
+      <span class="gc-voidfall__eyebrow">{{ T("voidfall_badge") }}</span>
+      <h3 id="voidfall-community-title">{{ vf.labels.community_title }}</h3>
+      <p>{{ vf.labels.community_hint }}</p>
+    </div>
+    <div class="gc-voidfall__signal">
+      <span>{{ vf.labels.community_signals }}</span>
+      <strong class="gc-mono">{{ vf.community.signals }}</strong>
+    </div>
+  </div>
+
+  <div class="gc-voidfall__milestones">
+    {% for milestone in vf.community.milestones %}
+    <article class="gc-voidfall__milestone{% if milestone.claimed %} gc-voidfall__milestone--done{% endif %}"
+             aria-labelledby="voidfall-milestone-{{ loop.index }}">
+      <div class="gc-voidfall__milestone-head">
+        <span class="gc-voidfall__milestone-tier gc-mono">0{{ loop.index }}</span>
+        <h4 id="voidfall-milestone-{{ loop.index }}">{{ vf.labels[milestone.key] }}</h4>
+        <strong class="gc-mono">{{ milestone.progress }} / {{ milestone.threshold }}</strong>
+      </div>
+      <div class="gc-voidfall__progress" role="progressbar"
+           aria-label="{{ vf.labels[milestone.key] }}"
+           aria-valuemin="0" aria-valuemax="{{ milestone.threshold }}"
+           aria-valuenow="{{ milestone.progress }}">
+        <span style="width: {{ (milestone.progress * 100 / milestone.threshold)|round(0)|int }}%"></span>
+      </div>
+      <div class="gc-voidfall__milestone-actions">
+        <div class="gc-voidfall__rewards">
+          {% for item in milestone.rewards %}
+          <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          {% endfor %}
+        </div>
+        <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form>
+          {{ csrf_input() }}
+          <input type="hidden" name="claim_key" value="{{ milestone.key }}">
+          <button type="submit" class="gc-btn gc-voidfall__btn{% if milestone.claimable %} gc-btn-primary{% else %} gc-btn-ghost{% endif %}"
+                  {% if not milestone.claimable %}disabled{% endif %}>
+            {{ vf.labels.claimed if milestone.claimed else (vf.labels.claim if milestone.claimable else vf.labels.locked) }}
+          </button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% if vf.community.my_signals == 0 %}
+  <p class="gc-voidfall__eligibility">{{ vf.labels.community_eligibility }}</p>
+  {% endif %}
+
+  <div class="gc-voidfall__discovery">
+    <div class="gc-voidfall__discovery-mark" aria-hidden="true">✧</div>
+    <div class="gc-voidfall__discovery-main">
+      <div class="gc-voidfall__discovery-header">
+        <h3>{{ vf.labels.discovery_title }}</h3>
+        <span class="gc-mono">{{ vf.community.discovery_count }} / {{ vf.community.discovery_max }}</span>
+      </div>
+      <p>{{ vf.labels.discovery_hint }}</p>
+      {% if vf.community.discoveries %}
+      <div class="gc-voidfall__discovery-list">
+        {% for finding in vf.community.discoveries %}
+        <div class="gc-voidfall__finding">
+          <strong>{{ vf.labels['discovery_' ~ finding.kind] }}</strong>
+          {% for item in finding.rewards %}
+          <span>{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <span class="gc-voidfall__discovery-empty">{{ vf.labels.discovery_none }}</span>
+      {% endif %}
+      {% if request.args.get("voidfall_discovery") and vf.community.discoveries %}
+        {% set last_finding = vf.community.discoveries[-1] %}
+        {% if request.args.get("voidfall_discovery") == last_finding.kind %}
+        <p class="gc-voidfall__discovery-alert" role="status">✦ {{ vf.labels.discovery_found }}: {{ vf.labels['discovery_' ~ last_finding.kind] }}</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
