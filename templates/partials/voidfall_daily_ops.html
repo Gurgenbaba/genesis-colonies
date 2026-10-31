@@ -5,12 +5,12 @@
   <div class="gc-voidfall__ambient" aria-hidden="true"></div>
   <header class="gc-voidfall__head">
     <div>
-      <span class="gc-voidfall__eyebrow">◈ LIVE OPS / 2026</span>
-      <h2 id="voidfall-title" class="gc-voidfall__title">VOIDFALL <span>RIFT OPENING</span></h2>
+      <span class="gc-voidfall__eyebrow">◈ {{ T('voidfall_badge') }}</span>
+      <h2 id="voidfall-title" class="gc-voidfall__title">{{ T('voidfall_name') }}</h2>
       <p class="gc-voidfall__subtitle">{{ vf.labels.subtitle }}</p>
     </div>
     <div class="gc-voidfall__status">
-      <span class="gc-voidfall__status-chip">{{ "● LIVE" if vf.active else "◌ OFFLINE" }}</span>
+      <span class="gc-voidfall__status-chip">{{ T("voidfall_live") if vf.active else T("voidfall_offline") }}</span>
       <time class="gc-voidfall__deadline" datetime="2026-11-07T23:59:59Z">{{ vf.labels.until }}</time>
     </div>
   </header>
