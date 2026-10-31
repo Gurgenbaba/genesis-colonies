@@ -6350,6 +6350,8 @@ def login_rewards_view():
     from game.login_rewards import serialize_for_client
 
     login_state = {"ready": False}
+    from game.voidfall import get_state as get_voidfall_state
+    voidfall_state = {"ready": False}
     conn = db()
     try:
         login_state = serialize_for_client(
@@ -6357,6 +6359,7 @@ def login_rewards_view():
             conn=conn,
             include_calendar=True,
         )
+        voidfall_state = get_voidfall_state(int(session["user_id"]), conn=conn)
     finally:
         conn.close()
 
@@ -6365,6 +6368,7 @@ def login_rewards_view():
         player=ctx["player_view"],
         storage_caps=ctx["storage_caps"],
         login_rewards=login_state,
+        voidfall=voidfall_state,
     )
 
 
@@ -6424,6 +6428,50 @@ def api_login_rewards_claim():
     if request_id and ok:
         save_idempotent_action(user_id, request_id, resp)
     return jsonify(resp)
+
+
+
+@app.route("/voidfall/claim", methods=["POST"])
+@require_login
+def voidfall_claim_view():
+    """CSRF-protected, account-serialized claim; native form + JSON enhancement."""
+    from game.db import lock_player_for_update
+    from game.security import validate_csrf_request
+    from game.voidfall import claim as claim_voidfall
+
+    is_json = bool(request.is_json)
+    if not validate_csrf_request(request, testing=bool(app.testing)):
+        if is_json:
+            return jsonify({"ok": False, "reason": "invalid_csrf"}), 403
+        return redirect(url_for("login_rewards_view", voidfall_claim="invalid_csrf"), code=303)
+
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {} if is_json else request.form
+    key = str(data.get("claim_key") or "")[:64]
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        lock_player_for_update(conn, user_id)
+        ok, reason, result = claim_voidfall(user_id, key, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("VOIDFALL claim failure user_id=%s", user_id)
+        ok, reason, result = False, "claim_failed", None
+    finally:
+        conn.close()
+
+    if is_json:
+        return jsonify({"ok": bool(ok), "reason": reason, "reward": result}), (
+            200 if ok else (409 if reason == "already_claimed" else 400)
+        )
+    return redirect(
+        url_for("login_rewards_view", voidfall_claim="ok" if ok else "failed"),
+        code=303,
+    )
 
 
 @app.route("/premium")
