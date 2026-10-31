@@ -187,7 +187,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
     return {
         "ready": True, "visible": True, "active": active,
         "slug": SLUG, "day": date, "ends_at": END_AT,
-        "copy": copy,
+        "labels": copy,
         "welcome": {
             "key": WELCOME_KEY, "claimed": welcomed, "claimable": active and not welcomed,
             "rewards": _reward_preview(WELCOME_ITEMS),
