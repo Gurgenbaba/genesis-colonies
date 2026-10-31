@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Nie można odebrać nagrody.",
   "voidfall_remaining": "Postęp",
   "voidfall_reward": "Nagroda",
-  "voidfall_until": "Koniec 7 listopada, 23:59 UTC"
+  "voidfall_until": "Koniec 7 listopada, 23:59 UTC",
+  "voidfall_community_title": "Galaktyczna konwergencja",
+  "voidfall_community_hint": "Każda odebrana misja dzienna dodaje sygnał do twojego uniwersum. Maksymalnie 3 sygnały na dowódcę dziennie (UTC).",
+  "voidfall_community_signals": "Wspólne sygnały",
+  "voidfall_community_eligibility": "Odbierz co najmniej jedną misję dzienną, aby zdobyć nagrody społeczności.",
+  "voidfall_community_breach": "Pierwszy wyłom",
+  "voidfall_community_stabilize": "Stabilizacja szczeliny",
+  "voidfall_community_contain": "Powstrzymać otchłań",
+  "voidfall_discovery_title": "Rzadkie odkrycia szczeliny",
+  "voidfall_discovery_hint": "Każda odebrana misja dzienna daje 5% szansy na odkrycie. Maksymalnie dwa na dowódcę, niezależnie od liczby planet.",
+  "voidfall_discovery_echo": "Echo ze szczeliny",
+  "voidfall_discovery_relic": "Zapomniany relikt",
+  "voidfall_discovery_artifact": "Zakazany artefakt pustki",
+  "voidfall_discovery_none": "Nie odkryto jeszcze rzadkiego sygnału.",
+  "voidfall_discovery_found": "Zdobyto rzadkie odkrycie"
 }

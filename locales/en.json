@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Claim unavailable.",
   "voidfall_remaining": "Progress",
   "voidfall_reward": "Reward",
-  "voidfall_until": "Ends November 7, 23:59 UTC"
+  "voidfall_until": "Ends November 7, 23:59 UTC",
+  "voidfall_community_title": "Galactic Convergence",
+  "voidfall_community_hint": "Each claimed daily mission adds one signal for your universe. Maximum 3 signals per Commander and UTC day.",
+  "voidfall_community_signals": "Global signals",
+  "voidfall_community_eligibility": "Claim at least one daily mission yourself before collecting community rewards.",
+  "voidfall_community_breach": "First Breach",
+  "voidfall_community_stabilize": "Rift Stabilization",
+  "voidfall_community_contain": "Contain the Abyss",
+  "voidfall_discovery_title": "Rare Rift Discoveries",
+  "voidfall_discovery_hint": "Each claimed daily mission offers a 5% discovery chance. Maximum two finds per Commander, regardless of planet count.",
+  "voidfall_discovery_echo": "Echo from the Rift",
+  "voidfall_discovery_relic": "Forgotten Rift Relic",
+  "voidfall_discovery_artifact": "Forbidden Void Artifact",
+  "voidfall_discovery_none": "No rare signal discovered yet.",
+  "voidfall_discovery_found": "Rare discovery secured"
 }

@@ -47,6 +47,20 @@ LABEL_NAMES = (
     "remaining",
     "reward",
     "until",
+    "community_title",
+    "community_hint",
+    "community_signals",
+    "community_eligibility",
+    "community_breach",
+    "community_stabilize",
+    "community_contain",
+    "discovery_title",
+    "discovery_hint",
+    "discovery_echo",
+    "discovery_relic",
+    "discovery_artifact",
+    "discovery_none",
+    "discovery_found",
 )
 
 
@@ -134,6 +148,8 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
             "claimed": has_claimed, "claimable": active and progress >= target and not has_claimed,
             "rewards": _reward_preview(rewards),
         })
+    from .voidfall_community import get_community_state
+    community = get_community_state(int(player_id), conn=conn, active=active)
     welcomed = _claim_key(WELCOME_KEY, ts) in claimed
     return {
         "ready": True, "visible": True, "active": active,
@@ -144,6 +160,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
             "rewards": _reward_preview(WELCOME_ITEMS),
         },
         "missions": missions,
+        "community": community,
     }
 
 
@@ -154,7 +171,9 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
         return False, "unavailable", None
     if not (START_AT <= ts <= END_AT):
         return False, "event_ended", None
-    allowed = (WELCOME_KEY,) + tuple(m[0] for m in MISSION_CATALOG)
+    from .voidfall_community import COMMUNITY_MILESTONES, community_claim_key, maybe_award_discovery
+    community_keys = tuple(m[0] for m in COMMUNITY_MILESTONES)
+    allowed = (WELCOME_KEY,) + tuple(m[0] for m in MISSION_CATALOG) + community_keys
     if key not in allowed:
         return False, "unknown_claim", None
     state = get_state(int(player_id), conn=conn, now=ts)
@@ -163,6 +182,9 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
     if key == WELCOME_KEY:
         target = state["welcome"]
         rewards = WELCOME_ITEMS
+    elif key in community_keys:
+        target = next(m for m in state["community"]["milestones"] if m["key"] == key)
+        rewards = next(m[2] for m in COMMUNITY_MILESTONES if m[0] == key)
     else:
         target = next(m for m in state["missions"] if m["key"] == key)
         rewards = next(m[3] for m in MISSION_CATALOG if m[0] == key)
@@ -171,7 +193,7 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
     if not target["claimable"]:
         return False, "objective_incomplete", None
 
-    claim_key = _claim_key(key, ts)
+    claim_key = community_claim_key(key) if key in community_keys else _claim_key(key, ts)
     for item_key, amount in rewards:
         if not grant_inventory_item(
             int(player_id), item_key, amount, conn=conn,
@@ -184,4 +206,9 @@ def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[
         "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at) VALUES (?, ?, ?, ?);",
         (int(player_id), claim_key, json.dumps(payload, separators=(",", ":")), ts),
     )
-    return True, "ok", {"claim_key": claim_key, "rewards": _reward_preview(rewards)}
+    result = {"claim_key": claim_key, "rewards": _reward_preview(rewards)}
+    if key != WELCOME_KEY and key not in community_keys:
+        discovery = maybe_award_discovery(int(player_id), conn=conn, now=ts)
+        if discovery is not None:
+            result["discovery"] = discovery
+    return True, "ok", result

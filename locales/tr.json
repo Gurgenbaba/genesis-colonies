@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Ödül alınamıyor.",
   "voidfall_remaining": "İlerleme",
   "voidfall_reward": "Ödül",
-  "voidfall_until": "7 Kasım, 23:59 UTC'de sona erer"
+  "voidfall_until": "7 Kasım, 23:59 UTC'de sona erer",
+  "voidfall_community_title": "Galaktik Yakınsama",
+  "voidfall_community_hint": "Her alınan günlük görev ödülü evrenine bir sinyal ekler. Komutan başına UTC gününde en fazla 3 sinyal.",
+  "voidfall_community_signals": "Ortak sinyaller",
+  "voidfall_community_eligibility": "Topluluk ödüllerini almak için en az bir günlük görevi kendin tamamlayıp ödülünü almalısın.",
+  "voidfall_community_breach": "İlk Yarık",
+  "voidfall_community_stabilize": "Yarık Stabilizasyonu",
+  "voidfall_community_contain": "Uçurumu Durdur",
+  "voidfall_discovery_title": "Nadir Yarık Keşifleri",
+  "voidfall_discovery_hint": "Alınan her günlük görev ödülü %5 keşif şansı verir. Gezegen sayısından bağımsız olarak komutan başına en fazla iki keşif.",
+  "voidfall_discovery_echo": "Yarıktan Yankı",
+  "voidfall_discovery_relic": "Unutulmuş Kalıntı",
+  "voidfall_discovery_artifact": "Yasak Boşluk Eseri",
+  "voidfall_discovery_none": "Henüz nadir sinyal keşfedilmedi.",
+  "voidfall_discovery_found": "Nadir keşif kazanıldı"
 }

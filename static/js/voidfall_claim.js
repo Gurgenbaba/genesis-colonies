@@ -33,6 +33,10 @@
       var url = new URL(window.location.href);
       url.pathname = "/login-rewards";
       url.search = "?voidfall_claim=ok";
+      var discovery = payload.reward && payload.reward.discovery;
+      if (discovery && /^(echo|relic|artifact)$/.test(String(discovery.kind))) {
+        url.searchParams.set("voidfall_discovery", discovery.kind);
+      }
       window.location.assign(url.toString());
     } catch (_error) {
       if (result && panel) {
