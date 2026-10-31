@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Награда недоступна.",
   "voidfall_remaining": "Прогресс",
   "voidfall_reward": "Награда",
-  "voidfall_until": "До 7 ноября, 23:59 UTC"
+  "voidfall_until": "До 7 ноября, 23:59 UTC",
+  "voidfall_community_title": "Галактическая конвергенция",
+  "voidfall_community_hint": "Каждая полученная награда за ежедневное задание добавляет сигнал в ваше мироздание. Не более 3 сигналов в день UTC на командира.",
+  "voidfall_community_signals": "Общие сигналы",
+  "voidfall_community_eligibility": "Получите награду хотя бы за одно ежедневное задание, чтобы открыть коллективные награды.",
+  "voidfall_community_breach": "Первый прорыв",
+  "voidfall_community_stabilize": "Стабилизация разлома",
+  "voidfall_community_contain": "Сдержать бездну",
+  "voidfall_discovery_title": "Редкие находки в разломе",
+  "voidfall_discovery_hint": "Каждое полученное ежедневное задание дает 5% шанс находки. Не более двух на командира, независимо от числа планет.",
+  "voidfall_discovery_echo": "Эхо разлома",
+  "voidfall_discovery_relic": "Забытая реликвия",
+  "voidfall_discovery_artifact": "Запретный артефакт Пустоты",
+  "voidfall_discovery_none": "Редкие сигналы пока не обнаружены.",
+  "voidfall_discovery_found": "Редкая находка получена"
 }
