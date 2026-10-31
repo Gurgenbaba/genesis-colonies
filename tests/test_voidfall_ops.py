@@ -174,3 +174,62 @@ def test_voidfall_ui_and_security_contract():
     assert 'partials/voidfall_daily_ops.html' in page
     assert 'validate_csrf_request' in app and 'lock_player_for_update(conn, user_id)' in app
     assert 'X-CSRF-Token' in script and 'credentials: "same-origin"' in script
+
+
+def test_voidfall_http_page_and_csrf_claim(voidfall_db, monkeypatch):
+    """Actual Flask/Jinja render, CSRF rejection and exactly-once API grant."""
+    import importlib
+    import game.voidfall as vf
+    import app as app_mod
+
+    importlib.reload(app_mod)
+    monkeypatch.setattr(app_mod.app, "testing", False)
+    uid = _player()
+    conn = db()
+    _enable_event(conn)
+    conn.commit()
+    conn.close()
+    fixed = float(START_AT + 3600)
+    real_state = vf.get_state
+    real_claim = vf.claim
+    monkeypatch.setattr(
+        vf, "get_state",
+        lambda player_id, *, conn, now=None, locale=None:
+            real_state(player_id, conn=conn, now=fixed, locale=locale),
+    )
+    monkeypatch.setattr(
+        vf, "claim",
+        lambda player_id, key, *, conn, now=None:
+            real_claim(player_id, key, conn=conn, now=fixed),
+    )
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+        sess["_csrf_token"] = "voidfall-test-csrf-token"
+
+    page = client.get("/login-rewards")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'id="voidfall-ops"' in html
+    assert html.count('data-voidfall-form') >= 4
+
+    bad = client.post("/voidfall/claim", json={"claim_key": "welcome"})
+    assert bad.status_code == 403
+    assert bad.get_json()["reason"] == "invalid_csrf"
+
+    headers = {"X-CSRF-Token": "voidfall-test-csrf-token"}
+    good = client.post("/voidfall/claim", json={"claim_key": "welcome"}, headers=headers)
+    assert good.status_code == 200
+    assert good.get_json()["ok"] is True
+
+    duplicate = client.post("/voidfall/claim", json={"claim_key": "welcome"}, headers=headers)
+    assert duplicate.status_code == 409
+    assert duplicate.get_json()["reason"] == "already_claimed"
+
+    conn = db()
+    assert inventory_amount(uid, "container_rare", conn=conn) == 1
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM voidfall_reward_claims WHERE user_id = ?;", (uid,),
+    ).fetchone()
+    assert int(row["n"]) == 1
+    conn.close()
