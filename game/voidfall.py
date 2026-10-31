@@ -1,0 +1,187 @@
+"""VOIDFALL 2026 daily operations and account welcome claim.
+
+Reads canonical activity_xp_log; grants canonical inventory items only.
+All writes must run inside the caller's transaction after locking the user row.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from datetime import datetime, timezone
+from typing import Any
+
+from .db import table_exists
+from .inventory import grant_inventory_item, inventory_schema_ready
+from .inventory_catalog import item_catalog_entry
+
+START_AT = 1793404800
+END_AT = 1794095999
+SLUG = "voidfall-rift-opening-2026"
+CLAIM_PREFIX = "voidfall2026"
+WELCOME_KEY = "welcome"
+
+# Complete all three objectives with just two expeditions and one completed build.
+# No planet count, premium requirement, timekeeper, or raw-resource injection.
+MISSION_CATALOG = (
+    ("expeditions", 2, ("expedition",), (("booster_expedition_loot_25_24h", 1),), "🚀"),
+    ("construction", 1, ("building_finish",), (("booster_build_15m", 1),), "⚒"),
+    ("operations", 3, ("expedition", "building_finish", "account_research_finish", "spy", "recycle"),
+     (("container_event_special", 1),), "✦"),
+)
+WELCOME_ITEMS = (("container_rare", 1), ("booster_research_15m", 1))
+
+LABEL_NAMES = (
+    "subtitle",
+    "welcome",
+    "welcome_hint",
+    "expeditions",
+    "construction",
+    "operations",
+    "claim",
+    "claimed",
+    "locked",
+    "ended",
+    "success",
+    "failed",
+    "remaining",
+    "reward",
+    "until",
+)
+
+
+def schema_ready(conn) -> bool:
+    return (
+        table_exists(conn, "voidfall_reward_claims")
+        and table_exists(conn, "server_events")
+        and table_exists(conn, "activity_xp_log")
+        and inventory_schema_ready(conn)
+    )
+
+
+def _reward_preview(items: tuple[tuple[str, int], ...]) -> list[dict[str, Any]]:
+    out = []
+    for key, amount in items:
+        spec = item_catalog_entry(key) or {}
+        out.append({
+            "item_key": key, "amount": amount,
+            "name_key": spec.get("name_key") or key,
+            "icon": spec.get("icon") or "✦",
+            "image": spec.get("image") or "",
+        })
+    return out
+
+
+def _utc_day(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def _claim_key(key: str, ts: float) -> str:
+    if key == WELCOME_KEY:
+        return f"{CLAIM_PREFIX}:{WELCOME_KEY}"
+    return f"{CLAIM_PREFIX}:{_utc_day(ts)}:{key}"
+
+
+def _event_status(conn, ts: float) -> tuple[bool, bool]:
+    row = conn.execute(
+        "SELECT enabled, starts_at, ends_at FROM server_events WHERE slug = ? LIMIT 1;",
+        (SLUG,),
+    ).fetchone()
+    if not row:
+        return False, False
+    active = (
+        bool(int(row["enabled"] or 0))
+        and START_AT <= ts <= END_AT
+        and float(row["starts_at"]) <= ts <= float(row["ends_at"])
+    )
+    return True, active
+
+
+def get_state(player_id: int, *, conn, now: float | None = None, locale: str | None = None) -> dict[str, Any]:
+    ts = float(time.time() if now is None else now)
+    if not schema_ready(conn) or int(player_id) <= 0:
+        return {"ready": False, "visible": False, "active": False}
+    from .i18n import current_locale, tr
+    loc = (locale or current_locale()).lower()
+    labels = {name: tr(f"voidfall_{name}", locale=loc) for name in LABEL_NAMES}
+    visible, active = _event_status(conn, ts)
+    if not visible:
+        return {"ready": True, "visible": False, "active": False}
+    bucket = int(ts // 86400)
+    rows = conn.execute(
+        """
+        SELECT source_key, COUNT(*) AS n FROM activity_xp_log
+        WHERE player_id = ? AND day_bucket = ?
+          AND source_key IN ('expedition','building_finish','account_research_finish','spy','recycle')
+        GROUP BY source_key;
+        """,
+        (int(player_id), bucket),
+    ).fetchall()
+    counts = {str(r["source_key"]): int(r["n"]) for r in rows}
+    date = _utc_day(ts)
+    claim_rows = conn.execute(
+        "SELECT claim_key FROM voidfall_reward_claims WHERE user_id = ? AND (claim_key = ? OR claim_key LIKE ?);",
+        (int(player_id), f"{CLAIM_PREFIX}:welcome", f"{CLAIM_PREFIX}:{date}:%"),
+    ).fetchall()
+    claimed = {str(r["claim_key"]) for r in claim_rows}
+    missions = []
+    for key, target, sources, rewards, icon in MISSION_CATALOG:
+        progress = min(target, sum(counts.get(src, 0) for src in sources))
+        has_claimed = _claim_key(key, ts) in claimed
+        missions.append({
+            "key": key, "title": labels[key], "icon": icon,
+            "progress": progress, "target": target,
+            "claimed": has_claimed, "claimable": active and progress >= target and not has_claimed,
+            "rewards": _reward_preview(rewards),
+        })
+    welcomed = _claim_key(WELCOME_KEY, ts) in claimed
+    return {
+        "ready": True, "visible": True, "active": active,
+        "slug": SLUG, "day": date, "ends_at": END_AT,
+        "labels": labels,
+        "welcome": {
+            "key": WELCOME_KEY, "claimed": welcomed, "claimable": active and not welcomed,
+            "rewards": _reward_preview(WELCOME_ITEMS),
+        },
+        "missions": missions,
+    }
+
+
+def claim(player_id: int, key: str, *, conn, now: float | None = None) -> tuple[bool, str, dict[str, Any] | None]:
+    """Caller owns a write transaction and must lock the account row first."""
+    ts = float(time.time() if now is None else now)
+    if not schema_ready(conn):
+        return False, "unavailable", None
+    if not (START_AT <= ts <= END_AT):
+        return False, "event_ended", None
+    allowed = (WELCOME_KEY,) + tuple(m[0] for m in MISSION_CATALOG)
+    if key not in allowed:
+        return False, "unknown_claim", None
+    state = get_state(int(player_id), conn=conn, now=ts)
+    if not state.get("active"):
+        return False, "event_inactive", None
+    if key == WELCOME_KEY:
+        target = state["welcome"]
+        rewards = WELCOME_ITEMS
+    else:
+        target = next(m for m in state["missions"] if m["key"] == key)
+        rewards = next(m[3] for m in MISSION_CATALOG if m[0] == key)
+    if target["claimed"]:
+        return False, "already_claimed", None
+    if not target["claimable"]:
+        return False, "objective_incomplete", None
+
+    claim_key = _claim_key(key, ts)
+    for item_key, amount in rewards:
+        if not grant_inventory_item(
+            int(player_id), item_key, amount, conn=conn,
+            metadata={"source": "voidfall", "claim_key": claim_key},
+        ):
+            return False, "grant_failed", None
+
+    payload = [{"item_key": k, "amount": n} for k, n in rewards]
+    conn.execute(
+        "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at) VALUES (?, ?, ?, ?);",
+        (int(player_id), claim_key, json.dumps(payload, separators=(",", ":")), ts),
+    )
+    return True, "ok", {"claim_key": claim_key, "rewards": _reward_preview(rewards)}
