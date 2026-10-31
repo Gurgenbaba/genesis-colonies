@@ -1,0 +1,84 @@
+{% set vf = voidfall if voidfall is defined and voidfall else {} %}
+{% if vf.ready and vf.visible %}
+<section class="gc-panel gc-voidfall{% if not vf.active %} gc-voidfall--inactive{% endif %}"
+         id="voidfall-ops" data-voidfall-panel aria-labelledby="voidfall-title">
+  <div class="gc-voidfall__ambient" aria-hidden="true"></div>
+  <header class="gc-voidfall__head">
+    <div>
+      <span class="gc-voidfall__eyebrow">◈ LIVE OPS / 2026</span>
+      <h2 id="voidfall-title" class="gc-voidfall__title">VOIDFALL <span>RIFT OPENING</span></h2>
+      <p class="gc-voidfall__subtitle">{{ vf.copy.subtitle }}</p>
+    </div>
+    <div class="gc-voidfall__status">
+      <span class="gc-voidfall__status-chip">{{ "● LIVE" if vf.active else "◌ OFFLINE" }}</span>
+      <time class="gc-voidfall__deadline" datetime="2026-11-07T23:59:59Z">{{ vf.copy.until }}</time>
+    </div>
+  </header>
+
+  {% if request.args.get("voidfall_claim") == "ok" %}
+  <p class="gc-voidfall__notice" role="status">{{ vf.copy.success }}</p>
+  {% elif request.args.get("voidfall_claim") %}
+  <p class="gc-voidfall__notice gc-voidfall__notice--error" role="status">{{ vf.copy.failed }}</p>
+  {% endif %}
+  <p class="gc-voidfall__notice" data-voidfall-result role="status" hidden></p>
+
+  {% if not vf.active %}
+  <p class="gc-voidfall__inactive-text">{{ vf.copy.ended }}</p>
+  {% endif %}
+
+  <div class="gc-voidfall__welcome">
+    <div class="gc-voidfall__welcome-mark" aria-hidden="true">✧</div>
+    <div class="gc-voidfall__welcome-copy">
+      <h3>{{ vf.copy.welcome }}</h3>
+      <p>{{ vf.copy.welcome_hint }}</p>
+      <div class="gc-voidfall__rewards" aria-label="{{ vf.copy.reward }}">
+        {% for item in vf.welcome.rewards %}
+        <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form class="gc-voidfall__form">
+      {{ csrf_input() }}
+      <input type="hidden" name="claim_key" value="welcome">
+      <button type="submit" class="gc-btn gc-btn-primary gc-voidfall__btn"
+              {% if not vf.welcome.claimable %}disabled{% endif %}>
+        {{ vf.copy.claimed if vf.welcome.claimed else (vf.copy.claim if vf.welcome.claimable else vf.copy.locked) }}
+      </button>
+    </form>
+  </div>
+
+  <div class="gc-voidfall__grid">
+    {% for mission in vf.missions %}
+    <article class="gc-voidfall__mission{% if mission.claimed %} gc-voidfall__mission--claimed{% endif %}">
+      <div class="gc-voidfall__mission-top">
+        <span class="gc-voidfall__mission-icon" aria-hidden="true">{{ mission.icon }}</span>
+        <span class="gc-voidfall__mission-index gc-mono">0{{ loop.index }}</span>
+      </div>
+      <h3>{{ mission.title }}</h3>
+      <div class="gc-voidfall__progress-label">
+        <span>{{ vf.copy.remaining }}</span>
+        <strong class="gc-mono">{{ mission.progress }} / {{ mission.target }}</strong>
+      </div>
+      <div class="gc-voidfall__progress" role="progressbar"
+           aria-label="{{ mission.title }}" aria-valuenow="{{ mission.progress }}"
+           aria-valuemin="0" aria-valuemax="{{ mission.target }}">
+        <span style="width: {{ (mission.progress * 100 / mission.target)|round(0)|int }}%"></span>
+      </div>
+      <div class="gc-voidfall__rewards">
+        {% for item in mission.rewards %}
+        <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+        {% endfor %}
+      </div>
+      <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form>
+        {{ csrf_input() }}
+        <input type="hidden" name="claim_key" value="{{ mission.key }}">
+        <button type="submit" class="gc-btn gc-voidfall__btn{% if mission.claimable %} gc-btn-primary{% else %} gc-btn-ghost{% endif %}"
+                {% if not mission.claimable %}disabled{% endif %}>
+          {{ vf.copy.claimed if mission.claimed else (vf.copy.claim if mission.claimable else vf.copy.locked) }}
+        </button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
