@@ -233,3 +233,178 @@ def test_voidfall_http_page_and_csrf_claim(voidfall_db, monkeypatch):
     ).fetchone()
     assert int(row["n"]) == 1
     conn.close()
+
+# GC-VOIDFALL-003 — community scoreboard, milestone claims and rare drops.
+
+def test_community_signals_only_count_verified_daily_claim_receipts(voidfall_db, monkeypatch):
+    import game.voidfall_community as community
+
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
+    user_id = _player()
+    other = _player()
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    ok, _, _ = claim(user_id, "welcome", conn=conn, now=ts)
+    assert ok
+    state = get_state(user_id, conn=conn, now=ts)
+    assert state["community"]["signals"] == 0  # welcome is not a contribution
+    assert state["community"]["my_signals"] == 0
+    assert all(not m["claimable"] for m in state["community"]["milestones"])
+
+    # 2 expeditions and 1 building yield 3 daily claims; single planet.
+    for d in range(7):
+        day_ts = ts + d * 86400
+        _activity(conn, user_id, "expedition", ts=day_ts, n=2)
+        _activity(conn, user_id, "building_finish", ts=day_ts)
+        for key in ("expeditions", "construction", "operations"):
+            ok, reason, _ = claim(user_id, key, conn=conn, now=day_ts)
+            assert ok, (d, key, reason)
+
+    state = get_state(user_id, conn=conn, now=ts + 6 * 86400)
+    assert state["community"]["signals"] == 21
+    assert state["community"]["my_signals"] == 21
+    assert state["community"]["milestones"][0]["claimable"]
+    assert not state["community"]["milestones"][1]["unlocked"]
+    assert not get_state(other, conn=conn, now=ts)["community"]["milestones"][0]["claimable"]
+
+    ok, reason, _ = claim(other, "community_breach", conn=conn, now=ts)
+    assert not ok and reason == "objective_incomplete"
+    _activity(conn, other, "building_finish", ts=ts)
+    assert claim(other, "construction", conn=conn, now=ts)[0]
+    ok, reason, payload = claim(other, "community_breach", conn=conn, now=ts)
+    assert ok, reason
+    assert payload["claim_key"] == "voidfall2026:community:community_breach"
+    assert inventory_amount(other, "container_rare", conn=conn) == 1
+    ok, reason, _ = claim(other, "community_breach", conn=conn, now=ts)
+    assert not ok and reason == "already_claimed"
+    # Community reward receipt itself must NOT increase shared signals.
+    assert get_state(other, conn=conn, now=ts)["community"]["signals"] == 22
+    assert not claim(other, "community_free_mythic", conn=conn, now=ts)[0]
+    conn.commit()
+    conn.close()
+
+
+def test_community_higher_tiers_unlock_without_counting_community_claims(voidfall_db, monkeypatch):
+    import game.voidfall_community as community
+
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
+    user_id = _player()
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    _activity(conn, user_id, "building_finish", ts=ts)
+    assert claim(user_id, "construction", conn=conn, now=ts)[0]
+
+    # Model legacy Release-2 mission receipts. They have the same canonical
+    # schema and unique key that production recorded before Release 3 shipped.
+    # The player needs their own actual daily claim to receive any milestone.
+    other_ids = [_player() for _ in range(7)]
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime(2026, 10, 31, tzinfo=timezone.utc)
+    n = 0
+    for pid in other_ids:
+        for day in range(8):
+            label = (base + timedelta(days=day)).strftime("%Y-%m-%d")
+            for mission_key in ("expeditions", "construction", "operations"):
+                conn.execute(
+                    "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at)"
+                    " VALUES (?, ?, ?, ?);",
+                    (pid, f"voidfall2026:{label}:{mission_key}", "[]", ts),
+                )
+                n += 1
+
+    state = get_state(user_id, conn=conn, now=ts)
+    assert state["community"]["signals"] == n + 1
+    assert n + 1 >= 150
+    assert all(m["claimable"] for m in state["community"]["milestones"])
+    for key, reward in (
+        ("community_breach", "container_rare"),
+        ("community_stabilize", "container_event_special"),
+        ("community_contain", "container_relic"),
+    ):
+        ok, reason, _ = claim(user_id, key, conn=conn, now=ts)
+        assert ok, (key, reason)
+        assert inventory_amount(user_id, reward, conn=conn) == 1
+        assert claim(user_id, key, conn=conn, now=ts)[:2] == (False, "already_claimed")
+    assert get_state(user_id, conn=conn, now=ts)["community"]["signals"] == n + 1
+    conn.commit()
+    conn.close()
+
+
+def test_rare_discoveries_have_two_per_account_limit_and_limited_tier(voidfall_db, monkeypatch):
+    import game.voidfall_community as community
+
+    def forced_artifact_roll(n):
+        return 99 if n == 100 else 0
+
+    monkeypatch.setattr(community.secrets, "randbelow", forced_artifact_roll)
+    user_id = _player()
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    _activity(conn, user_id, "expedition", ts=ts, n=2)
+    _activity(conn, user_id, "building_finish", ts=ts)
+    drops = []
+    for key in ("expeditions", "construction", "operations"):
+        ok, reason, result = claim(user_id, key, conn=conn, now=ts)
+        assert ok, reason
+        drops.append(result.get("discovery"))
+    assert [drop["kind"] if drop else None for drop in drops] == ["artifact", "artifact", None]
+    state = get_state(user_id, conn=conn, now=ts)
+    assert state["community"]["discovery_count"] == 2
+    assert state["community"]["discovery_max"] == 2
+    assert inventory_amount(user_id, "container_void_artifact", conn=conn) == 2
+    assert not claim(user_id, "expeditions", conn=conn, now=ts)[0]
+    assert inventory_amount(user_id, "container_void_artifact", conn=conn) == 2
+
+    day_2 = ts + 86400
+    _activity(conn, user_id, "expedition", ts=day_2, n=2)
+    assert claim(user_id, "expeditions", conn=conn, now=day_2)[0]
+    assert inventory_amount(user_id, "container_void_artifact", conn=conn) == 2
+    conn.commit()
+    conn.close()
+
+
+def test_rare_discovery_failure_rolls_back_daily_reward(voidfall_db, monkeypatch):
+    import game.voidfall_community as community
+    from game.db import begin_write_transaction, rollback
+
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: 0)
+    monkeypatch.setattr(community, "grant_inventory_item", lambda *args, **kwargs: False)
+    user_id = _player()
+    conn = db()
+    _enable_event(conn)
+    conn.commit()
+    ts = float(START_AT + 3600)
+    _activity(conn, user_id, "expedition", ts=ts, n=2)
+    conn.commit()
+    begin_write_transaction(conn)
+    with pytest.raises(RuntimeError, match="voidfall_discovery_grant_failed"):
+        claim(user_id, "expeditions", conn=conn, now=ts)
+    rollback(conn)
+    assert inventory_amount(user_id, "booster_expedition_loot_25_24h", conn=conn) == 0
+    assert get_state(user_id, conn=conn, now=ts)["community"]["signals"] == 0
+    assert get_state(user_id, conn=conn, now=ts)["community"]["discovery_count"] == 0
+    conn.close()
+
+
+def test_release3_page_renders_and_expired_milestones_lock(voidfall_db):
+    from game.voidfall_community import COMMUNITY_MILESTONES
+    assert [threshold for _key, threshold, _rewards in COMMUNITY_MILESTONES] == [20, 65, 150]
+    assert len(set(key for key, _, _ in COMMUNITY_MILESTONES)) == 3
+    user_id = _player()
+    conn = db()
+    _enable_event(conn)
+    state = get_state(user_id, conn=conn, now=END_AT + 1)
+    assert not state["active"]
+    assert all(not m["claimable"] for m in state["community"]["milestones"])
+    assert claim(user_id, "community_breach", conn=conn, now=END_AT + 1)[:2] == (
+        False, "event_ended",
+    )
+    conn.close()
+    template = (ROOT / "templates/partials/voidfall_community.html").read_text(encoding="utf-8")
+    assert 'id="voidfall-community-title"' in template
+    assert "voidfall_discovery" in template and "csrf_input()" in template
+    assert "milestone.progress" in template
