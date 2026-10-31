@@ -1,11 +1,10 @@
 {% set vf = voidfall if voidfall is defined and voidfall else {} %}
 {% if vf.ready and vf.visible %}
 <section class="gc-panel gc-voidfall{% if not vf.active %} gc-voidfall--inactive{% endif %}"
-         id="voidfall-ops" data-voidfall-panel data-voidfall-failed="{{ vf.labels.failed }}"
          data-voidfall-success="{{ vf.labels.success }}"
          data-voidfall-server-now="{{ vf.server_now|int }}"
          data-voidfall-next-reset="{{ vf.next_reset_at }}"
-         aria-labelledby="voidfall-title">
+         id="voidfall-ops" data-voidfall-panel data-voidfall-failed="{{ vf.labels.failed }}" aria-labelledby="voidfall-title">
   <div class="gc-voidfall__ambient" aria-hidden="true"></div>
   <header class="gc-voidfall__head">
     <div>
