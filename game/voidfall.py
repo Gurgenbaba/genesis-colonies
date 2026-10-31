@@ -188,6 +188,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
     return {
         "ready": True, "visible": True, "active": active,
         "slug": SLUG, "day": date, "ends_at": END_AT,
+        "server_now": ts, "next_reset_at": (bucket + 1) * 86400,
         "labels": labels,
         "welcome": {
             "key": WELCOME_KEY, "claimed": welcomed, "claimable": active and not welcomed,
