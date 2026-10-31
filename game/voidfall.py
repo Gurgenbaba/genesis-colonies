@@ -31,23 +31,23 @@ MISSION_CATALOG = (
 )
 WELCOME_ITEMS = (("container_rare", 1), ("booster_research_15m", 1))
 
-LABEL_KEYS = {
-    "subtitle": "voidfall_subtitle",
-    "welcome": "voidfall_welcome",
-    "welcome_hint": "voidfall_welcome_hint",
-    "expeditions": "voidfall_expeditions",
-    "construction": "voidfall_construction",
-    "operations": "voidfall_operations",
-    "claim": "voidfall_claim",
-    "claimed": "voidfall_claimed",
-    "locked": "voidfall_locked",
-    "ended": "voidfall_ended",
-    "success": "voidfall_success",
-    "failed": "voidfall_failed",
-    "remaining": "voidfall_remaining",
-    "reward": "voidfall_reward",
-    "until": "voidfall_until",
-}
+LABEL_NAMES = (
+    "subtitle",
+    "welcome",
+    "welcome_hint",
+    "expeditions",
+    "construction",
+    "operations",
+    "claim",
+    "claimed",
+    "locked",
+    "ended",
+    "success",
+    "failed",
+    "remaining",
+    "reward",
+    "until",
+)
 
 
 def schema_ready(conn) -> bool:
@@ -103,7 +103,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
         return {"ready": False, "visible": False, "active": False}
     from .i18n import current_locale, tr
     loc = (locale or current_locale()).lower()
-    labels = {name: tr(key, locale=loc) for name, key in LABEL_KEYS.items()}
+    labels = {name: tr(f"voidfall_{name}", locale=loc) for name in LABEL_NAMES}
     visible, active = _event_status(conn, ts)
     if not visible:
         return {"ready": True, "visible": False, "active": False}
