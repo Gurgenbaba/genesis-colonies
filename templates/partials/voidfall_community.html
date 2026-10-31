@@ -49,6 +49,41 @@
   <p class="gc-voidfall__eligibility">{{ vf.labels.community_eligibility }}</p>
   {% endif %}
 
+  <div class="gc-voidfall__alignment" data-voidfall-alignment>
+    <div class="gc-voidfall__alignment-head">
+      <div>
+        <span class="gc-voidfall__eyebrow">◈ VOIDFALL / 04</span>
+        <h3>{{ vf.labels.alignment_title }}</h3>
+        <p>{{ vf.labels.alignment_hint }}</p>
+      </div>
+      <div class="gc-voidfall__alignment-goals gc-mono">
+        <span>{{ vf.labels.alignment_global }}: {{ vf.community.signals }} / {{ vf.community.alignment.required_global }}</span>
+        <span>{{ vf.labels.alignment_personal }}: {{ vf.community.my_signals }} / {{ vf.community.alignment.required_personal }}</span>
+      </div>
+    </div>
+    <div class="gc-voidfall__alignment-grid">
+      {% for option in vf.community.alignment.options %}
+      <article class="gc-voidfall__alignment-option{% if option.selected %} gc-voidfall__alignment-option--chosen{% endif %}">
+        <span class="gc-voidfall__alignment-icon" aria-hidden="true">{{ option.icon }}</span>
+        <h4>{{ vf.labels[option.key] }}</h4>
+        <div class="gc-voidfall__rewards">
+          {% for item in option.rewards %}
+          <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          {% endfor %}
+        </div>
+        <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form>
+          {{ csrf_input() }}
+          <input type="hidden" name="claim_key" value="{{ option.key }}">
+          <button type="submit" class="gc-btn gc-voidfall__btn{% if option.claimable %} gc-btn-primary{% else %} gc-btn-ghost{% endif %}"
+                  {% if not option.claimable %}disabled{% endif %}>
+            {{ vf.labels.alignment_chosen if option.selected else (vf.labels.claim if option.claimable else vf.labels.locked) }}
+          </button>
+        </form>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+
   <div class="gc-voidfall__discovery">
     <div class="gc-voidfall__discovery-mark" aria-hidden="true">✧</div>
     <div class="gc-voidfall__discovery-main">
