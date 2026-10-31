@@ -16,6 +16,9 @@ ensure_db_parent_dir()
 echo "[GC] Applying migrations..."
 python migrate.py
 
+echo "[GC] Activating VOIDFALL Release 1 on production only..."
+python -m scripts.seed_voidfall_release1
+
 echo "[GC] Running tokenized UNI1 prelaunch reset before any serving/worker process..."
 python scripts/run_uni1_prelaunch_reset.py
 
