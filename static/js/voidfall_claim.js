@@ -37,7 +37,13 @@
       if (discovery && /^(echo|relic|artifact)$/.test(String(discovery.kind))) {
         url.searchParams.set("voidfall_discovery", discovery.kind);
       }
-      window.location.assign(url.toString());
+      var target = url.pathname + url.search + url.hash;
+      if (window.GC && typeof window.GC.navigateTo === "function") {
+        await window.GC.navigateTo(target, { push: false, force: true });
+      } else {
+        // Native navigation only when the in-game PJAX shell is unavailable.
+        window.location.assign(target);
+      }
     } catch (_error) {
       if (result && panel) {
         result.hidden = false;

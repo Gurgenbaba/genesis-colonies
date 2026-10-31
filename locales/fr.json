@@ -9288,5 +9288,13 @@
   "voidfall_discovery_relic": "Relique oubliée",
   "voidfall_discovery_artifact": "Artefact du Vide interdit",
   "voidfall_discovery_none": "Aucun signal rare découvert pour le moment.",
-  "voidfall_discovery_found": "Découverte rare obtenue"
+  "voidfall_discovery_found": "Découverte rare obtenue",
+  "voidfall_alignment_title": "Alignement de la Faille",
+  "voidfall_alignment_hint": "À 65 signaux communautaires et 3 missions quotidiennes récupérées par toi, choisis une voie une seule fois. Ce choix est définitif.",
+  "voidfall_alignment_global": "Communauté",
+  "voidfall_alignment_personal": "Ta contribution",
+  "voidfall_alignment_industry": "Protocole de la Forge",
+  "voidfall_alignment_science": "Protocole des Archives",
+  "voidfall_alignment_exploration": "Protocole Éclaireur",
+  "voidfall_alignment_chosen": "Choisi"
 }
