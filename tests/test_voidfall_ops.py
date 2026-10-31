@@ -290,6 +290,7 @@ def test_community_higher_tiers_unlock_without_counting_community_claims(voidfal
 
     monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
     user_id = _player()
+    other_ids = [_player() for _ in range(7)]
     conn = db()
     _enable_event(conn)
     ts = float(START_AT + 3600)
@@ -299,7 +300,6 @@ def test_community_higher_tiers_unlock_without_counting_community_claims(voidfal
     # Model legacy Release-2 mission receipts. They have the same canonical
     # schema and unique key that production recorded before Release 3 shipped.
     # The player needs their own actual daily claim to receive any milestone.
-    other_ids = [_player() for _ in range(7)]
     from datetime import datetime, timedelta, timezone
 
     base = datetime(2026, 10, 31, tzinfo=timezone.utc)
