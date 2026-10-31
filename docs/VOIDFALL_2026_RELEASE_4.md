@@ -4,7 +4,7 @@ Extends Release 3 on DEV main and UNI1 u2/staging-runtime. Existing global miles
 
 ## One-time player choice
 
-After **65 verified community daily-mission claim receipts** and **3 personally claimed daily missions** in the event, each account can select exactly one of:
+After **40 verified community daily-mission claim receipts** and **3 personally claimed daily missions** in the event, each account can select exactly one of:
 
 - Forge Protocol — 2 existing 15-minute building boosters.
 - Archive Protocol — 2 existing 15-minute research boosters.
