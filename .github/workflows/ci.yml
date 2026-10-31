@@ -104,7 +104,7 @@ jobs:
           pip install -r requirements-prod.txt pytest
       - name: Targeted liveops regression tests
         run: |
-          python -m pytest -q --tb=line tests/test_asteroids.py tests/test_server_events.py tests/test_noob_protection.py
+          python -m pytest -q --tb=line tests/test_asteroids.py tests/test_server_events.py tests/test_noob_protection.py tests/test_voidfall_ops.py
 
   big-score:
     name: big-score-ranking
