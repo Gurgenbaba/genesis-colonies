@@ -25,7 +25,8 @@
       serverClockOffsetMs = Number.isFinite(serverNow) && serverNow > 0
         ? serverNow * 1000 - Date.now() : 0;
     }
-    if (!panel || document.hidden) return;
+    // Once VOIDFALL ends, stop the daily refresh entirely.
+    if (!panel || document.hidden || panel.classList.contains("gc-voidfall--inactive")) return;
     var nextReset = Number(panel.dataset.voidfallNextReset);
     if (!Number.isFinite(nextReset) || nextReset <= 0) return;
     var remainingMs = nextReset * 1000 - (Date.now() + serverClockOffsetMs);
