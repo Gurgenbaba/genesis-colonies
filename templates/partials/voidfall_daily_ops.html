@@ -1,37 +1,37 @@
 {% set vf = voidfall if voidfall is defined and voidfall else {} %}
 {% if vf.ready and vf.visible %}
 <section class="gc-panel gc-voidfall{% if not vf.active %} gc-voidfall--inactive{% endif %}"
-         id="voidfall-ops" data-voidfall-panel data-voidfall-failed="{{ vf.copy.failed }}" aria-labelledby="voidfall-title">
+         id="voidfall-ops" data-voidfall-panel data-voidfall-failed="{{ vf.labels.failed }}" aria-labelledby="voidfall-title">
   <div class="gc-voidfall__ambient" aria-hidden="true"></div>
   <header class="gc-voidfall__head">
     <div>
       <span class="gc-voidfall__eyebrow">◈ LIVE OPS / 2026</span>
       <h2 id="voidfall-title" class="gc-voidfall__title">VOIDFALL <span>RIFT OPENING</span></h2>
-      <p class="gc-voidfall__subtitle">{{ vf.copy.subtitle }}</p>
+      <p class="gc-voidfall__subtitle">{{ vf.labels.subtitle }}</p>
     </div>
     <div class="gc-voidfall__status">
       <span class="gc-voidfall__status-chip">{{ "● LIVE" if vf.active else "◌ OFFLINE" }}</span>
-      <time class="gc-voidfall__deadline" datetime="2026-11-07T23:59:59Z">{{ vf.copy.until }}</time>
+      <time class="gc-voidfall__deadline" datetime="2026-11-07T23:59:59Z">{{ vf.labels.until }}</time>
     </div>
   </header>
 
   {% if request.args.get("voidfall_claim") == "ok" %}
-  <p class="gc-voidfall__notice" role="status">{{ vf.copy.success }}</p>
+  <p class="gc-voidfall__notice" role="status">{{ vf.labels.success }}</p>
   {% elif request.args.get("voidfall_claim") %}
-  <p class="gc-voidfall__notice gc-voidfall__notice--error" role="status">{{ vf.copy.failed }}</p>
+  <p class="gc-voidfall__notice gc-voidfall__notice--error" role="status">{{ vf.labels.failed }}</p>
   {% endif %}
   <p class="gc-voidfall__notice" data-voidfall-result role="status" hidden></p>
 
   {% if not vf.active %}
-  <p class="gc-voidfall__inactive-text">{{ vf.copy.ended }}</p>
+  <p class="gc-voidfall__inactive-text">{{ vf.labels.ended }}</p>
   {% endif %}
 
   <div class="gc-voidfall__welcome">
     <div class="gc-voidfall__welcome-mark" aria-hidden="true">✧</div>
     <div class="gc-voidfall__welcome-copy">
-      <h3>{{ vf.copy.welcome }}</h3>
-      <p>{{ vf.copy.welcome_hint }}</p>
-      <div class="gc-voidfall__rewards" aria-label="{{ vf.copy.reward }}">
+      <h3>{{ vf.labels.welcome }}</h3>
+      <p>{{ vf.labels.welcome_hint }}</p>
+      <div class="gc-voidfall__rewards" aria-label="{{ vf.labels.reward }}">
         {% for item in vf.welcome.rewards %}
         <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
         {% endfor %}
@@ -42,7 +42,7 @@
       <input type="hidden" name="claim_key" value="welcome">
       <button type="submit" class="gc-btn gc-btn-primary gc-voidfall__btn"
               {% if not vf.welcome.claimable %}disabled{% endif %}>
-        {{ vf.copy.claimed if vf.welcome.claimed else (vf.copy.claim if vf.welcome.claimable else vf.copy.locked) }}
+        {{ vf.labels.claimed if vf.welcome.claimed else (vf.labels.claim if vf.welcome.claimable else vf.labels.locked) }}
       </button>
     </form>
   </div>
@@ -56,7 +56,7 @@
       </div>
       <h3>{{ mission.title }}</h3>
       <div class="gc-voidfall__progress-label">
-        <span>{{ vf.copy.remaining }}</span>
+        <span>{{ vf.labels.remaining }}</span>
         <strong class="gc-mono">{{ mission.progress }} / {{ mission.target }}</strong>
       </div>
       <div class="gc-voidfall__progress" role="progressbar"
@@ -74,7 +74,7 @@
         <input type="hidden" name="claim_key" value="{{ mission.key }}">
         <button type="submit" class="gc-btn gc-voidfall__btn{% if mission.claimable %} gc-btn-primary{% else %} gc-btn-ghost{% endif %}"
                 {% if not mission.claimable %}disabled{% endif %}>
-          {{ vf.copy.claimed if mission.claimed else (vf.copy.claim if mission.claimable else vf.copy.locked) }}
+          {{ vf.labels.claimed if mission.claimed else (vf.labels.claim if mission.claimable else vf.labels.locked) }}
         </button>
       </form>
     </article>
