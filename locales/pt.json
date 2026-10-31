@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Prémio indisponível.",
   "voidfall_remaining": "Progresso",
   "voidfall_reward": "Prémio",
-  "voidfall_until": "Termina a 7 de novembro, 23:59 UTC"
+  "voidfall_until": "Termina a 7 de novembro, 23:59 UTC",
+  "voidfall_community_title": "Convergência Galáctica",
+  "voidfall_community_hint": "Cada missão diária reclamada adiciona um sinal ao teu universo. Máximo de 3 sinais por comandante e dia UTC.",
+  "voidfall_community_signals": "Sinais globais",
+  "voidfall_community_eligibility": "Reclama pelo menos uma missão diária para receber as recompensas coletivas.",
+  "voidfall_community_breach": "Primeira brecha",
+  "voidfall_community_stabilize": "Estabilização da fenda",
+  "voidfall_community_contain": "Conter o abismo",
+  "voidfall_discovery_title": "Descobertas raras da fenda",
+  "voidfall_discovery_hint": "Cada missão diária reclamada dá 5% de hipótese de descoberta. No máximo duas por comandante, independentemente do número de planetas.",
+  "voidfall_discovery_echo": "Eco da fenda",
+  "voidfall_discovery_relic": "Relíquia esquecida",
+  "voidfall_discovery_artifact": "Artefacto do Vazio proibido",
+  "voidfall_discovery_none": "Ainda não foi encontrado qualquer sinal raro.",
+  "voidfall_discovery_found": "Descoberta rara garantida"
 }

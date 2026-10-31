@@ -9274,5 +9274,19 @@
   "voidfall_failed": "Récompense indisponible.",
   "voidfall_remaining": "Progression",
   "voidfall_reward": "Récompense",
-  "voidfall_until": "Fin le 7 novembre à 23:59 UTC"
+  "voidfall_until": "Fin le 7 novembre à 23:59 UTC",
+  "voidfall_community_title": "Convergence galactique",
+  "voidfall_community_hint": "Chaque mission quotidienne récupérée ajoute un signal à votre univers. Maximum 3 signaux par commandant et jour UTC.",
+  "voidfall_community_signals": "Signaux globaux",
+  "voidfall_community_eligibility": "Récupérez au moins une mission quotidienne pour obtenir les récompenses collectives.",
+  "voidfall_community_breach": "Première brèche",
+  "voidfall_community_stabilize": "Stabilisation de la faille",
+  "voidfall_community_contain": "Contenir l'abîme",
+  "voidfall_discovery_title": "Rares découvertes de la faille",
+  "voidfall_discovery_hint": "Chaque mission quotidienne récupérée donne 5 % de chances de découverte. Deux maximum par commandant, quel que soit le nombre de planètes.",
+  "voidfall_discovery_echo": "Écho de la faille",
+  "voidfall_discovery_relic": "Relique oubliée",
+  "voidfall_discovery_artifact": "Artefact du Vide interdit",
+  "voidfall_discovery_none": "Aucun signal rare découvert pour le moment.",
+  "voidfall_discovery_found": "Découverte rare obtenue"
 }

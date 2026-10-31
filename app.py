@@ -6469,7 +6469,12 @@ def voidfall_claim_view():
             200 if ok else (409 if reason == "already_claimed" else 400)
         )
     return redirect(
-        url_for("login_rewards_view", voidfall_claim="ok" if ok else "failed"),
+        url_for(
+            "login_rewards_view",
+            voidfall_claim="ok" if ok else "failed",
+            **({"voidfall_discovery": result["discovery"]["kind"]}
+               if ok and result and result.get("discovery") else {}),
+        ),
         code=303,
     )
 
