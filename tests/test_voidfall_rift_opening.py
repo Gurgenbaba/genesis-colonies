@@ -1,51 +1,71 @@
-"""VOIDFALL 2026 Release 1 — additive, idempotent live event migration."""
+"""VOIDFALL Release 1 — production-only and side-effect-safe activation."""
 
-import json
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-START = 1793404800
-END = 1794095999
-SLUG = "voidfall-rift-opening-2026"
+import game.config as config
+import game.db as db_module
+import game.server_events as events
+from scripts.seed_voidfall_release1 import (
+    EFFECTS,
+    END_AT,
+    SLUG,
+    START_AT,
+    activate,
+    runtime_allowed,
+)
 
 
-def _migrate(conn):
-    conn.executescript((ROOT / "migrations/128_server_events.sql").read_text(encoding="utf-8"))
-    conn.executescript((ROOT / "migrations/186_voidfall_rift_opening.sql").read_text(encoding="utf-8"))
-
-
-def test_voidfall_is_time_boxed_and_only_uses_existing_gameplay_effects():
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    _migrate(conn)
-    row = conn.execute("SELECT * FROM server_events WHERE slug = ?", (SLUG,)).fetchone()
-    assert row is not None
-    assert row["enabled"] == 1
-    assert (row["starts_at"], row["ends_at"]) == (START, END)
-    assert datetime.fromtimestamp(START, tz=timezone.utc).isoformat() == "2026-10-31T00:00:00+00:00"
-    assert datetime.fromtimestamp(END, tz=timezone.utc).isoformat() == "2026-11-07T23:59:59+00:00"
-    assert json.loads(row["effects_json"]) == [
+def test_voidfall_time_window_and_gameplay_only_effects():
+    assert SLUG == "voidfall-rift-opening-2026"
+    assert datetime.fromtimestamp(START_AT, tz=timezone.utc).isoformat() == "2026-10-31T00:00:00+00:00"
+    assert datetime.fromtimestamp(END_AT, tz=timezone.utc).isoformat() == "2026-11-07T23:59:59+00:00"
+    cleaned, error = events.validate_effects(EFFECTS)
+    assert error is None
+    assert cleaned == [
         {"kind": "expedition_hold_mult", "mult": 0.85},
         {"kind": "research_time_speed", "mult": 1.10},
     ]
-    assert row["created_by"] is None
-    conn.close()
 
 
-def test_voidfall_migration_is_idempotent_and_preserves_admin_changes():
-    conn = sqlite3.connect(":memory:")
-    _migrate(conn)
-    conn.execute(
-        "UPDATE server_events SET enabled = 0, title = ? WHERE slug = ?",
-        ("Operator paused event", SLUG),
-    )
-    conn.commit()
-    _migrate(conn)
-    count, enabled, title = conn.execute(
-        "SELECT COUNT(*), MAX(enabled), MAX(title) FROM server_events WHERE slug = ?",
-        (SLUG,),
-    ).fetchone()
-    assert (count, enabled, title) == (1, 0, "Operator paused event")
-    conn.close()
+def test_voidfall_not_seeded_in_ci_or_sqlite():
+    for env, backend in (
+        ("test", "postgres"),
+        ("development", "postgres"),
+        ("production", "sqlite"),
+        ("", "postgres"),
+    ):
+        assert runtime_allowed(env, backend) is False
+    assert runtime_allowed("production", "postgres") is True
+
+
+def test_voidfall_skips_before_touching_ci_database(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setattr(config, "init_config", lambda: None)
+    monkeypatch.setattr(db_module, "get_db_backend", lambda: "postgres")
+    monkeypatch.setattr(db_module, "db", lambda: (_ for _ in ()).throw(AssertionError("must not connect")))
+    assert activate(now=START_AT + 100) == "skipped: not PostgreSQL production"
+
+
+def test_voidfall_preserves_existing_operator_pause(monkeypatch):
+    class FakeConn:
+        closed = False
+
+        def execute(self, sql, params):
+            assert params == (SLUG,)
+            return self
+
+        def fetchone(self):
+            return {"id": 99, "enabled": 0}
+
+        def close(self):
+            self.closed = True
+
+    conn = FakeConn()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setattr(config, "init_config", lambda: None)
+    monkeypatch.setattr(db_module, "get_db_backend", lambda: "postgres")
+    monkeypatch.setattr(db_module, "db", lambda: conn)
+    monkeypatch.setattr(events, "schema_ready", lambda _conn: True)
+    monkeypatch.setattr(events, "create_event", lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not overwrite")))
+    assert activate(now=START_AT + 100) == "existing: operator state preserved"
+    assert conn.closed is True
