@@ -16,11 +16,11 @@ This is a **per-universe event**: the same migration ships separately to DEV (`m
 
 Both modifiers use the canonical `game/server_events.py` hooks. Existing weekend effects multiply normally: weekend expedition stay ×0.75 combined with VOIDFALL ×0.85 yields ×0.6375 stay time while both events are active; VOIDFALL does **not** add production, shop discounts or passive-farm multipliers. Research ×1.10 applies to newly evaluated timing; existing queue times are not retroactively shortened.
 
-Migration 186 is PostgreSQL-only (the two live universes use PostgreSQL), so local SQLite test databases do not inherit a time-limited live campaign. It is INSERT-only, guarded by event slug; rerunning it cannot re-enable an event an operator paused. No resets, grants, Timekeeper claims or new economy tables. Event automatically stops affecting gameplay at the end timestamp. No periodic task is needed.
+The production-only boot hook `scripts/seed_voidfall_release1.py` runs after migrations (the two live universes use PostgreSQL). It skips CI, tests, SQLite and non-production environments. The hook uses the existing `server_events.create_event` API and checks for the slug first; rerunning it cannot re-enable an event an operator paused. No resets, grants, Timekeeper claims or new economy tables. Event automatically stops affecting gameplay at the end timestamp. No periodic task is needed.
 
 ## Verification (both environments)
 
-1. Migration `186_voidfall_rift_opening.sql` recorded and no DB errors.
+1. Docker startup log contains `[GC VOIDFALL] created` or `existing: operator state preserved`; no migration 186 is needed.
 2. Event slug `voidfall-rift-opening-2026` enabled and active within the UTC window.
 3. `/api/game-state` reports `server_events.expedition_hold_mult` and `research_time_speed` reflecting the active events.
 4. Event rail and Login Rewards render “VOIDFALL: Rift Opening” and the two localized modifier summaries.
