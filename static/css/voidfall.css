@@ -1,0 +1,53 @@
+/* VOIDFALL Release 2 — small, image-free, PJAX-safe mission surface. */
+.gc-voidfall {
+  --void: #ac7aff;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(172,122,255,.5);
+  background: linear-gradient(130deg,#120d23 0%,#0b1020 62%,#0b1221 100%);
+  box-shadow: inset 0 0 0 1px rgba(172,122,255,.11),0 12px 32px rgba(0,0,0,.25);
+  border-radius: 0;
+  padding: clamp(16px,2.4vw,30px);
+  margin: 18px 0 24px;
+}
+.gc-voidfall__ambient { pointer-events:none; position:absolute;z-index:-1;top:-140px;right:-140px;width:420px;height:420px;background:radial-gradient(circle,rgba(138,80,250,.22),transparent 68%); }
+.gc-voidfall__head { display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:20px; }
+.gc-voidfall__eyebrow { font:700 11px/1.5 "JetBrains Mono",monospace;letter-spacing:.19em;color:#b997ff; }
+.gc-voidfall__title { font:800 clamp(23px,3vw,33px)/1.15 "Orbitron",sans-serif;letter-spacing:.045em;color:#f2eaff;text-shadow:0 0 16px rgba(172,122,255,.33);margin:8px 0 10px; }
+.gc-voidfall__title span { color:#ae86ff; }
+.gc-voidfall__subtitle { color:#b7bed0;font-size:13px;line-height:1.65;max-width:660px;margin:0; }
+.gc-voidfall__status { display:flex;flex-direction:column;gap:9px;align-items:flex-end;text-align:right;flex-shrink:0; }
+.gc-voidfall__status-chip { padding:7px 13px;border:1px solid #8c5fe3;background:#1b1439;color:#dfceff;font:800 11px/1.2 "JetBrains Mono",monospace;letter-spacing:.12em; }
+.gc-voidfall__deadline { font:600 11px/1.5 "JetBrains Mono",monospace;color:#97a6c3; }
+.gc-voidfall__welcome { display:flex;align-items:center;gap:18px;padding:18px 20px;background:linear-gradient(110deg,rgba(120,75,217,.2),rgba(15,21,40,.9));border:1px solid rgba(172,122,255,.35);margin-bottom:15px;box-shadow:inset 3px 0 0 #ad81ff; }
+.gc-voidfall__welcome-mark { display:grid;place-items:center;flex:0 0 42px;height:42px;font-size:28px;color:#c3a5ff;text-shadow:0 0 17px #9f74ff; }
+.gc-voidfall__welcome-copy { flex:1;min-width:0; }
+.gc-voidfall__welcome h3,.gc-voidfall__mission h3 { margin:0 0 7px;font:750 14px/1.3 "Orbitron",sans-serif;color:#eee6ff; }
+.gc-voidfall__welcome p { font-size:12px;color:#aeb5cc;line-height:1.5;margin:0 0 8px; }
+.gc-voidfall__rewards { display:flex;gap:6px;flex-wrap:wrap;margin:10px 0; }
+.gc-voidfall__reward { font:600 11px/1.5 "Inter",sans-serif;padding:5px 8px;border:1px solid rgba(144,150,188,.26);color:#d4d5e6;background:rgba(10,14,29,.52); }
+.gc-voidfall__form { flex:0 0 auto; }
+.gc-voidfall__btn { min-width:140px;max-width:100%;min-height:38px;border-radius:0!important;white-space:normal; }
+.gc-voidfall__btn:not(:disabled) { border-color:#ad81ff;box-shadow:0 0 16px rgba(160,103,255,.18); }
+.gc-voidfall__btn:not(:disabled):hover { transform:translateY(-1px);box-shadow:0 0 20px rgba(160,103,255,.33); }
+.gc-voidfall__grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px; }
+.gc-voidfall__mission { display:flex;flex-direction:column;min-width:0;padding:16px 15px;border:1px solid rgba(132,117,176,.35);background:linear-gradient(160deg,rgba(26,25,51,.83),rgba(10,16,31,.95)); }
+.gc-voidfall__mission--claimed { border-color:rgba(100,211,186,.32); }
+.gc-voidfall__mission-top { display:flex;align-items:center;justify-content:space-between;margin-bottom:13px; }
+.gc-voidfall__mission-icon { display:grid;place-items:center;width:39px;height:39px;border:1px solid rgba(172,122,255,.42);color:#c4aaff;background:rgba(172,122,255,.1);font-size:21px; }
+.gc-voidfall__mission-index { font-size:12px;color:#847ba6; }
+.gc-voidfall__mission h3 { min-height:34px;margin-bottom:12px; }
+.gc-voidfall__progress-label { display:flex;justify-content:space-between;gap:6px;font-size:12px;color:#aeb6ca;margin-bottom:7px; }
+.gc-voidfall__progress-label strong { color:#e2d4ff; }
+.gc-voidfall__progress { height:6px;background:#151b34;overflow:hidden;border:1px solid #333158; }
+.gc-voidfall__progress span { display:block;height:100%;background:linear-gradient(90deg,#7655c3,#ba95ff);box-shadow:0 0 12px #ac82ff; }
+.gc-voidfall__mission .gc-voidfall__rewards { margin:auto 0 13px;padding-top:16px; }
+.gc-voidfall__mission .gc-voidfall__btn { width:100%; }
+.gc-voidfall__notice { padding:10px 14px;color:#b7ffea;border:1px solid rgba(62,195,153,.35);background:rgba(36,117,94,.13);margin:0 0 14px;font-size:13px; }
+.gc-voidfall__notice--error { color:#ffc9cf;border-color:rgba(255,107,128,.4);background:rgba(130,32,54,.17); }
+.gc-voidfall__inactive-text { font-size:12px;color:#f2c8d0; }
+.gc-voidfall form button:disabled { opacity:.52;cursor:not-allowed; }
+@media(max-width:900px){.gc-voidfall__grid{grid-template-columns:1fr 1fr;}.gc-voidfall__welcome{flex-wrap:wrap;}.gc-voidfall__welcome .gc-voidfall__form{width:100%;}.gc-voidfall__welcome .gc-voidfall__btn{width:100%;}}
+@media(max-width:580px){.gc-voidfall__head{flex-direction:column;gap:12px;}.gc-voidfall__status{align-items:flex-start;text-align:left;}.gc-voidfall__grid{grid-template-columns:1fr;}.gc-voidfall__welcome{padding:14px;gap:10px;}.gc-voidfall__welcome-mark{flex-basis:32px;height:32px;}.gc-voidfall__mission h3{min-height:0;}}
+@media(prefers-reduced-motion:reduce){.gc-voidfall__btn{transition:none!important;transform:none!important;}}
