@@ -31,9 +31,14 @@
     <div class="gc-voidfall__welcome-copy">
       <h3>{{ vf.labels.welcome }}</h3>
       <p>{{ vf.labels.welcome_hint }}</p>
+      <p class="gc-voidfall__inventory-hint">{{ vf.labels.inventory_hint }}</p>
+      <div class="gc-voidfall__reward-label">{{ vf.labels.reward_benefit }}</div>
       <div class="gc-voidfall__rewards" aria-label="{{ vf.labels.reward }}">
         {% for item in vf.welcome.rewards %}
-        <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+        <div class="gc-voidfall__reward-line">
+          <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          {% if item.detail_key %}<small class="gc-voidfall__reward-info">{{ T(item.detail_key) }}</small>{% endif %}
+        </div>
         {% endfor %}
       </div>
     </div>
@@ -55,6 +60,28 @@
         <span class="gc-voidfall__mission-index gc-mono">0{{ loop.index }}</span>
       </div>
       <h3>{{ mission.title }}</h3>
+      <div class="gc-voidfall__mission-instructions">
+        <div class="gc-voidfall__reward-label">{{ vf.labels.objective_title }}</div>
+        <p>{{ vf.labels['how_' ~ mission.key] }}</p>
+        {% if mission.key == 'operations' %}
+        <div class="gc-voidfall__activity-breakdown" aria-label="{{ vf.labels.activity_breakdown }}">
+          {% for src in mission.sources %}
+          <span>{{ vf.labels['source_' ~ src] }} <strong class="gc-mono">{{ mission.source_counts[src] }}</strong></span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <nav class="gc-voidfall__mission-links" aria-label="{{ vf.labels.objective_title }}">
+          {% if mission.key == 'expeditions' or mission.key == 'operations' %}
+          <a href="{{ url_for('fleet_view') }}">{{ vf.labels.go_fleet }}</a>
+          {% endif %}
+          {% if mission.key == 'construction' or mission.key == 'operations' %}
+          <a href="{{ url_for('buildings_view') }}">{{ vf.labels.go_buildings }}</a>
+          {% endif %}
+          {% if mission.key == 'operations' %}
+          <a href="{{ url_for('research_view') }}">{{ vf.labels.go_research }}</a>
+          {% endif %}
+        </nav>
+      </div>
       <div class="gc-voidfall__progress-label">
         <span>{{ vf.labels.remaining }}</span>
         <strong class="gc-mono">{{ mission.progress }} / {{ mission.target }}</strong>
@@ -64,10 +91,16 @@
            aria-valuemin="0" aria-valuemax="{{ mission.target }}">
         <span style="width: {{ (mission.progress * 100 / mission.target)|round(0)|int }}%"></span>
       </div>
-      <div class="gc-voidfall__rewards">
-        {% for item in mission.rewards %}
-        <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
-        {% endfor %}
+      <div class="gc-voidfall__mission-rewards">
+        <div class="gc-voidfall__reward-label">{{ vf.labels.reward_benefit }}</div>
+        <div class="gc-voidfall__rewards">
+          {% for item in mission.rewards %}
+          <div class="gc-voidfall__reward-line">
+            <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+            {% if item.detail_key %}<small class="gc-voidfall__reward-info">{{ T(item.detail_key) }}</small>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
       </div>
       <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form>
         {{ csrf_input() }}

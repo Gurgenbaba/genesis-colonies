@@ -31,6 +31,14 @@ MISSION_CATALOG = (
 )
 WELCOME_ITEMS = (("container_rare", 1), ("booster_research_15m", 1))
 
+# Only VOIDFALL reward items receive a player-facing, verified effect description.
+# Time booster values are actual queue/Timekeeper seconds, not a percentage.
+REWARD_DETAIL_ITEMS = frozenset({
+    "container_rare", "container_event_special", "container_relic",
+    "container_void_artifact", "booster_build_15m", "booster_research_15m",
+    "booster_expedition_loot_25_24h",
+})
+
 LABEL_NAMES = (
     "subtitle",
     "welcome",
@@ -69,6 +77,21 @@ LABEL_NAMES = (
     "discovery_artifact",
     "discovery_none",
     "discovery_found",
+    "how_expeditions",
+    "how_construction",
+    "how_operations",
+    "source_expedition",
+    "source_building_finish",
+    "source_account_research_finish",
+    "source_spy",
+    "source_recycle",
+    "go_fleet",
+    "go_buildings",
+    "go_research",
+    "objective_title",
+    "reward_benefit",
+    "activity_breakdown",
+    "inventory_hint",
 )
 
 
@@ -90,6 +113,7 @@ def _reward_preview(items: tuple[tuple[str, int], ...]) -> list[dict[str, Any]]:
             "name_key": spec.get("name_key") or key,
             "icon": spec.get("icon") or "✦",
             "image": spec.get("image") or "",
+            "detail_key": f"voidfall_reward_detail_{key}" if key in REWARD_DETAIL_ITEMS else None,
         })
     return out
 
@@ -153,6 +177,8 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
         missions.append({
             "key": key, "title": labels[key], "icon": icon,
             "progress": progress, "target": target,
+            "sources": sources,
+            "source_counts": {src: int(counts.get(src, 0)) for src in sources},
             "claimed": has_claimed, "claimable": active and progress >= target and not has_claimed,
             "rewards": _reward_preview(rewards),
         })
