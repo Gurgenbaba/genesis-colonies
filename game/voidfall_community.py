@@ -17,13 +17,13 @@ from .inventory import grant_inventory_item
 # 3 daily rewards/account max, independently of how many planets they own.
 COMMUNITY_MILESTONES = (
     ("community_breach", 20, (("container_rare", 1),)),
-    ("community_stabilize", 65, (("container_event_special", 1),)),
-    ("community_contain", 150, (("container_relic", 1),)),
+    ("community_stabilize", 40, (("container_event_special", 1),)),
+    ("community_contain", 70, (("container_relic", 1),)),
 )
 
 # Release 4: an irreversible, one-time account-wide choice.
 ALIGNMENT_CLAIM_KEY = "voidfall2026:alignment"
-ALIGNMENT_UNLOCK_SIGNALS = 65
+ALIGNMENT_UNLOCK_SIGNALS = 40
 ALIGNMENT_PERSONAL_SIGNALS = 3
 ALIGNMENT_OPTIONS = (
     ("alignment_industry", (("booster_build_15m", 2),), "⚒"),

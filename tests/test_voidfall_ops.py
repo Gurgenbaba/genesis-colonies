@@ -394,7 +394,7 @@ def test_rare_discovery_failure_rolls_back_daily_reward(voidfall_db, monkeypatch
 
 def test_release3_page_renders_and_expired_milestones_lock(voidfall_db):
     from game.voidfall_community import COMMUNITY_MILESTONES
-    assert [threshold for _key, threshold, _rewards in COMMUNITY_MILESTONES] == [20, 65, 150]
+    assert [threshold for _key, threshold, _rewards in COMMUNITY_MILESTONES] == [20, 40, 70]
     assert len(set(key for key, _, _ in COMMUNITY_MILESTONES)) == 3
     user_id = _player()
     conn = db()
@@ -414,7 +414,7 @@ def test_release3_page_renders_and_expired_milestones_lock(voidfall_db):
 
 # GC-VOIDFALL-004: account-scoped, irreversible Rift alignment.
 
-def test_alignment_requires_65_global_and_3_personal_signals(voidfall_db, monkeypatch):
+def test_alignment_requires_40_global_and_3_personal_signals(voidfall_db, monkeypatch):
     import game.voidfall_community as community
 
     calls = {"rolls": 0}
@@ -564,3 +564,85 @@ def test_voidfall_all_claim_pattern_reads_bind_like_wildcards(voidfall_db, monke
                for sql, params in guarded.seen_like[:1])
     assert guarded.seen_like[1][1][-1] == f"{community.DISCOVERY_PREFIX}%"
     connection.close()
+
+
+# GC-VOIDFALL-006 — small-community threshold boundaries on the canonical ledger.
+
+def test_small_community_thresholds_and_alignment_exact_boundaries(voidfall_db, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import game.voidfall_community as community
+
+    # No unrelated discovery reward obscures the result.
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
+    user = _player()
+    contributors = [_player() for _ in range(3)]
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    _activity(conn, user, "expedition", ts=ts, n=2)
+    _activity(conn, user, "building_finish", ts=ts)
+    for key in ("expeditions", "construction", "operations"):
+        assert claim(user, key, conn=conn, now=ts)[0]
+    assert get_state(user, conn=conn, now=ts)["community"]["my_signals"] == 3
+
+    receipts = []
+    base = datetime(2026, 10, 31, tzinfo=timezone.utc)
+    for other in contributors:
+        for d in range(8):
+            label = (base + timedelta(days=d)).strftime("%Y-%m-%d")
+            for key in ("expeditions", "construction", "operations"):
+                receipts.append((other, f"voidfall2026:{label}:{key}"))
+    assert len(receipts) >= 67
+
+    def add_until(total):
+        while get_state(user, conn=conn, now=ts)["community"]["signals"] < total:
+            other, receipt_key = receipts.pop(0)
+            conn.execute(
+                "INSERT INTO voidfall_reward_claims (user_id, claim_key, reward_json, claimed_at)"
+                " VALUES (?, ?, ?, ?)",
+                (other, receipt_key, "[]", ts),
+            )
+
+    add_until(39)
+    state = get_state(user, conn=conn, now=ts)["community"]
+    assert state["signals"] == 39
+    assert state["milestones"][0]["claimable"]
+    assert not state["milestones"][1]["unlocked"]
+    assert not state["alignment"]["available"]
+    assert claim(user, "community_stabilize", conn=conn, now=ts)[:2] == (
+        False, "objective_incomplete"
+    )
+    assert claim(user, "alignment_industry", conn=conn, now=ts)[:2] == (
+        False, "objective_incomplete"
+    )
+
+    add_until(40)
+    state = get_state(user, conn=conn, now=ts)["community"]
+    assert state["milestones"][1]["threshold"] == 40
+    assert state["milestones"][1]["claimable"]
+    assert state["alignment"]["required_global"] == 40
+    assert state["alignment"]["available"]
+    assert claim(user, "community_stabilize", conn=conn, now=ts)[0]
+    assert claim(user, "alignment_industry", conn=conn, now=ts)[0]
+    assert not claim(user, "alignment_science", conn=conn, now=ts)[0]
+    assert get_state(user, conn=conn, now=ts)["community"]["signals"] == 40
+
+    add_until(69)
+    state = get_state(user, conn=conn, now=ts)["community"]
+    assert state["signals"] == 69
+    assert state["milestones"][2]["threshold"] == 70
+    assert not state["milestones"][2]["unlocked"]
+    assert claim(user, "community_contain", conn=conn, now=ts)[:2] == (
+        False, "objective_incomplete"
+    )
+
+    add_until(70)
+    state = get_state(user, conn=conn, now=ts)["community"]
+    assert state["milestones"][2]["claimable"]
+    assert claim(user, "community_contain", conn=conn, now=ts)[0]
+    assert claim(user, "community_contain", conn=conn, now=ts)[:2] == (
+        False, "already_claimed"
+    )
+    assert get_state(user, conn=conn, now=ts)["community"]["signals"] == 70
+    conn.commit()
+    conn.close()
