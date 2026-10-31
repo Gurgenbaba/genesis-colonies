@@ -102,3 +102,25 @@
 .gc-voidfall__alignment-option form,.gc-voidfall__alignment-option button{width:100%;}
 @media(max-width:990px){.gc-voidfall__alignment-grid{grid-template-columns:1fr;}}
 @media(max-width:580px){.gc-voidfall__alignment{padding:14px;}.gc-voidfall__alignment-head{align-items:flex-start;flex-direction:column;}.gc-voidfall__alignment-goals{text-align:left;}}
+
+/* GC-VOIDFALL-007: self-explaining missions, compact reward effects, no image requests. */
+.gc-voidfall__inventory-hint{color:#dbc9ff!important;font-size:11px!important;line-height:1.5!important;margin:7px 0!important;}
+.gc-voidfall__mission-instructions{min-height:137px;padding:11px 12px;margin:0 0 13px;background:rgba(124,87,196,.09);border-left:2px solid rgba(181,137,255,.74);}
+.gc-voidfall__mission-instructions p{color:#d4cfdf;font-size:12px;line-height:1.55;margin:5px 0 9px;}
+.gc-voidfall__reward-label{font:750 10px/1.5 "JetBrains Mono",monospace;color:#bd9dff;letter-spacing:.1em;text-transform:uppercase;}
+.gc-voidfall__mission-links{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;}
+.gc-voidfall__mission-links a{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 9px;border:1px solid rgba(172,122,255,.57);background:rgba(112,67,190,.13);color:#e5d6ff;font:650 11px/1.3 "Inter",sans-serif;text-decoration:none;transition:background .16s,border-color .16s;}
+.gc-voidfall__mission-links a:hover,.gc-voidfall__mission-links a:focus-visible{background:rgba(151,91,238,.26);border-color:#bd97ff;color:#fff;}
+.gc-voidfall__activity-breakdown{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;}
+.gc-voidfall__activity-breakdown span{display:inline-flex;align-items:center;gap:5px;padding:3px 6px;border:1px solid rgba(155,144,186,.2);background:rgba(12,17,35,.66);color:#b7bbd0;font-size:10px;}
+.gc-voidfall__activity-breakdown strong{color:#f3e8ff;}
+.gc-voidfall__mission-rewards{margin-top:auto;padding-top:10px;}
+.gc-voidfall__mission .gc-voidfall__mission-rewards .gc-voidfall__rewards{margin:6px 0 13px;padding:0;}
+.gc-voidfall__reward-line{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;max-width:100%;}
+.gc-voidfall__reward-line .gc-voidfall__reward{display:inline-block;}
+.gc-voidfall__reward-info{display:block;color:#aebad1;font:500 11px/1.55 "Inter",sans-serif;max-width:100%;white-space:normal;overflow-wrap:break-word;}
+.gc-voidfall__welcome .gc-voidfall__reward-info{max-width:280px;}
+.gc-voidfall__milestone .gc-voidfall__reward-line,.gc-voidfall__alignment-option .gc-voidfall__reward-line{width:100%;}
+.gc-voidfall__finding .gc-voidfall__reward-info{color:#a5d8d1;}
+@media(max-width:580px){.gc-voidfall__mission-instructions{min-height:0}.gc-voidfall__mission-links a{flex:1 1 auto}.gc-voidfall__reward-info{font-size:11px;}}
+@media(prefers-reduced-motion:reduce){.gc-voidfall__mission-links a{transition:none}}

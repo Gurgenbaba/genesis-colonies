@@ -646,3 +646,83 @@ def test_small_community_thresholds_and_alignment_exact_boundaries(voidfall_db, 
     assert get_state(user, conn=conn, now=ts)["community"]["signals"] == 70
     conn.commit()
     conn.close()
+
+
+# GC-VOIDFALL-007 — self-explaining missions and reward-effect descriptions.
+
+def test_voidfall_guidance_matches_real_activity_and_reward_specs(voidfall_db):
+    from game.voidfall import REWARD_DETAIL_ITEMS, _reward_preview
+    from game.inventory_catalog import BOOSTER_TIME_SECONDS, item_catalog_entry
+
+    uid = _player()
+    conn = db()
+    _enable_event(conn)
+    ts = float(START_AT + 3600)
+    _activity(conn, uid, "expedition", ts=ts, n=1)
+    _activity(conn, uid, "building_finish", ts=ts, n=1)
+    _activity(conn, uid, "spy", ts=ts, n=1)
+    state = get_state(uid, conn=conn, now=ts, locale="de")
+    missions = {m["key"]: m for m in state["missions"]}
+    assert missions["expeditions"]["progress"] == 1
+    assert missions["expeditions"]["sources"] == ("expedition",)
+    assert missions["construction"]["progress"] == 1
+    assert missions["construction"]["sources"] == ("building_finish",)
+    assert missions["operations"]["progress"] == 3
+    assert missions["operations"]["source_counts"] == {
+        "expedition": 1, "building_finish": 1,
+        "account_research_finish": 0, "spy": 1, "recycle": 0,
+    }
+    assert BOOSTER_TIME_SECONDS["booster_build_15m"] == 900
+    assert BOOSTER_TIME_SECONDS["booster_research_15m"] == 900
+    exp_effect = item_catalog_entry("booster_expedition_loot_25_24h")["use_effect"]
+    assert exp_effect["pct"] == 25 and exp_effect["hours"] == 24
+    assert REWARD_DETAIL_ITEMS == {
+        "container_rare", "container_event_special", "container_relic",
+        "container_void_artifact", "booster_build_15m", "booster_research_15m",
+        "booster_expedition_loot_25_24h",
+    }
+    assert all(
+        reward["detail_key"] == "voidfall_reward_detail_" + reward["item_key"]
+        for reward in _reward_preview(tuple((key, 1) for key in sorted(REWARD_DETAIL_ITEMS)))
+    )
+    conn.close()
+
+
+def test_voidfall_guidance_all_eight_locales_and_template_contract():
+    import json
+
+    languages = ("de", "en", "es", "fr", "pl", "pt", "ru", "tr")
+    keys = (
+        "how_expeditions", "how_construction", "how_operations",
+        "source_expedition", "source_building_finish",
+        "source_account_research_finish", "source_spy", "source_recycle",
+        "go_fleet", "go_buildings", "go_research",
+        "objective_title", "reward_benefit", "activity_breakdown", "inventory_hint",
+        "reward_detail_container_rare", "reward_detail_container_event_special",
+        "reward_detail_container_relic", "reward_detail_container_void_artifact",
+        "reward_detail_booster_build_15m", "reward_detail_booster_research_15m",
+        "reward_detail_booster_expedition_loot_25_24h",
+    )
+    for language in languages:
+        strings = json.loads((ROOT / "locales" / (language + ".json")).read_text(encoding="utf-8"))
+        for suffix in keys:
+            key = "voidfall_" + suffix
+            assert key in strings and isinstance(strings[key], str) and strings[key].strip(), (
+                language, key
+            )
+        assert "24" in strings["voidfall_reward_detail_booster_expedition_loot_25_24h"]
+        assert "15" in strings["voidfall_reward_detail_booster_build_15m"]
+        assert "15" in strings["voidfall_reward_detail_booster_research_15m"]
+    daily = (ROOT / "templates/partials/voidfall_daily_ops.html").read_text(encoding="utf-8")
+    community = (ROOT / "templates/partials/voidfall_community.html").read_text(encoding="utf-8")
+    css = (ROOT / "static/css/voidfall.css").read_text(encoding="utf-8")
+    assert "mission.source_counts[src]" in daily
+    assert "vf.labels['how_' ~ mission.key]" in daily
+    assert "url_for('fleet_view')" in daily
+    assert "url_for('buildings_view')" in daily
+    assert "url_for('research_view')" in daily
+    assert "T(item.detail_key)" in daily and "T(item.detail_key)" in community
+    assert "gc-voidfall__mission-links" in css
+    # Render-only update; no new images, polling intervals, timers or mutation routes.
+    assert "<img" not in daily and "<img" not in community
+    assert "setInterval" not in daily and "setInterval" not in community

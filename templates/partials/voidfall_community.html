@@ -30,7 +30,10 @@
       <div class="gc-voidfall__milestone-actions">
         <div class="gc-voidfall__rewards">
           {% for item in milestone.rewards %}
-          <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          <div class="gc-voidfall__reward-line">
+            <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+            {% if item.detail_key %}<small class="gc-voidfall__reward-info">{{ T(item.detail_key) }}</small>{% endif %}
+          </div>
           {% endfor %}
         </div>
         <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form>
@@ -68,7 +71,10 @@
         <h4>{{ vf.labels[option.key] }}</h4>
         <div class="gc-voidfall__rewards">
           {% for item in option.rewards %}
-          <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          <div class="gc-voidfall__reward-line">
+            <span class="gc-voidfall__reward">{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+            {% if item.detail_key %}<small class="gc-voidfall__reward-info">{{ T(item.detail_key) }}</small>{% endif %}
+          </div>
           {% endfor %}
         </div>
         <form method="post" action="{{ url_for('voidfall_claim_view') }}" data-voidfall-form>
@@ -99,6 +105,7 @@
           <strong>{{ vf.labels['discovery_' ~ finding.kind] }}</strong>
           {% for item in finding.rewards %}
           <span>{{ item.icon }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</span>
+          {% if item.detail_key %}<small class="gc-voidfall__reward-info">{{ T(item.detail_key) }}</small>{% endif %}
           {% endfor %}
         </div>
         {% endfor %}
