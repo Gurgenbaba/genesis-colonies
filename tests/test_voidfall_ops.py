@@ -812,16 +812,18 @@ def test_voidfall_archive_uses_receipts_without_daily_mission_queries(voidfall_d
 
 def test_voidfall_archive_i18n_and_no_new_asset_or_poll_contract():
     import json
-    from game.i18n import get_locale_dict
 
     archive = (ROOT / "templates/partials/voidfall_archive.html").read_text(encoding="utf-8")
     ops = (ROOT / "templates/partials/voidfall_daily_ops.html").read_text(encoding="utf-8")
     css = (ROOT / "static/css/voidfall.css").read_text(encoding="utf-8")
-    for key in ("voidfall_archive_closed", "voidfall_archive_note", "voidfall_archive_milestones"):
-        for lang in ("de", "en"):
-            assert json.loads((ROOT / "locales" / f"{lang}.json").read_text(encoding="utf-8"))[key]
-        for lang in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
-            assert get_locale_dict(lang).get(key)  # English fallback, never raw keys
+    # Reuse native translated labels in all eight languages: no new locale
+    # entries and no incomplete fallbacks that fail i18n parity.
+    for lang in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        strings = json.loads((ROOT / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
+        for key in ("cb_status_finished", "login_rewards_milestone",
+                    "voidfall_inventory_hint", "voidfall_community_signals",
+                    "voidfall_alignment_personal"):
+            assert strings.get(key), (lang, key)
     assert "{% if vf.ended %}" in ops and 'partials/voidfall_archive.html' in ops
     assert "data-voidfall-archive" in archive
     assert "vf.archive.my_signals" in archive
