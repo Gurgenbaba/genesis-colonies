@@ -124,3 +124,26 @@
 .gc-voidfall__finding .gc-voidfall__reward-info{color:#a5d8d1;}
 @media(max-width:580px){.gc-voidfall__mission-instructions{min-height:0}.gc-voidfall__mission-links a{flex:1 1 auto}.gc-voidfall__reward-info{font-size:11px;}}
 @media(prefers-reduced-motion:reduce){.gc-voidfall__mission-links a{transition:none}}
+
+/* GC-VOIDFALL-009 — only a discreet, native, collapsed recap survives expiry. */
+.gc-voidfall-archive{margin:8px 0 12px;padding:0!important;background:rgba(18,22,37,.57)!important;border:1px solid rgba(137,119,186,.26)!important;box-shadow:none!important;overflow:hidden;min-width:0}
+.gc-voidfall-archive__summary{display:flex;align-items:center;gap:11px;min-height:52px;padding:10px 15px;cursor:pointer;list-style:none;color:#c5badc}
+.gc-voidfall-archive__summary::-webkit-details-marker{display:none}
+.gc-voidfall-archive__summary::marker{content:""}
+.gc-voidfall-archive__summary:focus-visible{outline:2px solid #b997ff;outline-offset:-2px}
+.gc-voidfall-archive__mark{display:grid;place-items:center;flex:0 0 27px;width:27px;height:27px;border:1px solid rgba(171,130,255,.28);color:#b997ff;font-size:16px}
+.gc-voidfall-archive__name{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;font-size:11px;color:#a7a5ba}
+.gc-voidfall-archive__name strong{font:750 12px/1.3 "Orbitron",sans-serif;letter-spacing:.035em;color:#dcd0ef}
+.gc-voidfall-archive__score{display:flex;align-items:center;gap:8px;font-size:11px;color:#aba8bb;text-align:right}
+.gc-voidfall-archive__score strong{font-size:13px;color:#d7c5f1}
+.gc-voidfall-archive__chevron{display:inline-block;font-size:17px;line-height:1;color:#aba0bf;transition:transform .15s}
+.gc-voidfall-archive__details[open] .gc-voidfall-archive__chevron{transform:rotate(180deg)}
+.gc-voidfall-archive__body{padding:0 15px 13px 53px;border-top:1px solid rgba(137,119,186,.17);font-size:12px;color:#b2afc2}
+.gc-voidfall-archive__body p{margin:9px 0;line-height:1.5}
+.gc-voidfall-archive__stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin:9px 0}
+.gc-voidfall-archive__stats div{display:flex;align-items:baseline;gap:6px}
+.gc-voidfall-archive__stats dt{font-size:11px;color:#a9a7b9}
+.gc-voidfall-archive__stats dd{margin:0;font:700 12px/1.4 "JetBrains Mono",monospace;color:#e2d4f4}
+.gc-voidfall-archive__alignment{font-size:11px;color:#d7c5f1}
+@media(max-width:580px){.gc-voidfall-archive__summary{padding:10px;gap:8px}.gc-voidfall-archive__score{flex-direction:column;gap:1px;align-items:flex-end}.gc-voidfall-archive__body{padding:0 10px 12px}.gc-voidfall-archive__stats{gap:6px 13px}}
+@media(prefers-reduced-motion:reduce){.gc-voidfall-archive__chevron{transition:none}}
