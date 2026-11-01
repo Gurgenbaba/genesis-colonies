@@ -9,7 +9,7 @@ VOIDFALL uses its full mission/convergence/alignment surface only during the eve
 - `partials/voidfall_daily_ops.html` selects the archive **instead of** the full event panel after expiry. The new `voidfall_archive.html` uses native HTML `<details>`, initially collapsed, no forms, no disabled buttons, no artwork, no JS listener.
 - Keep existing full experience for running or temporarily paused events. `voidfall_claim` still denies all post-expiry requests server-side; claim ledger and inventory are untouched.
 - Existing GC-VOIDFALL-008 UTC-midnight PJAX refresh replaces the running event panel with the archive when the event ends. No polling is added.
-- Archive text is translated in DE and EN; other supported languages use the project's existing English fallback for these three new short strings. Other labels reuse existing native localized strings.
+- Archive reuses existing native i18n keys in all eight supported locales, without adding or modifying locale keys.
 
 ## Guards
 - At UTC end boundary, the event remains active through END_AT, then immediately becomes read-only.
