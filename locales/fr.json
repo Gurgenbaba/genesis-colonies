@@ -9318,5 +9318,8 @@
   "voidfall_reward_detail_container_void_artifact": "À ouvrir dans l'inventaire : butin du conteneur Artefact du Vide exceptionnellement rare.",
   "voidfall_reward_detail_booster_build_15m": "15 minutes de crédit de construction à utiliser avec Timekeeper.",
   "voidfall_reward_detail_booster_research_15m": "15 minutes de crédit de recherche à utiliser avec Timekeeper.",
-  "voidfall_reward_detail_booster_expedition_loot_25_24h": "Après activation, +25 % de butin d'expédition pendant 24 heures."
+  "voidfall_reward_detail_booster_expedition_loot_25_24h": "Après activation, +25 % de butin d'expédition pendant 24 heures.",
+  "voidfall_archive_closed": "Terminé · Bilan",
+  "voidfall_archive_note": "VOIDFALL est terminé. Les récompenses récupérées restent dans ton inventaire.",
+  "voidfall_archive_milestones": "Paliers réclamés"
 }
