@@ -763,8 +763,12 @@ def test_voidfall_rollover_browser_contract_without_extra_polling():
 def test_voidfall_archive_uses_receipts_without_daily_mission_queries(voidfall_db, monkeypatch):
     import importlib
     import game.voidfall as vf
+    import game.voidfall_community as community
     import app as app_mod
 
+    # Mission claims have a separate 5% discovery roll. Keep this render
+    # regression deterministic; drop probabilities are tested elsewhere.
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
     uid = _player()
     conn = db()
     _enable_event(conn)
