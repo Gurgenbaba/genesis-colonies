@@ -1,5 +1,8 @@
 {% set vf = voidfall if voidfall is defined and voidfall else {} %}
 {% if vf.ready and vf.visible %}
+{% if vf.ended %}
+{% include "partials/voidfall_archive.html" %}
+{% else %}
 <section class="gc-panel gc-voidfall{% if not vf.active %} gc-voidfall--inactive{% endif %}"
          data-voidfall-success="{{ vf.labels.success }}"
          data-voidfall-server-now="{{ vf.server_now|int }}"
@@ -118,4 +121,5 @@
   </div>
   {% include "partials/voidfall_community.html" %}
 </section>
+{% endif %}
 {% endif %}
