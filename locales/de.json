@@ -9318,5 +9318,8 @@
   "voidfall_reward_detail_container_void_artifact": "Im Inventar öffnen: Beute aus dem besonders seltenen Riss-Artefakt-Container.",
   "voidfall_reward_detail_booster_build_15m": "15 Minuten Bauzeitguthaben – für Bauaufträge im Timekeeper einsetzbar.",
   "voidfall_reward_detail_booster_research_15m": "15 Minuten Forschungszeitguthaben – für Forschungen im Timekeeper einsetzbar.",
-  "voidfall_reward_detail_booster_expedition_loot_25_24h": "Nach Aktivierung 24 Stunden lang +25 % Expeditionsbeute."
+  "voidfall_reward_detail_booster_expedition_loot_25_24h": "Nach Aktivierung 24 Stunden lang +25 % Expeditionsbeute.",
+  "voidfall_archive_closed": "Beendet · Rückblick",
+  "voidfall_archive_note": "VOIDFALL ist abgeschlossen. Erhaltene Belohnungen bleiben in deinem Inventar.",
+  "voidfall_archive_milestones": "Abgeholte Meilensteine"
 }
