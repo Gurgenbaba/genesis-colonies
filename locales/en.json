@@ -9318,8 +9318,5 @@
   "voidfall_reward_detail_container_void_artifact": "Open in Inventory for loot from an exceptionally rare Void Artifact container.",
   "voidfall_reward_detail_booster_build_15m": "15 minutes of building time credit to use on build queues via Timekeeper.",
   "voidfall_reward_detail_booster_research_15m": "15 minutes of research time credit to use via Timekeeper.",
-  "voidfall_reward_detail_booster_expedition_loot_25_24h": "After activation, +25% expedition loot for 24 hours.",
-  "voidfall_archive_closed": "Ended · Recap",
-  "voidfall_archive_note": "VOIDFALL has ended. Rewards you collected remain in your inventory.",
-  "voidfall_archive_milestones": "Milestones claimed"
+  "voidfall_reward_detail_booster_expedition_loot_25_24h": "After activation, +25% expedition loot for 24 hours."
 }
