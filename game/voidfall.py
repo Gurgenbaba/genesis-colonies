@@ -153,6 +153,26 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
     visible, active = _event_status(conn, ts)
     if not visible:
         return {"ready": True, "visible": False, "active": False}
+    # GC-VOIDFALL-009: an expired event is a tiny, read-only recap, not
+    # the full daily-ops screen. Avoid the activity/day-claim queries forever
+    # after expiry; use the existing receipt ledger for stable final totals.
+    if ts > END_AT:
+        from .voidfall_community import get_community_state
+        community = get_community_state(int(player_id), conn=conn, active=False)
+        return {
+            "ready": True, "visible": True, "active": False, "ended": True,
+            "slug": SLUG, "ends_at": END_AT, "labels": labels,
+            "community": community,
+            "archive": {
+                "my_signals": community["my_signals"],
+                "signals": community["signals"],
+                "milestones_claimed": sum(
+                    1 for milestone in community["milestones"] if milestone["claimed"]
+                ),
+                "discovery_count": community["discovery_count"],
+                "selected_path": community["alignment"]["selected_path"],
+            },
+        }
     bucket = int(ts // 86400)
     rows = conn.execute(
         """
@@ -186,7 +206,7 @@ def get_state(player_id: int, *, conn, now: float | None = None, locale: str | N
     community = get_community_state(int(player_id), conn=conn, active=active)
     welcomed = _claim_key(WELCOME_KEY, ts) in claimed
     return {
-        "ready": True, "visible": True, "active": active,
+        "ready": True, "visible": True, "active": active, "ended": False,
         "slug": SLUG, "day": date, "ends_at": END_AT,
         "server_now": ts, "next_reset_at": (bucket + 1) * 86400,
         "labels": labels,
