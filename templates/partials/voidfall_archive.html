@@ -5,7 +5,7 @@
       <span class="gc-voidfall-archive__mark" aria-hidden="true">✧</span>
       <span class="gc-voidfall-archive__name">
         <strong id="voidfall-archive-title">{{ T("voidfall_name") }}</strong>
-        <span>{{ T("voidfall_archive_closed") }}</span>
+        <span>{{ T("cb_status_finished") }}</span>
       </span>
       <span class="gc-voidfall-archive__score">
         <span>{{ vf.labels.alignment_personal }}</span>
@@ -14,10 +14,10 @@
       <span class="gc-voidfall-archive__chevron" aria-hidden="true">⌄</span>
     </summary>
     <div class="gc-voidfall-archive__body">
-      <p>{{ T("voidfall_archive_note") }}</p>
+      <p>{{ T("voidfall_inventory_hint") }}</p>
       <dl class="gc-voidfall-archive__stats">
         <div><dt>{{ vf.labels.community_signals }}</dt><dd>{{ vf.archive.signals }}</dd></div>
-        <div><dt>{{ T("voidfall_archive_milestones") }}</dt><dd>{{ vf.archive.milestones_claimed }} / 3</dd></div>
+        <div><dt>{{ T("login_rewards_milestone") }}</dt><dd>{{ vf.archive.milestones_claimed }} / 3</dd></div>
         <div><dt>{{ vf.labels.discovery_title }}</dt><dd>{{ vf.archive.discovery_count }}</dd></div>
       </dl>
       {% if vf.archive.selected_path %}
