@@ -757,3 +757,81 @@ def test_voidfall_rollover_browser_contract_without_extra_polling():
     assert "window.setInterval(" not in script
     assert "granted = true" in script and "if (!granted)" in script
     assert "window.location.reload(" not in script
+
+# GC-VOIDFALL-009: post-event daily rewards keep only a collapsed, read-only recap.
+
+def test_voidfall_archive_uses_receipts_without_daily_mission_queries(voidfall_db, monkeypatch):
+    import importlib
+    import game.voidfall as vf
+    import game.voidfall_community as community
+    import app as app_mod
+
+    # Mission claims have a separate 5% discovery roll. Keep this render
+    # regression deterministic; drop probabilities are tested elsewhere.
+    monkeypatch.setattr(community.secrets, "randbelow", lambda n: n - 1)
+    uid = _player()
+    conn = db()
+    _enable_event(conn)
+    before_end = float(END_AT - 120)
+    _activity(conn, uid, "building_finish", ts=before_end)
+    assert claim(uid, "construction", conn=conn, now=before_end)[0]
+    conn.commit()
+
+    ended = float(END_AT + 1)
+    state = get_state(uid, conn=conn, now=ended, locale="de")
+    assert state["visible"] and state["ended"] and not state["active"]
+    assert state["archive"]["my_signals"] == 1
+    assert state["archive"]["signals"] == 1
+    assert state["archive"]["milestones_claimed"] == 0
+    assert state["archive"]["discovery_count"] == 0
+    assert state["archive"]["selected_path"] is None
+    assert "missions" not in state and "welcome" not in state
+    assert claim(uid, "welcome", conn=conn, now=ended)[:2] == (False, "event_ended")
+    assert get_state(uid, conn=conn, now=ended + 86400 * 40)["archive"] == state["archive"]
+    conn.close()
+
+    # Actual Flask/Jinja: the archive is small, collapsed by default, and
+    # contains no legacy daily missions, community cards, or claim forms.
+    importlib.reload(app_mod)
+    monkeypatch.setattr(app_mod.app, "testing", False)
+    real_get_state = vf.get_state
+    monkeypatch.setattr(
+        vf, "get_state",
+        lambda player_id, *, conn, now=None, locale=None:
+            real_get_state(player_id, conn=conn, now=ended, locale=locale),
+    )
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    response = client.get("/login-rewards")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'data-voidfall-archive' in html
+    assert '<details class="gc-voidfall-archive__details">' in html
+    assert 'id="voidfall-ops"' not in html
+    assert 'data-voidfall-form' not in html
+    assert 'gc-voidfall__convergence' not in html
+    assert 'data-lr-grid' in html  # 30-day rewards remain unchanged
+
+
+def test_voidfall_archive_i18n_and_no_new_asset_or_poll_contract():
+    import json
+
+    archive = (ROOT / "templates/partials/voidfall_archive.html").read_text(encoding="utf-8")
+    ops = (ROOT / "templates/partials/voidfall_daily_ops.html").read_text(encoding="utf-8")
+    css = (ROOT / "static/css/voidfall.css").read_text(encoding="utf-8")
+    # Reuse native translated labels in all eight languages: no new locale
+    # entries and no incomplete fallbacks that fail i18n parity.
+    for lang in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        strings = json.loads((ROOT / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
+        for key in ("cb_status_finished", "login_rewards_milestone",
+                    "voidfall_inventory_hint", "voidfall_community_signals",
+                    "voidfall_alignment_personal"):
+            assert strings.get(key), (lang, key)
+    assert "{% if vf.ended %}" in ops and 'partials/voidfall_archive.html' in ops
+    assert "data-voidfall-archive" in archive
+    assert "vf.archive.my_signals" in archive
+    assert "vf.archive.selected_path" in archive
+    assert "data-voidfall-form" not in archive
+    assert "<img" not in archive and "<script" not in archive
+    assert "setInterval" not in css and "setInterval" not in archive
