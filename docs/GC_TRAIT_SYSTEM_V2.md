@@ -65,6 +65,14 @@ kann ich wählen, wenn ich ihn nicht finde?
 - **Absichtlich nicht enthalten:** Scans fremder Galaxiepositionen, schätzen verborgener DNA, neue synergetische Effekte, Upgrades ohne Cooldown und eine globale Scan-Leaderboard-Währung.
 - Der erste Live-Rollout setzt die neuen Migrationen voraus und erfordert alle Tests/PG-Sentinel/Live-Healthcheck. UNI1 bleibt ein gesonderter Release.
 
+### R2D — Bestandsplaneten nach Level-15-Reveal-Fehler abgleichen
+
+- Die feste Level-15-Regel ist **DNA-Stufe 2**. Die ursprüngliche Level-Unlock-Auswertung hatte Stufe 1 verwendet; der Parser wurde in R2C korrigiert.
+- Für schon bestehende Kolonien prüft `planet_evolution_needs_bootstrap` nur `planet_level >= 15 AND dna_reveal_tier = 1`. Der reguläre Bootstrap korrigiert die Stufe im **gleichen Transaktionskontext** und kompiliert Mechaniken danach kanonisch neu.
+- `dna_seed`, `planet_dna`, Level, XP, Ressourcenspeicher und andere gültige Reveal-Stufen bleiben unverändert. Tier 0 (noch nicht etablierter Outpost) wird ausdrücklich nicht angefasst.
+- Nur der Besitzer darf über einen Planet-State-Request den Bootstrap auslösen. Request-lokale Planet-Caches werden nach der gezielten Änderung invalidiert.
+- **Kein flächendeckendes Update über alle Planeten beim Deploy**: Betroffene Bestandswelten werden über den bereits bestehenden Bootstrap-/Tick-Pfad nach und nach abgeglichen. Bei Bedarf ist eine gesondert geprüfte Admin-Massenreparatur möglich; hier wird keine automatische Datenbank-Massenmigration eingeführt.
+
 ## Release 3 — Aktive Synergien (geplant, NICHT implementiert)
 
 - Ein passender Trait kombiniert mit aktiver Spezialisierung kann eine **begrenzte**

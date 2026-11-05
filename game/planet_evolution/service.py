@@ -221,10 +221,14 @@ def get_planet_state_payload(
     if own:
         conn = db()
     try:
+        # Check ownership before bootstrap: legacy reconciliation can now write.
+        # Foreign planet-state probes must never trigger another owner's repair.
+        if player_id is not None:
+            owned_planet = get_planet_row(planet_id, conn=conn) or {}
+            if int(owned_planet.get("player_id") or 0) != int(player_id):
+                return {"ok": False, "error": "not_owner"}
         ensure_planet_evolution(planet_id, conn)
         planet = get_planet_row(planet_id, conn=conn) or {}
-        if player_id is not None and int(planet.get("player_id") or 0) != int(player_id):
-            return {"ok": False, "error": "not_owner"}
 
         level, xp, xp_remaining = level_progress(planet_id, conn)
         dna = get_planet_dna(planet_id, conn=conn) or {}
