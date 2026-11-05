@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "Auf einer anderen eigenen Welt",
   "pe_atlas_unfound": "Noch nicht entdeckt",
   "pe_atlas_other_worlds": "Bekannte Fundorte",
+  "pe_atlas_jump_world": "Zu Kolonie %(name)s wechseln",
   "pe_atlas_techs": "Trait-Voraussetzung für Planet-Forschung",
   "pe_atlas_specs": "Trait-Voraussetzung für Spezialisierungen",
   "pe_trait_tooltip": "Planet-Eigenschaften prägen Forschung, Events und Spezialisierungen.",
