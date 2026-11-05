@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Concrete effects",
   "pe_trait_risk_blocks": "Risk: blocks certain paths",
   "pe_trait_risk_events": "Risk: more frequent crisis events",
+  "pe_trait_source_hint": "Planet traits are assigned when a world is created. Complete establishment and develop the planet to reveal hidden traits. If none match, colonize another world.",
   "pe_trait_tooltip": "Planet traits shape research, events, and specializations.",
   "pe_unlock_ascension": "Ascension unlockable",
   "pe_unlock_auto_conversion": "Automatic resource conversion",
