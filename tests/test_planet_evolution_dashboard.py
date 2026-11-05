@@ -398,6 +398,17 @@ def test_trait_requirement_malformed_list_degrades_without_crash():
     assert lines == ["Requires a matching planet trait"]
 
 
+def test_planet_dna_trait_names_and_effects_are_visible_in_hero():
+    tpl = (Path(__file__).resolve().parents[1] / "templates" / "planet_evolution.html").read_text(
+        encoding="utf-8"
+    )
+    hero = tpl.split('id="pe-section-traits"', 1)[1].split("</aside>", 1)[0]
+    assert "pe-theater-trait-chips" in hero
+    assert "T(trait.label_key, trait.key)" in hero
+    assert "pe_trait_play_card(trait)" in hero
+    assert "if traits" in hero
+
+
 def test_pe_ssr_boot_history_limit_and_locked_card_template():
     """GC-PERF-PJAX-BYTES-HEAVY-001: SSR history window + locked cards omit info source."""
     tpl = (Path(__file__).resolve().parents[1] / "templates" / "planet_evolution.html").read_text(
