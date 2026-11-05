@@ -12,6 +12,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  planet-traits:
+    name: planet-traits
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      APP_ENV: development
+      FLASK_ENV: development
+      FLASK_DEBUG: "0"
+      SECRET_KEY: ci-planet-traits-not-production
+      GC_SKIP_MIGRATION_CHECK: "1"
+      GC_EMBEDDED_CRON: "0"
+      GC_DB_BACKEND: sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt pytest
+      - name: Trait Atlas and Planet Evolution regression tests
+        run: python -m pytest -q --tb=short tests/test_planet_trait_atlas.py tests/test_planet_evolution_dashboard.py
+
   smoke:
     name: smoke
     runs-on: ubuntu-latest

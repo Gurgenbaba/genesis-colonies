@@ -15,6 +15,7 @@ from .definitions import get_chains, get_research_defs, get_event, get_policy, g
 from .policies import evaluate_policy_gate
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
+from .trait_atlas import build_trait_atlas
 from .history import get_history
 from .impact import impact_scopes, mechanics_impact_rows, policy_tradeoff_rows
 from .planet_level import xp_threshold_for_level
@@ -1271,6 +1272,13 @@ def build_dashboard_extras(
         "location": _planet_location_display(planet),
         "planet_score": compute_single_planet_score(planet_id, conn=conn),
         "traits": _trait_cards(dna, reveal),
+        "trait_atlas": build_trait_atlas(
+            planet_id=int(planet_id),
+            player_id=player_id,
+            dna=dna,
+            reveal_tier=reveal,
+            conn=conn,
+        ) if player_id else {"entries": [], "catalogue_count": 0},
         "progression": {
             "level": level,
             "max_level": MAX_PLANET_LEVEL,

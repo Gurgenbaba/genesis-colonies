@@ -50,6 +50,65 @@ def _player(conn=None):
     return uid
 
 
+def test_trait_gates_cannot_be_probed_before_dna_reveal(evo_db):
+    from game.planet_evolution.requirements import check_requirements
+    from game.planet_evolution.mechanics import compile_planet_mechanics
+    from game.planet_evolution.repository import get_planet_dna, save_planet_dna
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+        ensure_planet_evolution(pid, conn)
+        dna = get_planet_dna(pid, conn=conn) or {}
+        dna["anomaly_traits"] = ["ancient_ruins"]
+        save_planet_dna(pid, dna, conn)
+        conn.execute("UPDATE planets SET dna_reveal_tier = 0 WHERE id = ?;", (pid,))
+        conn.commit()
+
+        ok, missing = check_requirements(pid, {"traits_any": ["ancient_ruins"]}, conn)
+        assert ok is False
+        assert any(entry.startswith("traits_any:") for entry in missing)
+        assert "ancient_ruins" not in compile_planet_mechanics(pid, conn)["flags"]["trait_keys"]
+
+        conn.execute("UPDATE planets SET dna_reveal_tier = 1 WHERE id = ?;", (pid,))
+        ok, missing = check_requirements(pid, {"traits_any": ["ancient_ruins"]}, conn)
+        assert ok is True
+        assert missing == []
+        assert "ancient_ruins" in compile_planet_mechanics(pid, conn)["flags"]["trait_keys"]
+    finally:
+        conn.close()
+
+
+def test_pre_establishment_state_does_not_expose_trait_identity(evo_db):
+    from game.planet_evolution.service import get_planet_state_payload
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_planets_by_player(uid, conn=conn)[0]
+        pid = int(planet["id"])
+        ensure_planet_evolution(pid, conn)
+        conn.execute("UPDATE planets SET dna_reveal_tier = 0 WHERE id = ?;", (pid,))
+        conn.commit()
+
+        payload = get_planet_state_payload(pid, player_id=uid, conn=conn)
+        summary = payload["dna_summary"]
+        assert summary["reveal_tier"] == 0
+        assert summary["revealed_traits"] == []
+        assert summary["affinities"] == {}
+        assert summary["rarity"] is None
+        assert payload["dashboard"]["traits"] == []
+        assert payload["dashboard"]["trait_atlas"]["on_current"] == 0
+        assert payload["dashboard"]["trait_atlas"]["unknown_on_current"] is None
+        for option in payload["specialization_options"]:
+            assert option["synergy_score"] == 0
+            assert not option["synergy_traits"]
+            assert not option["synergy_trait_labels"]
+    finally:
+        conn.close()
+
+
 def test_next_action_event_includes_cta_fields():
     action = _next_action(
         planet={},
@@ -389,7 +448,8 @@ def test_trait_requirement_lists_allowed_traits_and_explains_source_in_english(e
     assert len(lines) == 1
     assert "Ancient ruins" in lines[0]
     assert "Dark matter residue" in lines[0]
-    assert "colonize another world" in lines[0]
+    assert " or " in lines[0]
+    assert "colonize a new world" in lines[0]
     assert "['" not in lines[0]
 
 

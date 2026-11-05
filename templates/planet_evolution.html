@@ -527,6 +527,7 @@
 .pe-command-focus{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr) auto;gap:12px;align-items:center;margin:10px 0 14px;padding:12px 16px;border:1px solid rgba(119,210,231,.24);border-radius:var(--gc-radius-xs);background:linear-gradient(110deg,rgba(41,117,151,.18),rgba(10,25,44,.24))}
 .pe-command-focus>div{display:flex;flex-direction:column;gap:4px;min-width:0}.pe-command-focus small,.pe-guide-label{font-size:.7rem;letter-spacing:.07em;text-transform:uppercase;opacity:.75}.pe-command-focus strong{font-size:.93rem;line-height:1.3}.pe-command-focus span{font-size:.8rem;opacity:.8;overflow-wrap:anywhere}
 .pe-theater-trait-overview{margin-top:12px;min-width:0}.pe-theater-trait-chips{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 8px}.pe-theater-trait-chip{border:1px solid rgba(117,198,219,.3);border-radius:8px;padding:4px 7px;font-size:.7rem;line-height:1.3;overflow-wrap:anywhere}.pe-theater-trait-details{font-size:.76rem}.pe-theater-trait-details>summary{cursor:pointer}.pe-theater-trait-effect-cards{display:grid;gap:6px;margin-top:8px;max-height:260px;overflow:auto}.pe-theater-trait-effect-cards .pe-trait-play-card{min-width:0}
+.pe-atlas{margin:14px 0;padding:0;min-width:0}.pe-atlas-details>summary{cursor:pointer;list-style:none}.pe-atlas-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px}.pe-atlas-summary::-webkit-details-marker{display:none}.pe-atlas-summary-title{font-weight:750}.pe-atlas-summary-count{font-size:.72rem;opacity:.85}.pe-atlas-body{border-top:1px solid rgba(117,198,219,.19);padding:14px 16px}.pe-atlas-body>p{margin:0 0 10px}.pe-atlas-reveal{border-left:2px solid rgba(117,198,219,.45);padding-left:9px}.pe-atlas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:9px}.pe-atlas-trait{border:1px solid rgba(117,198,219,.18);background:rgba(25,50,69,.19);border-radius:9px;padding:11px;min-width:0}.pe-atlas-trait--current{border-color:rgba(104,220,180,.55)}.pe-atlas-trait--empire{border-color:rgba(117,198,219,.45)}.pe-atlas-trait--unfound{opacity:.78}.pe-atlas-trait-head{display:flex;justify-content:space-between;align-items:baseline;gap:7px;font-size:.82rem}.pe-atlas-trait-head>span{font-size:.7rem;white-space:nowrap}.pe-atlas-trait-meta{font-size:.69rem;opacity:.81;margin:6px 0 10px}.pe-atlas-trait-row{font-size:.72rem;line-height:1.45;overflow-wrap:anywhere;margin:6px 0}.pe-atlas-trait-row>b{font-weight:650}.pe-atlas-effect-lines{font-size:.71rem;margin:7px 0;padding-left:16px}.pe-atlas-effect-lines li{margin:4px 0;overflow-wrap:anywhere}
 .pe-player-guide{margin:9px 0;border-radius:var(--gc-radius-xs);max-width:100%}.pe-player-guide>.pe-compact-details-summary{font-size:.78rem;min-height:34px;cursor:pointer}.pe-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.pe-guide-tile{padding:10px;border:1px solid rgba(117,198,219,.2);border-radius:var(--gc-radius-xs);background:rgba(49,115,149,.09);min-width:0;overflow-wrap:anywhere;font-size:.82rem}.pe-guide-label{margin-bottom:4px}.pe-guide-value{margin:0}.pe-guide-tile:last-child{border-color:rgba(117,198,219,.4)}
 @media(max-width:850px){.pe-command-focus{grid-template-columns:minmax(0,1fr)}.pe-command-focus>a{justify-self:start}.pe-guide-grid{grid-template-columns:minmax(0,1fr)}}
 </style>
@@ -760,6 +761,67 @@
         <div class="pe-focus-traits" id="pe-section-specialization" hidden aria-hidden="true"></div>
       </footer>
     </section>
+
+    {# Trait Atlas: own-colony read model, hidden traits never disclosed. #}
+    {% set atlas = dash.trait_atlas if dash.trait_atlas is defined else {} %}
+    {% if atlas.catalogue_count %}
+    <section class="pe-atlas gc-panel" id="pe-section-trait-atlas" aria-label="{{ T('pe_atlas_title', 'Planet-Trait-Atlas') }}">
+      <details class="pe-atlas-details">
+        <summary class="pe-atlas-summary">
+          <span class="pe-atlas-summary-title">🧬 {{ T('pe_atlas_title', 'Planet-Trait-Atlas') }}</span>
+          <span class="pe-atlas-summary-count gc-mono">{{ T('pe_atlas_count', '%(current)s auf diesem Planeten · %(empire)s / %(total)s im Imperium bekannt', current=atlas.on_current, empire=atlas.known_empire, total=atlas.catalogue_count) }}</span>
+        </summary>
+        <div class="pe-atlas-body">
+          <p class="hint">{{ T('pe_atlas_intro', 'Jede Welt besitzt eine feste DNA. Der Atlas zeigt mögliche Eigenschaften, ihre Forschungspfade und wo du sie bereits entdeckt hast. Unbekannte Eigenschaften anderer Welten bleiben geheim.') }}</p>
+          {% if not atlas.can_see_current %}
+          <p class="pe-atlas-reveal hint">{{ T('pe_dna_masked_body', 'Die DNA dieser Welt ist noch unbekannt. Schließe die Etablierung ab, um ihre Eigenschaften zu entdecken.') }}</p>
+          {% elif atlas.unknown_on_current %}
+          <p class="pe-atlas-reveal hint">{{ T('pe_atlas_unknown_count', 'Noch %(count)s verborgene Eigenschaften auf diesem Planeten', count=atlas.unknown_on_current) }}</p>
+          {% endif %}
+          {% if atlas.next_reveal_level %}
+          <p class="pe-atlas-reveal hint">{{ T('pe_atlas_reveal_level', 'Nächste reguläre DNA-Enthüllung: Planet-Level %(level)s', level=atlas.next_reveal_level) }}</p>
+          {% endif %}
+          <div class="pe-atlas-grid">
+            {% for entry in atlas.entries %}
+            <article class="pe-atlas-trait pe-atlas-trait--{{ entry.status }}" data-trait-rarity="{{ entry.rarity }}">
+              <div class="pe-atlas-trait-head">
+                <strong>{{ T(entry.label_key, entry.key) }}</strong>
+                <span class="gc-mono">{{ T(entry.rarity_label_key, entry.rarity) }}</span>
+              </div>
+              <p class="pe-atlas-trait-meta">{{ T(entry.category_label_key, entry.category) }}
+                · {% if entry.status == 'current' %}{{ T('pe_atlas_current', 'Auf diesem Planeten') }}
+                {% elif entry.status == 'empire' %}{{ T('pe_atlas_empire', 'Auf einer anderen eigenen Welt') }}
+                {% else %}{{ T('pe_atlas_unfound', 'Noch nicht entdeckt') }}{% endif %}
+              </p>
+              {% if entry.effect_lines %}
+              <ul class="pe-atlas-effect-lines" aria-label="{{ T('pe_trait_effects_label', 'Konkrete Auswirkungen') }}">
+                {% for fx in entry.effect_lines %}
+                  {{ pe_trait_effect_line(fx) }}
+                {% endfor %}
+              </ul>
+              {% endif %}
+              {% if entry.owned_planets %}
+              <p class="pe-atlas-trait-row"><b>{{ T('pe_atlas_other_worlds', 'Bekannte Fundorte') }}:</b>
+                {% for world in entry.owned_planets %}{{ world.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+              </p>
+              {% endif %}
+              {% if entry.techs %}
+              <p class="pe-atlas-trait-row"><b>{{ T('pe_atlas_techs', 'Ermöglicht Planet-Forschung') }}:</b>
+                {% for tech in entry.techs %}{{ T(tech.label_key, tech.key) }}{% if not loop.last %}, {% endif %}{% endfor %}
+              </p>
+              {% endif %}
+              {% if entry.specializations %}
+              <p class="pe-atlas-trait-row"><b>{{ T('pe_atlas_specs', 'Passt zu Spezialisierungen') }}:</b>
+                {% for spec in entry.specializations %}{{ T(spec.label_key, spec.key) }}{% if not loop.last %}, {% endif %}{% endfor %}
+              </p>
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
+        </div>
+      </details>
+    </section>
+    {% endif %}
 
     {# ── 2. IMPERIUMS-EXPANSION (ausklappbar) ── #}
     {% if pe_expansion_visible %}

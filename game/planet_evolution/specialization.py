@@ -67,7 +67,7 @@ def list_specialization_options(
     planet = get_planet_row(planet_id, conn=conn) or {}
     dna = get_planet_dna(planet_id, conn=conn) or {}
     reveal = int(planet.get("dna_reveal_tier") or 0)
-    traits = set(all_trait_keys(dna, reveal_tier=max(reveal, 1)))
+    traits = set(all_trait_keys(dna, reveal_tier=reveal)) if reveal > 0 else set()
     affinities = dna.get("affinity_scores") or {}
     level = int(planet.get("planet_level") or 1)
     current_spec = planet.get("specialization_key")
@@ -82,7 +82,9 @@ def list_specialization_options(
             affinities=affinities,
             current_spec=str(current_spec) if current_spec else None,
         )
-        synergy_traits = [t for t in _spec_trait_labels(spec) if t in traits]
+        # Synergy is presentation data: an unestablished world's hidden DNA must
+        # not be inferable from scores or matching-trait names in the API.
+        synergy_traits = [t for t in _spec_trait_labels(spec) if t in traits] if reveal > 0 else []
         options.append(
             {
                 "spec_key": spec_key,
@@ -90,7 +92,7 @@ def list_specialization_options(
                 "tagline_key": f"pe_spec_tagline_{spec_key}",
                 "eligible": reason is None,
                 "locked_reason_key": f"pe_spec_lock_{reason}" if reason else None,
-                "synergy_score": _synergy_score(spec, traits, affinities),
+                "synergy_score": _synergy_score(spec, traits, affinities) if reveal > 0 else 0,
                 "synergy_traits": synergy_traits,
                 "synergy_trait_labels": [
                     (get_trait(t) or {}).get("lore_key") or f"trait_{t}" for t in synergy_traits

@@ -300,9 +300,10 @@ def get_planet_state_payload(
             },
             "culture": culture,
             "dna_summary": {
-                "rarity": dna.get("rarity_tier"),
-                "revealed_traits": all_trait_keys(dna, reveal_tier=max(reveal, 1)),
-                "affinities": dna.get("affinity_scores") or {},
+                # Do not expose outpost DNA via the JSON endpoint before establishment.
+                "rarity": dna.get("rarity_tier") if reveal > 0 else None,
+                "revealed_traits": all_trait_keys(dna, reveal_tier=reveal) if reveal > 0 else [],
+                "affinities": (dna.get("affinity_scores") or {}) if reveal > 0 else {},
                 "reveal_tier": reveal,
             },
             "mechanics": mechanics_payload,

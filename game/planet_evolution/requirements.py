@@ -38,7 +38,9 @@ def check_requirements(
 
     dna = get_planet_dna(planet_id, conn=conn) or {}
     reveal = int(planet.get("dna_reveal_tier") or 0)
-    traits = set(all_trait_keys(dna, reveal_tier=max(reveal, 1)))
+    # Unestablished worlds have not revealed their DNA. A hidden trait must not
+    # be probeable via a research gate before the reveal milestone.
+    traits = set(all_trait_keys(dna, reveal_tier=reveal)) if reveal > 0 else set()
     locked = get_locked_choices(planet_id, conn=conn)
 
     if "planet_level_min" in req:

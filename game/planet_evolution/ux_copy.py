@@ -201,7 +201,8 @@ def requirement_display_line(req: Dict[str, Any], *, locale: str | None = None) 
             "Traits are assigned when a world is created. Establish the colony and develop it to reveal hidden traits. If none match, colonize another world.",
             locale=locale,
         )
-        return f"{base}: {', '.join(trait_labels)}. {source_hint}"
+        choice_separator = tr("pe_req_trait_or", " or ", locale=locale)
+        return f"{base}: {choice_separator.join(trait_labels)}. {source_hint}"
 
     if "tech_label_key" in fmt:
         tech_key = str(fmt.get("tech_key") or "")
