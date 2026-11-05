@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Konkretne efekty",
   "pe_trait_risk_blocks": "Ryzyko: blokuje określone ścieżki",
   "pe_trait_risk_events": "Ryzyko: częstsze zdarzenia kryzysowe",
+  "pe_trait_source_hint": "Cechy planety są ustalane podczas tworzenia świata. Ukończ zakładanie kolonii i rozwijaj planetę, aby odkryć ukryte cechy. Jeśli żadna nie pasuje, skolonizuj inny świat.",
   "pe_trait_tooltip": "Cechy planety kształtują badania, wydarzenia i specjalizacje.",
   "pe_unlock_ascension": "Wniebowstąpienie do odblokowania",
   "pe_unlock_auto_conversion": "Automatyczna konwersja zasobów",
