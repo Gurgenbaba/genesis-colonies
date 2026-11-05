@@ -797,7 +797,9 @@
             </div>
             {% if dna_scan.ready %}
             <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-dna-scan-btn"
-                    data-gc-dna-scan-planet="{{ ps.planet_id }}">{{ T('pe_dna_scan_action', 'DNA analysieren') }}</button>
+                    data-gc-dna-scan-planet="{{ ps.planet_id }}"
+                    data-gc-dna-scan-success="{{ T('pe_dna_scan_success', 'DNA-Analyse abgeschlossen: +120 Planeten-XP') }}"
+                    data-gc-dna-scan-error="{{ T('pe_dna_scan_error', 'Analyse fehlgeschlagen. Ressourcen und Abklingzeit prüfen.') }}">{{ T('pe_dna_scan_action', 'DNA analysieren') }}</button>
             {% else %}
             <span class="hint gc-mono" role="status">{{ T('pe_dna_scan_cooldown', 'Nächste Analyse in ungefähr %(hours)s Std.', hours=((dna_scan.remaining_seconds + 3599) // 3600)) }}</span>
             {% endif %}
