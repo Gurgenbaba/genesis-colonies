@@ -368,16 +368,34 @@ def test_overview_planet_teaser_integration(evo_db):
 
 def test_humanize_requirement_lines_renders_translated_text_not_raw_dict():
     lines = humanize_requirement_lines(
-        ["traits_any:['mantle_rich']", "planet_level>=5"],
+        ["traits_any:['ancient_ruins']", "planet_level>=5"],
         planet_level=3,
         locale="de",
     )
     assert len(lines) == 2
-    assert lines[0] == "Benötigt passende Planet-Eigenschaft"
+    assert lines[0].startswith("Benötigt passende Planet-Eigenschaft: Uralte Ruinen.")
+    assert "kolonisiere" in lines[0].lower()
     assert lines[1] == "Planet muss Stufe 5 erreichen (aktuell: Stufe 3)"
     for line in lines:
         assert "label_key" not in line
         assert "fallback" not in line
+
+
+def test_trait_requirement_lists_allowed_traits_and_explains_source_in_english():
+    lines = humanize_requirement_lines(
+        ["traits_any:['ancient_ruins', 'dark_matter_residue']"],
+        locale="en",
+    )
+    assert len(lines) == 1
+    assert "Ancient ruins" in lines[0]
+    assert "Dark matter residue" in lines[0]
+    assert "colonize another world" in lines[0]
+    assert "['" not in lines[0]
+
+
+def test_trait_requirement_malformed_list_degrades_without_crash():
+    lines = humanize_requirement_lines(["traits_any:[broken"], locale="en")
+    assert lines == ["Requires a matching planet trait"]
 
 
 def test_pe_ssr_boot_history_limit_and_locked_card_template():
