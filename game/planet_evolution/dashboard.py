@@ -1278,6 +1278,7 @@ def build_dashboard_extras(
             dna=dna,
             reveal_tier=reveal,
             conn=conn,
+            planet_level=level,
         ) if player_id else {"entries": [], "catalogue_count": 0},
         "progression": {
             "level": level,
