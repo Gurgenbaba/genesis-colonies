@@ -35,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-prod.txt pytest
       - name: Trait Atlas and Planet Evolution regression tests
-        run: python -m pytest -q --tb=short tests/test_planet_trait_atlas.py tests/test_planet_evolution_dashboard.py tests/test_planet_dna_analysis.py
+        run: python -m pytest -q --tb=short tests/test_planet_trait_atlas.py tests/test_planet_evolution_dashboard.py tests/test_planet_dna_analysis.py tests/test_planet_dna_legacy_reconcile.py
 
   smoke:
     name: smoke
