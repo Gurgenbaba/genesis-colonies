@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Efeitos concretos",
   "pe_trait_risk_blocks": "Risco: bloqueia determinados caminhos",
   "pe_trait_risk_events": "Risco: eventos de crise mais frequentes",
+  "pe_trait_source_hint": "Os traços do planeta são definidos quando o mundo é criado. Conclua o estabelecimento da colônia e desenvolva o planeta para revelar traços ocultos. Se nenhum for compatível, colonize outro mundo.",
   "pe_trait_tooltip": "As características do planeta moldam pesquisas, eventos e especializações.",
   "pe_unlock_ascension": "Ascensão desbloqueável",
   "pe_unlock_auto_conversion": "Conversão automática de recursos",
