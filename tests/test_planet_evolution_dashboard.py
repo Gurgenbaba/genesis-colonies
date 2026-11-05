@@ -366,7 +366,7 @@ def test_overview_planet_teaser_integration(evo_db):
     assert "planet_level" in teaser
 
 
-def test_humanize_requirement_lines_renders_translated_text_not_raw_dict():
+def test_humanize_requirement_lines_renders_translated_text_not_raw_dict(evo_db):
     lines = humanize_requirement_lines(
         ["traits_any:['ancient_ruins']", "planet_level>=5"],
         planet_level=3,
@@ -381,7 +381,7 @@ def test_humanize_requirement_lines_renders_translated_text_not_raw_dict():
         assert "fallback" not in line
 
 
-def test_trait_requirement_lists_allowed_traits_and_explains_source_in_english():
+def test_trait_requirement_lists_allowed_traits_and_explains_source_in_english(evo_db):
     lines = humanize_requirement_lines(
         ["traits_any:['ancient_ruins', 'dark_matter_residue']"],
         locale="en",
