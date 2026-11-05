@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Konkrete Auswirkungen",
   "pe_trait_risk_blocks": "Risiko: Blockiert bestimmte Pfade",
   "pe_trait_risk_events": "Risiko: Häufigere Krisen-Events",
+  "pe_trait_source_hint": "Planet-Eigenschaften werden bei der Entstehung einer Welt festgelegt. Schließe die Etablierung ab und entwickle den Planeten, um verborgene Eigenschaften aufzudecken. Fehlt die passende Eigenschaft, kolonisiere eine andere Welt.",
   "pe_trait_tooltip": "Planet-Eigenschaften prägen Forschung, Events und Spezialisierungen.",
   "pe_unlock_ascension": "Aufstieg freischaltbar",
   "pe_unlock_auto_conversion": "Automatische Ressourcen-Konversion",
