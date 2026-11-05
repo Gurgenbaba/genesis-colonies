@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "On another owned world",
   "pe_atlas_unfound": "Not yet discovered",
   "pe_atlas_other_worlds": "Known locations",
+  "pe_atlas_jump_world": "Switch to colony %(name)s",
   "pe_atlas_techs": "Trait requirement for planet research",
   "pe_atlas_specs": "Trait requirement for specializations",
   "pe_trait_tooltip": "Planet traits shape research, events, and specializations.",
