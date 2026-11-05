@@ -45,6 +45,22 @@ def evolution_schema_ready(conn: sqlite3.Connection) -> bool:
     return table_exists(conn, "planet_dna") and table_exists(conn, "pe_trait_definitions")
 
 
+def invalidate_planet_row_cache(planet_id: int) -> None:
+    """Evict a mutated planet from request-local PostgreSQL reads.
+
+    A repaired reveal tier must be seen by mechanics compilation and by the
+    dashboard in the same request. Do not invalidate unrelated planet rows.
+    """
+    cache = _request_pg_cache("planet_row")
+    if cache is not None:
+        cache.pop(int(planet_id), None)
+    context_cache = _request_pg_cache("context_planet")
+    if context_cache is not None:
+        for uid, row in list(context_cache.items()):
+            if isinstance(row, dict) and int(row.get("id") or 0) == int(planet_id):
+                context_cache.pop(uid, None)
+
+
 def get_planet_row(planet_id: int, conn: Optional[sqlite3.Connection] = None) -> Optional[Dict[str, Any]]:
     pid = int(planet_id)
     cache = _request_pg_cache("planet_row")
