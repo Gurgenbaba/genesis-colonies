@@ -205,7 +205,7 @@ def compile_planet_mechanics(planet_id: int, conn: sqlite3.Connection) -> Dict[s
     planet = get_planet_row(planet_id, conn=conn) or {}
     dna = get_planet_dna(planet_id, conn=conn) or {}
     reveal = int(planet.get("dna_reveal_tier") or 0)
-    traits = all_trait_keys(dna, reveal_tier=max(reveal, 1))
+    traits = all_trait_keys(dna, reveal_tier=reveal) if reveal > 0 else []
     research_levels = get_planet_research_levels(planet_id, conn=conn)
 
     compiled: Dict[str, Any] = {
