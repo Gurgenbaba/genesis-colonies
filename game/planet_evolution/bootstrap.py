@@ -16,6 +16,7 @@ from .repository import (
     evolution_schema_ready,
     get_planet_dna,
     get_planet_row,
+    invalidate_planet_row_cache,
     save_planet_dna,
 )
 
@@ -30,6 +31,10 @@ def planet_evolution_needs_bootstrap(planet_id: int, conn: sqlite3.Connection) -
     stored_class = str(planet.get("planet_class") or "").strip().lower()
     existing_dna = get_planet_dna(planet_id, conn=conn)
     if not existing_dna or stored_class != expected_class or int(planet.get("dna_seed") or 0) <= 0:
+        return True
+    # GC-TRAIT-R2D: level-15 unlock formerly applied reveal tier 1 instead of 2.
+    # Repair only established existing worlds; never generate/reroll their DNA.
+    if int(planet.get("planet_level") or 1) >= 15 and int(planet.get("dna_reveal_tier") or 0) == 1:
         return True
     if not planet.get("last_evolution_tick"):
         return True
@@ -70,6 +75,19 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
         cur = conn.cursor()
         created = False
         regen_dna = False
+        legacy_reveal_repaired = False
+        if int(planet.get("planet_level") or 1) >= 15 and int(planet.get("dna_reveal_tier") or 0) == 1:
+            # Atomic with the canonical compile below. The WHERE guard makes
+            # retries safe and leaves legitimate tier-0 outposts untouched.
+            cur.execute(
+                "UPDATE planets SET dna_reveal_tier = 2 "
+                "WHERE id = ? AND planet_level >= 15 AND dna_reveal_tier = 1;",
+                (int(planet_id),),
+            )
+            legacy_reveal_repaired = cur.rowcount == 1
+            if legacy_reveal_repaired:
+                invalidate_planet_row_cache(planet_id)
+                planet = get_planet_row(planet_id, conn=conn) or planet
 
         expected_class = expected_planet_class(planet)
         stored_class = str(planet.get("planet_class") or "").strip().lower()
@@ -123,7 +141,12 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
         bootstrap_legacy_establishment(planet_id, conn=conn)
         if began:
             commit(conn)
-        return {"ready": True, "planet_id": int(planet_id), "dna_created": created}
+        return {
+            "ready": True,
+            "planet_id": int(planet_id),
+            "dna_created": created,
+            "legacy_reveal_repaired": legacy_reveal_repaired,
+        }
     except Exception:
         if began:
             rollback(conn)
