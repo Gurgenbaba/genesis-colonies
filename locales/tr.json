@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "Sahip olduğun başka bir dünyada",
   "pe_atlas_unfound": "Henüz keşfedilmedi",
   "pe_atlas_other_worlds": "Bilinen konumlar",
+  "pe_atlas_jump_world": "%(name)s kolonisine geç",
   "pe_atlas_techs": "Gezegen araştırması için gereken özellik",
   "pe_atlas_specs": "Uzmanlaşmalar için gereken özellik",
   "pe_trait_tooltip": "Gezegen özellikleri araştırmaları, etkinlikleri ve uzmanlıkları şekillendirir.",
