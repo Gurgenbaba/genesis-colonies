@@ -16,6 +16,7 @@ from .policies import evaluate_policy_gate
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
 from .trait_atlas import build_trait_atlas
+from .dna_analysis import scan_status
 from .history import get_history
 from .impact import impact_scopes, mechanics_impact_rows, policy_tradeoff_rows
 from .planet_level import xp_threshold_for_level
@@ -1272,6 +1273,7 @@ def build_dashboard_extras(
         "location": _planet_location_display(planet),
         "planet_score": compute_single_planet_score(planet_id, conn=conn),
         "traits": _trait_cards(dna, reveal),
+        "dna_analysis": scan_status(int(planet_id), conn=conn) if player_id else {"visible": False},
         "trait_atlas": build_trait_atlas(
             planet_id=int(planet_id),
             player_id=player_id,
