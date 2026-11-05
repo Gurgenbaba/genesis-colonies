@@ -1,7 +1,6 @@
 # Genesis Colonies — Trait System 2.0
 
-**Status:** In Arbeit, nicht vollständig live. PR #547 = Trait-Fehlermeldung und sichtbare DNA-Karten;
-Trait-Atlas-V2-Branch = katalogbasierte Zuordnung und eigene entdeckte Kolonien.
+**Status:** Release 1 (#547/#548) auf `main` gemerged und auf dem Main-Service ausgerollt. Release 2 wird in getrennten PRs aufgebaut; Scans und Resonanzen sind noch nicht aktiv.
 Die Ausbaustufen unten sind ein Releaseplan, keine Behauptung bereits aktivierter Spielmechanik.
 
 ## Designziel
@@ -46,9 +45,9 @@ kann ich wählen, wenn ich ihn nicht finde?
    versteckten DNA-Schlüssel verwenden. Ab Tier 1 gilt die bestehende
    kanonische Trait-Logik; bestehende DNA bleibt unverändert.
 
-## Release 2 — Entdeckungsloop (geplant, NICHT implementiert)
+## Release 2 — Entdeckungsloop (in Schritten, teils implementiert)
 
-- Auf dem Planeten: DNA-Analyse-Meilensteine, zugängliche Fortschrittsanzeige.
+- **R2A (dieser PR):** Auf dem Planeten zeigt der Trait-Atlas einen serverseitigen Level-3-bis-15-Fortschritt mit nativem, zugänglichem `<progress>`-Element. Vor Etablierung/Tier 0 gibt es **keinen Prozentwert**, damit die Oberfläche keine noch gesperrte DNA-Analyse suggeriert. Die Level-15-Anzeige benutzt ausschließlich vorhandene Planet-Level und Reveal-Stufe, keine neue Mechanik/DB-Abfrage.
 - Auf der Command Map: optionale **grobe** Potenzialhinweise je Sektortyp,
   ohne konkrete Seed-Traits vor Kolonisierung zu verraten.
 - Expeditionen/Entdeckungen als Progression ohne Paywall; gesondert balancierte
