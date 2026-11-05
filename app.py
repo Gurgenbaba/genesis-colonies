@@ -15486,6 +15486,20 @@ def api_planet_state(planet_id: int):
     return jsonify({"ok": True, "planet": payload})
 
 
+@app.route("/api/planets/<int:planet_id>/dna-analysis", methods=["POST"])
+@require_login
+def api_planet_dna_analysis(planet_id: int):
+    """GC-TRAIT-R2C: one atomic resource-priced DNA study per colony/24h."""
+    from game.planet_evolution.dna_analysis import perform_scan
+
+    user_id = int(session["user_id"])
+    ok, reason, data = perform_scan(int(planet_id), player_id=user_id)
+    if not ok:
+        status = 403 if reason == "not_owner" else 409 if reason == "cooldown" else 400
+        return jsonify({"ok": False, "reason": reason, "data": data}), status
+    return jsonify({"ok": True, "reason": "ok", "data": data})
+
+
 @app.route("/api/planets/<int:planet_id>/research")
 @require_login
 def api_planet_research_status(planet_id: int):
