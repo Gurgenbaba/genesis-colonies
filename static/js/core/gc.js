@@ -465,4 +465,44 @@
       }
     }, true);
   })();
+  // GC-TRAIT-R2C: single delegated action; the server owns cost, XP and cooldown.
+  (function bindPlanetDnaScan() {
+    var doc = global.document;
+    if (!doc || GC.core.planetDnaScanBound) return;
+    GC.core.planetDnaScanBound = true;
+    doc.addEventListener("click", function (event) {
+      var target = event.target;
+      var button = target && target.closest && target.closest("[data-gc-dna-scan-planet]");
+      if (!button || button.disabled || button.dataset.scanBusy === "1" ||
+          !button.closest("#pe-section-trait-atlas")) return;
+      var pid = button.getAttribute("data-gc-dna-scan-planet") || "";
+      if (!/^[1-9][0-9]*$/.test(pid)) return;
+      event.preventDefault();
+      button.disabled = true;
+      button.dataset.scanBusy = "1";
+      (async function () {
+        try {
+          if (typeof GC.fetchGameAction !== "function") throw new Error("missing_action_client");
+          var res = await GC.fetchGameAction("/api/planets/" + pid + "/dna-analysis", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: "{}"
+          });
+          if (!res || !res.ok) {
+            if (typeof GC.toast === "function") GC.toast(button.dataset.gcDnaScanError || "", "error");
+            return;
+          }
+          if (typeof GC.toast === "function") GC.toast(button.dataset.gcDnaScanSuccess || "", "success");
+          if (typeof GC.reloadCurrentPage === "function") {
+            await GC.reloadCurrentPage({ force: true });
+          }
+        } catch (_) {
+          if (typeof GC.toast === "function") GC.toast(button.dataset.gcDnaScanError || "", "error");
+        } finally {
+          button.disabled = false;
+          button.dataset.scanBusy = "0";
+        }
+      })();
+    });
+  })();
 })(typeof window !== "undefined" ? window : globalThis);
