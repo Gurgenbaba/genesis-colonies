@@ -45,6 +45,10 @@ def _apply_level_unlocks(planet_id: int, new_level: int, conn: sqlite3.Connectio
     cur = conn.cursor()
     unlocks = LEVEL_UNLOCKS.get(int(new_level)) or ()
     reveal_delta = 0
+    # LEVEL_UNLOCKS stores a pair ("dna_reveal", tier) directly, not a
+    # nested tuple. Iterating it previously discarded tier 2 at level 15.
+    if len(unlocks) == 2 and unlocks[0] == "dna_reveal":
+        reveal_delta = max(reveal_delta, int(unlocks[1]))
     for item in unlocks:
         if isinstance(item, tuple) and len(item) == 2 and item[0] == "dna_reveal":
             reveal_delta = max(reveal_delta, int(item[1]))

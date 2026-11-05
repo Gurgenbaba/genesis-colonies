@@ -787,6 +787,24 @@
           </div>
           {% endif %}
           {% endif %}
+          {% set dna_scan = dash.dna_analysis if dash.dna_analysis is defined else {} %}
+          {% if dna_scan.visible %}
+          <div class="pe-dna-scan" data-gc-dna-scan-panel>
+            <div class="pe-dna-scan-copy">
+              <strong>{{ T('pe_dna_scan_title', 'DNA-Laboranalyse') }}</strong>
+              <p class="hint">{{ T('pe_dna_scan_hint', 'Investiere Ressourcen für 120 Planeten-XP. Ein Scan je Kolonie alle 24 Stunden; die normale DNA-Enthüllung bleibt an Planet-Level gebunden.') }}</p>
+              <span class="gc-mono hint">{{ T('pe_dna_scan_cost', 'Kosten: %(metal)s Metall · %(crystal)s Kristall', metal=dna_scan.cost.metal|fmt_int, crystal=dna_scan.cost.crystal|fmt_int) }}</span>
+            </div>
+            {% if dna_scan.ready %}
+            <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-dna-scan-btn"
+                    data-gc-dna-scan-planet="{{ ps.planet_id }}"
+                    data-gc-dna-scan-success="{{ T('pe_dna_scan_success', 'DNA-Analyse abgeschlossen: +120 Planeten-XP') }}"
+                    data-gc-dna-scan-error="{{ T('pe_dna_scan_error', 'Analyse fehlgeschlagen. Ressourcen und Abklingzeit prüfen.') }}">{{ T('pe_dna_scan_action', 'DNA analysieren') }}</button>
+            {% else %}
+            <span class="hint gc-mono" role="status">{{ T('pe_dna_scan_cooldown', 'Nächste Analyse in ungefähr %(hours)s Std.', hours=((dna_scan.remaining_seconds + 3599) // 3600)) }}</span>
+            {% endif %}
+          </div>
+          {% endif %}
           <div class="pe-atlas-grid">
             {% for entry in atlas.entries %}
             <article class="pe-atlas-trait pe-atlas-trait--{{ entry.status }}" data-trait-rarity="{{ entry.rarity }}">
