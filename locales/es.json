@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "En otro mundo propio",
   "pe_atlas_unfound": "Aún no descubierto",
   "pe_atlas_other_worlds": "Ubicaciones conocidas",
+  "pe_atlas_jump_world": "Cambiar a la colonia %(name)s",
   "pe_atlas_techs": "Rasgo requerido para investigación planetaria",
   "pe_atlas_specs": "Rasgo requerido para especializaciones",
   "pe_trait_tooltip": "Los rasgos del planeta dan forma a la investigación, los eventos y las especializaciones.",
