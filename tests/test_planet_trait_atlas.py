@@ -140,3 +140,36 @@ def test_trait_atlas_reveal_stage_two_and_template_contract(monkeypatch):
     assert "entry.owned_planets" in tpl
     assert "entry.techs" in tpl
     assert "entry.specializations" in tpl
+
+
+def test_dna_milestone_progress_is_server_computed_and_never_previews_tier_zero(monkeypatch):
+    _definitions(monkeypatch)
+    rows = [_planet_row(5, "Ark", 1, geology=("ferronit_rich_crust",), hidden=("subsurface_vault_hint",))]
+    base = dict(planet_id=5, player_id=9, dna=_dna(geology=("ferronit_rich_crust",)), conn=_FakeConn(rows))
+
+    hidden = trait_atlas.build_trait_atlas(**base, reveal_tier=0, planet_level=12)
+    assert hidden["reveal_progress"] is None
+    assert hidden["on_current"] == 0
+
+    early = trait_atlas.build_trait_atlas(**base, reveal_tier=1, planet_level=3)
+    assert early["reveal_progress"] == {
+        "current_level": 3, "target_level": 15, "levels_remaining": 12, "pct": 0,
+    }
+    middle = trait_atlas.build_trait_atlas(**base, reveal_tier=1, planet_level=9)
+    assert middle["reveal_progress"]["pct"] == 50
+    assert middle["reveal_progress"]["levels_remaining"] == 6
+    stale = trait_atlas.build_trait_atlas(**base, reveal_tier=1, planet_level=19)
+    assert stale["reveal_progress"]["pct"] == 100
+    assert stale["reveal_progress"]["levels_remaining"] == 0
+    fully_revealed = trait_atlas.build_trait_atlas(**base, reveal_tier=2, planet_level=20)
+    assert fully_revealed["reveal_progress"] is None
+
+
+def test_dna_progress_bar_is_read_only_and_hidden_before_establishment():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    tpl = (root / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
+    assert "atlas.next_reveal_level and atlas.can_see_current" in tpl
+    assert 'class="pe-atlas-reveal-meter"' in tpl
+    assert 'value="{{ atlas.reveal_progress.pct }}"' in tpl
+    assert "atlas.reveal_progress.current_level" in tpl

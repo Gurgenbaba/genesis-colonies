@@ -778,8 +778,14 @@
           {% elif atlas.unknown_on_current %}
           <p class="pe-atlas-reveal hint">{{ T('pe_atlas_unknown_count', 'Noch %(count)s verborgene Eigenschaften auf diesem Planeten', count=atlas.unknown_on_current) }}</p>
           {% endif %}
-          {% if atlas.next_reveal_level %}
+          {% if atlas.next_reveal_level and atlas.can_see_current %}
           <p class="pe-atlas-reveal hint">{{ T('pe_atlas_reveal_level', 'Nächste reguläre DNA-Enthüllung: Planet-Level %(level)s', level=atlas.next_reveal_level) }}</p>
+          {% if atlas.reveal_progress %}
+          <div class="pe-atlas-reveal-progress" role="group" aria-label="{{ T('pe_atlas_reveal_level', 'Nächste reguläre DNA-Enthüllung: Planet-Level %(level)s', level=atlas.next_reveal_level) }}">
+            <progress class="pe-atlas-reveal-meter" value="{{ atlas.reveal_progress.pct }}" max="100"></progress>
+            <span class="hint gc-mono">{{ atlas.reveal_progress.current_level }} / {{ atlas.reveal_progress.target_level }} · {{ atlas.reveal_progress.pct }}%</span>
+          </div>
+          {% endif %}
           {% endif %}
           <div class="pe-atlas-grid">
             {% for entry in atlas.entries %}

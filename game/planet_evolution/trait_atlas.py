@@ -64,6 +64,7 @@ def build_trait_atlas(
     dna: Mapping[str, Any],
     reveal_tier: int,
     conn: sqlite3.Connection,
+    planet_level: int | None = None,
 ) -> dict:
     """Show trait opportunities and revealed traits across OWNED colonies.
 
@@ -137,7 +138,21 @@ def build_trait_atlas(
         )
     )
 
+    # Progress is display-only. Tier 0 is intentionally opaque: a player must
+    # establish the colony before the atlas may show an analysis percentage.
+    # The level-3 and level-15 thresholds come from the existing level unlocks.
+    progress = None
+    if reveal_tier == 1 and planet_level is not None:
+        current_level = max(3, int(planet_level))
+        progress = {
+            "current_level": int(planet_level),
+            "target_level": 15,
+            "levels_remaining": max(0, 15 - int(planet_level)),
+            "pct": max(0, min(100, (current_level - 3) * 100 // 12)),
+        }
+
     return {
+        "reveal_progress": progress,
         "entries": rows,
         "catalogue_count": len(rows),
         "on_current": len(current_known & definitions.keys()),
