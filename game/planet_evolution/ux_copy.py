@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -134,8 +135,21 @@ def humanize_requirement(raw: str, *, planet_level: int = 1) -> Dict[str, Any]:
         }
     m = _REQ_TRAITS_ANY.match(s)
     if m:
+        # requirements.py serializes the canonical trait keys as a Python list.
+        # Parse data only; never evaluate expressions from a requirement string.
+        try:
+            candidates = ast.literal_eval(m.group(1).strip())
+        except (SyntaxError, ValueError, TypeError, RecursionError):
+            candidates = []
+        if not isinstance(candidates, (list, tuple)):
+            candidates = []
+        trait_keys = [
+            key for key in candidates
+            if isinstance(key, str) and re.fullmatch(r"[a-zA-Z0-9_]+", key)
+        ]
         return {
             "label_key": "pe_req_traits_any",
+            "trait_keys": trait_keys,
             "fallback": "Benötigt passende Planet-Eigenschaft",
         }
     m = _REQ_TRAITS_NONE.match(s)
@@ -170,6 +184,24 @@ def requirement_display_line(req: Dict[str, Any], *, locale: str | None = None) 
     fmt: Dict[str, Any] = {
         k: v for k, v in req.items() if k not in ("label_key", "fallback", "raw")
     }
+
+    if label_key == "pe_req_traits_any":
+        trait_labels = []
+        for trait_key in req.get("trait_keys") or []:
+            definition = get_trait(str(trait_key)) or {}
+            label_key_trait = f"trait_{trait_key}"
+            lore_key = str(definition.get("lore_key") or label_key_trait)
+            fallback_name = tr(lore_key, str(trait_key).replace("_", " "), locale=locale)
+            trait_labels.append(tr(label_key_trait, fallback_name, locale=locale))
+        base = tr(label_key, fallback, locale=locale)
+        if not trait_labels:
+            return base
+        source_hint = tr(
+            "pe_trait_source_hint",
+            "Traits are assigned when a world is created. Establish the colony and develop it to reveal hidden traits. If none match, colonize another world.",
+            locale=locale,
+        )
+        return f"{base}: {', '.join(trait_labels)}. {source_hint}"
 
     if "tech_label_key" in fmt:
         tech_key = str(fmt.get("tech_key") or "")

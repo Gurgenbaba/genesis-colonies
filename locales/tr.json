@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Beton etkileri",
   "pe_trait_risk_blocks": "Risko: En iyi Pfade Blokajı",
   "pe_trait_risk_events": "Risk: Daha sık kriz olayları",
+  "pe_trait_source_hint": "Gezegen özellikleri dünya oluşturulurken belirlenir. Gizli özellikleri açığa çıkarmak için koloninin kuruluşunu tamamla ve gezegeni geliştir. Uygun özellik yoksa başka bir dünyayı kolonileştir.",
   "pe_trait_tooltip": "Gezegen özellikleri araştırmaları, etkinlikleri ve uzmanlıkları şekillendirir.",
   "pe_unlock_ascension": "Yükseliş kilidi açılabilir",
   "pe_unlock_auto_conversion": "Otomatik kaynak dönüşümü",

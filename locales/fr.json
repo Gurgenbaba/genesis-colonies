@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Des effets concrets",
   "pe_trait_risk_blocks": "Risque : Blocage de la zone optimale",
   "pe_trait_risk_events": "Risque : des événements de crise plus fréquents",
+  "pe_trait_source_hint": "Les traits sont attribués lors de la création d’un monde. Terminez l’établissement de la colonie et développez la planète pour révéler les traits cachés. Si aucun ne convient, colonisez un autre monde.",
   "pe_trait_tooltip": "Les traits planétaires façonnent la recherche, les événements et les spécialisations.",
   "pe_unlock_ascension": "Ascension déblocable",
   "pe_unlock_auto_conversion": "Conversion automatique des ressources",
