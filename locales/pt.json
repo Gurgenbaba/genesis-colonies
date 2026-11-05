@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "Em outro mundo seu",
   "pe_atlas_unfound": "Ainda não descoberto",
   "pe_atlas_other_worlds": "Locais conhecidos",
+  "pe_atlas_jump_world": "Mudar para a colónia %(name)s",
   "pe_atlas_techs": "Traço necessário para pesquisas planetárias",
   "pe_atlas_specs": "Traço necessário para especializações",
   "pe_trait_tooltip": "As características do planeta moldam pesquisas, eventos e especializações.",
