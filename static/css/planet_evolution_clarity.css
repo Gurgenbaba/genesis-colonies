@@ -247,3 +247,22 @@
   font-size: 0.76rem;
   text-align: right;
 }
+
+/* GC-TRAIT-R2B: compact keyboard-accessible links to known owned worlds. */
+.planet-evolution-page .pe-atlas-world-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  min-height: 2rem;
+  margin: 0.125rem 0.2rem;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.planet-evolution-page .pe-atlas-world-switch:focus-visible {
+  outline: 2px solid var(--gc-primary, #63c7ff);
+  outline-offset: 2px;
+}
+.planet-evolution-page .pe-atlas-world-current {
+  font-weight: 600;
+}
