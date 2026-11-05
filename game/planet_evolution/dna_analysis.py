@@ -14,6 +14,7 @@ from ..db import begin_write_transaction, commit, lock_planet_for_update, rollba
 from ..models import db, try_spend_resources_conn
 from ..ranking import invalidate_player_score_cache
 from .planet_level import add_planet_xp
+from .mechanics import compile_planet_mechanics
 from .repository import get_planet_row
 
 SCAN_COOLDOWN_SECONDS = 24 * 60 * 60
@@ -121,6 +122,9 @@ def perform_scan(
         result = add_planet_xp(
             int(planet_id), SCAN_REWARD_XP, conn, reason="dna_analysis", skip_diversity=True
         )
+        # Refresh the canonical trait effects if this XP reaches a reveal level.
+        if int(result["levels_gained"]) > 0:
+            compile_planet_mechanics(int(planet_id), conn)
         commit(conn)
         invalidate_player_score_cache(int(player_id))
         return True, "ok", {
