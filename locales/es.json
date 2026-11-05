@@ -6536,6 +6536,7 @@
   "pe_trait_effects_label": "Efectos concretos",
   "pe_trait_risk_blocks": "Riesgo: bloquea determinadas rutas",
   "pe_trait_risk_events": "Riesgo: eventos de crisis más frecuentes",
+  "pe_trait_source_hint": "Los rasgos se asignan cuando se crea un mundo. Completa el establecimiento de la colonia y desarrolla el planeta para revelar rasgos ocultos. Si ninguno coincide, coloniza otro mundo.",
   "pe_trait_tooltip": "Los rasgos del planeta dan forma a la investigación, los eventos y las especializaciones.",
   "pe_unlock_ascension": "Ascenso desbloqueable",
   "pe_unlock_auto_conversion": "Conversión automática de recursos",
