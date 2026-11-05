@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "Sur un autre monde possédé",
   "pe_atlas_unfound": "Pas encore découvert",
   "pe_atlas_other_worlds": "Emplacements connus",
+  "pe_atlas_jump_world": "Aller à la colonie %(name)s",
   "pe_atlas_techs": "Trait requis pour la recherche planétaire",
   "pe_atlas_specs": "Trait requis pour les spécialisations",
   "pe_trait_tooltip": "Les traits planétaires façonnent la recherche, les événements et les spécialisations.",

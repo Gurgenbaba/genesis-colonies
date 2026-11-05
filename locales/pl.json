@@ -6547,6 +6547,7 @@
   "pe_atlas_empire": "Na innej własnej planecie",
   "pe_atlas_unfound": "Jeszcze nie odkryto",
   "pe_atlas_other_worlds": "Znane lokalizacje",
+  "pe_atlas_jump_world": "Przełącz na kolonię %(name)s",
   "pe_atlas_techs": "Cecha wymagana do badań planetarnych",
   "pe_atlas_specs": "Cecha wymagana do specjalizacji",
   "pe_trait_tooltip": "Cechy planety kształtują badania, wydarzenia i specjalizacje.",

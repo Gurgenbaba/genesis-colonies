@@ -173,3 +173,53 @@ def test_dna_progress_bar_is_read_only_and_hidden_before_establishment():
     assert 'class="pe-atlas-reveal-meter"' in tpl
     assert 'value="{{ atlas.reveal_progress.pct }}"' in tpl
     assert "atlas.reveal_progress.current_level" in tpl
+
+
+def test_trait_atlas_world_switch_is_registry_owned_and_locale_complete():
+    """Only revealed owned colonies become navigable through the existing shell."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    tpl = (root / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
+    js = (root / "static" / "js" / "core" / "gc.js").read_text(encoding="utf-8")
+    assert 'data-gc-trait-atlas-switch="{{ world.planet_id }}"' in tpl
+    assert "{% if world.is_current %}" in tpl
+    assert 'aria-current="page"' in tpl
+    assert "pe_atlas_jump_world" in tpl
+    assert 'class="pe-atlas-world-switch gc-btn gc-btn-ghost gc-btn-xs"' in tpl
+    handler = js.split("function bindTraitAtlasWorldLinks()")[1]
+    assert 'button.closest("#pe-section-trait-atlas")' in handler
+    assert 'doc.querySelectorAll("[data-gc-planet-registry] .gc-planet-registry-card[data-planet-id]")' in handler
+    assert 'cards[i].getAttribute("data-planet-id") !== requestedId' in handler
+    assert "cards[i].click()" in handler
+    assert '"/api/planets/active"' not in handler
+    assert "location.reload(" not in handler
+    assert "location.assign(" not in handler
+
+    for locale in ("de", "en", "fr", "es", "pl", "pt", "ru", "tr"):
+        with (root / "locales" / f"{locale}.json").open(encoding="utf-8") as fh:
+            strings = json.load(fh)
+        label = strings["pe_atlas_jump_world"]
+        assert label.count("%(name)s") == 1, locale
+
+
+def test_atlas_world_navigation_never_includes_unrevealed_or_unknown_planets(monkeypatch):
+    _definitions(monkeypatch)
+    rows = [
+        _planet_row(5, "Ark", 1, geology=("ferronit_rich_crust",)),
+        _planet_row(6, "Hidden Outpost", 0, anomaly=("ancient_ruins",)),
+        _planet_row(7, "Ruins", 1, anomaly=("ancient_ruins",)),
+        _planet_row(8, "Another Ruins", 2, anomaly=("ancient_ruins",)),
+    ]
+    conn = _FakeConn(rows)
+    result = trait_atlas.build_trait_atlas(
+        planet_id=5, player_id=9,
+        dna=_dna(geology=("ferronit_rich_crust",)), reveal_tier=1, conn=conn,
+    )
+    by_key = {row["key"]: row for row in result["entries"]}
+    assert [w["planet_id"] for w in by_key["ancient_ruins"]["owned_planets"]] == [7, 8]
+    assert [w["is_current"] for w in by_key["ancient_ruins"]["owned_planets"]] == [False, False]
+    assert [w["planet_id"] for w in by_key["ferronit_rich_crust"]["owned_planets"]] == [5]
+    assert by_key["ferronit_rich_crust"]["owned_planets"][0]["is_current"] is True
+    assert len(conn.queries) == 1
+    assert conn.queries[0][1] == (9,)

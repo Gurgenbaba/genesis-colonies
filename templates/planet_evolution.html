@@ -808,7 +808,16 @@
               {% endif %}
               {% if entry.owned_planets %}
               <p class="pe-atlas-trait-row"><b>{{ T('pe_atlas_other_worlds', 'Bekannte Fundorte') }}:</b>
-                {% for world in entry.owned_planets %}{{ world.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                {% for world in entry.owned_planets %}
+                  {% if world.is_current %}
+                  <span class="pe-atlas-world-current" aria-current="page">{{ world.name }}</span>
+                  {% else %}
+                  <button type="button" class="pe-atlas-world-switch gc-btn gc-btn-ghost gc-btn-xs"
+                          data-gc-trait-atlas-switch="{{ world.planet_id }}"
+                          aria-label="{{ T('pe_atlas_jump_world', 'Zu Kolonie %(name)s wechseln', name=world.name) }}">{{ world.name }} <span aria-hidden="true">↗</span></button>
+                  {% endif %}
+                  {% if not loop.last %}, {% endif %}
+                {% endfor %}
               </p>
               {% endif %}
               {% if entry.techs %}

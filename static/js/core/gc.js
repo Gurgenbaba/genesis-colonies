@@ -440,4 +440,29 @@
       },
     };
   })();
+  // GC-TRAIT-R2B: reuse the canonical Planet Registry switch handler.
+  // Delegation survives PJAX page swaps; no second switch API, state or poller.
+  (function bindTraitAtlasWorldLinks() {
+    var doc = global.document;
+    if (!doc || GC.core.traitAtlasWorldLinksBound) return;
+    GC.core.traitAtlasWorldLinksBound = true;
+    doc.addEventListener("click", function (event) {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey ||
+          event.ctrlKey || event.shiftKey || event.altKey) return;
+      var target = event.target;
+      var button = target && target.closest && target.closest("[data-gc-trait-atlas-switch]");
+      if (!button || !button.closest("#pe-section-trait-atlas") || button.disabled) return;
+      var requestedId = button.getAttribute("data-gc-trait-atlas-switch") || "";
+      if (!/^[1-9][0-9]*$/.test(requestedId)) return;
+      // Only an owned world already present in the authoritative shell registry
+      // can be selected. The registry owns POST, state reconciliation and PJAX.
+      var cards = doc.querySelectorAll("[data-gc-planet-registry] .gc-planet-registry-card[data-planet-id]");
+      for (var i = 0; i < cards.length; i++) {
+        if (cards[i].getAttribute("data-planet-id") !== requestedId || cards[i].disabled) continue;
+        event.preventDefault();
+        cards[i].click();
+        return;
+      }
+    }, true);
+  })();
 })(typeof window !== "undefined" ? window : globalThis);

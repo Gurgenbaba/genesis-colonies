@@ -52,8 +52,7 @@ kann ich wählen, wenn ich ihn nicht finde?
   ohne konkrete Seed-Traits vor Kolonisierung zu verraten.
 - Expeditionen/Entdeckungen als Progression ohne Paywall; gesondert balancierte
   Scan-Chance und Cooldown gegen massenhaftes, billiges Scannen.
-- Eigene Kolonien im Atlas anklickbar machen via **bestehende** Planet-Registry-
-  Switch-Actions, nicht neue Session-Zustände.
+- **R2B (dieser PR):** Bekannte, bereits enthüllte eigene Kolonien im Atlas als zugängliche Buttons. Der Klick löst die vorhandene Planet-Registry-Karte aus, die weiterhin exklusiv Planet-Switch, State-Abgleich und PJAX-Refresh verantwortet. Aktiver Planet ist nur markiert; unrevealed/fremde Welt-IDs bleiben unsichtbar. Acht lokalisierte Beschriftungen, kein weiterer Poller oder Endpunkt.
 - Alt-Kolonien und Kartenwechsel müssen identisch behandelt werden.
 
 ## Release 3 — Aktive Synergien (geplant, NICHT implementiert)
