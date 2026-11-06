@@ -208,3 +208,62 @@ def test_no_new_gameplay_tables_or_migrations_added_by_simulator():
     assert not any("journey" in name.lower() for name in migrations)
     text = (SCRIPTS / "player_journey_sim.py").read_text(encoding="utf-8")
     assert "CREATE TABLE" not in text.upper()
+
+
+def _planet_cap_after(journey: "pj.Journey") -> int:
+    return int(journey.sb.cap_info()["gameplay_cap"])
+
+
+def test_eligible_home_seed_really_has_an_eligible_specialization():
+    from game.planet_evolution import definitions as defs
+    from game.planet_evolution.dna import all_trait_keys
+    from game.planet_evolution.repository import get_planet_dna
+    from game.planet_evolution.specialization import _ineligible_reason
+
+    with pj.Sandbox(pj.ELIGIBLE_HOME_SEED) as sb:
+        defs.reload_definitions(sb.conn)
+        dna = get_planet_dna(sb.home_planet_id, conn=sb.conn) or {}
+        traits = set(all_trait_keys(dna, 2))
+        eligible = [
+            k
+            for k, v in defs.get_specializations().items()
+            if _ineligible_reason(k, v, planet_level=22, traits=traits, affinities=dna.get("affinity_scores") or {}, current_spec=None) is None
+        ]
+    assert eligible, "ELIGIBLE_HOME_SEED must keep a homeworld with an eligible specialisation"
+
+
+def test_mandates_need_real_prerequisites_and_open_late_slots_in_order():
+    from game.planet_evolution.imperial_mandates import (
+        MANDATE_ORDER,
+        SURVEY_EXPEDITIONS_REQUIRED,
+        count_lifetime_expeditions,
+        list_earned_mandates,
+    )
+
+    sc = pj.Scenario("mand", "S11", "optimizer", "mid", "none", 125, rng_seed=pj.ELIGIBLE_HOME_SEED)
+    with pj.economy_curve("uni1"), pj.Sandbox(sc.rng_seed) as sb:
+        journey = pj.Journey(sc, sb)
+        result = journey.run()
+        earned = list_earned_mandates(sb.user_id, conn=sb.conn)
+        hw = sb.conn.execute("SELECT ascension_key FROM planets WHERE id = ?;", (sb.home_planet_id,)).fetchone()
+        # canonical evidence behind every earned mandate
+        assert earned == [k for k in MANDATE_ORDER if k in earned], "mandates are earned in order"
+        if "survey" in earned:
+            assert count_lifetime_expeditions(sb.user_id, conn=sb.conn) >= SURVEY_EXPEDITIONS_REQUIRED
+            assert result["mandates"]["survey_missions_done"] >= SURVEY_EXPEDITIONS_REQUIRED
+        if "apex" in earned:
+            assert str(hw["ascension_key"] or ""), "apex needs a finished ascension (or a World Boss claim, not modelled)"
+        assert len(journey.worlds) <= _planet_cap_after(journey)
+    assert "apex" in [e["mandate"] for e in result["mandates"]["earned"]]
+    # nothing is free: ships, fuel and the ascension price are charged
+    assert result["final"]["spend_metal"]["mandates"] >= 5_000_000
+    assert result["final"]["spend_fuel_cells"] > 0
+    assert result["invariants"]["ok"], result["invariants"]
+
+
+def test_default_homeworld_dna_without_eligible_specialization_keeps_apex_locked():
+    r = _run("S11-nodna", "S11", "optimizer", 100)
+    earned = [e["mandate"] for e in r["mandates"]["earned"]]
+    assert "apex" not in earned
+    assert r["mandates"]["rejections"].get("apex_no_eligible_specialization", 0) > 0
+    assert "apex_no_eligible_specialization" in r["blockers"]

@@ -81,7 +81,9 @@ All money/resource arithmetic should preserve the precision and integer rounding
 
 How it satisfies the measurement contract: economy, costs and timers come from `EffectResolver`, `economy_balance`, `buildings` and `research`; planet XP, DNA analysis, reveal tiers, expansion gates and colony founding are executed by `activity_xp`, `planet_level`, `dna_analysis`, `expansion_protocol` and `colonize_planet` inside a throw-away SQLite sandbox built from the repository migrations (never a live DB, no new tables). The decision policy is versioned (`POLICY_VERSION`) and deterministic; there is no RNG.
 
-Still open and listed in the report under *Not modelled*: expeditions and loot, Imperial Mandate loops (slots 7-10 stay locked and are reported as a blocker, never bypassed), applied Timekeeper skips, real fleet transport (flat package after a fixed transit), per-planet mechanics flags and live trait effects (so a separate "common trait" run would be identical to the zero-trait run), Trader, military sinks and Ascension rebuilds. The candidate resonance only shortens construction duration in the sandbox; R3 is not enabled anywhere.
+Imperial Mandates are modelled with real prerequisites (2 canonical expedition ships and 12 missions, owned systems, the canonical directive vote, and homeworld specialisation tier 3 plus `machine_ascension`); nothing is granted. A 730-day run per play style answers *when* a legal 11/11 empire is reachable. The World Boss claim route to the apex mandate is not modelled, so accounts whose homeworld DNA offers no eligible specialisation stay at 10 worlds in the simulator.
+
+Still open and listed in the report under *Not modelled*: expeditions and loot beyond the XP sensitivity run, applied Timekeeper skips, real fleet transport (flat package after a fixed transit), per-planet mechanics flags and live trait effects (so a separate "common trait" run would be identical to the zero-trait run), Trader, military sinks and Ascension rebuilds. The candidate resonance only shortens construction duration in the sandbox; R3 is not enabled anywhere.
 
 ## Decision gate
 

@@ -67,6 +67,7 @@ from game.planet_evolution.constants import (  # noqa: E402
     MAX_PLANET_LEVEL,
     SPECIALIZATION_UNLOCK_LEVEL,
 )
+from game.planet_evolution.definitions import get_ascension as get_ascension_def  # noqa: E402
 from game.planet_evolution.expansion_phase import ESTABLISHMENT_MILESTONE_DEFS  # noqa: E402
 from game.planet_evolution.expansion_protocol import (  # noqa: E402
     COLONY_MATURITY_REQUIRED_LEVEL,
@@ -92,6 +93,13 @@ _research_payment = functools.lru_cache(maxsize=200_000)(
 )
 
 SANDBOX_RNG_SEED = 20_261_106
+ELIGIBLE_HOME_SEED = 2  # homeworld DNA with 3 eligible specialisations (guarded by a test); the default seed has none
+MANDATE_START_WORLDS = 3  # the player starts the late-realm work once two colonies exist
+SURVEY_SHIPS = 2
+SURVEY_SHIP_KEY = "eclipse_runner"
+EXPEDITION_ROUND_SEC = 3 * 3600  # assumption: 1 h stay (canonical default) + 2 h round-trip flight
+EXPEDITION_RECORD_VALUE = 1000
+APEX_ASCENSION_KEY = "machine_ascension"  # requires specialisation tier 3 + metal/crystal, no trait gate of its own
 SIM_VERSION = "player-journey/1"
 POLICY_VERSION = "pj-policy/1"
 
@@ -99,6 +107,7 @@ DAY = 86400
 SIM_EPOCH = 20_000 * DAY  # day-aligned wall clock so canonical day buckets/cooldowns are exact
 CHECKPOINT_DAYS: Tuple[float, ...] = (7, 30, 90, 182.5, 365)
 TARGET_WORLDS = 11
+LONG_DAYS = 730.0  # extended horizon only used to find WHEN a legal 11/11 empire would be reachable
 COLONY_TRANSIT_SEC = 2 * 3600  # approximation, see NOT_MODELLED / assumptions
 CLIMATE_SLOT = {"hot": 1, "mid": 8, "cold": 15}
 COLONY_CLIMATE_CYCLE = ("mid", "hot", "cold")
@@ -110,7 +119,7 @@ ECON_TECHS = ("energy_tech", "mining_tech", "crystal_tech", "buildtime_tech", "s
 
 NOT_MODELLED = [
     "Expeditions and their loot: only the XP sensitivity scenario S11-active-mid-exp6 grants expedition XP (6/day); ship/fuel upkeep and loot are never charged or granted.",
-    "Imperial Mandates survey/directive/apex loops: colony slots 7-10 therefore stay locked (reported as blocker, never bypassed).",
+    "Imperial Mandates use real prerequisites: survey = 2 canonical expedition ships + 12 missions (3 h round trip is an assumption, no loot), presence = owned systems, directive = canonical vote, apex = homeworld specialisation tier 3 + machine_ascension (5M/3M, 7 d). The World Boss claim route is not modelled; if the homeworld DNA has no eligible specialisation the apex mandate and slots 10-11 stay locked (reported, never bypassed).",
     "Timekeeper / login / Battle Pass skips are reported as available potential only; none is applied to a queue (no free skips).",
     "Real fleet transport: colony supply is a flat package delivered after a fixed transit (assumption), transport ships are not charged.",
     "Per-planet mechanics flags (world-type start multipliers, trait effects, specialisations, policies) other than the candidate R3 resonance toggle.",
@@ -201,7 +210,8 @@ def resonance_qualified(*, enabled: bool, planet_level: int, reveal_tier: int, s
 class Sandbox:
     """Disposable game database. Never touches a configured/live database."""
 
-    def __init__(self) -> None:
+    def __init__(self, seed: Optional[int] = None) -> None:
+        self.seed = SANDBOX_RNG_SEED if seed is None else int(seed)
         self._dir: Optional[str] = None
         self._saved_env: Dict[str, Optional[str]] = {}
         self._saved_paths: Tuple[Any, Any] = (None, None)
@@ -237,7 +247,7 @@ class Sandbox:
         import random
 
         rng_state = random.getstate()
-        random.seed(SANDBOX_RNG_SEED)
+        random.seed(self.seed)
         try:
             ok, err, user = create_user("pj_sim_commander", "sandbox-only-secret-1")
             if not ok:
@@ -510,6 +520,7 @@ class Scenario:
     days: float = 365.0
     expeditions_per_day: int = 0
     transit_sec: int = COLONY_TRANSIT_SEC
+    rng_seed: Optional[int] = None  # sandbox homeworld placement/DNA; None = default seed
 
 
 def _settings() -> Dict[str, float]:
@@ -545,7 +556,7 @@ class Journey:
         self.worlds: List[World] = []
         self._stat_cache: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
         self._ctx: Optional[Tuple[int, float, int]] = None
-        self.spend: Dict[str, float] = {k: 0.0 for k in ("mines", "solar", "storage", "research", "colony_expansion", "dna_scans", "infrastructure", "transport")}
+        self.spend: Dict[str, float] = {k: 0.0 for k in ("mines", "solar", "storage", "research", "colony_expansion", "dna_scans", "infrastructure", "transport", "mandates")}
         self.spend_c: Dict[str, float] = {k: 0.0 for k in self.spend}
         self.spend_f: float = 0.0
         self.blockers: Dict[str, Dict[str, Any]] = {}
@@ -568,6 +579,17 @@ class Journey:
         self.target_worlds = TARGET_WORLDS if scenario.topology == "S11" else 1
         self.cap_info: Dict[str, Any] = self.sb.cap_info()
         self.storage_need: Optional[str] = None
+        self.ships_home = 0
+        self.ship_build: Optional[Dict[str, Any]] = None
+        self.missions: List[Dict[str, Any]] = []
+        self.missions_done = 0
+        self._movement_seq = 0
+        self.vote_done = False
+        self.asc: Optional[Dict[str, Any]] = None
+        self.mandate_rejections: Dict[str, int] = {}
+        self.mandate_log: List[Dict[str, Any]] = []
+        self._mandates_seen: List[str] = []
+        self.spec_picked: Optional[str] = None
         self._gate_next = 0.0
         self.lab_need = 0
         self._next_colony_binding: Optional[Dict[str, Any]] = None
@@ -736,6 +758,8 @@ class Journey:
                 lab_target = max(lab_target, 4)
             goals.append(("research_lab", lab_target))
             goals.append(("command_center", 3))
+            if self.mandate_phase() and self.survey_remaining() > 0:
+                goals.append(("orbital_shipyard", int(get_ship(SURVEY_SHIP_KEY)["requirements"]["buildings"]["orbital_shipyard"])))
             if self.sc.topology == "S11":
                 goals.append(("orbital_shipyard", int(get_ship("seed_ark")["requirements"]["buildings"]["orbital_shipyard"])))
                 goals.append(("fuel_cell_plant", max(1, min(mine_avg // 2, 12))))
@@ -918,6 +942,9 @@ class Journey:
         goals: List[Tuple[str, int]] = []
         for tech, lvl in sorted(self.research_needs.items()):
             goals.append((tech, lvl))
+        if self.mandate_phase() and self.survey_remaining() > 0:
+            for tech, lvl in ((get_ship(SURVEY_SHIP_KEY).get("requirements") or {}).get("research") or {}).items():
+                goals.append((str(tech), int(lvl)))
         if self.sc.topology == "S11":
             ark_req = (get_ship("seed_ark").get("requirements") or {}).get("research") or {}
             goals.append(("drone_tech", 2))
@@ -934,6 +961,20 @@ class Journey:
             goals.append((tech, min(cap, int(self.research.get(tech, 0)) + 1)))
         return goals
 
+    def resolve_research_prereq(self, tech: str, level: int, cur: int, queued: Dict[str, int]) -> Tuple[Optional[str], int, int]:
+        """Follow unmet research prerequisites down the chain; None when the chain is already queued."""
+        have = {**self.research, **{k: max(v, int(self.research.get(k, 0))) for k, v in queued.items()}}
+        for _ in range(8):
+            req = (RESEARCH_TECHS.get(tech, {}).get("requirements") or {}).get("research") or {}
+            nxt = next(((t, int(l)) for t, l in req.items() if int(have.get(t, 0)) < int(l)), None)
+            if nxt is None:
+                return tech, level, cur
+            tech, level = nxt
+            cur = int(have.get(tech, 0))
+            if cur >= level:
+                return None, level, cur
+        return None, level, cur
+
     def choose_research(self) -> Optional[Tuple[str, int, int, int, int]]:
         hw = self.hw()
         eff = self.eff_buildings(hw)
@@ -942,6 +983,9 @@ class Journey:
         for tech, level in self.research_goals():
             cur = max(int(self.research.get(tech, 0)), int(queued.get(tech, 0)))
             if cur >= level or tech not in RESEARCH_TECHS:
+                continue
+            tech, level, cur = self.resolve_research_prereq(tech, level, cur, queued)
+            if tech is None:
                 continue
             if not has_research_requirements(eff, {**self.research, **queued}, tech):
                 req = RESEARCH_TECHS[tech].get("requirements") or {}
@@ -1085,6 +1129,174 @@ class Journey:
     def xp_focus_world(self) -> World:
         behind = [w for w in self.worlds[1:] if not w.outpost and self.sb.planet(w.planet_id)["level"] < COLONY_MATURITY_REQUIRED_LEVEL]
         return behind[0] if behind else self.hw()
+
+    # -- Imperial Mandates (real prerequisites, nothing is granted) ---------------
+    def mandate_phase(self) -> bool:
+        return self.sc.topology == "S11" and len(self.worlds) >= MANDATE_START_WORLDS
+
+    def survey_remaining(self) -> int:
+        from game.planet_evolution.imperial_mandates import SURVEY_EXPEDITIONS_REQUIRED
+
+        return max(0, SURVEY_EXPEDITIONS_REQUIRED - self.missions_done - len(self.missions))
+
+    def mandate_reject(self, reason: str) -> None:
+        self.mandate_rejections[reason] = self.mandate_rejections.get(reason, 0) + 1
+        self.block(reason)
+
+    def mandate_step(self) -> None:
+        if not self.mandate_phase():
+            return
+        self._survey_step()
+        self._directive_step()
+        self._apex_step()
+        self._track_mandates()
+
+    def _track_mandates(self) -> None:
+        from game.planet_evolution.imperial_mandates import list_earned_mandates, sync_earned_mandates
+
+        sync_earned_mandates(self.sb.user_id, conn=self.sb.conn, now=SIM_EPOCH + self.t)
+        self.sb.conn.commit()
+        earned = list_earned_mandates(self.sb.user_id, conn=self.sb.conn)
+        for key in earned:
+            if key not in self._mandates_seen:
+                self._mandates_seen.append(key)
+                self.mandate_log.append({"mandate": key, "day": round(self.t / DAY, 2), "worlds": len(self.worlds)})
+
+    def _survey_step(self) -> None:
+        if self.survey_remaining() <= 0 and not self.missions and self.ships_home <= 0 and not self.ship_build:
+            return
+        hw = self.hw()
+        ship = get_ship(SURVEY_SHIP_KEY) or {}
+        req = ship.get("requirements") or {}
+        ready = all(int(hw.buildings.get(b, 0)) >= int(l) for b, l in (req.get("buildings") or {}).items()) and all(
+            int(self.research.get(t, 0)) >= int(l) for t, l in (req.get("research") or {}).items()
+        )
+        if self.survey_remaining() > 0 and self.ships_home + (self.ship_build or {}).get("count", 0) + len(self.missions) < SURVEY_SHIPS:
+            if not ready:
+                self.mandate_reject("survey_ship_prerequisites")
+                return
+            cost = ship.get("build_cost") or {}
+            n = SURVEY_SHIPS
+            cm, cc, cf = int(cost.get("metal", 0)) * n, int(cost.get("crystal", 0)) * n, int(cost.get("fuel_cells", 0)) * n
+            if hw.metal + EPS < cm or hw.crystal + EPS < cc or hw.fuel + EPS < cf:
+                self.mandate_reject("survey_ships_unaffordable")
+                return
+            hw.metal -= cm
+            hw.crystal -= cc
+            hw.fuel -= cf
+            self.spend["mandates"] += cm
+            self.spend_c["mandates"] += cc
+            self.spend_f += cf
+            cycle = float(production_level_cycle_seconds(int(ship.get("build_seconds", 260)), max(1, int(hw.buildings.get("orbital_shipyard", 0)))))
+            self.ship_build = {"ready": self.t + cycle, "count": n}
+        fuel_each = int(ship.get("fuel", 0))
+        while self.ships_home > 0 and self.survey_remaining() > 0 and hw.fuel + EPS >= fuel_each:
+            hw.fuel -= fuel_each
+            self.spend_f += fuel_each
+            self.ships_home -= 1
+            self._movement_seq += 1
+            self.missions.append({"arrive": self.t + EXPEDITION_ROUND_SEC, "movement": self._movement_seq})
+
+    def finish_mission(self, m: Dict[str, Any]) -> None:
+        from game.expedition_events import record_expedition_daily_value
+
+        record_expedition_daily_value(self.sb.user_id, int(m["movement"]), EXPEDITION_RECORD_VALUE, conn=self.sb.conn, ts=SIM_EPOCH + self.t)
+        self.sb.conn.commit()
+        got = self.sb.grant_xp("expedition", self.hw().planet_id, self.t, f"expedition:movement:{m['movement']}")
+        self.xp_by_source["expedition"] = self.xp_by_source.get("expedition", 0) + got
+        self.missions_done += 1
+        self.ships_home += 1
+        self._ctx = None
+
+    def _directive_step(self) -> None:
+        if self.vote_done:
+            return
+        from game.galactic_directives.voting import submit_directive_vote
+
+        galaxy = int(self.sb.conn.execute("SELECT galaxy FROM planets WHERE id = ?;", (self.hw().planet_id,)).fetchone()[0])
+        res = submit_directive_vote(self.sb.user_id, galaxy, "expansion", conn=self.sb.conn, now=int(SIM_EPOCH + self.t))
+        if res.get("ok"):
+            self.vote_done = True
+            self.mandate_log.append({"action": "directive_vote", "day": round(self.t / DAY, 2)})
+        else:
+            self.mandate_reject(f"directive_vote_{res.get('reason')}")
+
+    def _apex_step(self) -> None:
+        from game.planet_evolution.service import pick_specialization, start_ascension, upgrade_specialization_tier
+        from game.planet_evolution.specialization import eligible_specialization_keys, tier_upgrade_requirements
+
+        hw = self.hw()
+        pid = hw.planet_id
+        if self.asc:
+            return
+        row = self.sb.conn.execute("SELECT ascension_key, specialization_key, specialization_tier, planet_level FROM planets WHERE id = ?;", (pid,)).fetchone()
+        if str(row["ascension_key"] or ""):
+            return
+        if not row["specialization_key"]:
+            if int(row["planet_level"]) < SPECIALIZATION_UNLOCK_LEVEL:
+                self.mandate_reject("apex_waiting_planet_level")
+                return
+            options = eligible_specialization_keys(pid, self.sb.conn)
+            if not options:
+                self.mandate_reject("apex_no_eligible_specialization")
+                return
+            ok, reason, _extra = pick_specialization(pid, options[0], self.sb.user_id, conn=self.sb.conn)
+            self.sb.conn.commit()
+            if not ok:
+                self.mandate_reject(f"apex_pick_{reason}")
+                return
+            self.spec_picked = options[0]
+            self.mandate_log.append({"action": "specialization_picked", "day": round(self.t / DAY, 2), "tier": 0})
+            row = self.sb.conn.execute("SELECT ascension_key, specialization_key, specialization_tier, planet_level FROM planets WHERE id = ?;", (pid,)).fetchone()
+        while int(row["specialization_tier"] or 0) < 3:
+            ok_t, _missing = tier_upgrade_requirements(pid, self.sb.conn)
+            if not ok_t:
+                self.mandate_reject("apex_waiting_planet_level")
+                return
+            ok, reason, _extra = upgrade_specialization_tier(pid, self.sb.user_id, conn=self.sb.conn)
+            self.sb.conn.commit()
+            if not ok:
+                self.mandate_reject(f"apex_tier_{reason}")
+                return
+            row = self.sb.conn.execute("SELECT ascension_key, specialization_key, specialization_tier, planet_level FROM planets WHERE id = ?;", (pid,)).fetchone()
+            self.mandate_log.append({"action": "specialization_tier", "day": round(self.t / DAY, 2), "tier": int(row["specialization_tier"])})
+        from game.planet_evolution.ascension import ascension_cost_resources, check_ascension_requirements
+
+        cost = ascension_cost_resources(APEX_ASCENSION_KEY)
+        s = self.stats(hw)
+        if cost["metal"] > s["cap_m"] or cost["crystal"] > s["cap_c"]:
+            self.storage_need = "metal_storage" if cost["metal"] > s["cap_m"] else "crystal_storage"
+            self.mandate_reject("storage_cap_below_cost")
+            return
+        self.sb.conn.execute("UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;", (hw.metal, hw.crystal, pid))
+        self.sb.conn.commit()
+        ok_req, missing = check_ascension_requirements(pid, APEX_ASCENSION_KEY, self.sb.conn)
+        if not ok_req:
+            self.mandate_reject("apex_ascension_" + ("unaffordable" if all(str(x).startswith("cost:") for x in missing) else "requirements"))
+            return
+        ok, reason, extra = start_ascension(pid, APEX_ASCENSION_KEY, self.sb.user_id, conn=self.sb.conn)
+        self.sb.conn.commit()
+        if not ok:
+            self.mandate_reject(f"apex_ascension_{reason}")
+            return
+        after = self.sb.conn.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,)).fetchone()
+        self.spend["mandates"] += hw.metal - float(after["metal"])
+        self.spend_c["mandates"] += hw.crystal - float(after["crystal"])
+        hw.metal, hw.crystal = float(after["metal"]), float(after["crystal"])
+        duration = float(get_ascension_def(APEX_ASCENSION_KEY).get("duration_days") or 7) * DAY
+        self.asc = {"finish_sim": self.t + duration, "db_finish": float((extra or {}).get("finish_at") or 0)}
+        self.mandate_log.append({"action": "ascension_started", "day": round(self.t / DAY, 2)})
+
+    def finish_apex_ascension(self) -> None:
+        from game.planet_evolution.ascension import finish_ascension_jobs
+
+        pid = self.hw().planet_id
+        done = finish_ascension_jobs(self.sb.conn, pid, float(self.asc["db_finish"]) + 1.0)
+        self.sb.conn.commit()
+        self.asc = None
+        self._ctx = None
+        self.xp_by_source["ascension"] = self.xp_by_source.get("ascension", 0) + (500 if done else 0)
+        self.mandate_log.append({"action": "ascension_finished", "day": round(self.t / DAY, 2), "completed": bool(done)})
 
     # -- colonisation pipeline ------------------------------------------------
     def colony_package_cost(self) -> Tuple[int, int]:
@@ -1245,6 +1457,12 @@ class Journey:
                 cands.append(float(self.ark["arrive"]))
         for cv in self.convoys:
             cands.append(float(cv["arrive"]))
+        if self.ship_build:
+            cands.append(float(self.ship_build["ready"]))
+        for m in self.missions:
+            cands.append(float(m["arrive"]))
+        if self.asc:
+            cands.append(float(self.asc["finish_sim"]))
         cands.append(next_window)
         if self.wake is not None:
             cands.append(self.wake)
@@ -1319,6 +1537,14 @@ class Journey:
             self.ark = {"stage": "built"}
         if self.ark and self.ark.get("stage") == "flying" and float(self.ark["arrive"]) <= self.t + EPS:
             self.found_colony_now()
+        if self.ship_build and float(self.ship_build["ready"]) <= self.t + EPS:
+            self.ships_home += int(self.ship_build["count"])
+            self.ship_build = None
+        for m in [m for m in self.missions if m["arrive"] <= self.t + EPS]:
+            self.missions.remove(m)
+            self.finish_mission(m)
+        if self.asc and float(self.asc["finish_sim"]) <= self.t + EPS:
+            self.finish_apex_ascension()
         due = [cv for cv in self.convoys if cv["arrive"] <= self.t + EPS]
         for cv in due:
             self.convoys.remove(cv)
@@ -1342,9 +1568,8 @@ class Journey:
         for w in self.worlds:
             self.fill_build_queue(w)
         self.fill_research_queue()
+        self.mandate_step()
         self.colonization_step()
-        if self.ark and self.ark.get("stage") == "flying":
-            pass
         self.update_wake()
         _ = hw
 
@@ -1362,6 +1587,8 @@ class Journey:
                         best = min(best, self.t + wait + 1.0)
             if w.next_scan_t > self.t:
                 best = min(best, w.next_scan_t + 1.0)
+        if self.mandate_phase():
+            best = min(best, self.t + 3600.0)  # always-online player re-checks the mandate checklist hourly
         if len(self.rqueue) < min(self.research_limit, self.policy.queue_fill):
             pick = self.choose_research()
             if pick is not None:
@@ -1529,6 +1756,13 @@ class Journey:
             "daily": self.daily,
             "colony_log": self.colony_log,
             "gate_audit": self.gate_audit,
+            "mandates": {
+                "earned": [dict(e) for e in self.mandate_log if "mandate" in e],
+                "actions": [dict(e) for e in self.mandate_log if "action" in e],
+                "survey_missions_done": self.missions_done,
+                "rejections": dict(sorted(self.mandate_rejections.items())),
+                "specialization": self.spec_picked,
+            },
             "findings": self.findings,
             "blockers": {
                 k: {"first_day": v["first_day"], "last_day": v["last_day"], "days_observed": len(v["days"]), "recovery": v["recovery"], "detail": v["detail"]}
@@ -1584,6 +1818,44 @@ def upper_bound_control() -> Dict[str, Any]:
         return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
+def apex_dna_fairness(samples: int = 600) -> Dict[str, Any]:
+    """Share of homeworld DNAs that can reach the ascension route of the apex mandate.
+
+    Uses the canonical DNA generator and specialisation eligibility rule at planet level 22 with all
+    traits revealed (tier 2).  `without_rare` ignores rare/epic traits to show whether common DNA suffices.
+    """
+    import random
+
+    from game.planet_evolution import definitions as defs
+    from game.planet_evolution.dna import all_trait_keys, generate_planet_dna
+    from game.planet_evolution.specialization import _ineligible_reason
+
+    rng = random.Random(SANDBOX_RNG_SEED)
+    eligible = eligible_common = 0
+    with Sandbox() as sb:
+        defs.reload_definitions(sb.conn)
+        specs = defs.get_specializations()
+        traits = defs.get_traits()
+        rare = {k for k, t in traits.items() if str(t.get("rarity")) in ("rare", "epic")}
+        for _ in range(samples):
+            dna = generate_planet_dna(galaxy=rng.randint(1, 5), system=rng.randint(1, 499), position=rng.randint(1, 15), is_homeworld=True)
+            known = set(all_trait_keys(dna, 2))
+            aff = dna.get("affinity_scores") or {}
+
+            def ok(trait_set: set) -> bool:
+                return any(_ineligible_reason(k, v, planet_level=22, traits=trait_set, affinities=aff, current_spec=None) is None for k, v in specs.items())
+
+            eligible += 1 if ok(known) else 0
+            eligible_common += 1 if ok(known - rare) else 0
+    return {
+        "samples": samples,
+        "share_with_eligible_specialization": round(eligible / samples, 4),
+        "share_without_rare_or_epic_traits": round(eligible_common / samples, 4),
+        "route": "homeworld specialisation tier 3 -> machine_ascension (no trait gate of its own)",
+        "alternative_not_modelled": "World Boss claim",
+    }
+
+
 def code_sha() -> str:
     try:
         out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT), capture_output=True, text=True, timeout=10)
@@ -1615,7 +1887,7 @@ def meta(args_days: float) -> Dict[str, Any]:
         "settings_digest": digest,
         "settings": settings,
         "rounding": "Day 182.5 is sampled at exactly t=15 768 000 s; integer-day rows sit on either side (day 182 and 183). Mine depth = metal mine level.",
-        "determinism": "no RNG; fixed policy; sandbox DB seeded from migrations",
+        "determinism": "no RNG; fixed policy; sandbox DB seeded from migrations; homeworld placement pinned per scenario (rng_seed)",
         "buildings_known": sorted(ALL_BUILDINGS),
     }
 
@@ -1630,6 +1902,10 @@ def build_scenarios(days: float, quick: bool) -> List[Scenario]:
         out.append(Scenario(f"S11-{pol}-mid", "S11", pol, "mid", "none", days))
     if not quick:
         out.append(Scenario("S11-active-mid-exp6", "S11", "active", "mid", "none", days, expeditions_per_day=6))
+        for pol in policies:
+            out.append(Scenario(f"S11L-{pol}-mid-dnaE", "S11", pol, "mid", "none", LONG_DAYS, rng_seed=ELIGIBLE_HOME_SEED))
+        out.append(Scenario("S11L-active-mid-dnaE-exp6", "S11", "active", "mid", "none", LONG_DAYS, expeditions_per_day=6, rng_seed=ELIGIBLE_HOME_SEED))
+        out.append(Scenario("S11L-active-mid-dnaN", "S11", "active", "mid", "none", LONG_DAYS))
         for trait in ("r5_one", "r10_one", "r12_one", "r12_all"):
             out.append(Scenario(f"S1-active-mid-{trait}", "S1", "active", "mid", trait, days))
             out.append(Scenario(f"S11-active-mid-{trait}", "S11", "active", "mid", trait, days))
@@ -1650,7 +1926,7 @@ def economy_curve(curve: str):
 
 def run_scenario(sc: Scenario, curve: str = "uni1") -> Dict[str, Any]:
     started = time.time()
-    with economy_curve(curve), Sandbox() as sb:
+    with economy_curve(curve), Sandbox(sc.rng_seed) as sb:
         result = Journey(sc, sb).run()
     result["wall_seconds"] = round(time.time() - started, 1)
     result["economy_curve"] = curve
@@ -1666,6 +1942,7 @@ def run_all(days: float, quick: bool, only: Optional[str], with_upper_bound: boo
     info["economy_curve"] = curve
     return {
         "meta": info,
+        "apex_dna_fairness": apex_dna_fairness() if (with_upper_bound and not quick) else {"skipped": True},
         "upper_bound_control": upper_bound_control() if with_upper_bound else {"available": False, "error": "skipped"},
         "not_modelled": NOT_MODELLED,
         "scenarios": results,
@@ -1702,7 +1979,8 @@ def _hours(sec: Any) -> str:
 def render_markdown(data: Dict[str, Any]) -> str:
     meta_ = data["meta"]
     ub = data.get("upper_bound_control", {})
-    base_rows = [s for s in data["scenarios"] if s["trait_scenario"] == "none" and not s["expeditions_per_day"]]
+    base_rows = [s for s in data["scenarios"] if s["trait_scenario"] == "none" and not s["expeditions_per_day"] and float(s["days"]) <= 365]
+    long_rows = [s for s in data["scenarios"] if float(s["days"]) > 365]
     lines: List[str] = [
         "# GC - Trait R3 Player Journey Report",
         "",
@@ -1770,6 +2048,28 @@ def render_markdown(data: Dict[str, Any]) -> str:
             est_txt = ("%g" % est["day"]) if est else "not reached (not required by the canonical state)"
             lines.append(f"| #{f['world']} | {f['day']:g} | {unres_txt} | {est_txt} |")
         lines.append("")
+    lines += ["", "## Imperial Mandates (real prerequisites, nothing granted)", "", "Survey = 2 canonical expedition ships + 12 missions, presence = three owned systems, directive = canonical vote, apex = homeworld specialisation tier 3 + `machine_ascension` (5M metal / 3M crystal, 7 d). Late slots 7-10 open one per mandate, in order.", "", "| Scenario | Survey | Presence | Directive | Apex | Mandate spend M | Rejections (count) |", "|---|---:|---:|---:|---:|---:|---|"]
+    for s_ in base_rows + long_rows:
+        if s_["topology"] != "S11":
+            continue
+        got = {e["mandate"]: e["day"] for e in s_.get("mandates", {}).get("earned", [])}
+        rej = ", ".join(f"{k}={v}" for k, v in s_.get("mandates", {}).get("rejections", {}).items()) or "-"
+        spent = (s_["final"].get("spend_metal") or {}).get("mandates", 0)
+        lines.append(f"| {s_['id']} | {got.get('survey', '-')} | {got.get('presence', '-')} | {got.get('directive', '-')} | {got.get('apex', '-')} | {_human(spent)} | {rej} |")
+    fair = data.get("apex_dna_fairness") or {}
+    if fair and not fair.get("skipped"):
+        lines += ["", f"**Apex route fairness:** in {fair['samples']} sampled homeworld DNAs only **{fair['share_with_eligible_specialization']:.0%}** have any specialisation they are eligible for (tier 2 reveal, planet level 22); ignoring rare/epic traits changes this to {fair['share_without_rare_or_epic_traits']:.0%}, i.e. the gate is the common-trait/affinity roll, not rarity. The remaining accounts need the World Boss route, which is not modelled here."]
+
+    if long_rows:
+        lines += ["", "## 11/11 attempt (730-day horizon, legal route only)", "", "Same policy and rules as above, run longer only to find out *when* a legal eleven-world empire becomes reachable. Colony n+1 can only be launched after every existing colony reached planet level 15.", "", "| Scenario | Worlds @365 | Worlds @730 | Day of 11th world | Last colony PL15 chain (days/colony) | Status |", "|---|---:|---:|---:|---:|---|"]
+        for s_ in long_rows:
+            founded = [e for e in s_["colony_log"] if e["event"] == "founded"]
+            at365 = next((r for r in s_["daily"] if r["label"] == "d365"), None)
+            eleventh = next((e["day"] for e in founded if e["world"] == TARGET_WORLDS - 1), None)
+            cadence = (founded[-1]["day"] - founded[0]["day"]) / max(1, len(founded) - 1) if len(founded) > 1 else 0
+            lines.append(f"| {s_['id']} | {at365['worlds'] if at365 else '-'} | {s_['final']['worlds']} | {('%g' % eleventh) if eleventh else 'not reached'} | {cadence:.0f} | `{s_['status']}` |")
+        lines.append("")
+
     lines += ["### Dispersion across worlds (median and worst world vs best world)", "", "| Scenario | Day | Best | Median | Worst | Median/Best | Worst/Best |", "|---|---:|---:|---:|---:|---:|---:|"]
     for s in base_rows:
         if s["topology"] != "S11":
