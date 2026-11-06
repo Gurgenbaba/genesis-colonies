@@ -33,6 +33,7 @@ htmlcov/
 .tmp_gc547_audit/
 .tmp_sentinel/
 artifacts/browser/
+artifacts/player_journey/
 
 # SQLite — lokale Spielstände nicht committen
 game/game.db

@@ -70,6 +70,19 @@ All money/resource arithmetic should preserve the precision and integer rounding
 - Existing `tests/test_long_horizon_economy_audit.py` and `tests/test_gc829_fresh_account_progression.py` remain green.
 - No new gameplay DB tables, no duplicate production formulas, no live deployment from this measurement-only slice.
 
+## Implementation status (measurement slice)
+
+| Piece | Where |
+|---|---|
+| Simulator + CLI | `scripts/player_journey_sim.py` (`python scripts/player_journey_sim.py --quick --stdout` for a fast smoke run) |
+| Contract tests | `tests/test_player_journey_sim.py` (determinism, sandbox isolation, canonical gates, DNA masking, cap never bypassed, resonance gate) |
+| Generated report (JSON + Markdown) | `docs/GC_TRAIT_R3_PLAYER_JOURNEY_REPORT.md`; full JSON with daily rows via `--out-json` |
+| Upper-bound control | re-used from `scripts/audit_long_horizon_economy.py`, run under the same endgame curve (`--economy-curve uni1`) |
+
+How it satisfies the measurement contract: economy, costs and timers come from `EffectResolver`, `economy_balance`, `buildings` and `research`; planet XP, DNA analysis, reveal tiers, expansion gates and colony founding are executed by `activity_xp`, `planet_level`, `dna_analysis`, `expansion_protocol` and `colonize_planet` inside a throw-away SQLite sandbox built from the repository migrations (never a live DB, no new tables). The decision policy is versioned (`POLICY_VERSION`) and deterministic; there is no RNG.
+
+Still open and listed in the report under *Not modelled*: expeditions and loot, Imperial Mandate loops (slots 7-10 stay locked and are reported as a blocker, never bypassed), applied Timekeeper skips, real fleet transport (flat package after a fixed transit), per-planet mechanics flags and live trait effects (so a separate "common trait" run would be identical to the zero-trait run), Trader, military sinks and Ascension rebuilds. The candidate resonance only shortens construction duration in the sandbox; R3 is not enabled anywhere.
+
 ## Decision gate
 
 Do not merge live resonance modifiers until both real player trajectories and the optimistic upper bound are reported side by side, and the effect on 6/12-month rank dispersion, queue utilization and solo-vs-eleven disparity is quantified.
