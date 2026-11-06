@@ -261,9 +261,37 @@ def test_mandates_need_real_prerequisites_and_open_late_slots_in_order():
     assert result["invariants"]["ok"], result["invariants"]
 
 
-def test_default_homeworld_dna_without_eligible_specialization_keeps_apex_locked():
-    r = _run("S11-nodna", "S11", "optimizer", 100)
-    earned = [e["mandate"] for e in r["mandates"]["earned"]]
-    assert "apex" not in earned
-    assert r["mandates"]["rejections"].get("apex_no_eligible_specialization", 0) > 0
-    assert "apex_no_eligible_specialization" in r["blockers"]
+def test_unlucky_homeworld_dna_still_reaches_apex_via_world_boss_claim():
+    from game.planet_evolution.imperial_mandates import has_apex_achievement
+
+    sc = pj.Scenario("nodna", "S11", "optimizer", "mid", "none", 100)
+    with pj.economy_curve("uni1"), pj.Sandbox() as sb:  # default seed: no eligible specialisation
+        result = pj.Journey(sc, sb).run()
+        claims = sb.conn.execute("SELECT COUNT(*) FROM world_boss_claims WHERE player_id = ?;", (sb.user_id,)).fetchone()[0]
+        asc = str(sb.conn.execute("SELECT ascension_key FROM planets WHERE id = ?;", (sb.home_planet_id,)).fetchone()[0] or "")
+        assert has_apex_achievement(sb.user_id, conn=sb.conn)
+    assert result["mandates"]["rejections"].get("apex_no_eligible_specialization", 0) > 0
+    assert result["mandates"]["apex_route"] == "world_boss_claim"
+    assert claims >= 1 and asc == "", "apex came from a real boss claim, not from an ascension"
+    assert "apex" in [e["mandate"] for e in result["mandates"]["earned"]]
+    assert result["invariants"]["ok"], result["invariants"]
+
+
+def test_world_boss_claim_route_does_not_depend_on_dna():
+    from game import world_boss as wb
+    from game.fleet import set_planet_ships
+    from game.planet_evolution.imperial_mandates import has_apex_achievement
+
+    for seed in (pj.SANDBOX_RNG_SEED, pj.ELIGIBLE_HOME_SEED):
+        with pj.Sandbox(seed) as sb:
+            c = sb.conn
+            now = pj.SIM_EPOCH + 1000.0
+            event_id = wb.tick_world_boss_schedule(conn=c, now=now, include_auto_attack=False)["spawned_event_id"]
+            set_planet_ships(sb.home_planet_id, sb.user_id, {pj.BOSS_SHIP_KEY: pj.BOSS_SHIPS}, conn=c)
+            out = wb.execute_instant_attack(sb.user_id, int(event_id), {pj.BOSS_SHIP_KEY: pj.BOSS_SHIPS}, planet_id=sb.home_planet_id, conn=c, now=now + 10)
+            assert out["ok"], out
+            assert not has_apex_achievement(sb.user_id, conn=c), "no claim before the event ends"
+            ends = float(wb.get_event_by_id(int(event_id), conn=c)["ends_at"])
+            wb.tick_world_boss_schedule(conn=c, now=ends + 5, include_auto_attack=False)
+            assert wb.claim_world_boss_rewards(sb.user_id, int(event_id), conn=c, now=ends + 10)["ok"]
+            assert has_apex_achievement(sb.user_id, conn=c)

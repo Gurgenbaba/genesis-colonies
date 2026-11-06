@@ -99,6 +99,8 @@ SURVEY_SHIPS = 2
 SURVEY_SHIP_KEY = "eclipse_runner"
 EXPEDITION_ROUND_SEC = 3 * 3600  # assumption: 1 h stay (canonical default) + 2 h round-trip flight
 EXPEDITION_RECORD_VALUE = 1000
+BOSS_SHIP_KEY = "falcon_interceptor"  # cheapest combat hull; World Boss claim route needs only one damaging hit
+BOSS_SHIPS = 3
 APEX_ASCENSION_KEY = "machine_ascension"  # requires specialisation tier 3 + metal/crystal, no trait gate of its own
 SIM_VERSION = "player-journey/1"
 POLICY_VERSION = "pj-policy/1"
@@ -119,7 +121,7 @@ ECON_TECHS = ("energy_tech", "mining_tech", "crystal_tech", "buildtime_tech", "s
 
 NOT_MODELLED = [
     "Expeditions and their loot: only the XP sensitivity scenario S11-active-mid-exp6 grants expedition XP (6/day); ship/fuel upkeep and loot are never charged or granted.",
-    "Imperial Mandates use real prerequisites: survey = 2 canonical expedition ships + 12 missions (3 h round trip is an assumption, no loot), presence = owned systems, directive = canonical vote, apex = homeworld specialisation tier 3 + machine_ascension (5M/3M, 7 d). The World Boss claim route is not modelled; if the homeworld DNA has no eligible specialisation the apex mandate and slots 10-11 stay locked (reported, never bypassed).",
+    "Imperial Mandates use real prerequisites: survey = 2 canonical expedition ships + 12 missions (3 h round trip is an assumption, no loot), presence = owned systems, directive = canonical vote, apex = homeworld specialisation tier 3 + machine_ascension (5M/3M, 7 d). If the homeworld DNA has no eligible specialisation the player takes the World Boss claim route instead (3 combat hulls, one real hit on a scheduled boss, claim after the event); no combat realism beyond the canonical damage call.",
     "Timekeeper / login / Battle Pass skips are reported as available potential only; none is applied to a queue (no free skips).",
     "Real fleet transport: colony supply is a flat package delivered after a fixed transit (assumption), transport ships are not charged.",
     "Per-planet mechanics flags (world-type start multipliers, trait effects, specialisations, policies) other than the candidate R3 resonance toggle.",
@@ -590,6 +592,8 @@ class Journey:
         self.mandate_log: List[Dict[str, Any]] = []
         self._mandates_seen: List[str] = []
         self.spec_picked: Optional[str] = None
+        self.boss_route = False
+        self.boss: Optional[Dict[str, Any]] = None
         self._gate_next = 0.0
         self.lab_need = 0
         self._next_colony_binding: Optional[Dict[str, Any]] = None
@@ -758,6 +762,9 @@ class Journey:
                 lab_target = max(lab_target, 4)
             goals.append(("research_lab", lab_target))
             goals.append(("command_center", 3))
+            if self.mandate_phase() and self.boss_route and (self.boss is None or self.boss.get("stage") == "building"):
+                for b, lvl in ((get_ship(BOSS_SHIP_KEY).get("requirements") or {}).get("buildings") or {}).items():
+                    goals.append((str(b), int(lvl)))
             if self.mandate_phase() and self.survey_remaining() > 0:
                 goals.append(("orbital_shipyard", int(get_ship(SURVEY_SHIP_KEY)["requirements"]["buildings"]["orbital_shipyard"])))
             if self.sc.topology == "S11":
@@ -942,6 +949,9 @@ class Journey:
         goals: List[Tuple[str, int]] = []
         for tech, lvl in sorted(self.research_needs.items()):
             goals.append((tech, lvl))
+        if self.mandate_phase() and self.boss_route and (self.boss is None or self.boss.get("stage") == "building"):
+            for tech, lvl in ((get_ship(BOSS_SHIP_KEY).get("requirements") or {}).get("research") or {}).items():
+                goals.append((str(tech), int(lvl)))
         if self.mandate_phase() and self.survey_remaining() > 0:
             for tech, lvl in ((get_ship(SURVEY_SHIP_KEY).get("requirements") or {}).get("research") or {}).items():
                 goals.append((str(tech), int(lvl)))
@@ -1239,6 +1249,8 @@ class Journey:
             options = eligible_specialization_keys(pid, self.sb.conn)
             if not options:
                 self.mandate_reject("apex_no_eligible_specialization")
+                self.boss_route = True
+                self._boss_step()
                 return
             ok, reason, _extra = pick_specialization(pid, options[0], self.sb.user_id, conn=self.sb.conn)
             self.sb.conn.commit()
@@ -1286,6 +1298,62 @@ class Journey:
         duration = float(get_ascension_def(APEX_ASCENSION_KEY).get("duration_days") or 7) * DAY
         self.asc = {"finish_sim": self.t + duration, "db_finish": float((extra or {}).get("finish_at") or 0)}
         self.mandate_log.append({"action": "ascension_started", "day": round(self.t / DAY, 2)})
+
+    def _boss_step(self) -> None:
+        """World Boss claim route: DNA-independent apex mandate (one damaging hit + claim)."""
+        from game import world_boss as wb
+        from game.fleet import set_planet_ships
+
+        hw = self.hw()
+        now_abs = SIM_EPOCH + self.t
+        if self.boss is None:
+            ship = get_ship(BOSS_SHIP_KEY) or {}
+            req = ship.get("requirements") or {}
+            if not (
+                all(int(hw.buildings.get(b, 0)) >= int(l) for b, l in (req.get("buildings") or {}).items())
+                and all(int(self.research.get(t, 0)) >= int(l) for t, l in (req.get("research") or {}).items())
+            ):
+                self.mandate_reject("apex_boss_prerequisites")
+                return
+            cost = ship.get("build_cost") or {}
+            cm, cc, cf = (int(cost.get(k, 0)) * BOSS_SHIPS for k in ("metal", "crystal", "fuel_cells"))
+            if hw.metal + EPS < cm or hw.crystal + EPS < cc or hw.fuel + EPS < cf:
+                self.mandate_reject("apex_boss_ships_unaffordable")
+                return
+            hw.metal -= cm
+            hw.crystal -= cc
+            hw.fuel -= cf
+            self.spend["mandates"] += cm
+            self.spend_c["mandates"] += cc
+            self.spend_f += cf
+            cycle = float(production_level_cycle_seconds(int(ship.get("build_seconds", 60)), max(1, int(hw.buildings.get("orbital_shipyard", 0)))))
+            self.boss = {"stage": "building", "ready": self.t + cycle}
+            return
+        stage = self.boss["stage"]
+        if stage == "ready":
+            wb.tick_world_boss_schedule(conn=self.sb.conn, now=now_abs, include_auto_attack=False)
+            self.sb.conn.commit()
+            events = wb.list_active_events(conn=self.sb.conn, now=now_abs)
+            if not events:
+                self.mandate_reject("apex_boss_no_active_event")
+                return
+            ev = events[0]
+            out = wb.execute_instant_attack(self.sb.user_id, int(ev["id"]), {BOSS_SHIP_KEY: BOSS_SHIPS}, planet_id=hw.planet_id, conn=self.sb.conn, now=now_abs)
+            self.sb.conn.commit()
+            if not out.get("ok"):
+                self.mandate_reject(f"apex_boss_attack_{out.get('error')}")
+                return
+            self.boss.update(stage="waiting_end", event_id=int(ev["id"]), ends=float(ev["ends_at"]) - SIM_EPOCH)
+            self.mandate_log.append({"action": "world_boss_hit", "day": round(self.t / DAY, 2)})
+        elif stage == "waiting_end" and self.t + EPS >= float(self.boss["ends"]):
+            wb.tick_world_boss_schedule(conn=self.sb.conn, now=now_abs, include_auto_attack=False)
+            res = wb.claim_world_boss_rewards(self.sb.user_id, int(self.boss["event_id"]), conn=self.sb.conn, now=now_abs)
+            self.sb.conn.commit()
+            if res.get("ok"):
+                self.boss["stage"] = "claimed"
+                self.mandate_log.append({"action": "world_boss_claim", "day": round(self.t / DAY, 2), "tiers": list(res.get("tiers") or [])})
+            else:
+                self.mandate_reject(f"apex_boss_claim_{res.get('error')}")
 
     def finish_apex_ascension(self) -> None:
         from game.planet_evolution.ascension import finish_ascension_jobs
@@ -1463,6 +1531,11 @@ class Journey:
             cands.append(float(m["arrive"]))
         if self.asc:
             cands.append(float(self.asc["finish_sim"]))
+        if self.boss:
+            if self.boss.get("stage") == "building":
+                cands.append(float(self.boss["ready"]))
+            elif self.boss.get("stage") == "waiting_end":
+                cands.append(float(self.boss["ends"]))
         cands.append(next_window)
         if self.wake is not None:
             cands.append(self.wake)
@@ -1545,6 +1618,12 @@ class Journey:
             self.finish_mission(m)
         if self.asc and float(self.asc["finish_sim"]) <= self.t + EPS:
             self.finish_apex_ascension()
+        if self.boss and self.boss.get("stage") == "building" and float(self.boss["ready"]) <= self.t + EPS:
+            from game.fleet import set_planet_ships
+
+            set_planet_ships(self.hw().planet_id, self.sb.user_id, {BOSS_SHIP_KEY: BOSS_SHIPS}, conn=self.sb.conn)
+            self.sb.conn.commit()
+            self.boss["stage"] = "ready"
         due = [cv for cv in self.convoys if cv["arrive"] <= self.t + EPS]
         for cv in due:
             self.convoys.remove(cv)
@@ -1762,6 +1841,7 @@ class Journey:
                 "survey_missions_done": self.missions_done,
                 "rejections": dict(sorted(self.mandate_rejections.items())),
                 "specialization": self.spec_picked,
+                "apex_route": "world_boss_claim" if self.boss_route else ("machine_ascension" if self.spec_picked else None),
             },
             "findings": self.findings,
             "blockers": {
@@ -1852,7 +1932,7 @@ def apex_dna_fairness(samples: int = 600) -> Dict[str, Any]:
         "share_with_eligible_specialization": round(eligible / samples, 4),
         "share_without_rare_or_epic_traits": round(eligible_common / samples, 4),
         "route": "homeworld specialisation tier 3 -> machine_ascension (no trait gate of its own)",
-        "alternative_not_modelled": "World Boss claim",
+        "alternative": "World Boss claim (no DNA dependence): 3 falcon_interceptor hulls + one hit + claim",
     }
 
 
@@ -2058,7 +2138,7 @@ def render_markdown(data: Dict[str, Any]) -> str:
         lines.append(f"| {s_['id']} | {got.get('survey', '-')} | {got.get('presence', '-')} | {got.get('directive', '-')} | {got.get('apex', '-')} | {_human(spent)} | {rej} |")
     fair = data.get("apex_dna_fairness") or {}
     if fair and not fair.get("skipped"):
-        lines += ["", f"**Apex route fairness:** in {fair['samples']} sampled homeworld DNAs only **{fair['share_with_eligible_specialization']:.0%}** have any specialisation they are eligible for (tier 2 reveal, planet level 22); ignoring rare/epic traits changes this to {fair['share_without_rare_or_epic_traits']:.0%}, i.e. the gate is the common-trait/affinity roll, not rarity. The remaining accounts need the World Boss route, which is not modelled here."]
+        lines += ["", f"**Apex route fairness:** in {fair['samples']} sampled homeworld DNAs only **{fair['share_with_eligible_specialization']:.0%}** have any specialisation they are eligible for (tier 2 reveal, planet level 22); ignoring rare/epic traits changes this to {fair['share_without_rare_or_epic_traits']:.0%}, i.e. the gate is the common-trait/affinity roll, not rarity. The remaining accounts use the World Boss claim route, which is DNA-independent and modelled as the fallback."]
 
     if long_rows:
         lines += ["", "## 11/11 attempt (730-day horizon, legal route only)", "", "Same policy and rules as above, run longer only to find out *when* a legal eleven-world empire becomes reachable. Colony n+1 can only be launched after every existing colony reached planet level 15.", "", "| Scenario | Worlds @365 | Worlds @730 | Day of 11th world | Last colony PL15 chain (days/colony) | Status |", "|---|---:|---:|---:|---:|---|"]
