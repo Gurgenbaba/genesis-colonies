@@ -66,6 +66,20 @@ def _apply_level_unlocks(planet_id: int, new_level: int, conn: sqlite3.Connectio
         )
 
 
+def _is_unestablished_outpost(planet: Dict[str, Any], planet_id: int, conn: sqlite3.Connection) -> bool:
+    """Frontier outpost that is still at the stored level 0 and has not met its establishment milestones.
+
+    Only a stored 0 qualifies (NULL keeps the historical "level 1" reading, and every row at
+    level >= 1 is a grandfathered/legacy colony), so existing saves are never reclassified.
+    """
+    raw = planet.get("planet_level")
+    if raw is None or int(raw) != 0 or int(planet.get("is_homeworld") or 0) == 1:
+        return False
+    from .expansion_protocol import is_outpost_planet
+
+    return bool(is_outpost_planet(int(planet_id), conn=conn))
+
+
 def add_planet_xp(
     planet_id: int,
     base_xp: int,
@@ -75,8 +89,27 @@ def add_planet_xp(
     skip_diversity: bool = False,
 ) -> Dict[str, Any]:
     planet = get_planet_row(planet_id, conn=conn) or {}
-    level = int(planet.get("planet_level") or 1)
     xp = int(planet.get("planet_xp") or 0)
+    if _is_unestablished_outpost(planet, planet_id, conn):
+        # The `planet_level or 1` fallback below would write level >= 1 on the very first XP grant,
+        # which makes the outpost a "legacy full colony" (is_legacy_full_colony) before it is
+        # established and lets bootstrap_legacy_establishment reveal DNA tier 1 early. Keep the XP,
+        # hold the level at 0; sync_establishment_state() replays the levels once the outpost is
+        # established. Nothing here touches dna_seed / planet_dna.
+        gained = max(0, int(math.floor(int(base_xp))))
+        xp += gained
+        conn.cursor().execute("UPDATE planets SET planet_xp = ? WHERE id = ?;", (int(xp), int(planet_id)))
+        return {
+            "planet_id": int(planet_id),
+            "xp_gained": gained,
+            "planet_level": 0,
+            "planet_xp": xp,
+            "levels_gained": 0,
+            "xp_next_level": xp_threshold_for_level(2),
+            "diversity_bonus": 1.0,
+            "held_until_established": True,
+        }
+    level = int(planet.get("planet_level") or 1)
 
     bonus = 1.0 if skip_diversity else _diversity_bonus(planet_id, conn)
     # GC-720J: expansion directive planet XP multiplier (optional level cap).
