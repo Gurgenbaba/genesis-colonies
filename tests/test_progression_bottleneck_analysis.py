@@ -143,7 +143,7 @@ def test_matrix_shape_and_no_live_data():
     ids = [s["sid"] for s in specs]
     assert len(set(ids)) == len(ids)
     assert not any(s["topology"] == "S1" and s["lever"] in pb.COLONY_LEVERS for s in specs)
-    assert {s["lever"] for s in specs} - {"none"} == {k for k in pj.LEVERS if k != "none"}
+    assert {s["lever"] for s in specs} - {"none"} == {k for k in pj.LEVERS if k != "none" and k not in pj.ASCENSION_ONLY_LEVERS}
     assert {s["strategy"] for s in specs} == {"v1", "v2"}
     assert {s["policy"] for s in specs} == {"casual", "active", "optimizer"}
     assert all(s["days"] == 730.0 for s in specs)

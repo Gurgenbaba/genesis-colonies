@@ -61,6 +61,13 @@ from game.buildings import (  # noqa: E402
 )
 from game.economy_balance import research_empire_maturity_index  # noqa: E402
 from game.effects import EffectResolver  # noqa: E402
+from game.exchange import (  # noqa: E402
+    _min_give_amount,
+    _preview_receive,
+    _route_enabled,
+    get_exchange_config,
+    trade_would_increase_score,
+)
 from game.fleet_defs import get_ship  # noqa: E402
 from game.mine_evolution import nodebuster as nodebuster_mod  # noqa: E402
 from game.mine_evolution.formulas import EVOLVABLE_MINES  # noqa: E402
@@ -139,6 +146,7 @@ LEVERS: Dict[str, str] = {
     "income_x1.25": "metal/crystal/fuel production x1.25 (elasticity of progression to income)",
     # candidate mechanics (design options measured as levers; none is enabled anywhere)
     "build_time_x0.88": "construction time x0.88 (what a -12 % build-time resonance could at most deliver)",
+    "build_time_x0.5": "construction time x0.5 (how much of the queue time is construction duration?)",
     "research_time_x0.88": "research time x0.88 (the same -12 % applied to the research queue)",
     "colony_gate_pl10": "colony-maturity gate at planet level 10 instead of 15 (dose-response of the colony chain)",
     "colony_gate_pl5": "colony-maturity gate at planet level 5 instead of 15 (dose-response of the colony chain)",
@@ -151,6 +159,7 @@ LEVERS: Dict[str, str] = {
     "colony_xp_x1.25": "planet XP of colonies x1.25 (+25 %)",
 }
 COLONY_XP_BOOST = {"colony_xp_x1.1": 1.10, "colony_xp_x1.25": 1.25}
+ASCENSION_ONLY_LEVERS = frozenset({"build_time_x0.5"})  # used by the Ascension side check only; not part of the bottleneck-report matrix
 MINE_COST_KEYS = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant", "solar_plant"})
 LEVER_GATE_LEVEL = {"no_colony_chain": 1, "colony_gate_pl10": 10, "colony_gate_pl5": 5}
 LEVER_INCOME_FACTOR = 1.25
@@ -651,6 +660,7 @@ class Scenario:
     strategy: str = "v1"  # v1 = pj-policy/1 (goal list + patience); v2 = pj-policy/2 (payback-ranked, saves for the best purchase)
     asc: str = "legacy"  # mine rule set / Ascension policy, see ASC_MODES
     asc_skills: str = "rebuild_first"  # AP spending order, see ASC_SKILL_ORDERS
+    trader: bool = False  # sell surplus crystal for the metal a purchase lacks (canonical game.exchange route, rate and daily limit)
 
 
 def _settings() -> Dict[str, float]:
@@ -692,6 +702,14 @@ class Journey:
         self.mines_uncapped, self.asc_depth = parse_asc_mode(scenario.asc)
         if scenario.asc_skills not in ASC_SKILL_ORDERS:
             raise ValueError(f"unknown skill order {scenario.asc_skills!r}")
+        self.trader = bool(scenario.trader)
+        self._exch_cfg: Optional[Dict[str, Any]] = None
+        self._trade_day = -1
+        self._trade_used = 0
+        self._trade_retry: Optional[float] = None
+        self.trades: Dict[str, float] = {"trades": 0, "crystal_sold": 0.0, "metal_bought": 0.0, "metal_sold": 0.0, "crystal_bought": 0.0, "capped_days": 0}
+        self._trade_capped_day = -1
+        self._last_trade: Dict[int, Tuple[int, str]] = {}
         self.asc_ver = 0  # bumps with every canonical Ascension mutation (cache key of everything state-dependent)
         self._probe_caches: Dict[int, Dict[tuple, Any]] = {}
         self._profile_cache: Dict[Tuple[int, int], Dict[str, Dict[str, Any]]] = {}
@@ -886,8 +904,118 @@ class Journey:
             eff[job.key] = max(int(eff.get(job.key, 0)), int(job.target))
         return eff
 
+    # -- Trader (canonical game.exchange): crystal -> metal --------------------------------------------------
+    def exchange_cfg(self) -> Dict[str, Any]:
+        if self._exch_cfg is None:
+            self._exch_cfg = get_exchange_config(conn=self.sb.conn)
+        return self._exch_cfg
+
+    def exchange_rates(self) -> Tuple[float, float]:
+        """(metal paid per 1 crystal bought, metal received per 1 crystal sold); 0.0 for a disabled route."""
+        cfg = self.exchange_cfg()
+        if not cfg.get("enabled"):
+            return 0.0, 0.0
+        buy = max(0.0, float(cfg["rate_metal_to_crystal"])) if _route_enabled("metal", "crystal", cfg) else 0.0
+        sell = max(0.0, float(cfg["rate_crystal_to_metal"])) if _route_enabled("crystal", "metal", cfg) else 0.0
+        return buy, sell
+
+    def trade_daily_limit(self) -> int:
+        cfg = self.exchange_cfg()
+        m, c, f = self.empire_hourly()
+        scaled = int((m + c + f) * 24.0 * float(cfg["daily_limit_pct"]) / 100.0)
+        return max(int(cfg["daily_limit_min"]), scaled)
+
+    def _afford_wait_trader(self, w: World, s: Dict[str, Any], cost_m: float, cost_c: float) -> float:
+        """Time until a purchase is affordable when the surplus of one resource can be traded for the other at the canonical rates."""
+        buy, sell = self.exchange_rates()
+        need_m = max(0.0, cost_m - w.metal)
+        need_c = max(0.0, cost_c - w.crystal)
+        if need_m <= 0 and need_c <= 0:
+            return 0.0
+        if cost_m > s["cap_m"] or cost_c > s["cap_c"]:
+            return math.inf
+        t_m_own = 0.0 if need_m <= 0 else (need_m / s["m_ps"] if s["m_ps"] > 0 else math.inf)
+        t_c_own = 0.0 if need_c <= 0 else (need_c / s["c_ps"] if s["c_ps"] > 0 else math.inf)
+        best = max(t_m_own, t_c_own)
+        if sell > 0 and need_m > 0:  # metal is short: sell crystal beyond the purchase's own crystal cost
+            denom = s["m_ps"] + sell * s["c_ps"]
+            if denom > 0:
+                best = min(best, max(t_c_own, (cost_m - w.metal - sell * (w.crystal - cost_c)) / denom, 0.0))
+        if buy > 0 and need_c > 0:  # crystal is short: buy it with metal beyond the purchase's own metal cost
+            denom = s["c_ps"] + s["m_ps"] / buy
+            if denom > 0:
+                best = min(best, max(t_m_own, (cost_c - w.crystal - (w.metal - cost_m) / buy) / denom, 0.0))
+        return best
+
+    def _trade_execute(self, w: World, give_res: str, receive_res: str, give: float) -> bool:
+        """One canonical Trader transaction: minimum, preview, score guard and the daily limit of game.exchange."""
+        day = int(self.t // DAY)
+        if day != self._trade_day:
+            self._trade_day, self._trade_used = day, 0
+        remaining = self.trade_daily_limit() - self._trade_used
+        give_i = int(give)
+        if give_i > remaining:  # the canonical daily limit refuses the trade (daily_limit_exceeded): try again after the reset
+            if self._trade_capped_day != day:
+                self._trade_capped_day = day
+                self.trades["capped_days"] += 1
+            self._trade_retry = (day + 1) * DAY
+            return False
+        cfg = self.exchange_cfg()
+        if give_i < _min_give_amount(give_res, receive_res, cfg):
+            return False
+        got = int(_preview_receive(give_res, receive_res, give_i, cfg))
+        if got <= 0:
+            return False
+        if trade_would_increase_score(
+            metal=int(w.metal), crystal=int(w.crystal), fuel_cells=int(w.fuel),
+            give_resource=give_res, give_amount=give_i, receive_resource=receive_res, receive_amount=got,
+        ):
+            return False
+        setattr(w, give_res, getattr(w, give_res) - give_i)
+        setattr(w, receive_res, getattr(w, receive_res) + got)
+        self._trade_used += give_i
+        self.trades["trades"] += 1
+        self.trades[f"{give_res}_sold"] = self.trades.get(f"{give_res}_sold", 0.0) + give_i
+        self.trades[f"{receive_res}_bought"] = self.trades.get(f"{receive_res}_bought", 0.0) + got
+        return True
+
+    def trade_for(self, w: World, cost_m: float, cost_c: float) -> None:
+        """Trade the surplus resource for the one a purchase lacks - only when the trade makes the purchase affordable right now.
+
+        The policy never trades half-way (no ping-pong, no spread burned on speculative conversions) and never reverses a
+        trade of the same planet on the same day.
+        """
+        if not self.trader:
+            return
+        buy, sell = self.exchange_rates()
+        s = self.stats(w)
+        cfg = self.exchange_cfg()
+        day = int(self.t // DAY)
+        last = self._last_trade.get(w.idx)
+        if w.metal + EPS < cost_m and w.crystal + EPS >= cost_c:
+            if sell <= 0 or (last and last[0] == day and last[1] == "metal_to_crystal"):
+                return
+            give = math.ceil((cost_m - w.metal) / sell)
+            give = max(give, _min_give_amount("crystal", "metal", cfg))
+            if w.crystal - cost_c < give or w.metal + give * sell > s["cap_m"]:
+                return  # the surplus cannot complete the purchase
+            if self._trade_execute(w, "crystal", "metal", float(give)):
+                self._last_trade[w.idx] = (day, "crystal_to_metal")
+        elif w.crystal + EPS < cost_c and w.metal + EPS >= cost_m:
+            if buy <= 0 or (last and last[0] == day and last[1] == "crystal_to_metal"):
+                return
+            need_c = cost_c - w.crystal
+            give = math.ceil(need_c * buy)
+            give = max(give, _min_give_amount("metal", "crystal", cfg))
+            if w.metal - cost_m < give or w.crystal + give / buy > s["cap_c"]:
+                return
+            if self._trade_execute(w, "metal", "crystal", float(give)):
+                self._last_trade[w.idx] = (day, "metal_to_crystal")
+
     def afford_wait(self, w: World, cost_m: float, cost_c: float) -> float:
         s = self.stats(w)
+        if self.trader:
+            return self._afford_wait_trader(w, s, cost_m, cost_c)
         need_m = max(0.0, cost_m - w.metal)
         need_c = max(0.0, cost_c - w.crystal)
         wait = 0.0
@@ -1244,6 +1372,8 @@ class Journey:
             dur *= LEVER_TIME_FACTOR
         elif self.lever == "build_time_x0.88":
             dur *= 0.88
+        elif self.lever == "build_time_x0.5":
+            dur *= 0.5
         return max(1.0, dur)
 
     def is_resonating(self, w: World) -> bool:
@@ -1293,6 +1423,8 @@ class Journey:
             if pick is None:
                 return
             key, target, cm, cc = pick
+            if self.trader:
+                self.trade_for(w, cm, cc)
             if w.metal + EPS < cm or w.crystal + EPS < cc:
                 return
             self.enqueue_build(w, key, target, cm, cc)
@@ -1595,6 +1727,8 @@ class Journey:
                 self.block("storage_cap_below_cost", f"research {tech} L{target}")
                 return
             self.storage_need = None
+            if self.trader:
+                self.trade_for(payer, cm, cc)
             if payer.metal + EPS < cm or payer.crystal + EPS < cc:
                 return
             payer.metal -= cm
@@ -2356,8 +2490,12 @@ class Journey:
                     wait = self.afford_wait(w, pick[2], pick[3])
                     if math.isfinite(wait) and wait > 0:
                         best = min(best, self.t + wait + 1.0)
+                    elif self.trader and math.isfinite(wait) and (w.metal + EPS < pick[2] or w.crystal + EPS < pick[3]):
+                        best = min(best, self.t + 3600.0)  # fungible funds exist but no legal trade completed it: look again within the hour
             if w.next_scan_t > self.t:
                 best = min(best, w.next_scan_t + 1.0)
+        if self._trade_retry is not None and self._trade_retry > self.t:
+            best = min(best, self._trade_retry + 1.0)  # the Trader's daily limit was hit: try again after the reset
         if self.mandate_phase():
             best = min(best, self.t + 3600.0)  # always-online player re-checks the mandate checklist hourly
         if len(self.rqueue) < min(self.research_limit, self.policy.queue_fill):
@@ -2548,6 +2686,7 @@ class Journey:
             "ascension_runs": [dict(r) for r in self.asc_runs],
             "ascension_skill_log": [dict(r) for r in self.asc_skill_log],
             "ascension_rejections": dict(sorted(self.asc_rejections.items())),
+            "trader": {"enabled": self.trader, **{k: int(v) for k, v in self.trades.items()}},
             "days": self.sc.days,
             "expeditions_per_day": self.sc.expeditions_per_day,
             "transit_sec": self.sc.transit_sec,

@@ -40,8 +40,8 @@ DEEP = {
 }
 
 
-def _journey(sb, asc="T200", order="rebuild_first", policy="optimizer", days=30.0, levels=None):
-    sc = pj.Scenario("t", "S1", policy, "mid", "none", days, strategy="v2", asc=asc, asc_skills=order)
+def _journey(sb, asc="T200", order="rebuild_first", policy="optimizer", days=30.0, levels=None, trader=False):
+    sc = pj.Scenario("t", "S1", policy, "mid", "none", days, strategy="v2", asc=asc, asc_skills=order, trader=trader)
     j = pj.Journey(sc, sb)
     w = j.hw()
     if levels is not None:  # TEST-ONLY head start so the mechanism can be exercised without simulating a year
@@ -78,6 +78,8 @@ def test_matrix_shape():
     outpost = aa.build_matrix(730.0, quick=False, subset="outpost")
     assert len(outpost) == 3 * len(aa.SENSITIVITY_ARMS) and {s["topology"] for s in outpost} == {"S11"}
     assert len({s["sid"] for s in main}) == len(main)
+    trader = aa.build_matrix(730.0, quick=False, subset="trader")
+    assert len(trader) == 2 * 3 * len(aa.TRADER_ARMS) + 3 * len(aa.TRADER_EXT_ARMS) and all(s["arm"].endswith("_tr") for s in trader)
 
 
 # --------------------------------------------------------------------------- canonical reset
@@ -264,6 +266,78 @@ def test_policy_ascends_rebuilds_and_keeps_the_ledger_conserved():
         assert asc["ap_spent_total"] <= asc["ap_earned_total"]
 
 
+# --------------------------------------------------------------------------- Trader (canonical game.exchange)
+
+
+def test_trader_is_off_by_default_and_changes_nothing():
+    with pj.Sandbox() as sb:
+        j, w = _journey(sb, asc="never")
+        assert not j.trader
+        w.metal, w.crystal = 10.0, 5_000_000.0
+        j.trade_for(w, 1_000.0, 10.0)
+        assert (w.metal, w.crystal) == (10.0, 5_000_000.0) and j.trades["trades"] == 0
+
+
+def test_trader_uses_the_canonical_rates_and_completes_the_purchase():
+    from game.exchange import _preview_receive
+
+    with pj.Sandbox() as sb:
+        j, w = _journey(sb, asc="never", trader=True)
+        buy, sell = j.exchange_rates()
+        assert (buy, sell) == (1.5, 1.0)  # canonical defaults of game.exchange
+        w.metal, w.crystal = 1_000.0, 5_000_000.0
+        j.trade_for(w, 40_000.0, 10.0)  # metal short, crystal in surplus: sell exactly what completes the purchase
+        assert w.metal >= 40_000.0 and 5_000_000.0 - w.crystal == 39_000 and w.metal - 1_000.0 == _preview_receive("crystal", "metal", 39_000, j.exchange_cfg())
+        before = (w.metal, w.crystal)
+        j.trade_for(w, 40_000.0, 10.0)
+        assert (w.metal, w.crystal) == before  # nothing to do once the purchase is covered
+        # crystal short, metal in surplus: buy at 1.5 metal per crystal, but never reverse a trade on the same day
+        j._last_trade.clear()
+        w.metal, w.crystal = 10_000_000.0, 100.0
+        j.trade_for(w, 10.0, 30_000.0)
+        assert w.crystal >= 30_000.0 and 10_000_000.0 - w.metal >= 1.5 * (30_000.0 - 100.0)
+        j._last_trade[w.idx] = (int(j.t // pj.DAY), "metal_to_crystal")
+        w.metal, w.crystal = 10.0, 5_000_000.0
+        j.trade_for(w, 40_000.0, 10.0)
+        assert (w.metal, w.crystal) == (10.0, 5_000_000.0)  # no round trip within the day
+
+
+def test_trader_never_trades_half_way_and_respects_the_daily_limit():
+    with pj.Sandbox() as sb:
+        j, w = _journey(sb, asc="never", trader=True)
+        w.metal, w.crystal = 1_000.0, 20_000.0
+        j.trade_for(w, 1_000_000.0, 10.0)  # the surplus cannot complete the purchase: no speculative conversion
+        assert (w.metal, w.crystal) == (1_000.0, 20_000.0) and j.trades["trades"] == 0
+        w.metal, w.crystal = 1_000.0, 90_000_000.0
+        j._trade_day, j._trade_used = int(j.t // pj.DAY), j.trade_daily_limit() - 10  # daily limit nearly used up
+        j.trade_for(w, 100_000.0, 10.0)
+        assert w.metal == 1_000.0 and j.trades["capped_days"] == 1 and j._trade_retry is not None
+
+
+def test_fungible_wait_is_never_longer_than_the_plain_wait():
+    with pj.economy_curve("uni1"), pj.Sandbox() as sb:
+        plain, w = _journey(sb, asc="never", levels=DEEP)
+        fung, w2 = _journey(sb, asc="never", levels=DEEP, trader=True)
+        s = plain.stats(w)
+        for metal, crystal, cm, cc in ((1e6, 9e9, 5e10, 1e6), (9e9, 1e6, 1e6, 5e10), (1e6, 1e6, 5e10, 5e10), (1e12, 1e12, 1e6, 1e6)):
+            w.metal = w2.metal = metal
+            w.crystal = w2.crystal = crystal
+            assert fung.afford_wait(w2, cm, cc) <= plain.afford_wait(w, cm, cc) + 1e-6
+        assert s["m_ps"] > 0
+
+
+def test_trader_scenario_keeps_ledger_and_invariants():
+    sc = pj.Scenario("t-tr", "S1", "optimizer", "mid", "none", 25.0, strategy="v2", asc="never", trader=True)
+    res = pj.run_scenario(sc, curve="uni1")
+    assert res["invariants"]["ok"], res["invariants"]
+    assert res["trader"]["enabled"] and res["trader"]["trades"] >= 0
+    for wd in res["final"]["per_world"]:
+        assert abs(sum(wd["time_ledger_sec"].values()) - wd["age_sec"]) < 0.05
+        assert min(wd["wasted_metal"], wd["wasted_crystal"]) >= 0
+    # trade volume stays bounded by the canonical daily limit
+    assert res["trader"]["crystal_sold"] + res["trader"]["metal_sold"] <= 25 * 25_000_000 * 1000
+
+
 # --------------------------------------------------------------------------- aggregation helpers
 
 
@@ -305,7 +379,7 @@ def test_render_on_synthetic_data_and_cli_roundtrip(tmp_path):
                 results.append(_res(arm, [[5, 100, 10, 0, 1], [10, 120, 12, 1, 1]], [{"world": 0, "mine": "metal_mine", "day": 8.0, "rebuild_to_best_days": 1.0, "income_recovered_days": 1.0, "income_before_h": 10, "income_after_h": 5}], topo=topo, style=style, snaps={"182.5": snap, "365": snap, "730": snap}))
     data = {"meta": {"analysis_version": aa.ANALYSIS_VERSION, "sim_version": pj.SIM_VERSION, "asc_model_version": pj.ASC_MODEL_VERSION, "code_sha": "0" * 40}, "results": results, "extended": []}
     md = aa.render_markdown(data)
-    for heading in ("## 1. Production", "## 2. Ascend or keep building", "## 3. Are three Ascensions reachable", "## 4. Reset and rebuild", "## 6. Queue utilisation", "## 10. Invariants"):
+    for heading in ("## 1. Production", "## 2. Ascend or keep building", "## 3. Are three Ascensions reachable", "## 4. Reset and rebuild", "## 6. Queue utilisation", "## 12. Invariants"):
         assert heading in md
     out = tmp_path / "r.json"
     out.write_text(json.dumps(data), encoding="utf-8")

@@ -87,6 +87,8 @@ Still open and listed in the report under *Not modelled*: expeditions and loot b
 
 The progression-bottleneck follow-up (`docs/GC_PROGRESSION_BOTTLENECKS.md`, generated tables in `docs/GC_PROGRESSION_BOTTLENECK_REPORT.md`) adds an exclusive time ledger, counterfactual levers and an improved legal policy `pj-policy/2`. Headline for R3: a 5-12 % **build-time** resonance cannot matter (the queue waits for resources, not timers); equal-strength effects on colony planet XP and production-building upgrade cost are the ones with a measurable impact. The gate below still applies unchanged.
 
+The Ascension follow-up (`docs/GC_ASCENSION_SIMULATION.md`, generated tables in `docs/GC_ASCENSION_SIMULATION_REPORT.md`) corrects one statement of the bottleneck analysis: the mines are **not** capped at L200 under `nodebuster-v1`, so the "nothing to build after month 12" finding was a model artefact. For R3 it adds: construction time is not a brake past L200 either (x0.5 leaves the depth after 24 months unchanged), and an Ascension within 24 months is an economic net loss, so a resonance should not be designed around Ascension rebuilds.
+
 ## Decision gate
 
 Do not merge live resonance modifiers until both real player trajectories and the optimistic upper bound are reported side by side, and the effect on 6/12-month rank dispersion, queue utilization and solo-vs-eleven disparity is quantified.

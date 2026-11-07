@@ -99,7 +99,7 @@ def build_matrix(days: float, quick: bool, levers: Optional[List[str]] = None, w
     from scripts import player_journey_sim as pj
 
     if levers is None:
-        levers = [k for k in pj.LEVERS if k != "none"]
+        levers = [k for k in pj.LEVERS if k != "none" and k not in pj.ASCENSION_ONLY_LEVERS]
         if quick:
             levers = ["instant_build", "free_storage", "no_colony_chain"]
     styles = ("active",) if quick else STYLES

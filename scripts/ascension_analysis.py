@@ -72,10 +72,22 @@ ARMS: Dict[str, Tuple[str, str, str]] = {
     "T200y": ("T200", "yield_first", "T200 with AP into Deep Yield first"),
     "T250y": ("T250", "yield_first", "T250 with AP into Deep Yield first"),
     "T400": ("T400", "rebuild_first", "ascend at depth >= 400 (11 AP per run); extended horizon only"),
+    # sensitivity: the same arms with the canonical Trader (game.exchange: crystal -> metal 1:1, metal -> crystal 1.5:1, 80 % daily limit)
+    "never_tr": ("never", "rebuild_first", "`never` with the canonical Trader"),
+    "T200_tr": ("T200", "rebuild_first", "`T200` with the canonical Trader"),
+    "T250_tr": ("T250", "rebuild_first", "`T250` with the canonical Trader"),
+    "T300_tr": ("T300", "rebuild_first", "`T300` with the canonical Trader"),
+    # side check (simulation-only levers, labelled): is construction / research time a brake once the mines are past L200?
+    "never_bt88": ("never", "rebuild_first", "`never` with construction time x0.88 (lever, not a game value)"),
+    "never_bt50": ("never", "rebuild_first", "`never` with construction time x0.5 (lever, not a game value)"),
 }
+ARM_LEVER: Dict[str, str] = {"never_bt88": "build_time_x0.88", "never_bt50": "build_time_x0.5"}
+LEVER_ARMS: Tuple[str, ...] = ("never", "never_bt88", "never_bt50")
 MAIN_ARMS: Tuple[str, ...] = ("legacy", "never", "T200", "T225", "T250", "T300", "T200y", "T250y")
 EXT_ARMS: Tuple[str, ...] = ("never", "T200", "T250", "T300", "T400")
 SENSITIVITY_ARMS: Tuple[str, ...] = ("never", "T200")
+TRADER_ARMS: Tuple[str, ...] = ("never_tr", "T200_tr", "T250_tr")
+TRADER_EXT_ARMS: Tuple[str, ...] = ("never_tr", "T200_tr", "T250_tr", "T300_tr")
 PLAYER_RULE_CAUSES = ("wait_metal", "wait_crystal", "wait_storage_build", "wait_energy_drag", "research_prerequisite", "storage_cap_below_cost", "no_goal")
 
 
@@ -107,6 +119,20 @@ def build_matrix(days: float = DAYS, quick: bool = False, extended: bool = True,
             }
         )
 
+    if subset == "levers":
+        for style in STYLES:
+            for arm in LEVER_ARMS:
+                add("S1", style, arm, days)
+        return out
+    if subset == "trader":  # sensitivity: the canonical Trader balances metal and crystal
+        for topo in TOPOLOGIES:
+            for style in STYLES:
+                for arm in TRADER_ARMS:
+                    add(topo, style, arm, days)
+        for style in STYLES:
+            for arm in TRADER_EXT_ARMS:
+                add("S1", style, arm, EXTENDED_DAYS)
+        return out
     if subset == "outpost":  # sensitivity to the not-yet-integrated outpost-XP fix (run in a checkout that has the fix)
         for style in STYLES:
             for arm in SENSITIVITY_ARMS:
@@ -160,6 +186,7 @@ def run_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
     sc = pj.Scenario(
         spec["sid"], spec["topology"], spec["policy"], "mid", "none", float(spec["days"]),
         rng_seed=spec.get("rng_seed"), strategy=spec["strategy"], asc=spec["asc"], asc_skills=spec["asc_skills"],
+        trader=str(spec["arm"]).endswith("_tr"), lever=ARM_LEVER.get(spec["arm"], "none"),
     )
     res = pj.run_scenario(sc)
     days = float(spec["days"])
@@ -197,6 +224,7 @@ def run_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         "ascension_runs": res.get("ascension_runs", []),
         "ascension_skill_log": res.get("ascension_skill_log", []),
         "ascension_rejections": res.get("ascension_rejections", {}),
+        "trader": res.get("trader", {}),
         "invariants": res["invariants"],
         "series": series,
     }
@@ -334,6 +362,55 @@ def skill_rank_totals(s: Dict[str, Any]) -> Dict[str, int]:
     return out
 
 
+def ap_budget() -> Dict[str, Any]:
+    """Canonical AP arithmetic (no simulation): what the skill tree costs and how many resets that takes.
+
+    Everything comes from ``nodebuster.skill_point_cost`` / ``ascension_points_for_depth`` / the rebuild helpers, so it moves with the
+    owner.  Used to judge which skills a 24-month player can realistically reach - AP can never be granted for free.
+    """
+    from game.mine_evolution import nodebuster as nb
+
+    def total(skill: str, ranks: int) -> int:
+        return sum(nb.skill_point_cost(skill, r) for r in range(ranks))
+
+    core5 = ("frugal_rebuild", "rapid_rebuild", "reconstruction", "deep_yield", "deep_storage")
+    milestones: List[Tuple[str, int]] = [
+        ("Frugal Rebuild rank 5 (-27.5 % rebuild cost)", total("frugal_rebuild", 5)),
+        ("Frugal + Rapid Rebuild rank 5", total("frugal_rebuild", 5) + total("rapid_rebuild", 5)),
+        ("Deep Yield rank 5 (+12.5 % mine output)", total("deep_yield", 5)),
+        ("five core skills at rank 5 (Overdrive prerequisite)", sum(total(k, 5) for k in core5)),
+        ("... + Overdrive I", sum(total(k, 5) for k in core5) + total("overdrive", 1)),
+        ("... + Overdrive III", sum(total(k, 5) for k in core5) + total("overdrive", 3)),
+        ("five core skills at rank 10", sum(total(k, 10) for k in core5)),
+        ("Core Resonance (Deep Yield 8 + 15 AP; needs best depth L300)", total("deep_yield", 8) + total("core_resonance", 1)),
+        ("Legacy Reconstruction (Reconstruction 8 + 20 AP; best depth L400)", total("reconstruction", 8) + total("legacy_reconstruction", 1)),
+        ("Breakthrough Window (Frugal 8 + Rapid 8 + 24 AP; best depth L400)", total("frugal_rebuild", 8) + total("rapid_rebuild", 8) + total("breakthrough_window", 1)),
+        ("whole tree", sum(total(k, int(cfg["max_rank"])) for k, cfg in nb.SKILL_CATALOG.items())),
+    ]
+    depths = (200, 225, 250, 300, 400, 500)
+    per_run = {d: nb.ascension_points_for_depth(d) for d in depths}
+    runs_needed = {name: {d: -(-cost // per_run[d]) for d in depths} for name, cost in milestones}
+    effects = []
+    for label, skills in (
+        ("no skills", {}),
+        ("Frugal 1", {"frugal_rebuild": 1}),
+        ("core skills rank 5", {k: 5 for k in core5}),
+        ("core rank 5 + Overdrive III", {**{k: 5 for k in core5}, "overdrive": 3}),
+        ("all rank 10 + Overdrive III", {**{k: 10 for k in core5}, "overdrive": 3}),
+    ):
+        effects.append(
+            {
+                "set": label,
+                "rebuild_cost_pct": round(nb.rebuild_cost_bps(skills) / 100.0, 1),
+                "rebuild_time_pct": round(nb.rebuild_time_bps(skills) / 100.0, 1),
+                "restart_level": nb.reset_start_level(skills),
+                "output_bonus_pct": round(nb.production_bonus_bps(skills) / 100.0, 1),
+                "storage_bonus_pct": round(nb.storage_bonus_bps(skills) / 100.0, 1),
+            }
+        )
+    return {"ap_per_run": per_run, "milestones": [{"name": n, "ap": c, "runs_needed": runs_needed[n]} for n, c in milestones], "effects": effects}
+
+
 # ---------------------------------------------------------------------------
 # Markdown report
 # ---------------------------------------------------------------------------
@@ -450,6 +527,17 @@ def render_markdown(data: Dict[str, Any]) -> str:
                 L.append(f"| {topo} | {style} | `{arm}` | {earned} | {spent} | " + (", ".join(f"{k} {v}" for k, v in sorted(sk.items())) or "-") + " |")
     L += [""]
 
+    budget = data.get("ap_budget") or ap_budget()
+    depths = sorted(int(d) for d in budget["ap_per_run"])
+    ap_of = lambda mapping, d: mapping[str(d)] if str(d) in mapping else mapping[d]  # noqa: E731  (JSON round trip turns int keys into str)
+    L += ["### 5b. AP budget (canonical arithmetic, no simulation)", "", "AP granted per Ascension by run depth: " + ", ".join(f"L{d} = {ap_of(budget['ap_per_run'], d)} AP" for d in depths) + ".", "", "| Goal | AP needed | " + " | ".join(f"runs at L{d}" for d in depths) + " |", "|---|---:|" + "---:|" * len(depths)]
+    for m in budget["milestones"]:
+        L.append(f"| {m['name']} | {m['ap']} | " + " | ".join(str(ap_of(m["runs_needed"], d)) for d in depths) + " |")
+    L += ["", "| Skill set | Rebuild cost | Rebuild time | Restart level | Output | Depot (that resource) |", "|---|---:|---:|---:|---:|---:|"]
+    for e in budget["effects"]:
+        L.append(f"| {e['set']} | {e['rebuild_cost_pct']}% | {e['rebuild_time_pct']}% | L{e['restart_level']} | +{e['output_bonus_pct']}% | +{e['storage_bonus_pct']}% |")
+    L += [""]
+
     # 6. Queue utilisation and the cap correction
     L += ["## 6. Queue utilisation and the L200-cap correction", "", "Share of all world-seconds by cause. `legacy` is the bottleneck-report model (resolver nexus cap, nothing to build after L200); `never` follows the canonical queue rules.", "", "| Topology | Style | Arm | Months | Queue running | Wait metal | Wait crystal | Wait depot | Research prereq | Nothing to build | Player not acting |", "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|"]
     for topo in TOPOLOGIES:
@@ -520,10 +608,91 @@ def render_markdown(data: Dict[str, Any]) -> str:
                 L.append(f"| {style} | `{arm}` | {_day(b11)} -> {_day(f11)} | {cells[0]} | {cells[1]} | {_f(dd, 0, True)} |")
         L += [""]
 
-    # 10. Invariants
+    # 10. Trader sensitivity
+    if any(r["arm"].endswith("_tr") for r in results + ext):
+        L += [
+            "## 10. Sensitivity: with the canonical Trader",
+            "",
+            "Same arms, but the player may trade through `game.exchange`: surplus crystal is sold for metal (rate_crystal_to_metal), surplus metal buys crystal "
+            "(rate_metal_to_crystal metal per crystal); minimum amount, score guard and the daily limit (80 % of the empire's 24 h production) of the canonical owner apply. "
+            "A trade only fills the one resource a purchase lacks.",
+            "",
+            "| Topology | Style | Arm | Depth 24 mo | Income 24 mo | Income vs reference | Asc (max/mine) | Rebuild days (median) | Break-even day |",
+            "|---|---|---|---:|---:|---:|---:|---:|---:|",
+        ]
+        for topo in TOPOLOGIES:
+            for style in STYLES:
+                ref = find(results, topo, style, "never_tr")
+                base = find(results, topo, style, "never")
+                for arm in ("never", "never_tr", "T200_tr", "T250_tr"):
+                    r = find(results, topo, style, arm)
+                    s24 = snap(r, "730") if r else None
+                    if not s24:
+                        continue
+                    tot, mx, _e, _s = asc_counts(s24)
+                    if arm == "never":
+                        vs, be, rb = "-", "-", "-"
+                    elif arm == "never_tr":
+                        b24 = snap(base, "730") if base else None
+                        vs = (_pct(rel(income(s24), income(b24))) + " vs never") if b24 else "n/a"
+                        be, rb = "-", "-"
+                    else:
+                        vs = _pct(delta_vs(results, topo, style, arm, "never_tr", "730")["income_pct"]) + " vs never_tr"
+                        first = nth_ascension_day(r, 1)
+                        be = "no ascension" if first is None else _day(crossing_day(r["series"], ref["series"], first) if ref else None)
+                        rb = _f(rebuild_stats(r)["rebuild_days_median"], 0)
+                    L.append(f"| {topo} | {style} | `{arm}` | L{peak_depth(s24)} | {_human(income(s24))} | {vs} | {tot} ({mx}) | {rb} | {be} |")
+        tr_ext = [r for r in ext if r["arm"].endswith("_tr")]
+        if tr_ext:
+            L += [
+                "",
+                "Extended horizon with the Trader (S1, income change against `never_tr`):",
+                "",
+                "| Style | Arm | Depth 36 mo | 48 mo | 72 mo | Income vs never_tr 36 mo | 48 mo | 72 mo | Ascensions (72 mo) | Break-even day |",
+                "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+            for style in STYLES:
+                ref = find(ext, "S1", style, "never_tr", EXTENDED_DAYS)
+                for arm in TRADER_EXT_ARMS:
+                    r = find(ext, "S1", style, arm, EXTENDED_DAYS)
+                    if not r:
+                        continue
+                    depth = [f"L{peak_depth(snap(r, k))}" if snap(r, k) else "n/a" for k in ("1095", "1460", "2190")]
+                    d = [_pct(delta_vs(ext, "S1", style, arm, "never_tr", k, EXTENDED_DAYS)["income_pct"]) if arm != "never_tr" else "-" for k in ("1095", "1460", "2190")]
+                    s = snap(r, "2190")
+                    first = nth_ascension_day(r, 1)
+                    be = "-" if arm == "never_tr" else ("no ascension" if first is None else _day(crossing_day(r["series"], ref["series"], first) if ref else None))
+                    L.append(f"| {style} | `{arm}` | " + " | ".join(depth) + " | " + " | ".join(d) + f" | {asc_counts(s)[0] if s else 0} | {be} |")
+        L += [""]
+
+    # 11. Construction-time side check
+    if any(r["arm"] in ARM_LEVER for r in results):
+        L += [
+            "## 11. Side check: is construction time a brake once the mines are past L200?",
+            "",
+            "Simulation-only lever on the `never` arm (S1): construction time x0.88 (what a -12 % build-time resonance could at most deliver) and x0.5. Not a game value, not a proposal. "
+            "Caveat: the payback policy treats the Nanofactory (build-time building, -75 % construction time at level 20) as a neutral purchase, so it is built only when nothing better is affordable; "
+            "its level differs between runs (column *Nanofactory*), which changes the effective construction time by up to 4x independently of the lever. The depth column is therefore the robust result.",
+            "",
+            "| Style | Arm | Depth 12 mo | 24 mo | Income 24 mo | vs never | Queue running 12-24 mo | Waiting for metal 12-24 mo | Nanofactory |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for style in STYLES:
+            for arm in LEVER_ARMS:
+                r = find(results, "S1", style, arm)
+                s24 = snap(r, "730") if r else None
+                if not s24:
+                    continue
+                sh = interval_shares(r, "365", "730")
+                vs = "-" if arm == "never" else _pct(delta_vs(results, "S1", style, arm, "never", "730")["income_pct"])
+                nano = int((s24["per_world"][0].get("buildings") or {}).get("nanofactory", 0))
+                L.append(f"| {style} | `{arm}` | L{peak_depth(snap(r, '365'))} | L{peak_depth(s24)} | {_human(income(s24))} | {vs} | {sh.get('busy', 0):.0f}% | {sh.get('wait_metal', 0):.0f}% | L{nano} |")
+        L += [""]
+
+    # 12. Invariants
     bad = [r["sid"] for r in results + ext if not r["invariants"]["ok"]]
     err = max([ledger_conservation_error(snap(r, "730") or r["snapshots"]["end"]) for r in results] or [0.0])
-    L += ["## 10. Invariants", "", f"* scenarios: {len(results) + len(ext)}; invariant violations: {len(bad)} {bad[:5] if bad else ''}", f"* time-ledger conservation error (worst world): {err:.2e}", "* AP earned equals the sum of the canonical awards of the completed runs; AP spent equals the canonical cost of the owned skill ranks (checked daily inside the simulator).", ""]
+    L += ["## 12. Invariants", "", f"* scenarios: {len(results) + len(ext)}; invariant violations: {len(bad)} {bad[:5] if bad else ''}", f"* time-ledger conservation error (worst world): {err:.2e}", "* AP earned equals the sum of the canonical awards of the completed runs; AP spent equals the canonical cost of the owned skill ranks (checked daily inside the simulator).", ""]
     return "\n".join(L)
 
 
@@ -560,11 +729,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--days", type=float, default=None)
     ap.add_argument("--workers", type=int, default=0)
     ap.add_argument("--no-extended", action="store_true")
-    ap.add_argument("--subset", choices=("main", "outpost"), default="main")
+    ap.add_argument("--subset", choices=("main", "outpost", "trader", "levers"), default="main")
     ap.add_argument("--out-json", default="")
     ap.add_argument("--out-md", default="")
     ap.add_argument("--render-from", default="", help="re-render markdown from a saved JSON (no simulation)")
     ap.add_argument("--sensitivity-json", default="", help="JSON of a --subset outpost run made in a checkout with the outpost-XP fix")
+    ap.add_argument("--trader-json", default="", help="JSON of a --subset trader run to merge into the report (section 10)")
+    ap.add_argument("--levers-json", default="", help="JSON of a --subset levers run to merge into the report (section 11)")
     ap.add_argument("--stdout", action="store_true")
     args = ap.parse_args(argv)
 
@@ -577,10 +748,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         results = run_matrix(specs, workers)
         main_rows = [r for r in results if abs(float(r["days"]) - days) < 1e-9]
         ext_rows = [r for r in results if abs(float(r["days"]) - days) >= 1e-9]
-        data = {"meta": meta_block(specs), "results": main_rows, "extended": ext_rows}
+        data = {"meta": meta_block(specs), "results": main_rows, "extended": ext_rows, "ap_budget": ap_budget()}
     if args.sensitivity_json:
         sens = json.loads(Path(args.sensitivity_json).read_text(encoding="utf-8"))
         data["outpost_fix_sensitivity"] = sens["results"]
+    if args.levers_json:
+        lv = json.loads(Path(args.levers_json).read_text(encoding="utf-8"))
+        known = {r["sid"] for r in data["results"]}
+        data["results"] += [r for r in lv["results"] if r["sid"] not in known]
+    if args.trader_json:
+        tr = json.loads(Path(args.trader_json).read_text(encoding="utf-8"))
+        known = {r["sid"] for r in data["results"] + data.get("extended", [])}
+        for r in tr["results"] + tr.get("extended", []):
+            if r["sid"] in known:
+                continue
+            (data["extended"] if abs(float(r["days"]) - EXTENDED_DAYS) < 1e-9 else data["results"]).append(r)
     if args.out_json:
         Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out_json).write_text(json.dumps(data, indent=1, default=str), encoding="utf-8")
