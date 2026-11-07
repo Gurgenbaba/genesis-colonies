@@ -204,3 +204,37 @@ def test_homeworld_and_established_colonies_level_as_before(outpost_db):
         assert "held_until_established" not in res2 and res2["levels_gained"] >= 1
     finally:
         conn.close()
+
+
+def test_held_xp_keeps_directive_and_diversity_multipliers(outpost_db, monkeypatch):
+    """Holding the level must not change how much XP a grant is worth (multipliers unchanged)."""
+    import game.galactic_directives.mechanics as mech
+
+    conn = db()
+    try:
+        uid, pid = _outpost(conn)
+
+        monkeypatch.setattr(mech, "get_directive_flags_for_galaxy", lambda galaxy, conn=None: {"planet_xp_mult": 2.0})
+        res = add_planet_xp(pid, 100, conn, skip_diversity=True)
+        assert res["held_until_established"] and res["xp_gained"] == 200, "directive multiplier applies to held XP"
+        assert _row(conn, pid)["planet_xp"] == 200 and _row(conn, pid)["planet_level"] == 0
+
+        # a cap at level 1 means "no bonus from level 1 on": the pre-fix reading of a level-0 row was level 1
+        monkeypatch.setattr(
+            mech,
+            "get_directive_flags_for_galaxy",
+            lambda galaxy, conn=None: {"planet_xp_mult": 2.0, "planet_xp_mult_cap_level": 1},
+        )
+        res = add_planet_xp(pid, 100, conn, skip_diversity=True)
+        assert res["xp_gained"] == 100
+        assert _row(conn, pid)["planet_xp"] == 300 and _row(conn, pid)["planet_level"] == 0
+
+        # replaying on establishment adds no extra XP and no multiplier on top
+        monkeypatch.setattr(mech, "get_directive_flags_for_galaxy", lambda galaxy, conn=None: {"planet_xp_mult": 2.0})
+        _finish_milestones(conn, pid)
+        assert sync_establishment_state(pid, conn=conn)
+        conn.commit()
+        row = _row(conn, pid)
+        assert row["planet_xp"] == 300 and row["planet_level"] == 2
+    finally:
+        conn.close()

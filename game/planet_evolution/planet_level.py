@@ -90,26 +90,13 @@ def add_planet_xp(
 ) -> Dict[str, Any]:
     planet = get_planet_row(planet_id, conn=conn) or {}
     xp = int(planet.get("planet_xp") or 0)
-    if _is_unestablished_outpost(planet, planet_id, conn):
-        # The `planet_level or 1` fallback below would write level >= 1 on the very first XP grant,
-        # which makes the outpost a "legacy full colony" (is_legacy_full_colony) before it is
-        # established and lets bootstrap_legacy_establishment reveal DNA tier 1 early. Keep the XP,
-        # hold the level at 0; sync_establishment_state() replays the levels once the outpost is
-        # established. Nothing here touches dna_seed / planet_dna.
-        gained = max(0, int(math.floor(int(base_xp))))
-        xp += gained
-        conn.cursor().execute("UPDATE planets SET planet_xp = ? WHERE id = ?;", (int(xp), int(planet_id)))
-        return {
-            "planet_id": int(planet_id),
-            "xp_gained": gained,
-            "planet_level": 0,
-            "planet_xp": xp,
-            "levels_gained": 0,
-            "xp_next_level": xp_threshold_for_level(2),
-            "diversity_bonus": 1.0,
-            "held_until_established": True,
-        }
-    level = int(planet.get("planet_level") or 1)
+    # A stored level 0 on an unestablished outpost is held at 0 (see _is_unestablished_outpost);
+    # everything else keeps the historical `planet_level or 1` reading.
+    held = _is_unestablished_outpost(planet, planet_id, conn)
+    level = 0 if held else int(planet.get("planet_level") or 1)
+    # Multipliers use the same level (>= 1) the pre-fix code saw, so held XP earns exactly what
+    # the first grant used to earn.
+    mult_level = max(1, level)
 
     bonus = 1.0 if skip_diversity else _diversity_bonus(planet_id, conn)
     # GC-720J: expansion directive planet XP multiplier (optional level cap).
@@ -121,12 +108,30 @@ def add_planet_xp(
             flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
             xp_mult = float(flags.get("planet_xp_mult") or 1.0)
             cap_level = int(flags.get("planet_xp_mult_cap_level") or 0)
-            if xp_mult != 1.0 and (cap_level <= 0 or level < cap_level):
+            if xp_mult != 1.0 and (cap_level <= 0 or mult_level < cap_level):
                 bonus *= xp_mult
     except Exception:
         pass
     gained = max(0, int(math.floor(int(base_xp) * bonus)))
     xp += gained
+
+    if held:
+        # The `planet_level or 1` fallback would write level >= 1 on the very first XP grant, which
+        # makes the outpost a "legacy full colony" (is_legacy_full_colony) before it is established
+        # and lets bootstrap_legacy_establishment reveal DNA tier 1 early. Keep the XP, hold the
+        # level at 0; sync_establishment_state() replays the levels once the outpost is established.
+        # Nothing here touches dna_seed / planet_dna.
+        conn.cursor().execute("UPDATE planets SET planet_xp = ? WHERE id = ?;", (int(xp), int(planet_id)))
+        return {
+            "planet_id": int(planet_id),
+            "xp_gained": gained,
+            "planet_level": 0,
+            "planet_xp": xp,
+            "levels_gained": 0,
+            "xp_next_level": xp_threshold_for_level(2),
+            "diversity_bonus": bonus,
+            "held_until_established": True,
+        }
 
     levels_gained = 0
     while level < MAX_PLANET_LEVEL and xp >= xp_threshold_for_level(level + 1):
