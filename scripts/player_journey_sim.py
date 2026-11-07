@@ -116,8 +116,42 @@ COLONY_CLIMATE_CYCLE = ("mid", "hot", "cold")
 ENERGY_LOW_RATIO = 0.95
 EPS = 1e-6
 PATIENCE_SEC = 6 * 3600  # a player saves for a goal only if it is affordable within this horizon
+PATIENCE_V2_SEC = 24 * 3600  # pj-policy/2: a planning player saves up to a day for the best purchase / a needed enabler
+SLACK_PRICE = 0.15  # pj-policy/2: relative value of the non-binding resource when ranking purchases by payback
+STRATEGY_VERSIONS = {"v1": "pj-policy/1", "v2": "pj-policy/2"}
+
+# Counterfactual levers (SIMULATION ONLY - they remove or scale one brake to measure how much progression it costs;
+# none of them is a game change or a proposal by itself, and none is a player route).
+LEVERS: Dict[str, str] = {
+    "none": "baseline (canonical rules)",
+    "instant_build": "construction time x0.01 (is build duration a brake?)",
+    "instant_research": "research time x0.01 (is research duration a brake?)",
+    "free_research_cost": "research costs 0 metal / 0 crystal (is the research resource sink a brake?)",
+    "free_energy": "energy ratio forced to 1.0 (is energy supply a brake?)",
+    "free_storage": "storage capacity unlimited (are depot caps a brake?)",
+    "no_colony_chain": "colony-maturity gate lowered from planet level 15 to 1 (is the serial PL15 chain a brake?)",
+    "income_x1.25": "metal/crystal/fuel production x1.25 (elasticity of progression to income)",
+    # candidate mechanics (design options measured as levers; none is enabled anywhere)
+    "build_time_x0.88": "construction time x0.88 (what a -12 % build-time resonance could at most deliver)",
+    "research_time_x0.88": "research time x0.88 (the same -12 % applied to the research queue)",
+    "colony_gate_pl10": "colony-maturity gate at planet level 10 instead of 15 (dose-response of the colony chain)",
+    "colony_gate_pl5": "colony-maturity gate at planet level 5 instead of 15 (dose-response of the colony chain)",
+    "auto_start": "a purchase the player cannot afford yet is reserved and starts by itself when the funds arrive (removes action-window latency)",
+    # equal-strength (about 10 %) candidates for a trait resonance: which brake does it act on?
+    "res_cost_x0.9": "research costs x0.9 (-10 %)",
+    "mine_cost_x0.9": "metal/crystal mine, fuel plant and solar upgrade costs x0.9 (-10 %)",
+    "storage_cap_x1.1": "depot capacity x1.1 (+10 %)",
+    "colony_xp_x1.1": "planet XP of colonies x1.1 (+10 %, DNA scans, building finishes, ...)",
+    "colony_xp_x1.25": "planet XP of colonies x1.25 (+25 %)",
+}
+COLONY_XP_BOOST = {"colony_xp_x1.1": 1.10, "colony_xp_x1.25": 1.25}
+MINE_COST_KEYS = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant", "solar_plant"})
+LEVER_GATE_LEVEL = {"no_colony_chain": 1, "colony_gate_pl10": 10, "colony_gate_pl5": 5}
+LEVER_INCOME_FACTOR = 1.25
+LEVER_TIME_FACTOR = 0.01
 
 ECON_TECHS = ("energy_tech", "mining_tech", "crystal_tech", "buildtime_tech", "storage_tech")
+PROD_BUILDINGS = frozenset({"metal_mine", "crystal_mine", "solar_plant"})  # pj-policy/2 ranks these by payback
 
 NOT_MODELLED = [
     "Expeditions and their loot: only the XP sensitivity scenario S11-active-mid-exp6 grants expedition XP (6/day); ship/fuel upkeep and loot are never charged or granted.",
@@ -220,6 +254,7 @@ class Sandbox:
         self.conn = None
         self.user_id = 0
         self.home_planet_id = 0
+        self.colony_xp_boost = 1.0  # lever colony_xp_*: extra planet XP on colonies, granted through add_planet_xp
         self._coord_x = 700
         self._system_seq = 300
 
@@ -333,7 +368,19 @@ class Sandbox:
             now=SIM_EPOCH + float(t),
         )
         self.conn.commit()
-        return int(result.get("amount") or 0) if result.get("granted") else 0
+        got = int(result.get("amount") or 0) if result.get("granted") else 0
+        self._boost_colony_xp(int(planet_id), got)
+        return got
+
+    def _boost_colony_xp(self, planet_id: int, gained: int) -> None:
+        if self.colony_xp_boost <= 1.0 or gained <= 0 or int(planet_id) == self.home_planet_id:
+            return
+        extra = int(gained * (self.colony_xp_boost - 1.0))
+        if extra > 0:
+            from game.planet_evolution.planet_level import add_planet_xp
+
+            add_planet_xp(int(planet_id), extra, self.conn, reason="lever_colony_xp", skip_diversity=True)
+            self.conn.commit()
 
     def scan_status(self, planet_id: int, t: float) -> Dict[str, Any]:
         return dna_analysis.scan_status(int(planet_id), conn=self.conn, now=SIM_EPOCH + float(t))
@@ -345,6 +392,8 @@ class Sandbox:
             int(planet_id), player_id=self.user_id, now=SIM_EPOCH + float(t), conn=self.conn
         )
         row = self.conn.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (int(planet_id),)).fetchone()
+        xp = int((data or {}).get("xp_gained") or 0) if ok else 0
+        self._boost_colony_xp(int(planet_id), xp)
         return bool(ok), str(reason), float(row["metal"]), float(row["crystal"]), int((data or {}).get("xp_gained") or 0)
 
     def cap_check(self) -> Tuple[bool, str]:
@@ -510,6 +559,12 @@ class World:
     produced_c: float = 0.0
     produced_f: float = 0.0
     energy_low_by_climate_sec: float = 0.0
+    # exclusive time ledger (seconds since the world exists): busy + one cause per queue-empty interval
+    causes: Dict[str, float] = field(default_factory=dict)
+    lost_energy_m: float = 0.0
+    lost_energy_c: float = 0.0
+    lost_energy_f: float = 0.0
+    reserved: Optional[Tuple[str, int, int, int]] = None  # auto_start lever: next purchase waiting for funds
 
 
 @dataclass
@@ -523,6 +578,8 @@ class Scenario:
     expeditions_per_day: int = 0
     transit_sec: int = COLONY_TRANSIT_SEC
     rng_seed: Optional[int] = None  # sandbox homeworld placement/DNA; None = default seed
+    lever: str = "none"  # counterfactual lever (see LEVERS) - never a player route
+    strategy: str = "v1"  # v1 = pj-policy/1 (goal list + patience); v2 = pj-policy/2 (payback-ranked, saves for the best purchase)
 
 
 def _settings() -> Dict[str, float]:
@@ -554,6 +611,17 @@ class Journey:
         self.r_idle_cost_sec = 0.0
         self.r_idle_window_sec = 0.0
         self.r_idle_nothing_sec = 0.0
+        self.r_causes: Dict[str, float] = {}
+        self.r_reserved: Optional[Tuple[str, int, int, int, int]] = None
+        if scenario.lever not in LEVERS:
+            raise ValueError(f"unknown lever {scenario.lever!r}")
+        if scenario.strategy not in STRATEGY_VERSIONS:
+            raise ValueError(f"unknown strategy {scenario.strategy!r}")
+        self.lever = scenario.lever
+        self.sb.colony_xp_boost = COLONY_XP_BOOST.get(scenario.lever, 1.0)
+        self.colony_state = "init"
+        self.colony_state_sec: Dict[str, float] = {}
+        self._hyp_cache: Dict[Tuple[Any, ...], Tuple[float, float, float]] = {}
         self.research_needs: Dict[str, int] = {}
         self.worlds: List[World] = []
         self._stat_cache: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
@@ -637,21 +705,54 @@ class Journey:
         m_rate, c_rate = r.production_rates_per_sec()
         f_rate = r.fuel_cells_rate_per_sec()
         caps = r.get_storage_capacity()
+        ratio_eff, income = self._lever_scale(float(ratio))
+        free_storage = self.lever == "free_storage"
+        cap_mult = 1.1 if self.lever == "storage_cap_x1.1" else 1.0
         out = {
-            "ratio": float(ratio),
+            "ratio": float(ratio_eff),
+            "ratio_real": float(ratio),
             "supply": int(total),
             "demand": int(used),
-            "m_ps": float(m_rate) * ratio,
-            "c_ps": float(c_rate) * ratio,
-            "f_ps": float(f_rate) * ratio,
-            "cap_m": float(caps.get("metal", 10**12)),
-            "cap_c": float(caps.get("crystal", 10**12)),
-            "cap_f": float(caps.get("fuel_cells", 10**12)),
+            "m_ps": float(m_rate) * ratio_eff * income,
+            "c_ps": float(c_rate) * ratio_eff * income,
+            "f_ps": float(f_rate) * ratio_eff * income,
+            "cap_m": 1e18 if free_storage else float(caps.get("metal", 10**12)) * cap_mult,
+            "cap_c": 1e18 if free_storage else float(caps.get("crystal", 10**12)) * cap_mult,
+            "cap_f": 1e18 if free_storage else float(caps.get("fuel_cells", 10**12)) * cap_mult,
         }
         if len(self._stat_cache) > 4000:
             self._stat_cache.clear()
         self._stat_cache[key] = out
         return out
+
+    def ucost(self, key: str, level: int) -> Tuple[int, int]:
+        cm, cc = _upgrade_cost(key, level)
+        if self.lever == "mine_cost_x0.9" and key in MINE_COST_KEYS:
+            return int(cm * 0.9), int(cc * 0.9)
+        return cm, cc
+
+    def _lever_scale(self, ratio: float) -> Tuple[float, float]:
+        """(energy ratio used, income factor) after the counterfactual lever; identity for the baseline."""
+        ratio_eff = 1.0 if self.lever == "free_energy" else ratio
+        income = LEVER_INCOME_FACTOR if self.lever == "income_x1.25" else 1.0
+        return ratio_eff, income
+
+    def hyp_income(self, w: World, buildings: Dict[str, int], research: Optional[Dict[str, int]] = None) -> Tuple[float, float, float]:
+        """Hypothetical (metal, crystal, fuel) per second of `w` with other buildings/research (same EffectResolver path as stats())."""
+        rs = self.research if research is None else research
+        key = (w.slot, tuple(sorted(buildings.items())), tuple(sorted(rs.items())))
+        hit = self._hyp_cache.get(key)
+        if hit is None:
+            r = EffectResolver(dict(buildings), dict(rs), settings=self.settings, planet_position=w.slot)
+            total, used = r.compute_energy()
+            ratio_eff, income = self._lever_scale(float(EffectResolver.energy_ratio(total, used)))
+            m_rate, c_rate = r.production_rates_per_sec()
+            f_rate = r.fuel_cells_rate_per_sec()
+            hit = (float(m_rate) * ratio_eff * income, float(c_rate) * ratio_eff * income, float(f_rate) * ratio_eff * income)
+            if len(self._hyp_cache) > 20000:
+                self._hyp_cache.clear()
+            self._hyp_cache[key] = hit
+        return hit
 
     def eff_buildings(self, w: World) -> Dict[str, int]:
         eff = dict(w.buildings)
@@ -698,13 +799,16 @@ class Journey:
         return m, c, f
 
     def research_cost(self, tech: str, level: int) -> Tuple[int, int]:
+        if self.lever == "free_research_cost":
+            return 0, 0
+        scale = 0.9 if self.lever == "res_cost_x0.9" else 1.0
         ctx = self._ctx
         if ctx is None:
             m, c, _f = self.empire_hourly()
             ctx = (int(m + c), float(research_empire_maturity_index(self._world_levels())), len(self.worlds))
             self._ctx = ctx
         mm, cc = _research_payment(tech, int(level), ctx[0], ctx[1], ctx[2])
-        return int(mm), int(cc)
+        return int(mm * scale), int(cc * scale)
 
     def _world_levels(self) -> List[int]:
         return [self.sb.planet(w.planet_id)["level"] for w in self.worlds]
@@ -774,7 +878,7 @@ class Journey:
                 goals.append(("fuel_cell_plant", max(1, min(mine_avg // 3, 8))))
         # storage guard: never let the next mine/building cost exceed what the depot can hold
         lowest = "metal_mine" if L("metal_mine") <= L("crystal_mine") else "crystal_mine"
-        nm, nc = _upgrade_cost(lowest, L(lowest))
+        nm, nc = self.ucost(lowest, L(lowest))
         if nm > 0.9 * s["cap_m"]:
             goals.append(("metal_storage", L("metal_storage") + 1))
         if nc > 0.9 * s["cap_c"]:
@@ -799,6 +903,8 @@ class Journey:
         behind a hopeless purchase); if every goal is hopeless the nearest one is
         returned so the queue still waits for something.
         """
+        if self.sc.strategy == "v2":
+            return self.choose_build_v2(w)
         eff = self.eff_buildings(w)
         r = self._resolver(w, eff)
         s = self.stats(w)
@@ -816,11 +922,11 @@ class Journey:
                 continue
             if not has_building_requirements(eff, self.research, nxt):
                 continue
-            cm, cc = _upgrade_cost(nxt, cur)
+            cm, cc = self.ucost(nxt, cur)
             if cm > s["cap_m"] or cc > s["cap_c"]:
                 storage = "metal_storage" if cm > s["cap_m"] else "crystal_storage"
                 if int(eff.get(storage, 0)) < r.get_max_building_level(storage) and has_building_requirements(eff, self.research, storage):
-                    cm2, cc2 = _upgrade_cost(storage, int(eff.get(storage, 0)))
+                    cm2, cc2 = self.ucost(storage, int(eff.get(storage, 0)))
                     cand = (storage, int(eff.get(storage, 0)) + 1, int(cm2), int(cc2))
                 else:
                     self.block("storage_cap_below_cost", f"{nxt} L{cur + 1} on world {w.idx}")
@@ -832,6 +938,149 @@ class Journey:
                 return cand
             if math.isfinite(wait) and (fallback is None or wait < fallback[0]):
                 fallback = (wait, cand)
+        return fallback[1] if fallback else None
+
+    # -- pj-policy/2: payback-ranked purchases, saving for the best one -------------
+    # Same goals, prerequisites, costs, queue depth and action windows as pj-policy/1 (so it is a legal
+    # play pattern); only the choice differs: among income purchases take the lowest
+    # (time-to-afford + payback), save for it instead of buying cheaper filler, and let the canonical
+    # energy model (solar vs mine) and the depot rule decide the priority dynamically.
+    def _build_candidates_v2(self, w: World, eff: Dict[str, int]) -> List[Tuple[Tuple[str, int, int, int], str]]:
+        r = self._resolver(w, eff)
+        s = self.stats(w)
+        goals = list(self.build_goals(w, eff))
+        if not w.outpost:
+            goals.append(("solar_plant", int(eff.get("solar_plant", 0)) + 1))
+        out: List[Tuple[Tuple[str, int, int, int], str]] = []
+        seen: set = set()
+        for key, level in goals:
+            if w.outpost and key not in OUTPOST_ALLOWED_BUILDINGS:
+                continue
+            nxt = self.step_toward(key, level, eff)
+            if nxt is None:
+                continue
+            if w.outpost and nxt not in OUTPOST_ALLOWED_BUILDINGS:
+                continue
+            cur = int(eff.get(nxt, 0))
+            if cur >= r.get_max_building_level(nxt):
+                continue
+            if not has_building_requirements(eff, self.research, nxt):
+                continue
+            cm, cc = self.ucost(nxt, cur)
+            if cm > s["cap_m"] or cc > s["cap_c"]:
+                storage = "metal_storage" if cm > s["cap_m"] else "crystal_storage"
+                if int(eff.get(storage, 0)) < r.get_max_building_level(storage) and has_building_requirements(eff, self.research, storage):
+                    cm2, cc2 = self.ucost(storage, int(eff.get(storage, 0)))
+                    cand = (storage, int(eff.get(storage, 0)) + 1, int(cm2), int(cc2))
+                else:
+                    self.block("storage_cap_below_cost", f"{nxt} L{cur + 1} on world {w.idx}")
+                    continue
+            else:
+                cand = (nxt, cur + 1, int(cm), int(cc))
+            if cand[0] in seen:
+                continue
+            seen.add(cand[0])
+            if w.outpost:
+                kind = "enabler"
+            elif cand[0].endswith("_storage"):
+                kind = "storage"
+            elif cand[0] in PROD_BUILDINGS:
+                kind = "prod"
+            elif cand[0] == "nanofactory":
+                kind = "neutral"
+            else:
+                kind = "enabler"
+            out.append((cand, kind))
+        return out
+
+    def shadow_prices(self, w: World, cm: float, cc: float) -> Tuple[float, float]:
+        """Dynamic priority by bottleneck: the resource that takes longer to produce for this purchase is priced 1,
+        the slack one low (a surplus crystal that overflows the depot is worth little)."""
+        s = self.stats(w)
+        tm = cm / s["m_ps"] if s["m_ps"] > 0 else math.inf
+        tc = cc / s["c_ps"] if s["c_ps"] > 0 else math.inf
+        return (1.0, SLACK_PRICE) if tm >= tc else (SLACK_PRICE, 1.0)
+
+    def choose_build_v2(self, w: World) -> Optional[Tuple[str, int, int, int]]:
+        eff = self.eff_buildings(w)
+        best: Optional[Tuple[float, Tuple[str, int, int, int]]] = None
+        fallback: Optional[Tuple[float, Tuple[str, int, int, int]]] = None
+        base = None
+        for cand, kind in self._build_candidates_v2(w, eff):
+            wait = self.afford_wait(w, cand[2], cand[3])
+            if not math.isfinite(wait):
+                continue
+            if kind in ("enabler", "storage"):
+                if wait <= PATIENCE_V2_SEC:
+                    return cand
+            elif kind == "prod":
+                if base is None:
+                    base = self.hyp_income(w, eff)
+                after = self.hyp_income(w, {**eff, cand[0]: cand[1]})
+                pm, pc = self.shadow_prices(w, cand[2], cand[3])
+                gain = pm * (after[0] - base[0]) + pc * (after[1] - base[1])
+                if gain > 0:
+                    score = wait + (pm * cand[2] + pc * cand[3]) / gain
+                    if best is None or score < best[0]:
+                        best = (score, cand)
+                    continue
+            if fallback is None or wait < fallback[0]:
+                fallback = (wait, cand)
+        if best is not None:
+            return best[1]
+        return fallback[1] if fallback else None
+
+    def choose_research_v2(self) -> Optional[Tuple[str, int, int, int, int]]:
+        hw = self.hw()
+        eff = self.eff_buildings(hw)
+        queued = {j.key: j.target for j in self.rqueue}
+        best: Optional[Tuple[float, Tuple[str, int, int, int, int]]] = None
+        fallback: Optional[Tuple[float, Tuple[str, int, int, int, int]]] = None
+        established = [x for x in self.worlds if not x.outpost]
+        goals = self.research_goals()
+        must_n = int(getattr(self, "_must_goals", 0))
+        for gi, (tech0, level) in enumerate(goals):
+            cur0 = max(int(self.research.get(tech0, 0)), int(queued.get(tech0, 0)))
+            cur = cur0
+            if cur >= level or tech0 not in RESEARCH_TECHS:
+                continue
+            tech, level, cur = self.resolve_research_prereq(tech0, level, cur, queued)
+            if tech is None:
+                continue
+            if not has_research_requirements(eff, {**self.research, **queued}, tech):
+                req = RESEARCH_TECHS[tech].get("requirements") or {}
+                for b, bl in (req.get("buildings") or {}).items():
+                    if b == "research_lab" and int(eff.get(b, 0)) < int(bl):
+                        self.lab_need = max(int(self.lab_need), int(bl))
+                continue
+            cm, cc = self.research_cost(tech, cur + 1)
+            payer, wait = self.best_payer(cm, cc)
+            s = self.stats(payer)
+            cand = (tech, cur + 1, cm, cc, payer.idx)
+            if cm > s["cap_m"] or cc > s["cap_c"]:
+                return (tech, cur + 1, cm, cc, hw.idx)
+            if not math.isfinite(wait):
+                continue
+            if gi >= must_n:
+                trial = {**self.research, tech0: cur0 + 1}  # value of the economy tech this purchase leads to
+                pm, pc = self.shadow_prices(payer, cm, cc)
+                gain = 0.0
+                for x in established:
+                    b = self.eff_buildings(x)
+                    now = self.hyp_income(x, b)
+                    nxt_ = self.hyp_income(x, b, trial)
+                    gain += pm * (nxt_[0] - now[0]) + pc * (nxt_[1] - now[1])
+                if gain > 0:
+                    score = wait + (pm * cm + pc * cc) / gain
+                    if best is None or score < best[0]:
+                        best = (score, cand)
+                    continue
+            elif wait <= 3 * PATIENCE_V2_SEC:  # required for a gate / ship / mandate: a planner saves up to three days for it
+                return cand
+            if fallback is None or wait < fallback[0]:
+                fallback = (wait, cand)
+        if best is not None:
+            return best[1]
         return fallback[1] if fallback else None
 
     @staticmethod
@@ -854,6 +1103,10 @@ class Journey:
         dur = float(r.get_build_time_seconds(job.key, job.target))
         if self.is_resonating(w):
             dur *= 1.0 - self.reduction
+        if self.lever == "instant_build":
+            dur *= LEVER_TIME_FACTOR
+        elif self.lever == "build_time_x0.88":
+            dur *= 0.88
         return max(1.0, dur)
 
     def is_resonating(self, w: World) -> bool:
@@ -963,6 +1216,7 @@ class Journey:
             slots = len(self.worlds)  # next expansion index == worlds already owned (HW counts as 0)
             gate = EXPANSION_SLOT_GATES[min(slots, len(EXPANSION_SLOT_GATES)) - 1] if slots >= 1 else EXPANSION_SLOT_GATES[0]
             goals.append((INTERSTELLAR_EXPANSION_TECH, int(gate["expansion_tech"])))
+        self._must_goals = len(goals)  # everything before the economy pool is required by a gate / ship / mandate
         hw = self.hw()
         mine_avg = (hw.buildings.get("metal_mine", 0) + hw.buildings.get("crystal_mine", 0)) // 2
         cap = max(2, mine_avg + 4)
@@ -986,6 +1240,8 @@ class Journey:
         return None, level, cur
 
     def choose_research(self) -> Optional[Tuple[str, int, int, int, int]]:
+        if self.sc.strategy == "v2":
+            return self.choose_research_v2()
         hw = self.hw()
         eff = self.eff_buildings(hw)
         queued = {j.key: j.target for j in self.rqueue}
@@ -1039,12 +1295,71 @@ class Journey:
             self.rqueue.append(Job(self.next_id(), "research", tech, target, cm, cc, "research", payer.idx))
             self.start_research()
 
+    # -- auto_start lever (simulation only): reserve the next unaffordable purchase -------------
+    def enqueue_research(self, tech: str, target: int, cm: int, cc: int, pidx: int) -> None:
+        payer = self.worlds[pidx]
+        payer.metal -= cm
+        payer.crystal -= cc
+        self.spend["research"] += cm
+        self.spend_c["research"] += cc
+        self.rqueue.append(Job(self.next_id(), "research", tech, target, cm, cc, "research", payer.idx))
+        self.start_research()
+
+    def reserve_next(self) -> None:
+        """The player queues what they want next even if it is not affordable yet; the game starts it when funds arrive."""
+        if self.lever != "auto_start":
+            return
+        for w in self.worlds:
+            w.reserved = None
+            if len(w.queue) < self.build_limit:
+                pick = self.choose_build(w)
+                if pick is not None and (w.metal + EPS < pick[2] or w.crystal + EPS < pick[3]):
+                    w.reserved = pick
+        self.r_reserved = None
+        if len(self.rqueue) < min(self.research_limit, self.policy.queue_fill):
+            rp = self.choose_research()
+            if rp is not None:
+                payer = self.worlds[rp[4]]
+                s = self.stats(payer)
+                if rp[2] <= s["cap_m"] and rp[3] <= s["cap_c"] and (payer.metal + EPS < rp[2] or payer.crystal + EPS < rp[3]):
+                    self.r_reserved = rp
+
+    def start_reserved(self) -> None:
+        if self.lever != "auto_start":
+            return
+        for w in self.worlds:
+            r = w.reserved
+            if r is None or len(w.queue) >= self.build_limit:
+                continue
+            key, target, cm, cc = r
+            cur = max([int(w.buildings.get(key, 0))] + [j.target for j in w.queue if j.key == key])
+            if target != cur + 1:
+                w.reserved = None
+            elif w.metal + EPS >= cm and w.crystal + EPS >= cc:
+                w.reserved = None
+                self.enqueue_build(w, key, target, cm, cc)
+        rr = self.r_reserved
+        if rr is not None and len(self.rqueue) < min(self.research_limit, self.policy.queue_fill):
+            tech, target, cm, cc, pidx = rr
+            queued = max([int(self.research.get(tech, 0))] + [j.target for j in self.rqueue if j.key == tech])
+            payer = self.worlds[pidx]
+            if target != queued + 1:
+                self.r_reserved = None
+            elif payer.metal + EPS >= cm and payer.crystal + EPS >= cc:
+                self.r_reserved = None
+                self.enqueue_research(tech, target, cm, cc, pidx)
+
     def start_research(self) -> None:
         if self.rqueue and self.rqueue[0].start is None:
             job = self.rqueue[0]
             r = self._resolver(self.hw(), self.hw().buildings)
             job.start = self.t
-            job.finish = self.t + max(1.0, float(r.get_research_time_seconds(job.key, job.target)))
+            dur = float(r.get_research_time_seconds(job.key, job.target))
+            if self.lever == "instant_research":
+                dur *= LEVER_TIME_FACTOR
+            elif self.lever == "research_time_x0.88":
+                dur *= 0.88
+            job.finish = self.t + max(1.0, dur)
 
     def finish_research(self, job: Job) -> None:
         if job.jid in self.completed_ids:
@@ -1397,6 +1712,7 @@ class Journey:
             if w.outpost and not w.package_sent:
                 self.send_package(w)
         if self.ark or len(self.worlds) >= self.target_worlds:
+            self.colony_state = "ark_building_or_flying" if self.ark else "target_reached"
             return
         if self.policy.continuous and self.t + EPS < self._gate_next:
             return  # an always-online player re-checks the expansion gates hourly
@@ -1405,12 +1721,14 @@ class Journey:
         ok_cap, cap_reason = self.sb.cap_check()
         if not ok_cap:
             self.block(cap_reason)
+            self.colony_state = f"gate:{cap_reason or 'cap'}"
             return
         if self._next_colony_binding is None:
             self._next_colony_binding = self.sb.next_binding()
         ok_gate, gate_reason, _meta = self.sb.expansion_gate(self._next_colony_binding.get("world_type"))
         if not ok_gate:
             self.block(gate_reason)
+            self.colony_state = f"gate:{gate_reason}"
             return
         ship = get_ship("seed_ark") or {}
         req = ship.get("requirements") or {}
@@ -1419,16 +1737,25 @@ class Journey:
         )
         if missing:
             self.block("seed_ark_prerequisites")
+            self.colony_state = "seed_ark_prerequisites"
             return
         cost = ship.get("build_cost") or {}
         cm, cc, cf = int(cost.get("metal", 0)), int(cost.get("crystal", 0)), int(cost.get("fuel_cells", 0))
         s = self.stats(hw)
         if cf > s["cap_f"] or cm > s["cap_m"] or cc > s["cap_c"]:
             self.block("storage_cap_below_cost", "seed ark vs depot capacity")
+            self.colony_state = "seed_ark_storage_cap_below_cost"
             return
         if hw.metal + EPS < cm or hw.crystal + EPS < cc or hw.fuel + EPS < cf:
             self.block("seed_ark_unaffordable")
+            waits = {
+                "metal": max(0.0, cm - hw.metal) / s["m_ps"] if s["m_ps"] > 0 else math.inf,
+                "crystal": max(0.0, cc - hw.crystal) / s["c_ps"] if s["c_ps"] > 0 else math.inf,
+                "fuel": max(0.0, cf - hw.fuel) / s["f_ps"] if s["f_ps"] > 0 else (math.inf if cf > hw.fuel else 0.0),
+            }
+            self.colony_state = "seed_ark_unaffordable:" + max(waits, key=lambda k: waits[k])
             return
+        self.colony_state = "ark_building_or_flying"
         hw.metal -= cm
         hw.crystal -= cc
         hw.fuel -= cf
@@ -1529,6 +1856,16 @@ class Journey:
             cands.append(float(self.ship_build["ready"]))
         for m in self.missions:
             cands.append(float(m["arrive"]))
+        if self.lever == "auto_start":
+            for w in self.worlds:
+                if w.reserved is not None:
+                    wait = self.afford_wait(w, w.reserved[2], w.reserved[3])
+                    if math.isfinite(wait):
+                        cands.append(self.t + wait + 1.0)
+            if self.r_reserved is not None:
+                wait = self.afford_wait(self.worlds[self.r_reserved[4]], self.r_reserved[2], self.r_reserved[3])
+                if math.isfinite(wait):
+                    cands.append(self.t + wait + 1.0)
         if self.asc:
             cands.append(float(self.asc["finish_sim"]))
         if self.boss:
@@ -1541,18 +1878,48 @@ class Journey:
             cands.append(self.wake)
         return max(self.t, min(cands))
 
+    @staticmethod
+    def _add(ledger: Dict[str, float], key: str, sec: float) -> None:
+        if sec > 0:
+            ledger[key] = ledger.get(key, 0.0) + sec
+
+    def _wait_split(self, ledger: Dict[str, float], w: World, cm: float, cc: float, cost_part: float, storage_target: bool) -> None:
+        """Split a resource-wait interval into energy drag and the binding resource (pure observation, no state change)."""
+        s = self.stats(w)
+        ratio = s["ratio"]
+        energy_part = cost_part * (1.0 - ratio) if 0.0 < ratio < 1.0 else 0.0
+        pure = cost_part - energy_part
+        self._add(ledger, "wait_energy_drag", energy_part)
+        if storage_target:
+            self._add(ledger, "wait_storage_build", pure)
+            return
+        need_m = max(0.0, cm - w.metal)
+        need_c = max(0.0, cc - w.crystal)
+        wm = need_m / s["m_ps"] if s["m_ps"] > 0 else (math.inf if need_m > 0 else 0.0)
+        wc = need_c / s["c_ps"] if s["c_ps"] > 0 else (math.inf if need_c > 0 else 0.0)
+        self._add(ledger, "wait_metal" if wm >= wc else "wait_crystal", pure)
+
     def classify_idle(self, w: World, dt: float) -> None:
         if w.queue:
             w.build_busy_sec += dt
+            self._add(w.causes, "busy", dt)
             return
         pick = self.choose_build(w)
         if pick is None:
             w.idle_nothing_sec += dt
+            if self.research_needs:
+                self._add(w.causes, "research_prerequisite", dt)
+            elif self.blockers.get("storage_cap_below_cost", {}).get("last_day") == int(self.t // DAY):
+                self._add(w.causes, "storage_cap_below_cost", dt)
+            else:
+                self._add(w.causes, "no_goal", dt)
             return
         wait = self.afford_wait(w, pick[2], pick[3])
         cost_part = min(dt, wait if math.isfinite(wait) else dt)
         w.idle_cost_sec += cost_part
         w.idle_window_sec += dt - cost_part
+        self._wait_split(w.causes, w, pick[2], pick[3], cost_part, pick[0].endswith("_storage"))
+        self._add(w.causes, "player_not_acting", dt - cost_part)
 
     def advance(self, dt: float) -> None:
         if dt <= 0:
@@ -1563,6 +1930,10 @@ class Journey:
             self.classify_idle(w, dt)
             if s["ratio"] < ENERGY_LOW_RATIO:
                 w.energy_low_sec += dt
+            if 0.0 < s["ratio"] < 1.0:
+                w.lost_energy_m += s["m_ps"] * (1.0 / s["ratio"] - 1.0) * dt
+                w.lost_energy_c += s["c_ps"] * (1.0 / s["ratio"] - 1.0) * dt
+                w.lost_energy_f += s["f_ps"] * (1.0 / s["ratio"] - 1.0) * dt
             full = 0.0
             for attr, ps, cap, prod, waste in (
                 ("metal", s["m_ps"], s["cap_m"], "produced_m", "wasted_m"),
@@ -1584,19 +1955,27 @@ class Journey:
         # research queue occupancy
         if self.rqueue:
             self.r_busy_sec += dt
+            self._add(self.r_causes, "busy", dt)
         else:
             pick = self.choose_research()
             if pick is None:
                 self.r_idle_nothing_sec += dt
+                self._add(self.r_causes, "no_goal", dt)
             else:
-                wait = self.afford_wait(self.worlds[pick[4]], pick[2], pick[3])
+                payer = self.worlds[pick[4]]
+                wait = self.afford_wait(payer, pick[2], pick[3])
                 part = min(dt, wait if math.isfinite(wait) else dt)
                 self.r_idle_cost_sec += part
                 self.r_idle_window_sec += dt - part
+                self._wait_split(self.r_causes, payer, pick[2], pick[3], part, False)
+                self._add(self.r_causes, "player_not_acting", dt - part)
+        if self.sc.topology == "S11":
+            self._add(self.colony_state_sec, self.colony_state, dt)
         self.t += dt
 
     def process_events(self) -> None:
         progressed = True
+        self.start_reserved()
         while progressed:
             progressed = False
             for w in self.worlds:
@@ -1630,6 +2009,7 @@ class Journey:
             w = self.worlds[cv["world"]]
             w.metal += cv["m"]
             w.crystal += cv["c"]
+        self.start_reserved()
 
     def act(self) -> None:
         for w in self.worlds[1:]:
@@ -1647,6 +2027,7 @@ class Journey:
         for w in self.worlds:
             self.fill_build_queue(w)
         self.fill_research_queue()
+        self.reserve_next()
         self.mandate_step()
         self.colonization_step()
         self.update_wake()
@@ -1752,6 +2133,15 @@ class Journey:
                             "storage_full_days": round(w.storage_full_sec / DAY, 2),
                             "wasted_metal": int(w.wasted_m),
                             "wasted_crystal": int(w.wasted_c),
+                            "wasted_fuel": int(w.wasted_f),
+                            "produced_metal": int(w.produced_m),
+                            "produced_crystal": int(w.produced_c),
+                            "produced_fuel": int(w.produced_f),
+                            "lost_to_energy_metal": int(w.lost_energy_m),
+                            "lost_to_energy_crystal": int(w.lost_energy_c),
+                            "lost_to_energy_fuel": int(w.lost_energy_f),
+                            "age_sec": round(self.t - w.founded_at, 3),
+                            "time_ledger_sec": {k: round(v, 3) for k, v in sorted(w.causes.items())},
                             "queue_busy_pct": round(100 * w.build_busy_sec / span, 1),
                             "idle_waiting_cost_pct": round(100 * w.idle_cost_sec / span, 1),
                             "idle_waiting_player_pct": round(100 * w.idle_window_sec / span, 1),
@@ -1770,6 +2160,9 @@ class Journey:
                         for i, w in enumerate(self.worlds)
                     ],
                     "research": dict(sorted(self.research.items())),
+                    "research_time_ledger_sec": {k: round(v, 3) for k, v in sorted(self.r_causes.items())},
+                    "colony_pipeline_sec": {k: round(v, 3) for k, v in sorted(self.colony_state_sec.items())},
+                    "elapsed_sec": round(self.t, 3),
                     "research_queue_busy_pct": round(100 * self.r_busy_sec / span, 1),
                     "research_idle_waiting_cost_pct": round(100 * self.r_idle_cost_sec / span, 1),
                     "research_idle_waiting_player_pct": round(100 * self.r_idle_window_sec / span, 1),
@@ -1826,6 +2219,10 @@ class Journey:
             "home_climate": self.sc.climate,
             "trait_scenario": self.sc.trait,
             "trait_label": TRAIT_SCENARIOS[self.sc.trait]["label"],
+            "lever": self.sc.lever,
+            "lever_label": LEVERS[self.sc.lever],
+            "strategy": self.sc.strategy,
+            "policy_version": STRATEGY_VERSIONS[self.sc.strategy],
             "days": self.sc.days,
             "expeditions_per_day": self.sc.expeditions_per_day,
             "transit_sec": self.sc.transit_sec,
@@ -2004,9 +2401,25 @@ def economy_curve(curve: str):
         yield
 
 
+@contextlib.contextmanager
+def lever_context(lever: str):
+    """Sandbox-only patches for levers that act on canonical rules (restored on exit; never a game change)."""
+    if lever in LEVER_GATE_LEVEL:
+        import game.planet_evolution.expansion_protocol as ep
+
+        old = ep.COLONY_MATURITY_REQUIRED_LEVEL
+        ep.COLONY_MATURITY_REQUIRED_LEVEL = LEVER_GATE_LEVEL[lever]
+        try:
+            yield
+        finally:
+            ep.COLONY_MATURITY_REQUIRED_LEVEL = old
+    else:
+        yield
+
+
 def run_scenario(sc: Scenario, curve: str = "uni1") -> Dict[str, Any]:
     started = time.time()
-    with economy_curve(curve), Sandbox(sc.rng_seed) as sb:
+    with economy_curve(curve), lever_context(sc.lever), Sandbox(sc.rng_seed) as sb:
         result = Journey(sc, sb).run()
     result["wall_seconds"] = round(time.time() - started, 1)
     result["economy_curve"] = curve

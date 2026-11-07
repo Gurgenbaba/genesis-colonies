@@ -85,6 +85,8 @@ Imperial Mandates are modelled with real prerequisites (2 canonical expedition s
 
 Still open and listed in the report under *Not modelled*: expeditions and loot beyond the XP sensitivity run, applied Timekeeper skips, real fleet transport (flat package after a fixed transit), per-planet mechanics flags and live trait effects (so a separate "common trait" run would be identical to the zero-trait run), Trader, military sinks and Ascension rebuilds. The candidate resonance only shortens construction duration in the sandbox; R3 is not enabled anywhere.
 
+The progression-bottleneck follow-up (`docs/GC_PROGRESSION_BOTTLENECKS.md`, generated tables in `docs/GC_PROGRESSION_BOTTLENECK_REPORT.md`) adds an exclusive time ledger, counterfactual levers and an improved legal policy `pj-policy/2`. Headline for R3: a 5-12 % **build-time** resonance cannot matter (the queue waits for resources, not timers); equal-strength effects on colony planet XP and production-building upgrade cost are the ones with a measurable impact. The gate below still applies unchanged.
+
 ## Decision gate
 
 Do not merge live resonance modifiers until both real player trajectories and the optimistic upper bound are reported side by side, and the effect on 6/12-month rank dispersion, queue utilization and solo-vs-eleven disparity is quantified.
