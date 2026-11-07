@@ -52,13 +52,18 @@ if str(ROOT) not in sys.path:
 from game.buildings import (  # noqa: E402
     ALL_BUILDINGS,
     BUILDING_REQUIREMENTS,
+    _effective_building_queue_cap,
+    _nodebuster_rebuild_bps,
     _resolve_build_queue_limit,
+    _scale_bps,
     get_upgrade_cost,
     has_building_requirements,
 )
 from game.economy_balance import research_empire_maturity_index  # noqa: E402
 from game.effects import EffectResolver  # noqa: E402
 from game.fleet_defs import get_ship  # noqa: E402
+from game.mine_evolution import nodebuster as nodebuster_mod  # noqa: E402
+from game.mine_evolution.formulas import EVOLVABLE_MINES  # noqa: E402
 from game.mine_evolution.nodebuster import ascension_points_for_depth  # noqa: E402
 from game.models import DEFAULT_GAME_SETTINGS  # noqa: E402
 from game.planet_evolution import dna_analysis  # noqa: E402
@@ -84,6 +89,7 @@ from game.research import (  # noqa: E402
     has_research_requirements,
 )
 from game.shipyard import production_level_cycle_seconds  # noqa: E402
+from game.time_floors import building_progress_floor_seconds  # noqa: E402
 
 _upgrade_cost = functools.lru_cache(maxsize=None)(get_upgrade_cost)
 _research_payment = functools.lru_cache(maxsize=200_000)(
@@ -150,6 +156,47 @@ LEVER_GATE_LEVEL = {"no_colony_chain": 1, "colony_gate_pl10": 10, "colony_gate_p
 LEVER_INCOME_FACTOR = 1.25
 LEVER_TIME_FACTOR = 0.01
 
+# Mine Ascension model (asc-model/1).  The canonical owners ``game.mine_evolution.nodebuster.ascend_mine`` and
+# ``purchase_skill`` perform every reset / AP grant / skill purchase against the sandbox DB; the simulator only
+# decides WHEN to call them.  Scenario.asc selects the mine rule set and the ascension policy:
+ASC_MODEL_VERSION = "asc-model/1"
+PRE_NODEBUSTER_MINE_CEILING = 200  # 50 base + 50 planet-core nexus + 2 x 50 geothermal nexus: the resolver cap the pj/1 policy was built around
+ASC_EXTRA_CHECKPOINT_DAYS: Tuple[float, ...] = (730, 1095, 1460, 2190)  # full snapshots of Ascension scenarios (24 months and the extended exploration)
+ASC_MINES = ("metal_mine", "crystal_mine")  # the fuel plant never reaches the L200 activation level in these journeys
+ASC_MODES: Dict[str, str] = {
+    "legacy": "pj/1 behaviour: the resolver's nexus cap (L200) stops the mines; no Ascension (reference, kept for comparability with the bottleneck report)",
+    "never": "canonical Nodebuster queue rules (no mine cap) and the player never ascends: keep building",
+    "T<n>": "canonical rules; each production mine ascends the first time it is at level >= n (n >= 200) with an empty mine queue; one mine per planet rebuilds at a time",
+}
+ASC_SKILL_ORDERS: Dict[str, Tuple[str, ...]] = {
+    # strict priority: buy the first available skill of the list as soon as the AP are there (save otherwise)
+    "rebuild_first": (
+        "frugal_rebuild", "rapid_rebuild", "reconstruction", "deep_yield", "deep_storage", "overdrive",
+        "core_resonance", "legacy_reconstruction", "breakthrough_window", "singularity_excavation",
+        "optimized_energy", "load_balancing",
+    ),
+    "yield_first": (
+        "deep_yield", "deep_storage", "frugal_rebuild", "rapid_rebuild", "reconstruction", "overdrive",
+        "core_resonance", "legacy_reconstruction", "breakthrough_window", "singularity_excavation",
+        "optimized_energy", "load_balancing",
+    ),
+}
+
+
+def parse_asc_mode(mode: str) -> Tuple[bool, Optional[int]]:
+    """(mines_uncapped, ascension depth threshold or None)."""
+    if mode == "legacy":
+        return False, None
+    if mode == "never":
+        return True, None
+    if mode.startswith("T") and mode[1:].isdigit():
+        depth = int(mode[1:])
+        if depth < nodebuster_mod.ASCENSION_MIN_LEVEL:
+            raise ValueError(f"ascension threshold below the canonical activation level: {mode!r}")
+        return True, depth
+    raise ValueError(f"unknown ascension mode {mode!r}")
+
+
 ECON_TECHS = ("energy_tech", "mining_tech", "crystal_tech", "buildtime_tech", "storage_tech")
 PROD_BUILDINGS = frozenset({"metal_mine", "crystal_mine", "solar_plant"})  # pj-policy/2 ranks these by payback
 
@@ -160,7 +207,7 @@ NOT_MODELLED = [
     "Real fleet transport: colony supply is a flat package delivered after a fixed transit (assumption), transport ships are not charged.",
     "Per-planet mechanics flags (world-type start multipliers, trait effects, specialisations, policies) other than the candidate R3 resonance toggle.",
     "Trader/exchange, military sinks, defence, galactic directives, discoveries/events XP and planet research XP.",
-    "Mine Ascension rebuilds: AP is reported as potential (ascension_points_for_depth) but no reset is performed.",
+    "Mine Ascension: the reset, AP grant, skill purchases and rebuild discounts run through the canonical nodebuster owners only in scenarios with asc != legacy (asc-model/1); legacy scenarios report AP as potential only. Research-Lab Ascension, Stellar Forge and Ascension-skill resets are not modelled.",
     "Research queue beyond the canonical default limit; research is paid from the best-stocked established world (assumption: the player switches planet context), labs/academy bonuses come from the homeworld.",
 ]
 
@@ -355,6 +402,27 @@ class Sandbox:
             [v for _, v in sets] + [int(planet_id)],
         )
         self.conn.commit()
+
+    # -- Mine Ascension (canonical owners; the sandbox DB is the single source of truth for AP / ranks) --------------
+    def planet_row(self, planet_id: int) -> Dict[str, Any]:
+        row = self.conn.execute("SELECT * FROM planets WHERE id = ?;", (int(planet_id),)).fetchone()
+        return dict(row)
+
+    def ascend_mine(self, planet_id: int, building_type: str) -> Tuple[bool, str, Dict[str, Any]]:
+        """`nodebuster.ascend_mine` exactly as the endpoint calls it (reset, AP grant, best depth)."""
+        self.conn.commit()
+        ok, reason, data = nodebuster_mod.ascend_mine(self.user_id, self.planet_row(planet_id), str(building_type))
+        self.conn.commit()
+        return bool(ok), str(reason), dict(data or {})
+
+    def buy_skill(self, planet_id: int, building_type: str, skill_key: str) -> Tuple[bool, str, Dict[str, Any]]:
+        self.conn.commit()
+        ok, reason, data = nodebuster_mod.purchase_skill(self.user_id, self.planet_row(planet_id), str(building_type), str(skill_key))
+        self.conn.commit()
+        return bool(ok), str(reason), dict(data or {})
+
+    def asc_profiles(self, planet_id: int) -> Dict[str, Dict[str, Any]]:
+        return nodebuster_mod.get_profiles_for_planet(int(planet_id), conn=self.conn)
 
     def grant_xp(self, source_key: str, planet_id: int, t: float, idem: str) -> int:
         from game.activity_xp import grant_activity_xp
@@ -565,6 +633,7 @@ class World:
     lost_energy_c: float = 0.0
     lost_energy_f: float = 0.0
     reserved: Optional[Tuple[str, int, int, int]] = None  # auto_start lever: next purchase waiting for funds
+    asc_any: bool = False  # a mine of this world has ascended: the resolver then reads the Nodebuster state of the sandbox DB
 
 
 @dataclass
@@ -580,6 +649,8 @@ class Scenario:
     rng_seed: Optional[int] = None  # sandbox homeworld placement/DNA; None = default seed
     lever: str = "none"  # counterfactual lever (see LEVERS) - never a player route
     strategy: str = "v1"  # v1 = pj-policy/1 (goal list + patience); v2 = pj-policy/2 (payback-ranked, saves for the best purchase)
+    asc: str = "legacy"  # mine rule set / Ascension policy, see ASC_MODES
+    asc_skills: str = "rebuild_first"  # AP spending order, see ASC_SKILL_ORDERS
 
 
 def _settings() -> Dict[str, float]:
@@ -618,6 +689,17 @@ class Journey:
         if scenario.strategy not in STRATEGY_VERSIONS:
             raise ValueError(f"unknown strategy {scenario.strategy!r}")
         self.lever = scenario.lever
+        self.mines_uncapped, self.asc_depth = parse_asc_mode(scenario.asc)
+        if scenario.asc_skills not in ASC_SKILL_ORDERS:
+            raise ValueError(f"unknown skill order {scenario.asc_skills!r}")
+        self.asc_ver = 0  # bumps with every canonical Ascension mutation (cache key of everything state-dependent)
+        self._probe_caches: Dict[int, Dict[tuple, Any]] = {}
+        self._profile_cache: Dict[Tuple[int, int], Dict[str, Dict[str, Any]]] = {}
+        self.asc_runs: List[Dict[str, Any]] = []
+        self.asc_skill_log: List[Dict[str, Any]] = []
+        self.asc_rejections: Dict[str, int] = {}
+        self.asc_open: Dict[Tuple[int, str], Dict[str, Any]] = {}
+        self.asc_peak: Dict[Tuple[int, str], int] = {}
         self.sb.colony_xp_boost = COLONY_XP_BOOST.get(scenario.lever, 1.0)
         self.colony_state = "init"
         self.colony_state_sec: Dict[str, float] = {}
@@ -691,11 +773,48 @@ class Journey:
         self.worlds.append(w)
 
     # -- economy helpers ------------------------------------------------------
+    def _new_resolver(self, w: World, buildings: Dict[str, int], research: Dict[str, int]) -> EffectResolver:
+        """EffectResolver of a world.  After the first Ascension of a world the resolver is bound to the sandbox planet,
+        so the canonical Nodebuster hooks (production / rebuild surge / tail, storage, energy) read the real state."""
+        if not w.asc_any:
+            return EffectResolver(dict(buildings), dict(research), settings=self.settings, planet_position=w.slot)
+        cache = self._probe_caches.setdefault(w.planet_id, {})
+        return EffectResolver(
+            dict(buildings),
+            dict(research),
+            settings=self.settings,
+            planet_position=w.slot,
+            planet_id=w.planet_id,
+            conn=self.sb.conn,
+            external_probe_cache=cache,
+        )
+
     def _resolver(self, w: World, buildings: Dict[str, int]) -> EffectResolver:
-        return EffectResolver(dict(buildings), dict(self.research), settings=self.settings, planet_position=w.slot)
+        return self._new_resolver(w, buildings, self.research)
+
+    def asc_key(self, w: World) -> int:
+        return self.asc_ver if w.asc_any else 0
+
+    def profiles(self, w: World) -> Dict[str, Dict[str, Any]]:
+        """Canonical Nodebuster state of a world (ascension counts, AP, best depth, skill ranks)."""
+        key = (w.planet_id, self.asc_ver)
+        hit = self._profile_cache.get(key)
+        if hit is None:
+            hit = self.sb.asc_profiles(w.planet_id)
+            if len(self._profile_cache) > 512:
+                self._profile_cache.clear()
+            self._profile_cache[key] = hit
+        return hit
+
+    def max_level(self, w: World, r: EffectResolver, key: str) -> int:
+        """Authoritative enqueue cap: the canonical queue owner under Nodebuster (no mine / solar cap), else the resolver cap."""
+        base = int(r.get_max_building_level(key))
+        if self.mines_uncapped and (key in EVOLVABLE_MINES or key == "solar_plant"):
+            return int(_effective_building_queue_cap(key, base, planet_id=w.planet_id, conn=self.sb.conn))
+        return base
 
     def stats(self, w: World) -> Dict[str, Any]:
-        key = (w.idx, tuple(sorted(w.buildings.items())), self.research_ver)
+        key = (w.idx, tuple(sorted(w.buildings.items())), self.research_ver, self.asc_key(w))
         hit = self._stat_cache.get(key)
         if hit is not None:
             return hit
@@ -725,10 +844,15 @@ class Journey:
         self._stat_cache[key] = out
         return out
 
-    def ucost(self, key: str, level: int) -> Tuple[int, int]:
+    def ucost(self, key: str, level: int, w: Optional[World] = None) -> Tuple[int, int]:
         cm, cc = _upgrade_cost(key, level)
         if self.lever == "mine_cost_x0.9" and key in MINE_COST_KEYS:
             return int(cm * 0.9), int(cc * 0.9)
+        if w is not None and w.asc_any and key in EVOLVABLE_MINES:
+            # canonical rebuild discount (Frugal Rebuild / Overdrive / Breakthrough Window), exact integer basis points
+            cost_bps, _time_bps = _nodebuster_rebuild_bps(w.planet_id, key, int(level) + 1, conn=self.sb.conn, profiles=self.profiles(w))
+            if cost_bps != 10000:
+                return _scale_bps(cm, cost_bps), _scale_bps(cc, cost_bps)
         return cm, cc
 
     def _lever_scale(self, ratio: float) -> Tuple[float, float]:
@@ -741,9 +865,11 @@ class Journey:
         """Hypothetical (metal, crystal, fuel) per second of `w` with other buildings/research (same EffectResolver path as stats())."""
         rs = self.research if research is None else research
         key = (w.slot, tuple(sorted(buildings.items())), tuple(sorted(rs.items())))
+        if w.asc_any:
+            key += (w.planet_id, self.asc_ver)
         hit = self._hyp_cache.get(key)
         if hit is None:
-            r = EffectResolver(dict(buildings), dict(rs), settings=self.settings, planet_position=w.slot)
+            r = self._new_resolver(w, buildings, rs)
             total, used = r.compute_energy()
             ratio_eff, income = self._lever_scale(float(EffectResolver.energy_ratio(total, used)))
             m_rate, c_rate = r.production_rates_per_sec()
@@ -878,7 +1004,7 @@ class Journey:
                 goals.append(("fuel_cell_plant", max(1, min(mine_avg // 3, 8))))
         # storage guard: never let the next mine/building cost exceed what the depot can hold
         lowest = "metal_mine" if L("metal_mine") <= L("crystal_mine") else "crystal_mine"
-        nm, nc = self.ucost(lowest, L(lowest))
+        nm, nc = self.ucost(lowest, L(lowest), w)
         if nm > 0.9 * s["cap_m"]:
             goals.append(("metal_storage", L("metal_storage") + 1))
         if nc > 0.9 * s["cap_c"]:
@@ -886,13 +1012,20 @@ class Journey:
         if mine_avg >= 12:
             goals.append(("nanofactory", min(20, mine_avg // 3)))
         mine_cap = r.get_max_building_level("metal_mine")
-        if L(lowest) >= mine_cap:
+
+        def blocked(k: str) -> bool:
+            # pj/1 policy: below the old nexus ceiling a mine waits for the nexus buildings.  Under the canonical Nodebuster
+            # queue (asc != legacy) there is no cap beyond that ceiling, so mines at/above L200 are never blocked.
+            lvl = L(k)
+            return lvl >= mine_cap and (not self.mines_uncapped or lvl < PRE_NODEBUSTER_MINE_CEILING)
+
+        other = "crystal_mine" if lowest == "metal_mine" else "metal_mine"
+        if blocked(lowest):
             goals.append(("geothermal_nexus", L("geothermal_nexus") + 1))
             goals.append(("planet_core_nexus", L("planet_core_nexus") + 1))
-        else:
+        elif not self.asc_hold(w, lowest, eff):
             goals.append((lowest, L(lowest) + 1))
-        other = "crystal_mine" if lowest == "metal_mine" else "metal_mine"
-        if L(other) < mine_cap:
+        if not blocked(other) and not self.asc_hold(w, other, eff):
             goals.append((other, L(other) + 1))
         return goals
 
@@ -918,11 +1051,11 @@ class Journey:
             if w.outpost and nxt not in OUTPOST_ALLOWED_BUILDINGS:
                 continue
             cur = int(eff.get(nxt, 0))
-            if cur >= r.get_max_building_level(nxt):
+            if cur >= self.max_level(w, r, nxt):
                 continue
             if not has_building_requirements(eff, self.research, nxt):
                 continue
-            cm, cc = self.ucost(nxt, cur)
+            cm, cc = self.ucost(nxt, cur, w)
             if cm > s["cap_m"] or cc > s["cap_c"]:
                 storage = "metal_storage" if cm > s["cap_m"] else "crystal_storage"
                 if int(eff.get(storage, 0)) < r.get_max_building_level(storage) and has_building_requirements(eff, self.research, storage):
@@ -962,11 +1095,11 @@ class Journey:
             if w.outpost and nxt not in OUTPOST_ALLOWED_BUILDINGS:
                 continue
             cur = int(eff.get(nxt, 0))
-            if cur >= r.get_max_building_level(nxt):
+            if cur >= self.max_level(w, r, nxt):
                 continue
             if not has_building_requirements(eff, self.research, nxt):
                 continue
-            cm, cc = self.ucost(nxt, cur)
+            cm, cc = self.ucost(nxt, cur, w)
             if cm > s["cap_m"] or cc > s["cap_c"]:
                 storage = "metal_storage" if cm > s["cap_m"] else "crystal_storage"
                 if int(eff.get(storage, 0)) < r.get_max_building_level(storage) and has_building_requirements(eff, self.research, storage):
@@ -1101,6 +1234,10 @@ class Journey:
     def duration_for(self, w: World, job: Job) -> float:
         r = self._resolver(w, w.buildings)
         dur = float(r.get_build_time_seconds(job.key, job.target))
+        if w.asc_any and job.key in EVOLVABLE_MINES:
+            _cost_bps, time_bps = _nodebuster_rebuild_bps(w.planet_id, job.key, int(job.target), conn=self.sb.conn, profiles=self.profiles(w))
+            if time_bps != 10000:
+                dur = float(_scale_bps(int(dur), time_bps, minimum=building_progress_floor_seconds(job.key, int(job.target))))
         if self.is_resonating(w):
             dur *= 1.0 - self.reduction
         if self.lever == "instant_build":
@@ -1168,6 +1305,8 @@ class Journey:
         self._ctx = None
         w.buildings[job.key] = int(job.target)
         w.queue.pop(0)
+        if job.key in ASC_MINES:
+            self.asc_track_finish(w, job.key)
         got = self.sb.grant_xp("building_finish", w.planet_id, self.t, f"building_finish:job:{job.jid}")
         self.xp_by_source["building_finish"] = self.xp_by_source.get("building_finish", 0) + got
         if not w.home:
@@ -1196,6 +1335,176 @@ class Journey:
                 "dna_revealed_before_establishment",
                 {"first_day": day, "worlds": [], "mechanism": "colonize XP lifts planet level 0->2, is_legacy_full_colony() turns true, ensure_planet_evolution() -> bootstrap_legacy_establishment() sets dna_reveal_tier=1"},
             )["worlds"].append(w.idx)
+
+    # -- Mine Ascension (asc-model/1) -------------------------------------------------
+    def asc_rebuilding(self, w: World, key: str) -> bool:
+        """True while the mine climbs back through its lifetime best depth (canonical rebuild window of the owner)."""
+        st = self.profiles(w)[key]["state"] if w.asc_any else None
+        return bool(st and int(st["ascension_count"]) > 0 and int(w.buildings.get(key, 0)) < int(st["best_depth"]))
+
+    def asc_stagger_blocked(self, w: World, key: str) -> bool:
+        """Income-continuity rule of the policy: only one production mine of a planet rebuilds at a time."""
+        return any(self.asc_rebuilding(w, other) for other in ASC_MINES if other != key)
+
+    def asc_hold(self, w: World, key: str, eff: Dict[str, int]) -> bool:
+        """The mine is at its ascension depth and waits for the reset: do not deepen it further."""
+        if self.asc_depth is None or w.outpost or key not in ASC_MINES:
+            return False
+        return int(eff.get(key, 0)) >= self.asc_depth and not self.asc_stagger_blocked(w, key)
+
+    def maybe_ascend(self, w: World) -> None:
+        if self.asc_depth is None or w.outpost:
+            return
+        for key in sorted(ASC_MINES, key=lambda k: -int(w.buildings.get(k, 0))):
+            lvl = int(w.buildings.get(key, 0))
+            if lvl < self.asc_depth:
+                continue
+            if any(j.key == key for j in w.queue):  # canonical owner: queue_pending
+                continue
+            if self.asc_stagger_blocked(w, key):
+                continue
+            self.ascend(w, key)
+            return
+
+    def ascend(self, w: World, key: str) -> None:
+        level = int(w.buildings.get(key, 0))
+        before = self.stats(w)
+        income_before = (before["m_ps"] + before["c_ps"]) * 3600.0
+        self.sb.set_buildings(w.planet_id, w.buildings)
+        ok, reason, data = self.sb.ascend_mine(w.planet_id, key)
+        if not ok:
+            self.asc_rejections[reason] = self.asc_rejections.get(reason, 0) + 1
+            return
+        restart = int(data["level"])
+        w.buildings[key] = restart
+        w.asc_any = True
+        self._bump_asc()
+        after = self.stats(w)
+        run = {
+            "world": w.idx,
+            "mine": key,
+            "run": int(data["evolution_rank"]),
+            "day": round(self.t / DAY, 3),
+            "from_level": level,
+            "ap_gain": int(data["points_gain"]),
+            "reset_level": restart,
+            "best_depth": int(data["best_depth"]),
+            "income_before_h": int(income_before),
+            "income_after_h": int((after["m_ps"] + after["c_ps"]) * 3600.0),
+            "rebuild_to_best_days": None,
+            "income_recovered_days": None,
+        }
+        self.asc_runs.append(run)
+        self.asc_open[(w.idx, key)] = run
+        self.asc_spend_ap(w, key)
+
+    def _bump_asc(self) -> None:
+        self.asc_ver += 1
+        self._probe_caches.clear()
+        self._ctx = None
+
+    def asc_next_skill(self, w: World, key: str) -> Optional[Tuple[str, int]]:
+        prof = self.profiles(w)[key]
+        state, skills = prof["state"], prof["skills"]
+        for skill in ASC_SKILL_ORDERS[self.sc.asc_skills]:
+            cfg = nodebuster_mod.SKILL_CATALOG[skill]
+            rank = int(skills.get(skill, 0))
+            if rank >= int(cfg["max_rank"]) or not nodebuster_mod.skill_prerequisites_met(skill, skills, state):
+                continue
+            return skill, int(nodebuster_mod.skill_point_cost(skill, rank))
+        return None
+
+    def asc_spend_ap(self, w: World, key: str) -> None:
+        """Strict-priority AP spending through the canonical purchase (the server validates prerequisites, cost and balance)."""
+        for _ in range(64):
+            pick = self.asc_next_skill(w, key)
+            if pick is None:
+                return
+            skill, cost = pick
+            if cost > int(self.profiles(w)[key]["state"]["points_unspent"]):
+                return  # save for it
+            ok, reason, data = self.sb.buy_skill(w.planet_id, key, skill)
+            if not ok:
+                self.asc_rejections[f"skill:{reason}"] = self.asc_rejections.get(f"skill:{reason}", 0) + 1
+                return
+            self._bump_asc()
+            self.asc_skill_log.append({"world": w.idx, "mine": key, "day": round(self.t / DAY, 3), "skill": skill, "rank": int(data["skill_rank"]), "cost": int(data["skill_cost"])})
+
+    def asc_track_finish(self, w: World, key: str) -> None:
+        run = self.asc_open.get((w.idx, key))
+        level = int(w.buildings.get(key, 0))
+        self.asc_peak[(w.idx, key)] = max(self.asc_peak.get((w.idx, key), 0), level)
+        if run is None:
+            return
+        days = (self.t / DAY) - float(run["day"])
+        if run["rebuild_to_best_days"] is None and level >= int(run["best_depth"]):
+            run["rebuild_to_best_days"] = round(days, 3)
+        if run["income_recovered_days"] is None:
+            s = self.stats(w)
+            if (s["m_ps"] + s["c_ps"]) * 3600.0 >= float(run["income_before_h"]):
+                run["income_recovered_days"] = round(days, 3)
+        if run["rebuild_to_best_days"] is not None and run["income_recovered_days"] is not None:
+            self.asc_open.pop((w.idx, key), None)
+
+    def asc_summary(self) -> Dict[str, Any]:
+        """Per planet and mine: canonical state (AP, ranks, best depth) read back from the sandbox DB."""
+        rows: List[Dict[str, Any]] = []
+        for w in self.worlds:
+            prof = self.profiles(w) if w.asc_any else None
+            for key in ASC_MINES:
+                level = int(w.buildings.get(key, 0))
+                st = prof[key]["state"] if prof else {"ascension_count": 0, "points_earned": 0, "points_unspent": 0, "best_depth": 0, "last_depth": 0}
+                sk = prof[key]["skills"] if prof else {}
+                peak = max(level, int(st["best_depth"]), self.asc_peak.get((w.idx, key), 0))
+                rows.append(
+                    {
+                        "world": w.idx,
+                        "mine": key,
+                        "level": level,
+                        "peak_depth": peak,
+                        "ascensions": int(st["ascension_count"]),
+                        "ap_earned": int(st["points_earned"]),
+                        "ap_unspent": int(st["points_unspent"]),
+                        "ap_spent": int(st["points_earned"]) - int(st["points_unspent"]),
+                        "best_depth": int(st["best_depth"]),
+                        "skills": {k: int(v) for k, v in sorted(sk.items()) if v},
+                        "rebuilding": self.asc_rebuilding(w, key),
+                    }
+                )
+        return {
+            "mode": self.sc.asc,
+            "skill_order": self.sc.asc_skills,
+            "mines": rows,
+            "ascensions_total": sum(r["ascensions"] for r in rows),
+            "ascensions_max_single_mine": max([r["ascensions"] for r in rows] or [0]),
+            "ap_earned_total": sum(r["ap_earned"] for r in rows),
+            "ap_spent_total": sum(r["ap_spent"] for r in rows),
+            "peak_depth_max": max([r["peak_depth"] for r in rows] or [0]),
+            "mines_rebuilding": sum(1 for r in rows if r["rebuilding"]),
+        }
+
+    def check_asc_invariants(self) -> None:
+        """No free AP, no skipped prerequisites: AP earned must equal the canonical award per run, AP spent the canonical skill costs."""
+        if not any(w.asc_any for w in self.worlds):
+            return
+        for w in self.worlds:
+            if not w.asc_any:
+                continue
+            for key in ASC_MINES:
+                st = self.profiles(w)[key]["state"]
+                sk = self.profiles(w)[key]["skills"]
+                runs = [r for r in self.asc_runs if r["world"] == w.idx and r["mine"] == key]
+                awarded = sum(ascension_points_for_depth(r["from_level"]) for r in runs)
+                if int(st["points_earned"]) != awarded:
+                    self.invariant_violations.append(f"AP mismatch world {w.idx} {key}: earned {st['points_earned']} vs awarded {awarded}")
+                spent = sum(sum(nodebuster_mod.skill_point_cost(name, r) for r in range(int(rank))) for name, rank in sk.items())
+                if int(st["points_earned"]) - int(st["points_unspent"]) != spent:
+                    self.invariant_violations.append(f"AP spent mismatch world {w.idx} {key}: {st['points_earned'] - st['points_unspent']} vs skills {spent}")
+                if int(st["points_unspent"]) < 0:
+                    self.invariant_violations.append(f"negative AP world {w.idx} {key}")
+                for r in runs:
+                    if int(r["from_level"]) < nodebuster_mod.ASCENSION_MIN_LEVEL:
+                        self.invariant_violations.append(f"ascension below L200 world {w.idx} {key}")
 
     # -- research -------------------------------------------------------------
     def research_goals(self) -> List[Tuple[str, int]]:
@@ -2025,6 +2334,8 @@ class Journey:
         self.fill_research_queue()
         hw = self.hw()
         for w in self.worlds:
+            self.maybe_ascend(w)
+        for w in self.worlds:
             self.fill_build_queue(w)
         self.fill_research_queue()
         self.reserve_next()
@@ -2083,6 +2394,7 @@ class Journey:
             self.invariant_violations.append("worlds exceed admin ceiling")
         if self.sb.planet_count() != len(self.worlds):
             self.invariant_violations.append("sandbox planet count differs from simulated worlds")
+        self.check_asc_invariants()
 
     def snapshot(self, label: str, full: bool) -> Dict[str, Any]:
         m_h, c_h, f_h = self.empire_hourly()
@@ -2107,8 +2419,14 @@ class Journey:
             "research_sum": sum(self.research.values()),
             "scans": sum(w.scans for w in self.worlds),
         }
+        if self.sc.asc != "legacy":
+            peak = max([self.asc_peak.get((w.idx, k), 0) for w in self.worlds for k in ASC_MINES] + metal_lv + crystal_lv)
+            row["peak_depth_max"] = max(peak, max((int(r["best_depth"]) for r in self.asc_runs), default=0))
+            row["ascensions_total"] = len(self.asc_runs)
         if full:
             span = max(self.t, 1.0)
+            if self.sc.asc != "legacy":
+                row["ascension"] = self.asc_summary()
             row.update(
                 {
                     "crystal_depth_max": max(crystal_lv),
@@ -2180,8 +2498,9 @@ class Journey:
 
     # -- main loop ------------------------------------------------------------
     def run(self) -> Dict[str, Any]:
-        snaps = sorted({float(d) * DAY for d in range(0, int(math.ceil(self.sc.days)) + 1) if d * DAY <= self.horizon} | {d * DAY for d in CHECKPOINT_DAYS if d * DAY <= self.horizon} | {self.horizon})
-        cp_times = {d * DAY: ("day%g" % d) for d in CHECKPOINT_DAYS if d * DAY <= self.horizon}
+        cp_days = tuple(CHECKPOINT_DAYS) + (ASC_EXTRA_CHECKPOINT_DAYS if self.sc.asc != "legacy" else ())
+        snaps = sorted({float(d) * DAY for d in range(0, int(math.ceil(self.sc.days)) + 1) if d * DAY <= self.horizon} | {d * DAY for d in cp_days if d * DAY <= self.horizon} | {self.horizon})
+        cp_times = {d * DAY: ("day%g" % d) for d in cp_days if d * DAY <= self.horizon}
         snap_i = 0
         self.process_events()
         self.act()
@@ -2223,6 +2542,12 @@ class Journey:
             "lever_label": LEVERS[self.sc.lever],
             "strategy": self.sc.strategy,
             "policy_version": STRATEGY_VERSIONS[self.sc.strategy],
+            "asc": self.sc.asc,
+            "asc_skills": self.sc.asc_skills,
+            "asc_model_version": ASC_MODEL_VERSION,
+            "ascension_runs": [dict(r) for r in self.asc_runs],
+            "ascension_skill_log": [dict(r) for r in self.asc_skill_log],
+            "ascension_rejections": dict(sorted(self.asc_rejections.items())),
             "days": self.sc.days,
             "expeditions_per_day": self.sc.expeditions_per_day,
             "transit_sec": self.sc.transit_sec,
