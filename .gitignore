@@ -67,3 +67,5 @@ Thumbs.db
 static/video/bosses/*.mp4.whitebak
 static/video/bosses/_preview/
 artifacts/progression_bottlenecks/
+
+artifacts/ascension/
