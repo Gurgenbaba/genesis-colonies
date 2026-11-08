@@ -241,11 +241,15 @@ def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
     if mode == "never":
         return True, None, "", 0
     kind, rest = mode[:1], mode[1:]
+    if kind == "L" and "x" in rest:  # ladder with a cap of resets per mine: L200+50x3 (see parse_asc_cap)
+        rest, cap = rest.rsplit("x", 1)
+        if not cap.isdigit() or int(cap) < 1:
+            raise ValueError(f"unknown ascension mode {mode!r}")
     if kind == "T" and rest.isdigit():
         depth, step = int(rest), 0
-    elif kind in ("O", "G", "M") and rest.isdigit():
+    elif kind in ("O", "G", "M", "P", "H") and rest.isdigit():
         depth, step = int(rest), 1
-    elif kind == "O" and "x" in rest and rest.split("x", 1)[0].isdigit() and rest.split("x", 1)[1].isdigit() and int(rest.split("x", 1)[1]) >= 1:
+    elif kind in ("O", "P", "H") and "x" in rest and rest.split("x", 1)[0].isdigit() and rest.split("x", 1)[1].isdigit() and int(rest.split("x", 1)[1]) >= 1:
         depth, step = int(rest.split("x", 1)[0]), int(rest.split("x", 1)[1])
     elif kind == "L" and "+" in rest and rest.split("+", 1)[0].isdigit() and rest.split("+", 1)[1].isdigit():
         depth, step = int(rest.split("+", 1)[0]), int(rest.split("+", 1)[1])
@@ -256,6 +260,23 @@ def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
     if depth < nodebuster_mod.ASCENSION_MIN_LEVEL:
         raise ValueError(f"ascension threshold below the canonical activation level: {mode!r}")
     return True, depth, kind, step
+
+
+def expected_ascension_points(level: int, previous_best: int) -> int:
+    """AP the owner's CURRENT rule awards for a reset at ``level`` when the mine's record was ``previous_best`` (canonical: independent of it)."""
+    fn = nodebuster_mod.ascension_points_for_depth
+    try:
+        return int(fn(level, previous_best=previous_best))
+    except TypeError:
+        return int(fn(level))
+
+
+def parse_asc_cap(mode: str) -> Optional[int]:
+    """Resets per mine of a capped ladder (``L200+50x3`` -> 3), None for every other policy."""
+    if mode[:1] == "L" and "x" in mode[1:]:
+        parse_asc_policy(mode)  # validates
+        return int(mode.rsplit("x", 1)[1])
+    return None
 
 
 def parse_asc_mode(mode: str) -> Tuple[bool, Optional[int]]:
@@ -767,6 +788,7 @@ class Journey:
             raise ValueError(f"unknown strategy {scenario.strategy!r}")
         self.lever = scenario.lever
         self.mines_uncapped, self.asc_depth, self.asc_kind, self.asc_step = parse_asc_policy(scenario.asc)
+        self.asc_max = parse_asc_cap(scenario.asc)
         if scenario.asc_skills not in ASC_SKILL_ORDERS:
             raise ValueError(f"unknown skill order {scenario.asc_skills!r}")
         self.trader = bool(scenario.trader)
@@ -1553,13 +1575,20 @@ class Journey:
             return None
         if self.asc_kind == "M":  # one single reset in the whole empire: the first mine that gets there
             return None if self.asc_runs else self.asc_depth
+        if self.asc_kind == "P" and key != "metal_mine":  # selective: only the metal mine of every planet
+            return None
+        if self.asc_kind == "H" and w.idx != 0:  # selective: only the homeworld
+            return None
         if self.asc_kind == "T" or not w.asc_any:
             return self.asc_depth
         st = self.profiles(w)[key]["state"]
-        if self.asc_kind in ("O", "G"):
-            return self.asc_depth if int(st["ascension_count"]) < max(1, self.asc_step) else None
+        count = int(st["ascension_count"])
+        if self.asc_kind in ("O", "G", "P", "H"):
+            return self.asc_depth if count < max(1, self.asc_step) else None
+        if self.asc_max is not None and count >= self.asc_max:  # capped ladder: the mine has had its resets
+            return None
         best = int(st["best_depth"])
-        return max(self.asc_depth, best + self.asc_step) if int(st["ascension_count"]) > 0 else self.asc_depth
+        return max(self.asc_depth, best + self.asc_step) if count > 0 else self.asc_depth
 
     def asc_hold(self, w: World, key: str, eff: Dict[str, int]) -> bool:
         """The mine is at its ascension depth and waits for the reset: do not deepen it further."""
@@ -1711,7 +1740,10 @@ class Journey:
                 st = self.profiles(w)[key]["state"]
                 sk = self.profiles(w)[key]["skills"]
                 runs = [r for r in self.asc_runs if r["world"] == w.idx and r["mine"] == key]
-                awarded = sum(nodebuster_mod.ascension_points_for_depth(r["from_level"]) for r in runs)
+                awarded, record = 0, 0
+                for r in sorted(runs, key=lambda x: float(x["day"])):  # the owner's rule may depend on the mine's record (ap_by_record sandbox rule)
+                    awarded += expected_ascension_points(int(r["from_level"]), record)
+                    record = max(record, int(r["from_level"]))
                 if int(st["points_earned"]) != awarded:
                     self.invariant_violations.append(f"AP mismatch world {w.idx} {key}: earned {st['points_earned']} vs awarded {awarded}")
                 spent = sum(sum(nodebuster_mod.skill_point_cost(name, r) for r in range(int(rank))) for name, rank in sk.items())
