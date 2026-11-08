@@ -57,13 +57,13 @@ A reset at L250 or L300 is worse in every candidate (income at 48 months 0.61 / 
 
 ## 5. Design criteria
 
-Thresholds are this analysis' operationalisation (medians over the styles): **C1** cliff leaves ≥ 2/3 of the income and the empire is back within 30 days; **C2** payback within 365 days (good) or 730 days (ok) for every style; **C3** `never` stays legitimate: cumulative production at 48 months within 0.85-1.15 and no style above 1.25; **Guard** no multiplier by repetition: no style above 1.25 with treadmill, ladder or 4 / 8 resets per mine, and extra resets do not pay.
+Thresholds are this analysis' operationalisation (medians over the styles): **C1** cliff leaves ≥ 2/3 of the income and the empire is back within 30 days; **C2** payback within 365 days (good) or 730 days (ok) for every style (judged on the slowest style; the first version of the code used the median, which changed one class only: `fast_p8` was "ok" at a median of 656 days but its optimizer needs 756); **C3** `never` stays legitimate: cumulative production at 48 months within 0.85-1.15 and no style above 1.25; **Guard** no multiplier by repetition: no style above 1.25 with treadmill, ladder or 4 / 8 resets per mine, and extra resets do not pay.
 
 | Candidate | C1 | C2 | C3 | Guard | All |
 |---|---|---|---|---|---|
 | `canon` | no (0.63 / 89 d) | no | no (0.60) | yes | no |
 | `fast_p10` | yes | ok (526) | yes (1.13) | **no** (farming pays for casual: 4 resets reach 1.57x) | no |
-| `fast_p8` | yes | ok (656) | yes (1.08) | **no** (casual 1.39x) | no |
+| `fast_p8` | yes | no (656; slowest style 756) | yes (1.08) | **no** (casual 1.39x) | no |
 | `fast_p7` | yes | no (740) | yes (1.05) | **no** (casual 1.30x) | no |
 | `keep90_p10` | yes | good (190) | no (1.20) | **no** (casual and active gain from farming, up to 1.76x) | no |
 | `rank1_fast` | **yes** (0.70 / 26 d) | **ok (556)** | **yes (1.12)** | **yes** | **yes** |
