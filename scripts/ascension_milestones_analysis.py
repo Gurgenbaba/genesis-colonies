@@ -155,8 +155,8 @@ def run_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
 
     cand = CANDIDATES[spec["cand"]]
     topology = spec.get("topology", "S1")
-    seed = pj.ELIGIBLE_HOME_SEED if topology == "S11" else None
-    sc = pj.Scenario(spec["sid"], topology, spec["style"], "mid", "none", float(spec["days"]), rng_seed=seed, strategy="v2", asc=spec["arm"], asc_skills=cand.ap_order)
+    seed = spec.get("seed", pj.ELIGIBLE_HOME_SEED if topology == "S11" else None)
+    sc = pj.Scenario(spec["sid"], topology, spec["style"], "mid", "none", float(spec["days"]), rng_seed=seed, strategy=spec.get("strategy", "v2"), asc=spec["arm"], asc_skills=cand.ap_order, lever=spec.get("lever", "none"))
     with ar.rules_context(cand):
         res = pj.run_scenario(sc)
     days = float(spec["days"])
@@ -180,11 +180,27 @@ def run_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         for r in res.get("ascension_runs", [])
     ]
     skill_log = [{k: s.get(k) for k in ("world", "mine", "day", "skill", "rank", "cost")} for s in res.get("ascension_skill_log", [])]
-    return {
-        "sid": spec["sid"], "topology": topology, "style": spec["style"], "arm": spec["arm"], "cand": spec["cand"], "days": days,
+    out = {
+        "sid": spec["sid"], "topology": topology, "style": spec["style"], "arm": spec["arm"], "cand": spec["cand"], "days": days, "variant": spec.get("variant", ""),
         "status": res["status"], "wall_seconds": res["wall_seconds"], "snapshots": snaps, "series": series, "runs": runs, "skill_log": skill_log,
         "founded_days": [e["day"] for e in res["colony_log"] if e["event"] == "founded"], "invariants": res["invariants"],
     }
+    if spec.get("diag"):  # where did the time and the resources go? (spend by category, queue occupancy, colony pipeline)
+        diag: Dict[str, Any] = {}
+        for key in ar.CHECK_KEYS:
+            c = res["checkpoints"].get("day%s" % key)
+            if c is None and abs(float(key) - days) < 1e-9:
+                c = res["final"]
+            if c is not None:
+                pw = c.get("per_world", [])
+                diag[key] = {
+                    "spend_metal": c.get("spend_metal"), "spend_crystal": c.get("spend_crystal"), "research_queue_busy_pct": c.get("research_queue_busy_pct"),
+                    "colony_pipeline_sec": c.get("colony_pipeline_sec"), "worlds": c.get("worlds"),
+                    "planet_queue_busy_pct": [w.get("queue_busy_pct") for w in pw], "planet_levels": c.get("planet_levels"),
+                    "wasted_metal": sum(float(w.get("wasted_metal") or 0) for w in pw), "storage_full_days": sum(float(w.get("storage_full_days") or 0) for w in pw),
+                }
+        out["diag"] = diag
+    return out
 
 
 def run_matrix(specs: List[Dict[str, Any]], workers: int, progress: bool = True) -> List[Dict[str, Any]]:

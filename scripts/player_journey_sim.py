@@ -186,6 +186,7 @@ LEVERS: Dict[str, str] = {
     "build_time_x0.5": "construction time x0.5 (how much of the queue time is construction duration?)",
     "research_time_x0.88": "research time x0.88 (the same -12 % applied to the research queue)",
     "colony_gate_pl10": "colony-maturity gate at planet level 10 instead of 15 (dose-response of the colony chain)",
+    "colony_gate_pl12": "colony-maturity gate at planet level 12 instead of 15 (the middle option between PL10 and PL15)",
     "colony_gate_pl5": "colony-maturity gate at planet level 5 instead of 15 (dose-response of the colony chain)",
     "auto_start": "a purchase the player cannot afford yet is reserved and starts by itself when the funds arrive (removes action-window latency)",
     # equal-strength (about 10 %) candidates for a trait resonance: which brake does it act on?
@@ -196,9 +197,10 @@ LEVERS: Dict[str, str] = {
     "colony_xp_x1.25": "planet XP of colonies x1.25 (+25 %)",
 }
 COLONY_XP_BOOST = {"colony_xp_x1.1": 1.10, "colony_xp_x1.25": 1.25}
-ASCENSION_ONLY_LEVERS = frozenset({"build_time_x0.5"})  # used by the Ascension side check only; not part of the bottleneck-report matrix
+ASCENSION_ONLY_LEVERS = frozenset({"build_time_x0.5", "colony_gate_pl12"})  # side-study levers (the Ascension check, the PL12 gate comparison); not part of the bottleneck-report matrix
 MINE_COST_KEYS = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant", "solar_plant"})
-LEVER_GATE_LEVEL = {"no_colony_chain": 1, "colony_gate_pl10": 10, "colony_gate_pl5": 5}
+LEVER_GATE_LEVEL = {"no_colony_chain": 1, "colony_gate_pl10": 10, "colony_gate_pl12": 12, "colony_gate_pl5": 5}
+AGGRESSIVE_COOLDOWN_DAYS = 7  # policy A<n>: a player who presses Ascend whenever the button is enabled, at most once a week per mine
 LEVER_INCOME_FACTOR = 1.25
 LEVER_TIME_FACTOR = 0.01
 
@@ -235,7 +237,9 @@ def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
     """(mines_uncapped, first ascension depth or None, kind 'T' | 'O' | 'L' | 'M' | 'G' | '', ladder step for 'L' / resets per mine for 'O').
 
     Empire scope (S11): ``O<n>`` resets every mine once, one rebuild at a time *per planet* (planets in parallel); ``G<n>`` the same but
-    one rebuild at a time in the whole empire (serial); ``M<n>`` exactly one reset of one single mine in the whole empire."""
+    one rebuild at a time in the whole empire (serial); ``M<n>`` exactly one reset of one single mine in the whole empire.  Selective:
+    ``P<n>`` only the metal mine of every planet, ``C<n>`` only the crystal mine, ``H<n>`` only the homeworld.  ``A<n>`` is the button-masher:
+    it resets whenever a mine is at or above n, at most once a week per mine, and never stops building in between (stress test)."""
     if mode == "legacy":
         return False, None, "", 0
     if mode == "never":
@@ -247,7 +251,7 @@ def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
             raise ValueError(f"unknown ascension mode {mode!r}")
     if kind == "T" and rest.isdigit():
         depth, step = int(rest), 0
-    elif kind in ("O", "G", "M", "P", "H") and rest.isdigit():
+    elif kind in ("O", "G", "M", "P", "H", "C", "A") and rest.isdigit():
         depth, step = int(rest), 1
     elif kind in ("O", "P", "H") and "x" in rest and rest.split("x", 1)[0].isdigit() and rest.split("x", 1)[1].isdigit() and int(rest.split("x", 1)[1]) >= 1:
         depth, step = int(rest.split("x", 1)[0]), int(rest.split("x", 1)[1])
@@ -789,6 +793,7 @@ class Journey:
         self.lever = scenario.lever
         self.mines_uncapped, self.asc_depth, self.asc_kind, self.asc_step = parse_asc_policy(scenario.asc)
         self.asc_max = parse_asc_cap(scenario.asc)
+        self.asc_last: Dict[Tuple[int, str], float] = {}  # day of the last reset per (world, mine): the cooldown of policy A
         if scenario.asc_skills not in ASC_SKILL_ORDERS:
             raise ValueError(f"unknown skill order {scenario.asc_skills!r}")
         self.trader = bool(scenario.trader)
@@ -1577,13 +1582,17 @@ class Journey:
             return None if self.asc_runs else self.asc_depth
         if self.asc_kind == "P" and key != "metal_mine":  # selective: only the metal mine of every planet
             return None
+        if self.asc_kind == "C" and key != "crystal_mine":  # selective: only the crystal mine of every planet
+            return None
+        if self.asc_kind == "A":  # button-masher: always eligible (the weekly cooldown is applied in maybe_ascend)
+            return self.asc_depth
         if self.asc_kind == "H" and w.idx != 0:  # selective: only the homeworld
             return None
         if self.asc_kind == "T" or not w.asc_any:
             return self.asc_depth
         st = self.profiles(w)[key]["state"]
         count = int(st["ascension_count"])
-        if self.asc_kind in ("O", "G", "P", "H"):
+        if self.asc_kind in ("O", "G", "P", "H", "C"):
             return self.asc_depth if count < max(1, self.asc_step) else None
         if self.asc_max is not None and count >= self.asc_max:  # capped ladder: the mine has had its resets
             return None
@@ -1592,7 +1601,7 @@ class Journey:
 
     def asc_hold(self, w: World, key: str, eff: Dict[str, int]) -> bool:
         """The mine is at its ascension depth and waits for the reset: do not deepen it further."""
-        if self.asc_depth is None or w.outpost or key not in ASC_MINES:
+        if self.asc_depth is None or w.outpost or key not in ASC_MINES or self.asc_kind == "A":  # the button-masher never waits at a depth
             return False
         target = self.asc_target(w, key)
         return target is not None and int(eff.get(key, 0)) >= target and not self.asc_stagger_blocked(w, key)
@@ -1607,7 +1616,9 @@ class Journey:
                 continue
             if any(j.key == key for j in w.queue):  # canonical owner: queue_pending
                 continue
-            if self.asc_stagger_blocked(w, key):
+            if self.asc_kind == "A" and self.t / DAY - self.asc_last.get((w.idx, key), -1e9) < AGGRESSIVE_COOLDOWN_DAYS:
+                continue
+            if self.asc_kind != "A" and self.asc_stagger_blocked(w, key):  # the button-masher ignores the income-continuity rule
                 continue
             self.ascend(w, key)
             return
@@ -1641,6 +1652,7 @@ class Journey:
             "income_recovered_days": None,
         }
         self.asc_runs.append(run)
+        self.asc_last[(w.idx, key)] = self.t / DAY
         self.asc_open[(w.idx, key)] = run
         self.asc_spend_ap(w, key)
 
