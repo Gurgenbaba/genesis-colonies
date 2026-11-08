@@ -39,6 +39,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -98,12 +99,48 @@ from game.research import (  # noqa: E402
 from game.shipyard import production_level_cycle_seconds  # noqa: E402
 from game.time_floors import building_progress_floor_seconds  # noqa: E402
 
-_upgrade_cost = functools.lru_cache(maxsize=None)(get_upgrade_cost)
-_research_payment = functools.lru_cache(maxsize=200_000)(
-    lambda tech, level, income, maturity, worlds: get_research_payment_cost(
-        tech, level, cost_context={"empire_combined_per_hour": income, "maturity_index": maturity, "world_count": worlds}
+# One simulated universe at a time per process.  The simulator patches process-global state (endgame curve, colony gate,
+# database path, environment) for the duration of a run; this re-entrant lock makes concurrent callers (threads) queue instead
+# of silently reading each other's parameters.  Separate processes (the analysis runners) are isolated by the OS.
+SIM_LOCK = threading.RLock()
+
+
+def universe_key() -> Tuple[Any, ...]:
+    """Every process-global parameter that can change a price, a production figure or a gate - the cache key of the simulator."""
+    from game import production_formula as pf
+    from game.planet_evolution import expansion_protocol as ep
+
+    return (
+        str(pf.ENDGAME_ECONOMY_MODE),
+        int(pf.ENDGAME_PRODUCTION_PIVOT_LEVEL),
+        int(pf.ENDGAME_PRODUCTION_TAIL_POWER),
+        int(ep.COLONY_MATURITY_REQUIRED_LEVEL),
     )
-)
+
+
+@functools.lru_cache(maxsize=None)
+def _upgrade_cost_in(universe: Tuple[Any, ...], key: str, level: int) -> Tuple[int, int]:
+    return get_upgrade_cost(key, level)
+
+
+def _upgrade_cost(key: str, level: int) -> Tuple[int, int]:
+    """Canonical upgrade price, cached per universe: a lookup under another endgame curve can never serve a stale price."""
+    return _upgrade_cost_in(universe_key(), key, int(level))
+
+
+_upgrade_cost.cache_clear = _upgrade_cost_in.cache_clear  # type: ignore[attr-defined]
+
+
+@functools.lru_cache(maxsize=200_000)
+def _research_payment_in(universe: Tuple[Any, ...], tech: str, level: int, income: Any, maturity: Any, worlds: Any) -> Tuple[int, int]:
+    return get_research_payment_cost(tech, level, cost_context={"empire_combined_per_hour": income, "maturity_index": maturity, "world_count": worlds})
+
+
+def _research_payment(tech: str, level: int, income: Any, maturity: Any, worlds: Any) -> Tuple[int, int]:
+    return _research_payment_in(universe_key(), tech, level, income, maturity, worlds)
+
+
+_research_payment.cache_clear = _research_payment_in.cache_clear  # type: ignore[attr-defined]
 
 SANDBOX_RNG_SEED = 20_261_106
 ELIGIBLE_HOME_SEED = 2  # homeworld DNA with 3 eligible specialisations (guarded by a test); the default seed has none
@@ -176,6 +213,8 @@ ASC_MODES: Dict[str, str] = {
     "legacy": "pj/1 behaviour: the resolver's nexus cap (L200) stops the mines; no Ascension (reference, kept for comparability with the bottleneck report)",
     "never": "canonical Nodebuster queue rules (no mine cap) and the player never ascends: keep building",
     "T<n>": "canonical rules; each production mine ascends the first time it is at level >= n (n >= 200) with an empty mine queue; one mine per planet rebuilds at a time",
+    "O<n>[x<k>]": "like T<n> but each mine ascends exactly k times (default 1), then keeps building (price of a first reset / of farming k resets, no treadmill)",
+    "L<n>+<d>": "ladder: the first reset at depth >= n, every further reset only at depth >= previous best depth + d (a prestige loop that must beat its own record)",
 }
 ASC_SKILL_ORDERS: Dict[str, Tuple[str, ...]] = {
     # strict priority: buy the first available skill of the list as soon as the AP are there (save otherwise)
@@ -192,18 +231,34 @@ ASC_SKILL_ORDERS: Dict[str, Tuple[str, ...]] = {
 }
 
 
+def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
+    """(mines_uncapped, first ascension depth or None, kind 'T' | 'O' | 'L' | '', ladder step for 'L' / resets per mine for 'O')."""
+    if mode == "legacy":
+        return False, None, "", 0
+    if mode == "never":
+        return True, None, "", 0
+    kind, rest = mode[:1], mode[1:]
+    if kind == "T" and rest.isdigit():
+        depth, step = int(rest), 0
+    elif kind == "O" and rest.isdigit():
+        depth, step = int(rest), 1
+    elif kind == "O" and "x" in rest and rest.split("x", 1)[0].isdigit() and rest.split("x", 1)[1].isdigit() and int(rest.split("x", 1)[1]) >= 1:
+        depth, step = int(rest.split("x", 1)[0]), int(rest.split("x", 1)[1])
+    elif kind == "L" and "+" in rest and rest.split("+", 1)[0].isdigit() and rest.split("+", 1)[1].isdigit():
+        depth, step = int(rest.split("+", 1)[0]), int(rest.split("+", 1)[1])
+        if step < 1:
+            raise ValueError(f"ladder step must be positive: {mode!r}")
+    else:
+        raise ValueError(f"unknown ascension mode {mode!r}")
+    if depth < nodebuster_mod.ASCENSION_MIN_LEVEL:
+        raise ValueError(f"ascension threshold below the canonical activation level: {mode!r}")
+    return True, depth, kind, step
+
+
 def parse_asc_mode(mode: str) -> Tuple[bool, Optional[int]]:
     """(mines_uncapped, ascension depth threshold or None)."""
-    if mode == "legacy":
-        return False, None
-    if mode == "never":
-        return True, None
-    if mode.startswith("T") and mode[1:].isdigit():
-        depth = int(mode[1:])
-        if depth < nodebuster_mod.ASCENSION_MIN_LEVEL:
-            raise ValueError(f"ascension threshold below the canonical activation level: {mode!r}")
-        return True, depth
-    raise ValueError(f"unknown ascension mode {mode!r}")
+    uncapped, depth, _kind, _step = parse_asc_policy(mode)
+    return uncapped, depth
 
 
 ECON_TECHS = ("energy_tech", "mining_tech", "crystal_tech", "buildtime_tech", "storage_tech")
@@ -315,6 +370,14 @@ class Sandbox:
         self._system_seq = 300
 
     def __enter__(self) -> "Sandbox":
+        SIM_LOCK.acquire()
+        try:
+            return self._enter()
+        except BaseException:
+            SIM_LOCK.release()
+            raise
+
+    def _enter(self) -> "Sandbox":
         import game.db as gdb
         import game.models as models
 
@@ -370,6 +433,7 @@ class Sandbox:
                     os.environ[key] = value
             if self._dir:
                 shutil.rmtree(self._dir, ignore_errors=True)
+            SIM_LOCK.release()
 
     # -- canonical reads/writes -------------------------------------------------
     def planet(self, planet_id: int) -> Dict[str, Any]:
@@ -699,7 +763,7 @@ class Journey:
         if scenario.strategy not in STRATEGY_VERSIONS:
             raise ValueError(f"unknown strategy {scenario.strategy!r}")
         self.lever = scenario.lever
-        self.mines_uncapped, self.asc_depth = parse_asc_mode(scenario.asc)
+        self.mines_uncapped, self.asc_depth, self.asc_kind, self.asc_step = parse_asc_policy(scenario.asc)
         if scenario.asc_skills not in ASC_SKILL_ORDERS:
             raise ValueError(f"unknown skill order {scenario.asc_skills!r}")
         self.trader = bool(scenario.trader)
@@ -1478,18 +1542,32 @@ class Journey:
         """Income-continuity rule of the policy: only one production mine of a planet rebuilds at a time."""
         return any(self.asc_rebuilding(w, other) for other in ASC_MINES if other != key)
 
+    def asc_target(self, w: World, key: str) -> Optional[int]:
+        """Depth at which the policy ascends this mine next (None: it will not ascend again)."""
+        if self.asc_depth is None:
+            return None
+        if self.asc_kind == "T" or not w.asc_any:
+            return self.asc_depth
+        st = self.profiles(w)[key]["state"]
+        if self.asc_kind == "O":
+            return self.asc_depth if int(st["ascension_count"]) < max(1, self.asc_step) else None
+        best = int(st["best_depth"])
+        return max(self.asc_depth, best + self.asc_step) if int(st["ascension_count"]) > 0 else self.asc_depth
+
     def asc_hold(self, w: World, key: str, eff: Dict[str, int]) -> bool:
         """The mine is at its ascension depth and waits for the reset: do not deepen it further."""
         if self.asc_depth is None or w.outpost or key not in ASC_MINES:
             return False
-        return int(eff.get(key, 0)) >= self.asc_depth and not self.asc_stagger_blocked(w, key)
+        target = self.asc_target(w, key)
+        return target is not None and int(eff.get(key, 0)) >= target and not self.asc_stagger_blocked(w, key)
 
     def maybe_ascend(self, w: World) -> None:
         if self.asc_depth is None or w.outpost:
             return
         for key in sorted(ASC_MINES, key=lambda k: -int(w.buildings.get(k, 0))):
             lvl = int(w.buildings.get(key, 0))
-            if lvl < self.asc_depth:
+            target = self.asc_target(w, key)
+            if target is None or lvl < target:
                 continue
             if any(j.key == key for j in w.queue):  # canonical owner: queue_pending
                 continue
@@ -1626,7 +1704,7 @@ class Journey:
                 st = self.profiles(w)[key]["state"]
                 sk = self.profiles(w)[key]["skills"]
                 runs = [r for r in self.asc_runs if r["world"] == w.idx and r["mine"] == key]
-                awarded = sum(ascension_points_for_depth(r["from_level"]) for r in runs)
+                awarded = sum(nodebuster_mod.ascension_points_for_depth(r["from_level"]) for r in runs)
                 if int(st["points_earned"]) != awarded:
                     self.invariant_violations.append(f"AP mismatch world {w.idx} {key}: earned {st['points_earned']} vs awarded {awarded}")
                 spent = sum(sum(nodebuster_mod.skill_point_cost(name, r) for r in range(int(rank))) for name, rank in sk.items())
@@ -2625,7 +2703,7 @@ class Journey:
                     "spend_metal": {k: int(v) for k, v in self.spend.items()},
                     "spend_crystal": {k: int(v) for k, v in self.spend_c.items()},
                     "spend_fuel_cells": int(self.spend_f),
-                    "ascension_ap_if_reset_top_mine": int(ascension_points_for_depth(max(metal_lv))),
+                    "ascension_ap_if_reset_top_mine": int(nodebuster_mod.ascension_points_for_depth(max(metal_lv))),
                     "ascension_note": "potential only - no reset simulated",
                     "xp_by_source": dict(sorted(self.xp_by_source.items())),
                     "paid_accelerators": 0,
@@ -2856,29 +2934,31 @@ def build_scenarios(days: float, quick: bool) -> List[Scenario]:
 @contextlib.contextmanager
 def economy_curve(curve: str):
     """Match the endgame production curve of the record-mine control (UNI1) or use the process default."""
-    if curve == "uni1":
-        from scripts.sim_ascension_breakthroughs import uni1_endgame_curve
+    with SIM_LOCK:
+        if curve == "uni1":
+            from scripts.sim_ascension_breakthroughs import uni1_endgame_curve
 
-        with uni1_endgame_curve():
+            with uni1_endgame_curve():
+                yield
+        else:
             yield
-    else:
-        yield
 
 
 @contextlib.contextmanager
 def lever_context(lever: str):
     """Sandbox-only patches for levers that act on canonical rules (restored on exit; never a game change)."""
-    if lever in LEVER_GATE_LEVEL:
-        import game.planet_evolution.expansion_protocol as ep
+    with SIM_LOCK:
+        if lever in LEVER_GATE_LEVEL:
+            import game.planet_evolution.expansion_protocol as ep
 
-        old = ep.COLONY_MATURITY_REQUIRED_LEVEL
-        ep.COLONY_MATURITY_REQUIRED_LEVEL = LEVER_GATE_LEVEL[lever]
-        try:
+            old = ep.COLONY_MATURITY_REQUIRED_LEVEL
+            ep.COLONY_MATURITY_REQUIRED_LEVEL = LEVER_GATE_LEVEL[lever]
+            try:
+                yield
+            finally:
+                ep.COLONY_MATURITY_REQUIRED_LEVEL = old
+        else:
             yield
-        finally:
-            ep.COLONY_MATURITY_REQUIRED_LEVEL = old
-    else:
-        yield
 
 
 def run_scenario(sc: Scenario, curve: str = "uni1") -> Dict[str, Any]:

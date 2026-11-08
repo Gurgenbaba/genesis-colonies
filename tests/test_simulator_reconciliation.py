@@ -71,19 +71,6 @@ def test_price_convention_matches_the_controls_cost_owner(uni1):
             assert tuple(rc.price(key, level)) == tuple(power_upgrade_cost(key, level + 1)), (key, level)
 
 
-def test_price_cache_poisoned_outside_the_curve_is_cleaned(uni1):
-    """A lookup outside the UNI1 curve fills the process-wide price cache with legacy-curve prices; the context clears it."""
-    from game import production_formula as pf
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(pf, "ENDGAME_ECONOMY_MODE", "legacy")
-        pj._upgrade_cost.cache_clear()
-        legacy = tuple(pj._upgrade_cost("metal_mine", 250))  # poison: legacy-curve price cached
-    with rc.uni1_curve():
-        assert tuple(rc.price("metal_mine", 250)) == tuple(power_upgrade_cost("metal_mine", 251))
-    assert legacy is not None
-
-
 def test_start_resources_and_speed_settings_equal_the_fresh_account_simulator():
     assert float(DEFAULT_GAME_SETTINGS.get("start_metal", 150000)) == float(fresh.START_METAL)
     assert float(DEFAULT_GAME_SETTINGS.get("start_crystal", 100000)) == float(fresh.START_CRYSTAL)

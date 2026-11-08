@@ -83,18 +83,16 @@ BUILD_FIELDS = ("t", "key", "target", "cost_m", "cost_c", "stock_m", "stock_c")
 
 @contextlib.contextmanager
 def uni1_curve():
-    """UNI1 endgame curve with a clean price cache.
+    """UNI1 endgame curve, serialised against other simulated universes in this process.
 
-    ``pj._upgrade_cost`` is a process-wide ``lru_cache`` keyed by (building, level) only, while the price table itself
-    depends on the active endgame curve.  A lookup outside the curve would silently poison every later run, so the cache
-    is cleared on entry and exit.
+    The simulator's price caches are keyed by the active universe (endgame curve, colony gate), so a lookup under another
+    curve can no longer serve a stale price; the caches are still cleared on exit to bound memory.
     """
-    pj._upgrade_cost.cache_clear()
-    try:
-        with pj.economy_curve("uni1"):
+    with pj.SIM_LOCK, pj.economy_curve("uni1"):
+        try:
             yield
-    finally:
-        pj._upgrade_cost.cache_clear()
+        finally:
+            pj._upgrade_cost.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +468,7 @@ def control_days(start: int = START_LEVEL, end: int = END_LEVEL) -> float:
     from scripts import sim_ascension_breakthroughs as ctl
 
     scenario = ctl.Scenario("baseline_q3", "Baseline q3", start_level=start)
-    with ctl.uni1_endgame_curve():
+    with pj.SIM_LOCK, ctl.uni1_endgame_curve():
         return float(ctl.hours_to_target(scenario, end) / Decimal(24))
 
 
