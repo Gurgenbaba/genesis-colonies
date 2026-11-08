@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import contextvars
 import json
 import sys
 import time
@@ -69,9 +70,30 @@ class Candidate:
     prestige_cap: int = 0  # ... counted up to this many Ascensions (the multiplier is bounded by prestige_bps x prestige_cap)
     first_yield_bps: int = 0  # first Deep Yield rank gives this much output (canonical +250 bps) and costs 1 AP (canonical 2); later ranks unchanged
     ap_order: str = "rebuild_first"  # AP spending order of the simulated player
+    awaken_bps: int = 0  # First Awakening: permanent output bonus of a mine once it has ascended at least once (one-time per mine, never stacks, costs no AP)
+    tier_step: int = 50  # Depth Breakthrough: one record tier = this many levels of BEST depth above L200 (the record only moves when a reset happens at a new depth) ...
+    tier_cap: int = 0  # ... counted up to this many tiers (0: no tiers)
+    tier_yield_bps: int = 0  # permanent output per record tier
+    tier_restart_pp: int = 0  # restart level: + this many percentage points of the best depth per record tier (always below L200)
+    tier_cost_bps: int = 0  # rebuild cost: - this many basis points of the base cost per record tier
+    cost_floor_bps: int = 3500  # lowest rebuild cost the rules allow (canonical floor 3500)
+    rebuild_time_bps: int = 10000  # base rebuild time before skills (canonical 10000); skills still subtract 650 bps / Rapid rank
+    time_floor_bps: int = 3000  # lowest rebuild time the rules allow (canonical floor 3000)
+    tier_time_bps: int = 0  # rebuild time: - this many basis points of the base time per record tier
+    ap_by_record: bool = False  # AP are earned for RECORD progress only: a reset awards points_for_depth(level) - points_for_depth(previous best), 0 at or below the record
+    restart_ceiling: int = 199  # highest level a reset may restart at (canonical: always below L200).  Lifting it keeps a share of a deep record; only safe together with ap_by_record + record tiers
 
     def is_canon(self) -> bool:
-        return (self.rebuild_cost_bps, self.restart_pct, self.surge_bps, self.ap_flat, self.ap_step, self.prestige_bps * self.prestige_cap, self.first_yield_bps) == (10000, 0, 0, 0, 25, 0, 0)
+        return (self.rebuild_cost_bps, self.restart_pct, self.surge_bps, self.ap_flat, self.ap_step, self.prestige_bps * self.prestige_cap, self.first_yield_bps, self.awaken_bps, self.tiers_active(), self.cost_floor_bps, self.rebuild_time_bps, self.time_floor_bps, self.ap_by_record, self.restart_ceiling) == (10000, 0, 0, 0, 25, 0, 0, 0, False, 3500, 10000, 3000, False, 199)
+
+    def tiers_active(self) -> bool:
+        return self.tier_cap > 0 and (self.tier_yield_bps > 0 or self.tier_restart_pp > 0 or self.tier_cost_bps > 0 or self.tier_time_bps > 0)
+
+    def tier_of(self, best_depth: int) -> int:
+        """Record tier of a best depth: 0 at L200..L(200+step-1), capped."""
+        if not self.tiers_active():
+            return 0
+        return min(int(self.tier_cap), max(0, (int(best_depth or 0) - ASCENSION_MIN_LEVEL) // max(1, int(self.tier_step))))
 
     def prestige_max_bps(self) -> int:
         return int(self.prestige_bps) * int(self.prestige_cap)
@@ -113,6 +135,9 @@ MAIN_ORDER: Tuple[str, ...] = tuple(CANDIDATES)
 # ---------------------------------------------------------------------------
 
 
+_PREVIOUS_BEST: "contextvars.ContextVar[int]" = contextvars.ContextVar("nodebuster_previous_best", default=0)
+
+
 @contextlib.contextmanager
 def rules_context(candidate: Candidate):
     """Apply a candidate to the Nodebuster rule functions for the duration of a run; restored afterwards.  Canonical = no patch."""
@@ -126,27 +151,52 @@ def rules_context(candidate: Candidate):
             return
         names = (
             "ascension_points_for_depth", "rebuild_cost_bps", "reset_start_level",
-            "rebuild_production_multiplier_for", "production_multiplier_for", "production_bonus_bps", "skill_point_cost",
+            "rebuild_production_multiplier_for", "production_multiplier_for", "production_bonus_bps", "skill_point_cost", "rebuild_bps_for_target",
+            "rebuild_time_bps", "ascend_mine",
         )
         saved = {n: getattr(nb, n) for n in names}
         min_level = int(nb.ASCENSION_MIN_LEVEL)
 
-        def points(level: int) -> int:
-            depth = int(level or 0)
+        def points_for(depth: int) -> int:
             if depth < min_level:
                 return 0
             above = depth - min_level
             return 1 + int(candidate.ap_flat) + above // int(candidate.ap_step) + above // 100
 
+        def points(level: int, previous_best: Optional[int] = None) -> int:
+            depth = int(level or 0)
+            if not candidate.ap_by_record:
+                return points_for(depth)
+            prev = _PREVIOUS_BEST.get() if previous_best is None else int(previous_best)
+            return max(0, points_for(depth) - points_for(prev)) if depth > prev else 0
+
+        def ascend_with_record(user_id, planet, building_type):
+            """The AP rule of ap_by_record needs the mine's record before the reset: read it, then call the owner unchanged."""
+            prev = 0
+            if candidate.ap_by_record:
+                pid = int(planet["id"])
+                prev = int(nb.get_state(pid, str(building_type), profiles=nb.get_profiles_for_planet(pid)).get("best_depth") or 0)
+            token = _PREVIOUS_BEST.set(prev)
+            try:
+                return saved["ascend_mine"](user_id, planet, building_type)
+            finally:
+                _PREVIOUS_BEST.reset(token)
+
+        def time_bps(skills: Dict[str, int]) -> int:
+            rapid = max(0, int(skills.get("rapid_rebuild", 0) or 0))
+            overdrive = max(0, int(skills.get("overdrive", 0) or 0))
+            return max(int(candidate.time_floor_bps), int(candidate.rebuild_time_bps) - 650 * rapid - 250 * overdrive)
+
         def cost_bps(skills: Dict[str, int]) -> int:
             frugal = max(0, int(skills.get("frugal_rebuild", 0) or 0))
             overdrive = max(0, int(skills.get("overdrive", 0) or 0))
-            return max(3500, int(candidate.rebuild_cost_bps) - 550 * frugal - 250 * overdrive)
+            return max(int(candidate.cost_floor_bps), int(candidate.rebuild_cost_bps) - 550 * frugal - 250 * overdrive)
 
         def start_level(skills: Dict[str, int], best_depth: int = 0) -> int:
             canonical = saved["reset_start_level"](skills, best_depth)
-            floor = (int(best_depth or 0) * int(candidate.restart_pct)) // 100
-            return min(min_level - 1, max(int(canonical), floor))
+            pct = int(candidate.restart_pct) + int(candidate.tier_restart_pp) * candidate.tier_of(best_depth)
+            floor = (int(best_depth or 0) * pct) // 100
+            return min(int(candidate.restart_ceiling), max(int(canonical), floor))
 
         def rebuild_multiplier(planet_id: int, building_type: str, current_level: int, *, conn=None, profiles=None) -> float:
             canonical = saved["rebuild_production_multiplier_for"](planet_id, building_type, current_level, conn=conn, profiles=profiles)
@@ -162,12 +212,16 @@ def rules_context(candidate: Candidate):
 
         def production_multiplier(planet_id: int, building_type: str, *, conn=None, profiles=None) -> float:
             canonical = saved["production_multiplier_for"](planet_id, building_type, conn=conn, profiles=profiles)
-            if candidate.prestige_max_bps() <= 0 or not is_evolvable_mine(str(building_type or "")):
+            if (candidate.prestige_max_bps() <= 0 and candidate.awaken_bps <= 0 and candidate.tier_yield_bps <= 0) or not is_evolvable_mine(str(building_type or "")):
                 return canonical
             data = profiles if profiles is not None else nb.get_profiles_for_planet(int(planet_id), conn=conn)
             state = nb.get_state(int(planet_id), str(building_type), conn=conn, profiles=data)
-            n = min(int(candidate.prestige_cap), int(state.get("ascension_count") or 0))
-            return canonical * (1.0 + candidate.prestige_bps * n / 10000.0)
+            count = int(state.get("ascension_count") or 0)
+            n = min(int(candidate.prestige_cap), count)
+            out = canonical * (1.0 + candidate.prestige_bps * n / 10000.0)
+            if count > 0:  # First Awakening and the record-tier output: only a mine that has ascended, and only as a function of its record
+                out *= 1.0 + (int(candidate.awaken_bps) + int(candidate.tier_yield_bps) * candidate.tier_of(int(state.get("best_depth") or 0))) / 10000.0
+            return out
 
         def production_bonus(skills: Dict[str, int]) -> int:
             canonical = int(saved["production_bonus_bps"](skills))
@@ -181,6 +235,23 @@ def rules_context(candidate: Candidate):
                 return 1
             return int(saved["skill_point_cost"](skill_key, current_rank))
 
+        def bps_for_target(planet_id: int, building_type: str, target_level: int, *, conn=None, profiles=None):
+            cost, time_ = saved["rebuild_bps_for_target"](planet_id, building_type, target_level, conn=conn, profiles=profiles)
+            if (candidate.tier_cost_bps <= 0 and candidate.tier_time_bps <= 0) or candidate.tier_cap <= 0 or not is_evolvable_mine(str(building_type or "")):
+                return cost, time_
+            data = profiles if profiles is not None else nb.get_profiles_for_planet(int(planet_id), conn=conn)
+            state = nb.get_state(int(planet_id), str(building_type), conn=conn, profiles=data)
+            if int(state.get("ascension_count") or 0) <= 0:
+                return cost, time_
+            skills = nb.get_skills(int(planet_id), str(building_type), conn=conn, profiles=data)
+            if int(target_level or 0) > int(state.get("best_depth") or 0) + nb.rebuild_window_extra_levels(skills):
+                return cost, time_  # outside the rebuild window nothing is discounted (canonical)
+            tier = candidate.tier_of(int(state.get("best_depth") or 0))
+            return max(int(candidate.cost_floor_bps), int(cost) - int(candidate.tier_cost_bps) * tier), max(int(candidate.time_floor_bps), int(time_) - int(candidate.tier_time_bps) * tier)
+
+        nb.rebuild_bps_for_target = bps_for_target
+        nb.rebuild_time_bps = time_bps
+        nb.ascend_mine = ascend_with_record
         nb.ascension_points_for_depth = points
         nb.production_bonus_bps = production_bonus
         nb.skill_point_cost = skill_cost
