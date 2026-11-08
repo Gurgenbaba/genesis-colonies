@@ -232,7 +232,10 @@ ASC_SKILL_ORDERS: Dict[str, Tuple[str, ...]] = {
 
 
 def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
-    """(mines_uncapped, first ascension depth or None, kind 'T' | 'O' | 'L' | '', ladder step for 'L' / resets per mine for 'O')."""
+    """(mines_uncapped, first ascension depth or None, kind 'T' | 'O' | 'L' | 'M' | 'G' | '', ladder step for 'L' / resets per mine for 'O').
+
+    Empire scope (S11): ``O<n>`` resets every mine once, one rebuild at a time *per planet* (planets in parallel); ``G<n>`` the same but
+    one rebuild at a time in the whole empire (serial); ``M<n>`` exactly one reset of one single mine in the whole empire."""
     if mode == "legacy":
         return False, None, "", 0
     if mode == "never":
@@ -240,7 +243,7 @@ def parse_asc_policy(mode: str) -> Tuple[bool, Optional[int], str, int]:
     kind, rest = mode[:1], mode[1:]
     if kind == "T" and rest.isdigit():
         depth, step = int(rest), 0
-    elif kind == "O" and rest.isdigit():
+    elif kind in ("O", "G", "M") and rest.isdigit():
         depth, step = int(rest), 1
     elif kind == "O" and "x" in rest and rest.split("x", 1)[0].isdigit() and rest.split("x", 1)[1].isdigit() and int(rest.split("x", 1)[1]) >= 1:
         depth, step = int(rest.split("x", 1)[0]), int(rest.split("x", 1)[1])
@@ -1539,17 +1542,21 @@ class Journey:
         return bool(st and int(st["ascension_count"]) > 0 and int(w.buildings.get(key, 0)) < int(st["best_depth"]))
 
     def asc_stagger_blocked(self, w: World, key: str) -> bool:
-        """Income-continuity rule of the policy: only one production mine of a planet rebuilds at a time."""
+        """Income-continuity rule of the policy: only one production mine of a planet rebuilds at a time (policy ``G``: in the whole empire)."""
+        if self.asc_kind == "G":
+            return any(self.asc_rebuilding(ow, other) for ow in self.worlds for other in ASC_MINES if ow is not w or other != key)
         return any(self.asc_rebuilding(w, other) for other in ASC_MINES if other != key)
 
     def asc_target(self, w: World, key: str) -> Optional[int]:
         """Depth at which the policy ascends this mine next (None: it will not ascend again)."""
         if self.asc_depth is None:
             return None
+        if self.asc_kind == "M":  # one single reset in the whole empire: the first mine that gets there
+            return None if self.asc_runs else self.asc_depth
         if self.asc_kind == "T" or not w.asc_any:
             return self.asc_depth
         st = self.profiles(w)[key]["state"]
-        if self.asc_kind == "O":
+        if self.asc_kind in ("O", "G"):
             return self.asc_depth if int(st["ascension_count"]) < max(1, self.asc_step) else None
         best = int(st["best_depth"])
         return max(self.asc_depth, best + self.asc_step) if int(st["ascension_count"]) > 0 else self.asc_depth
@@ -2959,6 +2966,23 @@ def lever_context(lever: str):
                 ep.COLONY_MATURITY_REQUIRED_LEVEL = old
         else:
             yield
+
+
+def universe_probe(curve: str, lever: str = "none", dwell: float = 0.0) -> Dict[str, Any]:
+    """Self-check of the isolation (used by the stress tests): what a scenario of this universe sees inside its contexts and what the
+    process looks like before and after.  ``dwell`` keeps the universe open for that many seconds so that concurrent callers would
+    interleave if the lock did not serialise them."""
+    from game.planet_evolution import expansion_protocol as ep
+
+    before = universe_key()
+    with economy_curve(curve), lever_context(lever):
+        if dwell > 0:
+            time.sleep(dwell)
+        inside = {"key": universe_key(), "gate": int(ep.COLONY_MATURITY_REQUIRED_LEVEL), "price": tuple(_upgrade_cost("metal_mine", 250))}
+        if dwell > 0:
+            time.sleep(dwell)
+        inside["key_after_dwell"] = universe_key()
+    return {"before": before, "inside": inside, "after": universe_key()}
 
 
 def run_scenario(sc: Scenario, curve: str = "uni1") -> Dict[str, Any]:

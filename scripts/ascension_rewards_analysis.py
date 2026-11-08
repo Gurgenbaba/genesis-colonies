@@ -479,7 +479,8 @@ def criteria(results: Sequence[Dict[str, Any]], cand: str) -> Dict[str, Any]:
     all_paid = all(v["payback_day"] is not None for v in m.values())
     c2 = "no"
     if pay and all_paid:
-        c2 = "good" if pay[0] <= C2_PAYBACK_DAYS else ("ok" if pay[0] <= C2_PAYBACK_DAYS_OK else "no")
+        slowest = pay[2]  # "for every style": judged on the slowest style, not on the median (the first version used the median; fast_p8 is the only candidate whose class changes)
+        c2 = "good" if slowest <= C2_PAYBACK_DAYS else ("ok" if slowest <= C2_PAYBACK_DAYS_OK else "no")
     finals = agg([v["produced_1460"] for v in m.values()])
     top = max([v[f"produced_{k}"] for v in m.values() for k in ("1460", "2190") if v[f"produced_{k}"] is not None] or [0.0])
     c3 = bool(finals and C3_LOW <= finals[0] <= C3_HIGH and top <= STYLE_MAX)
@@ -714,7 +715,7 @@ def render_markdown(data: Dict[str, Any]) -> str:
         "",
         "## 5. Design criteria",
         "",
-        f"Thresholds are this analysis' operationalisation (medians over the three styles unless stated): **C1** the first reset feels valuable = the cliff leaves >= {th['c1_cliff']:.2f} of the income before the reset and the empire is back at it within {th['c1_recover_days']} days; **C2** the deficit is recoverable = cumulative payback within {th['c2_payback_days']} days (good) or {th['c2_payback_days_ok']} days (ok), for every style; **C3** `never` stays legitimate = cumulative production of the one-reset policy at 48 months within {th['c3'][0]:g}-{th['c3'][1]:g} of `never` and no style above {th['style_max']:g} at 48 or 72 months; **Guard** no multiplier by repetition = no style above {th['style_max']:g} with a treadmill (`T200`), a ladder (`L200+25`) or {4}/{8} resets per mine, and extra resets do not pay (no style gains more than {th['farm_gain']:g} from 4 or 8 resets over a single one).",
+        f"Thresholds are this analysis' operationalisation (medians over the three styles unless stated): **C1** the first reset feels valuable = the cliff leaves >= {th['c1_cliff']:.2f} of the income before the reset and the empire is back at it within {th['c1_recover_days']} days; **C2** the deficit is recoverable = cumulative payback within {th['c2_payback_days']} days (good) or {th['c2_payback_days_ok']} days (ok), judged on the slowest style (the table shows the median and the range); **C3** `never` stays legitimate = cumulative production of the one-reset policy at 48 months within {th['c3'][0]:g}-{th['c3'][1]:g} of `never` and no style above {th['style_max']:g} at 48 or 72 months; **Guard** no multiplier by repetition = no style above {th['style_max']:g} with a treadmill (`T200`), a ladder (`L200+25`) or {4}/{8} resets per mine, and extra resets do not pay (no style gains more than {th['farm_gain']:g} from 4 or 8 resets over a single one).",
         "",
         "| Candidate | C1 valuable | Cliff / recovered (days) | C2 payback | C3 never legit | Guard | All four | Payback (days) | Cum. production 48 mo |",
         "|---|---|---|---|---|---|---|---:|---:|",

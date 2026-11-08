@@ -141,7 +141,7 @@ Resets of one mine needed for tree milestones (AP per run at L200 / L250 / L300 
 
 ## 5. Design criteria
 
-Thresholds are this analysis' operationalisation (medians over the three styles unless stated): **C1** the first reset feels valuable = the cliff leaves >= 0.67 of the income before the reset and the empire is back at it within 30 days; **C2** the deficit is recoverable = cumulative payback within 365 days (good) or 730 days (ok), for every style; **C3** `never` stays legitimate = cumulative production of the one-reset policy at 48 months within 0.85-1.15 of `never` and no style above 1.25 at 48 or 72 months; **Guard** no multiplier by repetition = no style above 1.25 with a treadmill (`T200`), a ladder (`L200+25`) or 4/8 resets per mine, and extra resets do not pay (no style gains more than 0.05 from 4 or 8 resets over a single one).
+Thresholds are this analysis' operationalisation (medians over the three styles unless stated): **C1** the first reset feels valuable = the cliff leaves >= 0.67 of the income before the reset and the empire is back at it within 30 days; **C2** the deficit is recoverable = cumulative payback within 365 days (good) or 730 days (ok), judged on the slowest style (the table shows the median and the range); **C3** `never` stays legitimate = cumulative production of the one-reset policy at 48 months within 0.85-1.15 of `never` and no style above 1.25 at 48 or 72 months; **Guard** no multiplier by repetition = no style above 1.25 with a treadmill (`T200`), a ladder (`L200+25`) or 4/8 resets per mine, and extra resets do not pay (no style gains more than 0.05 from 4 or 8 resets over a single one).
 
 | Candidate | C1 valuable | Cliff / recovered (days) | C2 payback | C3 never legit | Guard | All four | Payback (days) | Cum. production 48 mo |
 |---|---|---|---|---|---|---|---:|---:|
@@ -163,7 +163,7 @@ Thresholds are this analysis' operationalisation (medians over the three styles 
 | `abl_no_cost` | no | 0.70 (0.70-0.70) / 34 (34-39) | no | yes | no | no | 1001 (996-1046) | 1.00 (0.97-1.02) |
 | `abl_no_ap` | yes | 0.70 (0.70-0.70) / 26 (17-30) | ok | yes | no | no | 526 (401-611) | 1.13 (1.05-1.15) |
 | `keep90_p10` | yes | 0.86 (0.86-0.86) / 11 (7-13) | good | no | no | no | 190 (126-221) | 1.20 (1.12-1.21) |
-| `fast_p8` | yes | 0.70 (0.70-0.70) / 27 (17-31) | ok | yes | no | no | 656 (511-756) | 1.08 (1.01-1.10) |
+| `fast_p8` | yes | 0.70 (0.70-0.70) / 27 (17-31) | no | yes | no | no | 656 (511-756) | 1.08 (1.01-1.10) |
 | `rank1_yield` | no | 0.63 (0.62-0.63) / 83 (82-102) | no | no | yes | no | - | 0.76 (0.67-0.77) |
 | `rank1_fast` | yes | 0.70 (0.69-0.70) / 26 (19-30) | ok | yes | yes | **yes** | 556 (461-631) | 1.12 (1.04-1.14) |
 

@@ -269,6 +269,17 @@ def test_metrics_and_criteria_on_a_good_and_a_bad_candidate():
     assert ar.metrics(ar.find(results, "active", "T200", "good"), ar.reference(results, "active"))["payback_day"] is not None
 
 
+def test_payback_class_is_judged_on_the_slowest_style_not_on_the_median():
+    fast = lambda d: 1000.0 if d < 400 else (800.0 if d < 430 else 1100.0)  # noqa: E731
+    slow = lambda d: 1000.0 if d < 400 else (500.0 if d < 700 else 1200.0)  # noqa: E731
+    run = {"day": 400.0, "ap_gain": 1, "mine": "metal_mine", "world": 0, "income_before_h": 1000.0, "income_after_h": 700.0, "income_recovered_days": 20.0}
+    results = _never() + [_res(style, "O200", "mixed", slow if style == "optimizer" else fast, runs=[run]) for style in ar.STYLES]
+    c = ar.criteria(results, "mixed")
+    assert c["payback_days"][0] < ar.C2_PAYBACK_DAYS  # the median style would be "good" ...
+    assert c["payback_days"][2] > ar.C2_PAYBACK_DAYS_OK  # ... but one style needs more than two years
+    assert c["c2_payback"] == "no" and c["all_pass"] is False
+
+
 def test_farming_metrics_detect_whether_extra_resets_pay():
     base = lambda d: 1000.0  # noqa: E731
     pays = lambda d: 1000.0 * (1.0 + 0.1 * (d > 600))  # noqa: E731  more resets -> +10 %
