@@ -63,7 +63,15 @@ The day ratio grows because the same absolute gap (≈ 200 days) now sits on a s
 * Whether "7 months more to a full empire" is too slow is a retention and feel question the simulator cannot answer; it shows that the long-run economy does not suffer much from PL15 and that PL15 is not a casual-specific penalty (the absolute gap is the same at PL10).
 * Options this evidence would let us price next (none is proposed here, none changes a value): keep PL15; PL10; a staged gate (for example PL10 for colonies 2-5, PL15 beyond); or a faster XP source for the colony under development instead of a lower gate.
 
-## 7. Limits
+## 7. Release readiness
+
+**PL10 is a serious candidate, not release-ready.** Missing before any decision (also PL12 as a middle option has not been simulated yet):
+
+* real expedition XP (this analysis models none, so the chain may be faster than simulated at either gate);
+* several homeworld / DNA seeds (one seed here);
+* a re-run with the outpost-XP fix of #556 (not applied; noise under PL15, not measured under PL10).
+
+## 8. Limits
 
 * One homeworld seed (eligible DNA), mid climate, three fixed player styles, policy v2. S11 pools nothing between planets (no transport).
 * XP model: DNA scans, building and research finishes. Expeditions, quests and other XP sources are not modelled (0 expeditions per day), so real players may chain faster than simulated at either gate.
@@ -72,7 +80,7 @@ The day ratio grows because the same absolute gap (≈ 200 days) now sits on a s
 * `T200` income on a single day depends on the rebuild phase; use the production columns.
 * The "lead in days" uses a series sampled every 5 days.
 
-## 8. Reproduce
+## 9. Reproduce
 
 ```bash
 python scripts/colony_gate_analysis.py --workers 10 --out-json artifacts/colony_gate/latest.json --out-md docs/GC_COLONY_GATE_PL10_VS_PL15_REPORT.md
