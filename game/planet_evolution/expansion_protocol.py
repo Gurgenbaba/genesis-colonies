@@ -830,6 +830,11 @@ def sync_establishment_state(planet_id: int, *, conn: sqlite3.Connection) -> boo
             (pid,),
         )
         changed = True
+        # XP earned while the outpost was held at level 0 (colonize XP, building finishes) is
+        # replayed now that it is established; same level-up/unlock path as every other grant.
+        from .planet_level import add_planet_xp
+
+        add_planet_xp(pid, 0, conn, reason="establishment_catch_up", skip_diversity=True)
 
     compile_planet_mechanics(pid, conn)
     return changed
