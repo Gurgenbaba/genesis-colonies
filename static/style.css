@@ -10539,6 +10539,75 @@ a.gc-bld-head-action-btn--go:focus-visible{
   cursor: not-allowed;
 }
 
+/* GC-RESERVE-001: reserve the next building (square, same chrome as the other head actions) */
+.gc-bld-head-action-btn--reserve{
+  border-color: rgba(120, 190, 255, 0.55);
+  color: rgba(170, 215, 255, 0.96);
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.gc-bld-head-action-btn--reserve:hover,
+.gc-bld-head-action-btn--reserve:focus-visible{
+  border-color: rgba(127, 255, 217, 0.85);
+  color: rgba(255, 255, 255, 1);
+}
+
+.gc-build-reservation{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(120, 190, 255, 0.4);
+  border-radius: var(--gc-radius-xs);
+  background: rgba(10, 24, 44, 0.72);
+  color: rgba(214, 232, 255, 0.96);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.gc-build-reservation[hidden]{
+  display: none;
+}
+
+.gc-build-reservation__label{
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(127, 255, 217, 0.95);
+}
+
+.gc-build-reservation__body{
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.gc-build-reservation__meta{
+  display: block;
+  margin-top: 2px;
+  color: rgba(160, 190, 220, 0.88);
+  font-size: 0.82rem;
+}
+
+.gc-build-reservation__cancel{
+  appearance: none;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  border-radius: var(--gc-radius-xs);
+  background: transparent;
+  color: rgba(251, 191, 36, 0.96);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gc-build-reservation__cancel:hover,
+.gc-build-reservation__cancel:focus-visible{
+  background: rgba(251, 191, 36, 0.14);
+}
+
 .gc-bld-head-action-btn--afford{
   border-color: rgba(251, 120, 120, 0.35);
   color: rgba(251, 160, 160, 0.82);

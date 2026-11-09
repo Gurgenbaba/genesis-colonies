@@ -1597,7 +1597,7 @@ def poll_slim_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     energy = payload.get("energy") if isinstance(payload.get("energy"), dict) else {}
     active = payload.get("active_planet") if isinstance(payload.get("active_planet"), dict) else {}
     research = payload.get("research") if isinstance(payload.get("research"), dict) else {}
-    return {
+    slim: Dict[str, Any] = {
         "notification_revision": payload.get("notification_revision"),
         "unread_messages_count": payload.get("unread_messages_count"),
         "build_queue": _queue_fp_for_poll(payload.get("build_queue")),
@@ -1610,6 +1610,24 @@ def poll_slim_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "score": payload.get("score"),
         "nav_badges": payload.get("nav_badges"),
     }
+    resv_fp = _reservation_fp_for_poll(payload)
+    if resv_fp is not None:  # GC-RESERVE-001: only while the feature is on for this player; off keeps the legacy hash
+        slim["reservation"] = resv_fp
+    return slim
+
+
+def _reservation_fp_for_poll(payload: Dict[str, Any]) -> Optional[List[int]]:
+    """``[armed id, last ended id]`` of the building reservation, from the full payload or the cheap probe stub."""
+    probe = payload.get("reservation_probe")
+    if isinstance(probe, (list, tuple)):
+        return [int(x or 0) for x in probe]
+    bq = payload.get("build_queue")
+    resv = bq.get("reservation") if isinstance(bq, dict) else None
+    if not isinstance(resv, dict) or not resv.get("enabled"):
+        return None
+    armed = resv.get("armed") if isinstance(resv.get("armed"), dict) else {}
+    ended = resv.get("last_ended") if isinstance(resv.get("last_ended"), dict) else {}
+    return [int(armed.get("id") or 0), int(ended.get("id") or 0)]
 
 
 def compute_poll_version(payload: Dict[str, Any]) -> int:
@@ -1793,6 +1811,11 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
             "score": score,
             "nav_badges": nav_badges_for_game_state(uid, conn=conn),
         }
+        from game.build_reservations import reservation_poll_fingerprint
+
+        resv_fp = reservation_poll_fingerprint(conn, int(planet["id"]), uid)
+        if resv_fp is not None:  # flag off -> no key -> the legacy fingerprint, byte for byte
+            stub["reservation_probe"] = resv_fp
         return compute_poll_version(stub)
     except Exception:
         logger.debug("probe_poll_version failed player_id=%s", player_id, exc_info=True)

@@ -448,6 +448,40 @@ def is_shop_enabled() -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def reserve_next_purchase_mode() -> str:
+    """GC-RESERVE-001 feature flag for the building reservation: ``off`` | ``test`` | ``on``.
+
+    ``GC_RESERVE_NEXT_PURCHASE`` is read per call, so a restart with a new value is the kill switch.
+    Default ``off``: no route arms, no worker starts, the autoplay guard stays silent and every armed
+    row (if any) is simply left to expire. ``test`` limits it to the accounts in
+    ``GC_RESERVE_NEXT_PURCHASE_USER_IDS`` (comma separated player ids); ``on`` is everyone.
+    """
+    raw = str(os.environ.get("GC_RESERVE_NEXT_PURCHASE", "off") or "off").strip().lower()
+    if raw in ("1", "true", "yes", "on", "all"):
+        return "on"
+    if raw in ("test", "allowlist", "beta"):
+        return "test"
+    return "off"
+
+
+def reserve_next_purchase_user_ids() -> frozenset[int]:
+    ids: set[int] = set()
+    for part in str(os.environ.get("GC_RESERVE_NEXT_PURCHASE_USER_IDS", "") or "").replace(";", ",").split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.add(int(part))
+    return frozenset(ids)
+
+
+def is_reserve_next_purchase_enabled_for(player_id: int | None = None) -> bool:
+    mode = reserve_next_purchase_mode()
+    if mode == "on":
+        return True
+    if mode == "test" and player_id is not None:
+        return int(player_id) in reserve_next_purchase_user_ids()
+    return False
+
+
 def shop_success_url(*, checkout_base: str | None = None) -> str:
     explicit = _env_str("SHOP_SUCCESS_URL")
     if explicit:

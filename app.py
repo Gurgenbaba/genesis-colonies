@@ -1412,6 +1412,8 @@ _FINISH_SOURCE_PANEL_PAGE: Dict[str, str] = {
     "api_shipyard_queue_cancel": "shipyard",
     "api_buildings_upgrade": "buildings",
     "api_buildings_cancel": "buildings",
+    "api_buildings_reserve": "buildings",
+    "api_buildings_reserve_cancel": "buildings",
     "api_buildings_mine_evolve": "buildings",
     "api_research_start": "research",
     "api_research_ascend_lab": "research",
@@ -1894,6 +1896,8 @@ _POST_MUTATION_READ_ONLY_LIVE_SOURCES = frozenset(
     {
         "api_buildings_upgrade",
         "api_buildings_cancel",
+        "api_buildings_reserve",
+        "api_buildings_reserve_cancel",
         "api_research_start",
         "api_research_ascend_lab",
         "api_research_cancel",
@@ -2490,9 +2494,13 @@ def buildings_view():
     finally:
         conn.close()
 
+    from game.config import is_reserve_next_purchase_enabled_for
+
     tpl_t0 = time.perf_counter()
     resp = render_template(
         "buildings.html",
+        # GC-RESERVE-001: env-only check (no query). Flag off -> the page carries no reservation markup at all.
+        reserve_next_enabled=bool(is_reserve_next_purchase_enabled_for(int(session["user_id"]))),
         player=ctx["player_view"],
         active_planet_id=int(planet["id"]),
         active_planet_name=str(planet.get("name") or ""),
@@ -12172,6 +12180,8 @@ def _uses_action_state_diet(finish_source: str) -> bool:
     return str(finish_source or "") in (
         "api_buildings_upgrade",
         "api_buildings_cancel",
+        "api_buildings_reserve",
+        "api_buildings_reserve_cancel",
         "api_buildings_mine_evolve",
         "api_research_start",
         "api_research_ascend_lab",
@@ -12297,6 +12307,8 @@ def _is_buildings_queue_action_source(finish_source: str) -> bool:
     return str(finish_source or "") in (
         "api_buildings_upgrade",
         "api_buildings_cancel",
+        "api_buildings_reserve",
+        "api_buildings_reserve_cancel",
         "game_state_buildings_finish",
     )
 
@@ -15255,6 +15267,83 @@ def api_buildings_cancel():
         finish_source="api_buildings_cancel",
         include_panel=False,
         panel_delta_keys=delta_keys,
+    )
+
+
+@app.route("/api/buildings/reserve", methods=["POST"])
+@require_login
+def api_buildings_reserve():
+    """GC-RESERVE-001: remember the next building; the server starts it when funds + a queue slot exist."""
+    from game.build_reservations import arm_reservation
+
+    data = request.get_json(silent=True) or {}
+    building_type = (data.get("building_type") or "").strip()
+    if not building_type:
+        return jsonify({"ok": False, "reason": "missing_building_type"}), 400
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+    try:
+        planet_id = int(data["planet_id"]) if data.get("planet_id") not in (None, "") else None
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "invalid_planet"}), 400
+
+    ok, reason, extra = arm_reservation(
+        user_id,
+        building_type,
+        planet_id=planet_id,
+        request_id=request_id or None,
+        replace=bool(data.get("replace")),
+    )
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_buildings_reserve",
+        include_panel=False,
+        panel_delta_keys=[building_type],
+    )
+    response_obj = resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
+
+
+@app.route("/api/buildings/reserve/cancel", methods=["POST"])
+@require_login
+def api_buildings_reserve_cancel():
+    """GC-RESERVE-001: drop an armed reservation (free; a started one is cancelled through its job)."""
+    from game.build_reservations import cancel_reservation
+
+    data = request.get_json(silent=True) or {}
+    try:
+        reservation_id = int(data.get("reservation_id") or 0)
+    except (TypeError, ValueError):
+        reservation_id = 0
+    if reservation_id <= 0:
+        return jsonify({"ok": False, "reason": "missing_reservation_id"}), 400
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    ok, reason, extra = cancel_reservation(user_id, reservation_id)
+    building_type = ""
+    if isinstance(extra, dict) and isinstance(extra.get("reservation"), dict):
+        building_type = str(extra["reservation"].get("building_type") or "")
+    return _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_buildings_reserve_cancel",
+        include_panel=False,
+        panel_delta_keys=[building_type] if building_type else None,
     )
 
 
