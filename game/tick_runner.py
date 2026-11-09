@@ -11,6 +11,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+from .build_reservations import run_reservation_tick
 from .db import db, table_exists
 from .queue_engine import finish_due_work
 from .runtime_state import record_queue_tick_result
@@ -307,6 +308,16 @@ def run_tick(
                     include_relocations=False,
                 )
                 _merge_tick_results(result, batch_result)
+
+    # GC-RESERVE-001: after the due work above, so a slot freed in this very tick is used. A no-op
+    # (one environment read) unless GC_RESERVE_NEXT_PURCHASE is on/test; it never raises.
+    reservations = run_reservation_tick(now=now)
+    if reservations.get("enabled"):
+        result["reservations"] = reservations
+        if reservations.get("errors"):
+            result["errors"].append(f"build reservations: {int(reservations['errors'])} error(s)")
+        if reservations.get("evaluated"):
+            logger.info("build reservations source=%s %s", source, reservations.get("outcomes"))
 
     if include_fleet_tail:
         _run_global_fleet_tail(result, source=source)

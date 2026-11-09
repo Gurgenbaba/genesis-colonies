@@ -3617,6 +3617,13 @@
       job_not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
       max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
+      // GC-RESERVE-001
+      affordable_now: t("reserve_err_affordable_now", "Du kannst das jetzt sofort starten – nutze den Bau-Button."),
+      reservation_exists: t("reserve_err_exists", "Hebe zuerst die aktuelle Vormerkung dieses Planeten auf."),
+      disabled: t("reserve_err_disabled", "Vormerkungen sind derzeit nicht verfügbar."),
+      vacation: t("reserve_err_vacation", "Im Urlaubsmodus nicht verfügbar."),
+      max_level: t("reserve_err_max_level", "Maximale Stufe erreicht – nichts vorzumerken."),
+      not_armed: t("reserve_err_not_armed", "Diese Vormerkung wartet nicht mehr."),
       level_too_low: t("buildings_mine_evo_err_level", "Mine noch nicht bereit für Ascension."),
       insufficient_resources: t("buildings_mine_evo_err_resources", "Nicht genug Ressourcen für den Ascension-Tribute."),
       queue_pending: t("buildings_mine_evo_err_queue", "Bauaufträge dieser Mine zuerst abschließen oder abbrechen."),
@@ -9806,7 +9813,108 @@
     GC.startProgressTicker();
   }
 
+  // =========================
+  // GC-RESERVE-001: reserve the next building (UI). Everything below is a no-op while the server sends
+  // no `build_queue.reservation` (feature flag off): no buttons, no strip, no notices.
+  // =========================
+  const _reservationNoticed = new Set();
+
+  function _reservationBuildingLabel(key) {
+    return t(`building_${key}`, key);
+  }
+
+  function _reservationNotice(ended) {
+    if (!ended) return null;
+    if (ended.state === "started") {
+      return [tf("reserve_notice_started", { building: _reservationBuildingLabel(ended.building_type) }, "Vormerkung gestartet."), "success"];
+    }
+    if (ended.state === "expired") return [t("reserve_notice_expired", "Vormerkung ohne Start abgelaufen."), "info"];
+    const byReason = {
+      superseded: t("reserve_notice_superseded", "Vormerkung aufgehoben: Diese Stufe wurde anders eingereiht."),
+      invalid: t("reserve_notice_invalid", "Vormerkung aufgehoben: Die Voraussetzungen sind nicht mehr erfüllt."),
+      replaced: t("reserve_notice_replaced", "Vormerkung ersetzt."),
+      player: t("reserve_notice_player", "Vormerkung aufgehoben."),
+    };
+    return [byReason[ended.reason] || byReason.player, "info"];
+  }
+
+  function syncBuildReservationUi(buildQueueRaw) {
+    const info = buildQueueRaw && !Array.isArray(buildQueueRaw) ? buildQueueRaw.reservation : null;
+    const enabled = !!(info && info.enabled);
+    const armed = enabled ? info.armed : null;
+
+    // Reserve buttons are rebuilt on every sync (the cards' head actions change with stock and queue).
+    document.querySelectorAll("[data-build-reserve]").forEach((el) => el.remove());
+    if (enabled && !armed) {
+      document.querySelectorAll(".gc-bld-card-head-action[data-building]").forEach((head) => {
+        const key = head.dataset.building || "";
+        if (!key || !head.querySelector('[data-reason="resources"], [data-reason="queue_full"]')) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "gc-bld-head-action-btn gc-bld-head-action-btn--reserve";
+        btn.dataset.buildReserve = key;
+        const label = t("reserve_btn", "Vormerken");
+        btn.title = t("reserve_btn_title", label);
+        btn.setAttribute("aria-label", label);
+        const icon = document.createElement("span");
+        icon.className = "gc-bld-head-action-icon";
+        icon.textContent = "⏱";
+        btn.appendChild(icon);
+        head.appendChild(btn);
+      });
+    }
+
+    const host = document.getElementById("gc-build-reservation");
+    if (host) {
+      host.textContent = "";
+      host.hidden = !armed;
+      if (armed) {
+        const label = document.createElement("span");
+        label.className = "gc-build-reservation__label";
+        label.textContent = t("reserve_strip_label", "Vorgemerkt");
+        const body = document.createElement("span");
+        body.className = "gc-build-reservation__body";
+        body.textContent = tf(
+          "reserve_strip_body",
+          { building: _reservationBuildingLabel(armed.building_type), level: armed.target_level },
+          ""
+        );
+        const waitKey = { funds: "reserve_wait_funds", slot: "reserve_wait_slot", vacation: "reserve_wait_vacation" }[armed.waiting_for];
+        const hours = Math.max(1, Math.ceil((Number(armed.expires_at || 0) - Date.now() / 1000) / 3600));
+        const meta = document.createElement("span");
+        meta.className = "gc-build-reservation__meta";
+        meta.textContent = [waitKey ? t(waitKey, "") : "", tf("reserve_expires", { hours }, "")].filter(Boolean).join(" · ");
+        body.appendChild(meta);
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "gc-build-reservation__cancel";
+        cancel.dataset.reserveCancelId = String(armed.id);
+        cancel.textContent = t("reserve_cancel", "Vormerkung aufheben");
+        host.append(label, body, cancel);
+      }
+    }
+
+    // What happened to the last reservation (started / cancelled / expired): said once per reservation.
+    const ended = enabled ? info.last_ended : null;
+    if (ended && ended.id && !_reservationNoticed.has(ended.id)) {
+      _reservationNoticed.add(ended.id);
+      let seen = false;
+      try {
+        const k = `gc_resv_seen_${ended.id}`;
+        seen = window.localStorage.getItem(k) === "1";
+        if (!seen) window.localStorage.setItem(k, "1");
+      } catch (_) {}
+      const notice = seen ? null : _reservationNotice(ended);
+      if (notice) showNotify(notice[0], notice[1]);
+    }
+  }
+
   function renderBuildQueue(buildQueueRaw) {
+    try {
+      syncBuildReservationUi(buildQueueRaw);
+    } catch (err) {
+      console.error("syncBuildReservationUi failed:", err);
+    }
     let queueList = [];
     if (!buildQueueRaw) {
       queueList = [];
@@ -45388,6 +45496,54 @@
           );
         } finally {
           setProgressionActionBusy(researchLink, false);
+        }
+        return;
+      }
+
+      const reserveBtn = e.target.closest("[data-build-reserve]");
+      if (reserveBtn) {
+        e.preventDefault();
+        if (reserveBtn.dataset.busy === "1") return;
+        setProgressionActionBusy(reserveBtn, true);
+        try {
+          const json = await GC.fetchGameAction("/api/buildings/reserve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              building_type: reserveBtn.dataset.buildReserve || "",
+              planet_id: Number(GC.lastState?.active_planet_id || GC.lastState?.build_queue?.planet_id || 0) || undefined,
+              request_id: newRequestId(),
+            }),
+          });
+          applyActionState(json, json.ok ? "build_reserve_success" : "build_reserve_error");
+          if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+        } catch (err) {
+          console.error("Build reserve AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          setProgressionActionBusy(reserveBtn, false);
+        }
+        return;
+      }
+
+      const reserveCancelBtn = e.target.closest("[data-reserve-cancel-id]");
+      if (reserveCancelBtn) {
+        e.preventDefault();
+        if (reserveCancelBtn.dataset.busy === "1") return;
+        setProgressionActionBusy(reserveCancelBtn, true);
+        try {
+          const json = await GC.fetchGameAction("/api/buildings/reserve/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ reservation_id: Number(reserveCancelBtn.dataset.reserveCancelId || 0) }),
+          });
+          applyActionState(json, json.ok ? "build_reserve_cancel_success" : "build_reserve_cancel_error");
+          if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+        } catch (err) {
+          console.error("Build reserve cancel AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          setProgressionActionBusy(reserveCancelBtn, false);
         }
         return;
       }

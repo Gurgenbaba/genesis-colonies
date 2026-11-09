@@ -868,6 +868,14 @@ def plan_passive_planet_tick(
     """
     ts = float(now if now is not None else _now())
     planet_id = int(planet["id"])
+    # GC-RESERVE-001: a reservation means the player named the next building. The automation never
+    # competes with it for the queue slot or builds the reserved type behind the player's back.
+    # (No query at all unless the reservation feature flag is on.)
+    if allow_buildings:
+        from .build_reservations import planet_has_armed_reservation
+
+        if planet_has_armed_reservation(conn, planet_id, int(player_id)):
+            allow_buildings = False
     chains = max(1, min(5, int(chain_limit)))
     is_idle_tick = bool(idle_chance > 0 and random.random() < float(idle_chance))
     out: Dict[str, Any] = {

@@ -2419,6 +2419,31 @@ def planet_ids_with_build_queue(
             conn.close()
 
 
+def _attach_build_reservation(payload: Dict[str, Any], planet_id: int, conn, now: float) -> None:
+    """GC-RESERVE-001: add ``payload["reservation"]`` for the planet owner when the feature is on.
+
+    No query and no key at all while ``GC_RESERVE_NEXT_PURCHASE`` is off, so the payload of every
+    existing consumer stays byte-identical until the flag is switched on.
+    """
+    from .config import reserve_next_purchase_mode
+
+    if reserve_next_purchase_mode() == "off":
+        return
+    try:
+        owner = conn.execute(
+            "SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),)
+        ).fetchone()
+        if not owner or owner["player_id"] is None:
+            return
+        from .build_reservations import planet_reservation_payload
+
+        info = planet_reservation_payload(conn, int(planet_id), int(owner["player_id"]), now=now)
+        if info is not None:
+            payload["reservation"] = info
+    except Exception:
+        logger.exception("build reservation payload failed planet=%s", planet_id)
+
+
 def get_build_queue_status_for_planet(
     planet_id: int,
     conn=None,
@@ -2532,6 +2557,7 @@ def get_build_queue_status_for_planet(
         payload["mini_queue_jobs"] = map_card_jobs_to_mini_queue_jobs(
             card_jobs, domain="building", now=now
         )
+        _attach_build_reservation(payload, int(planet_id), conn, now)
         return payload
 
     finally:
@@ -2588,7 +2614,23 @@ def queue_build_for_planet(
     user_id: Optional[int] = None,
     *,
     queue_mode: str = "single",
+    reservation: Optional[Dict[str, Any]] = None,
+    lock_mode: str = "wait",
+    dry_run: bool = False,
 ) -> Tuple[bool, str, Dict[str, Any]]:
+    """Queue one (or, with ``queue_mode="max"``, several) build jobs, paid up front.
+
+    GC-RESERVE-001 (``game/build_reservations.py``) reuses this exact function as the single start
+    path of a reserved build, so cost, prerequisites, caps, queue limit and timers are the manual ones:
+
+    * ``reservation={"id", "expected_level"}``: the job is only queued while the next level still is
+      ``expected_level`` (else ``reservation_superseded``) and the reservation is claimed
+      (``armed -> started``, compare-and-swap) in the SAME transaction as the debit and the job insert;
+      a lost claim rolls the debit and the job back (``reservation_not_armed``).
+    * ``lock_mode="skip"``: background callers never wait behind a planet a request owns (``lock_busy``).
+    * ``dry_run=True``: runs every check, writes nothing and returns ``(True, "would_start", ...)`` when the
+      build could start right now. Callers that pass none of these get the historical behaviour.
+    """
     if building_type not in BASE_COST:
         return False, "invalid", {"msg": "Unknown building type"}
 
@@ -2604,7 +2646,11 @@ def queue_build_for_planet(
 
     from .options import vacation_blocks_outbound
 
-    want_max = str(queue_mode or "single").strip().lower() == "max"
+    want_max = (
+        str(queue_mode or "single").strip().lower() == "max"
+        and reservation is None
+        and not dry_run
+    )
 
     # GC-PERF-ACTION-009: context planet + vacation + queue mutation share one
     # checkout. The old route loaded player/planet/buildings on separate
@@ -2626,7 +2672,14 @@ def queue_build_for_planet(
         planet_id = int(planet["id"])
 
         begin_write_transaction(conn)
-        lock_planet_for_update(conn, planet_id)
+        if str(lock_mode or "wait") == "skip":
+            from .db import try_lock_planet_for_update
+
+            if not try_lock_planet_for_update(conn, planet_id):
+                rollback(conn)
+                return False, "lock_busy", {}
+        else:
+            lock_planet_for_update(conn, planet_id)
         now = time.time()
 
         from .queue_engine import finish_due_work
@@ -2783,6 +2836,18 @@ def queue_build_for_planet(
             queued_same = sum(1 for r in rows_db if str(r["building_type"]) == building_type)
             target_level = current_level + queued_same + 1
 
+            if reservation is not None and target_level != int(reservation.get("expected_level") or 0):
+                # The level the player meant is gone (manual build / cancel in between): never start
+                # a different level than the one that was reserved. Nothing has been charged yet.
+                last_reason = "reservation_superseded"
+                last_fail = {
+                    "building_type": building_type,
+                    "current_level": current_level,
+                    "target_level": target_level,
+                    "expected_level": int(reservation.get("expected_level") or 0),
+                }
+                break
+
             if target_level > max_level:
                 last_reason = "ascension_required" if is_evolution_mine else "invalid"
                 last_fail = _cap_failure_payload(target_level)
@@ -2824,6 +2889,14 @@ def queue_build_for_planet(
             if len(rows_db) >= queue_limit:
                 last_reason = "queue_full"
                 last_fail = {"queue_count": len(rows_db), "queue_limit": queue_limit}
+                if dry_run or reservation is not None:
+                    last_fail.update({
+                        "building_type": building_type,
+                        "current_level": current_level,
+                        "target_level": target_level,
+                        "cost_metal": int(cost_metal),
+                        "cost_crystal": int(cost_crystal),
+                    })
                 break
 
             duration = _scale_bps(
@@ -2831,6 +2904,18 @@ def queue_build_for_planet(
                 rebuild_time_bps,
                 minimum=building_progress_floor_seconds(building_type, target_level),
             )
+
+            if dry_run:
+                _record_mutate_perf()
+                rollback(conn)
+                return True, "would_start", {
+                    "building_type": building_type,
+                    "current_level": current_level,
+                    "target_level": int(target_level),
+                    "cost_metal": int(cost_metal),
+                    "cost_crystal": int(cost_crystal),
+                    "duration": int(duration),
+                }
 
             last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
             start_time = max(now, last_finish_time)
@@ -2856,6 +2941,14 @@ def queue_build_for_planet(
                 cost_metal=int(cost_metal),
                 cost_crystal=int(cost_crystal),
             )
+            if reservation is not None:
+                from .build_reservations import claim_reservation_in_transaction
+
+                if not claim_reservation_in_transaction(conn, int(reservation["id"]), int(job_id), now):
+                    # Somebody else started / cancelled it first: the debit and the job go with the rollback.
+                    _record_mutate_perf()
+                    rollback(conn)
+                    return False, "reservation_not_armed", {"reservation_id": int(reservation["id"])}
             jobs_queued += 1
             job_ids.append(int(job_id))
             queued_spends.append((int(job_id), int(cost_metal), int(cost_crystal)))
@@ -2868,6 +2961,8 @@ def queue_build_for_planet(
                 "queue_limit": int(queue_limit),
                 "max_level": int(max_level),
             }
+            if reservation is not None:
+                last_payload["reservation_id"] = int(reservation["id"])
             rows_db.append(
                 {
                     "id": int(job_id),

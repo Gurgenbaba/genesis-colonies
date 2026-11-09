@@ -44,6 +44,7 @@
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn gc-req-hover-trigger"
               data-action-state="warn"
+              data-reason="requirements"
               disabled
               {{ render_req_hover_attrs(b.requirements_items) }}
               aria-label="{{ T('msg_build_requirements', 'Voraussetzungen nicht erfüllt') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
@@ -51,6 +52,7 @@
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade"
               data-action-state="locked"
+              data-reason="queue_full"
               disabled
               aria-disabled="true"
               title="{{ T('buildings_btn_queue_full', 'Warteschlange voll') }}"
@@ -59,6 +61,7 @@
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn gc-req-hover-trigger"
               data-action-state="warn"
+              data-reason="resources"
               disabled
               {{ render_req_hover_attrs(b.resource_items) }}
               aria-label="{{ T('msg_build_not_enough_resources') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
@@ -448,6 +451,8 @@
     </div>
     {% endif %}
 
+    {# GC-RESERVE-001: filled by main.js from build_queue.reservation; stays hidden (and empty) while the feature flag is off. #}
+    <div id="gc-build-reservation" class="gc-build-reservation" data-build-reservation hidden></div>
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
     {% set bq_mini = (bq.mini_queue_jobs if bq and bq.mini_queue_jobs is defined else []) %}
     {{ render_page_mini_queue_strip(
