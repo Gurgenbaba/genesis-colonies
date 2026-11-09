@@ -823,13 +823,19 @@ def test_dna_cores_not_usable(inventory_use_db):
     conn.close()
 
 
-def _assert_inventory_json_response(response, *, expect_ok: bool):
+def _assert_inventory_json_response(response, *, expect_ok: bool, slim: bool = False):
     assert response.content_type.startswith("application/json")
     payload = response.get_json()
     assert isinstance(payload, dict)
     assert payload.get("ok") is expect_ok
     assert "state" in payload
-    assert "inventory" in payload
+    if slim and expect_ok:
+        # Open-container intentionally returns a slim committed-state payload.
+        # Full inventory is refreshed separately to keep the click path fast.
+        assert "inventory" not in payload
+        assert "containers" in payload
+    else:
+        assert "inventory" in payload
     if not expect_ok:
         assert payload.get("message")
         assert payload.get("reason")
@@ -868,7 +874,11 @@ def test_all_inventory_use_actions_return_json(inventory_use_db, monkeypatch):
     ]
     for url, body, expect_ok in cases:
         r = client.post(url, json=body)
-        _assert_inventory_json_response(r, expect_ok=expect_ok)
+        _assert_inventory_json_response(
+            r,
+            expect_ok=expect_ok,
+            slim=(url == "/api/inventory/open-container"),
+        )
 
 
 def test_mutation_results_do_not_include_inventory(inventory_use_db):

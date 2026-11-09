@@ -791,7 +791,7 @@ def test_roll_preview_contains_real_reward(inventory_db, monkeypatch):
     assert winning["key"] in {str(r["reward_key"]) for r in rewards}
 
 
-def test_open_container_response_still_has_state_and_inventory(inventory_db, monkeypatch):
+def test_open_container_response_has_state_and_slim_container_snapshot(inventory_db, monkeypatch):
     client, uid, _ = _login_client(inventory_db, monkeypatch)
     conn = db()
     grant_inventory_item(uid, "container_rare", 1, conn=conn)
@@ -809,9 +809,9 @@ def test_open_container_response_still_has_state_and_inventory(inventory_db, mon
     data = res.get_json()
     assert data["ok"] is True
     assert "state" in data
-    assert "inventory" in data
-    assert isinstance(data["inventory"], dict)
-    assert "containers" in data["inventory"]
+    assert "inventory" not in data
+    assert isinstance(data.get("containers"), list)
+    assert any(c.get("item_key") == "container_rare" for c in data["containers"])
 
 
 def test_roll_preview_does_not_change_reward_outcome(inventory_db):
