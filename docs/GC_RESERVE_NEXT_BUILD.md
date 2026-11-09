@@ -55,7 +55,7 @@ The flag is per service, so DEV (`main`) and UNI1 are switched independently. Su
 * `python migrate.py` applies the whole chain including 189; a second run applies nothing. The table, the three partial unique indexes (`WHERE state = 'armed'`, `WHERE request_id IS NOT NULL`, `WHERE job_id IS NOT NULL`), the CHECK constraint and the cascading foreign key were read back with `\d`.
 * The 43 original contract tests run **unchanged** against PostgreSQL (`GC_RESERVE_TEST_BACKEND=postgres` + `GC_TEST_POSTGRES_URL`), plus PostgreSQL-only tests of real concurrency: a worker leaves at once (`lock_busy`, under 5 s) when another transaction holds the planet row; 8 workers x 12 rounds charge exactly one price per round; two concurrent arms leave exactly one armed row; one request id from 6 threads is one reservation; a manual click racing the worker never charges one level twice. Final state: **73 passed, 1 skipped** (the SQLite-only SQL trace); SQLite: 68 passed, 6 skipped (the PostgreSQL-only ones).
 * **Defects the PostgreSQL run found (fixed):** `prune_ended()` returned -1 because the PostgreSQL cursor wrapper reports "0 rows" as -1 (`rowcount or -1`); every other `rowcount == 1` check in the feature is immune (0 and -1 both mean "not mine"). A test leaked an open read transaction that blocked the fixture's `TRUNCATE` (test hygiene, fixed).
-* The CI workflow `reserve-next-build.yml` repeats this on every push touching the feature.
+* The CI workflow `reserve-next-build.yml` repeats this on every push touching the feature. On this PR's head (4a6b4c8e) `reserve-sqlite` and `reserve-postgres` (GitHub's `postgres:16` service) pass, as do `pg-numeric-core`, `pg-transaction-ownership`, `pg-navigation`, `queue-worker-perf`, `browser-sentinel` and `smoke` - 13 of 13 checks.
 
 ### 2. Browser - done on a throw-away local database with a test account (real app, real worker process)
 
@@ -63,7 +63,7 @@ The flag is per service, so DEV (`main`) and UNI1 are switched independently. Su
 * **Expiry:** a worker process expired an armed reservation (no charge); the open tab dropped the strip and showed "Reservation expired without a start (48 h)".
 * **Automatic start:** a worker process started it with exactly one price charged (the stock after equals the funded amount minus one price); the open tab showed "Reservation started: Ferronite Mine" once and the queue gained the job.
 * **Defect the browser pass found (fixed):** the first expiry run left the open tab showing "armed" for minutes. Cause: the `/api/game-state?since=` short-circuit hashes queues, fleets and notifications, not reservations; an end state that does not touch the queue never changed the version. Fixed (see "Idle tab").
-* Not done: the repository's Sentinel (`browser-sentinel` runs in CI on the PR), a real phone, a real PostgreSQL behind the UI.
+* `browser-sentinel` passes in CI on this head. It drives the default (flag-off) app, so it shows the existing pages are unharmed, not the reservation UI. Not done: a real phone, a real PostgreSQL behind the browser UI.
 
 ### Idle tab
 
@@ -94,7 +94,7 @@ These stale tests are not fixed here (separate hygiene PR); they are listed so n
 
 * Start latency = one queue tick (deviation 1). An open tab learns of a worker-ended reservation at its next poll, up to about 45 s later (see "Idle tab").
 * Existing, not touched here: the toast stack is about 6 px wider than a 375 px viewport (a plain test toast measures the same), and in es / fr / pl / tr / ru / pt the building name `building_metal_mine` reads like the pronoun "mine" ("Ferronite Mío", "Le mien", "Mój", "Benim", "Мой", "Meu") - visible in the strip text. Both are on `main` already.
-* A real phone, the Sentinel run and a staging database with real accounts are not covered; DEV is the same Railway service as the public domains (see `docs/GC_556_MERGE_ACCEPTANCE.md` on #566 for the deploy mapping: Railway does not wait for CI).
+* A real phone, the reservation UI under the Sentinel and a staging database with real accounts are not covered; DEV is the same Railway service as the public domains (see `docs/GC_556_MERGE_ACCEPTANCE.md` on #566 for the deploy mapping: Railway does not wait for CI).
 * Phase 2 (research) stays out: the measurement shows it can hurt the active style.
 * Telemetry for armed / started / cancelled-by-reason and start latency is derivable from `build_reservations` (rows are kept 30 days) but there is no dashboard yet.
 * Open owner decisions from the spec (expiry 48 h, strict `affordable_now`, autoplay skips) are implemented as recommended.
