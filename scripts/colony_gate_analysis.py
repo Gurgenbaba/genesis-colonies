@@ -114,6 +114,7 @@ def run_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
     sc = pj.Scenario(
         spec["sid"], spec["topology"], spec["policy"], "mid", "none", float(spec["days"]),
         rng_seed=spec.get("rng_seed"), strategy=spec["strategy"], asc=spec["asc"], asc_skills=spec["asc_skills"], lever=spec.get("lever", "none"),
+        expeditions_per_day=int(spec.get("expeditions_per_day", 0) or 0),
     )
     res = pj.run_scenario(sc)
     days = float(spec["days"])
@@ -145,6 +146,8 @@ def run_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         "snapshots": snaps,
         "series": series,
         "invariants": res["invariants"],
+        "xp_by_source": dict(res["final"].get("xp_by_source", {})),
+        "expeditions_per_day": int(spec.get("expeditions_per_day", 0) or 0),
     }
 
 
