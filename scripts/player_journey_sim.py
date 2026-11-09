@@ -189,6 +189,8 @@ LEVERS: Dict[str, str] = {
     "colony_gate_pl12": "colony-maturity gate at planet level 12 instead of 15 (the middle option between PL10 and PL15)",
     "colony_gate_pl5": "colony-maturity gate at planet level 5 instead of 15 (dose-response of the colony chain)",
     "auto_start": "a purchase the player cannot afford yet is reserved and starts by itself when the funds arrive (removes action-window latency)",
+    "auto_start_build": "auto_start for the building queues only (one reserved build per planet; research stays manual)",
+    "auto_start_research": "auto_start for the research queue only (one reserved research; buildings stay manual)",
     # equal-strength (about 10 %) candidates for a trait resonance: which brake does it act on?
     "res_cost_x0.9": "research costs x0.9 (-10 %)",
     "mine_cost_x0.9": "metal/crystal mine, fuel plant and solar upgrade costs x0.9 (-10 %)",
@@ -197,7 +199,9 @@ LEVERS: Dict[str, str] = {
     "colony_xp_x1.25": "planet XP of colonies x1.25 (+25 %)",
 }
 COLONY_XP_BOOST = {"colony_xp_x1.1": 1.10, "colony_xp_x1.25": 1.25}
-ASCENSION_ONLY_LEVERS = frozenset({"build_time_x0.5", "colony_gate_pl12"})  # side-study levers (the Ascension check, the PL12 gate comparison); not part of the bottleneck-report matrix
+ASCENSION_ONLY_LEVERS = frozenset({"build_time_x0.5", "colony_gate_pl12", "auto_start_build", "auto_start_research"})  # side-study levers (the Ascension check, the PL12 gate comparison, the reserve-next-purchase split); not part of the bottleneck-report matrix
+RESERVE_BUILD_LEVERS = frozenset({"auto_start", "auto_start_build"})
+RESERVE_RESEARCH_LEVERS = frozenset({"auto_start", "auto_start_research"})
 MINE_COST_KEYS = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant", "solar_plant"})
 LEVER_GATE_LEVEL = {"no_colony_chain": 1, "colony_gate_pl10": 10, "colony_gate_pl12": 12, "colony_gate_pl5": 5}
 AGGRESSIVE_COOLDOWN_DAYS = 7  # policy A<n>: a player who presses Ascend whenever the button is enabled, at most once a week per mine
@@ -1879,16 +1883,16 @@ class Journey:
 
     def reserve_next(self) -> None:
         """The player queues what they want next even if it is not affordable yet; the game starts it when funds arrive."""
-        if self.lever != "auto_start":
+        if self.lever not in RESERVE_BUILD_LEVERS and self.lever not in RESERVE_RESEARCH_LEVERS:
             return
         for w in self.worlds:
             w.reserved = None
-            if len(w.queue) < self.build_limit:
+            if self.lever in RESERVE_BUILD_LEVERS and len(w.queue) < self.build_limit:
                 pick = self.choose_build(w)
                 if pick is not None and (w.metal + EPS < pick[2] or w.crystal + EPS < pick[3]):
                     w.reserved = pick
         self.r_reserved = None
-        if len(self.rqueue) < min(self.research_limit, self.policy.queue_fill):
+        if self.lever in RESERVE_RESEARCH_LEVERS and len(self.rqueue) < min(self.research_limit, self.policy.queue_fill):
             rp = self.choose_research()
             if rp is not None:
                 payer = self.worlds[rp[4]]
@@ -1897,7 +1901,7 @@ class Journey:
                     self.r_reserved = rp
 
     def start_reserved(self) -> None:
-        if self.lever != "auto_start":
+        if self.lever not in RESERVE_BUILD_LEVERS and self.lever not in RESERVE_RESEARCH_LEVERS:
             return
         for w in self.worlds:
             r = w.reserved
@@ -2024,7 +2028,12 @@ class Journey:
             self.expedition_count += 1
 
     def xp_focus_world(self) -> World:
-        behind = [w for w in self.worlds[1:] if not w.outpost and self.sb.planet(w.planet_id)["level"] < COLONY_MATURITY_REQUIRED_LEVEL]
+        # the colony that blocks the next founding: judged against the LIVE gate, so a gate lever (PL10 / PL12) steers the
+        # expedition XP to the colony that is actually holding the chain (at the default gate this is the constant 15 as before)
+        from game.planet_evolution import expansion_protocol as ep
+
+        gate = int(ep.COLONY_MATURITY_REQUIRED_LEVEL)
+        behind = [w for w in self.worlds[1:] if not w.outpost and self.sb.planet(w.planet_id)["level"] < gate]
         return behind[0] if behind else self.hw()
 
     # -- Imperial Mandates (real prerequisites, nothing is granted) ---------------
@@ -2428,7 +2437,7 @@ class Journey:
             cands.append(float(self.ship_build["ready"]))
         for m in self.missions:
             cands.append(float(m["arrive"]))
-        if self.lever == "auto_start":
+        if self.lever in RESERVE_BUILD_LEVERS or self.lever in RESERVE_RESEARCH_LEVERS:
             for w in self.worlds:
                 if w.reserved is not None:
                     wait = self.afford_wait(w, w.reserved[2], w.reserved[3])
