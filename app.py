@@ -2494,9 +2494,13 @@ def buildings_view():
     finally:
         conn.close()
 
+    from game.config import is_reserve_next_purchase_enabled_for
+
     tpl_t0 = time.perf_counter()
     resp = render_template(
         "buildings.html",
+        # GC-RESERVE-001: env-only check (no query). Flag off -> the page carries no reservation markup at all.
+        reserve_next_enabled=bool(is_reserve_next_purchase_enabled_for(int(session["user_id"]))),
         player=ctx["player_view"],
         active_planet_id=int(planet["id"]),
         active_planet_name=str(planet.get("name") or ""),

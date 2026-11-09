@@ -32,8 +32,26 @@ RICH = 50_000_000_000
 # ---------------------------------------------------------------------------
 
 
+def _postgres_url() -> str:
+    """The PostgreSQL gate: the SAME tests run on a real PostgreSQL when asked for explicitly.
+
+    ``GC_RESERVE_TEST_BACKEND=postgres`` + ``GC_TEST_POSTGRES_URL`` (a migrated, disposable database).
+    A stray ``DATABASE_URL`` in the shell never flips the backend by itself.
+    """
+    if os.environ.get("GC_RESERVE_TEST_BACKEND", "").strip().lower() != "postgres":
+        return ""
+    return os.environ.get("GC_TEST_POSTGRES_URL", "").strip()
+
+
+ON_POSTGRES = bool(_postgres_url())
+sqlite_only = pytest.mark.skipif(ON_POSTGRES, reason="SQLite-specific check")
+postgres_only = pytest.mark.skipif(not ON_POSTGRES, reason="needs GC_RESERVE_TEST_BACKEND=postgres + GC_TEST_POSTGRES_URL")
+
+
 @pytest.fixture(scope="module")
 def template_db(tmp_path_factory):
+    if ON_POSTGRES:
+        return None  # the PostgreSQL database is migrated up front (python migrate.py)
     path = tmp_path_factory.mktemp("gc_reserve_template") / "template.db"
     env = os.environ.copy()
     env["GC_DB_PATH"] = str(path)
@@ -45,20 +63,35 @@ def template_db(tmp_path_factory):
 
 @pytest.fixture()
 def world(template_db, tmp_path, monkeypatch):
-    db_file = tmp_path / "reserve.db"
-    shutil.copy(template_db, db_file)
-    monkeypatch.setenv("GC_DB_PATH", str(db_file))
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", "on")
     monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE_USER_IDS", raising=False)
-    monkeypatch.setattr(dbmod, "DB_PATH", db_file)
-    monkeypatch.setattr(models, "DB_PATH", db_file)
+    if ON_POSTGRES:
+        from tests.pg_fixtures import close_pg_pool, wipe_postgres_game_data_direct
+
+        url = _postgres_url()
+        close_pg_pool()
+        monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+        monkeypatch.setenv("DATABASE_URL", url)
+        monkeypatch.setenv("SECRET_KEY", "reserve-pg-test-secret-key-not-for-production")
+        monkeypatch.setenv("APP_ENV", "development")
+        monkeypatch.setenv("GC_PG_POOL_MAX", os.environ.get("GC_PG_POOL_MAX", "12") or "12")
+        monkeypatch.setenv("GC_PG_LOCK_TIMEOUT", "15s")
+        wipe_postgres_game_data_direct(url)  # TRUNCATE ... CASCADE also empties build_reservations (FK)
+    else:
+        db_file = tmp_path / "reserve.db"
+        shutil.copy(template_db, db_file)
+        monkeypatch.setenv("GC_DB_PATH", str(db_file))
+        monkeypatch.setattr(dbmod, "DB_PATH", db_file)
+        monkeypatch.setattr(models, "DB_PATH", db_file)
     models.init_db()
     ok, err, info = models.create_user("reserve_user", "secret123")
     assert ok, err
     uid = int(info["id"])
     planet = dict(models.get_homeworld(player_id=uid))
-    return uid, planet
+    yield uid, planet
+    if ON_POSTGRES:
+        close_pg_pool()
 
 
 def _db():
@@ -146,7 +179,11 @@ def _evaluate(rid: int, **kw):
 def test_migration_creates_the_table_and_the_three_guards(world):
     conn = _db()
     try:
-        names = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE tbl_name = 'build_reservations';").fetchall()}
+        if ON_POSTGRES:
+            names = {r["indexname"] for r in conn.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'build_reservations';").fetchall()}
+            names.add("build_reservations")
+        else:
+            names = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE tbl_name = 'build_reservations';").fetchall()}
     finally:
         conn.close()
     assert {
@@ -653,12 +690,16 @@ def test_queue_payload_carries_the_reservation_only_when_the_flag_is_on(world, m
     uid, planet = world
     res = _arm_poor(uid, planet)
     app = Flask("gc_reserve_payload")
-    with app.test_request_context("/"):
-        on = get_build_queue_status_for_planet(int(planet["id"]), conn=_db(), skip_finish=True)
-        assert on["reservation"]["armed"]["id"] == res["id"] and on["reservation"]["armed"]["waiting_for"] == "funds"
-        monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE", raising=False)
-        off = get_build_queue_status_for_planet(int(planet["id"]), conn=_db(), skip_finish=True)
-        assert "reservation" not in off
+    conn = _db()  # caller-owned: closed below (a leaked read transaction would block a PostgreSQL TRUNCATE)
+    try:
+        with app.test_request_context("/"):
+            on = get_build_queue_status_for_planet(int(planet["id"]), conn=conn, skip_finish=True)
+            assert on["reservation"]["armed"]["id"] == res["id"] and on["reservation"]["armed"]["waiting_for"] == "funds"
+            monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE", raising=False)
+            off = get_build_queue_status_for_planet(int(planet["id"]), conn=conn, skip_finish=True)
+            assert "reservation" not in off
+    finally:
+        conn.close()
 
 
 def test_last_ended_reservation_is_reported_for_a_day(world):
@@ -853,7 +894,10 @@ def test_template_marks_the_card_states_and_hosts_the_strip():
     text = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     for marker in ('data-reason="resources"', 'data-reason="queue_full"', 'data-reason="requirements"', 'id="gc-build-reservation"'):
         assert marker in text, marker
-    assert "hidden" in text[text.index('id="gc-build-reservation"'):][:200]  # invisible until the server sends a reservation
+    host = text[text.index('id="gc-build-reservation"'):][:200]
+    assert "hidden" in host  # invisible until the server sends a reservation
+    # ... and not rendered at all while the flag is off for the player
+    assert "{% if reserve_next_enabled %}<div id=\"gc-build-reservation\"" in text
 
 
 def test_main_js_wires_both_routes_and_the_error_texts():
@@ -918,3 +962,447 @@ def test_game_state_has_no_reservation_key_when_the_flag_is_off(world, monkeypat
         sess["user_id"] = uid
     state = client.get("/api/game-state").get_json()
     assert state.get("ok") is True and "reservation" not in (state.get("build_queue") or {})
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL gate: real row locks, real partial unique indexes, real concurrent transactions
+# (run with GC_RESERVE_TEST_BACKEND=postgres + GC_TEST_POSTGRES_URL; skipped otherwise)
+# ---------------------------------------------------------------------------
+
+
+def _run_threads(count: int, target) -> list:
+    barrier = threading.Barrier(count)
+    results: list = [None] * count
+    errors: list = []
+
+    def runner(i: int) -> None:
+        try:
+            barrier.wait(timeout=20)
+            results[i] = target(i)
+        except BaseException as exc:  # pragma: no cover - reported by the caller
+            errors.append(exc)
+
+    threads = [threading.Thread(target=runner, args=(i,)) for i in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=90)
+    assert not errors, errors
+    return results
+
+
+@postgres_only
+def test_postgres_worker_never_waits_for_a_planet_row_another_transaction_holds(world):
+    """SKIP LOCKED: a transaction holds the planet (e.g. a manual click mid-flight) -> the worker leaves at once."""
+    from game.db import begin_write_transaction, lock_planet_for_update, rollback
+
+    uid, planet = world
+    pid = int(planet["id"])
+    res = _arm_poor(uid, planet)
+    cost_m, cost_c = _cost_of_next(planet)
+    _set_stock(pid, cost_m * 3, cost_c * 3)
+    before = _stock(pid)
+
+    holder = _db()
+    try:
+        begin_write_transaction(holder)
+        lock_planet_for_update(holder, pid)  # SELECT ... FOR UPDATE, held until rollback below
+        started = time.monotonic()
+        out = _evaluate(res["id"])
+        elapsed = time.monotonic() - started
+        assert out["outcome"] == "skipped" and out.get("reason") == "lock_busy", out
+        assert elapsed < 5.0, f"the worker waited {elapsed:.1f}s for a locked planet (lock_timeout would be 15s)"
+        assert _stock(pid) == before and _queue(pid) == []
+        assert _reservation(res["id"])["state"] == "armed"
+    finally:
+        rollback(holder)
+        holder.close()
+
+    assert _evaluate(res["id"])["outcome"] == "started"  # the next beat gets it
+    assert _stock(pid) == (before[0] - cost_m, before[1] - cost_c) and len(_queue(pid)) == 1
+
+
+@postgres_only
+def test_postgres_eight_workers_over_twelve_rounds_charge_exactly_one_price_per_round(world):
+    from game.build_reservations import evaluate_reservation
+
+    uid, planet = world
+    pid = int(planet["id"])
+    cost_m, cost_c = _cost_of_next(planet)
+    for _ in range(12):
+        res = _arm_poor(uid, planet)
+        _set_stock(pid, cost_m * 10, cost_c * 10)
+        snapshot = _reservation(res["id"])
+        outcomes = _run_threads(8, lambda _i: evaluate_reservation(dict(snapshot))["outcome"])
+        assert outcomes.count("started") == 1, outcomes
+        assert set(outcomes) <= {"started", "skipped"}, outcomes
+        assert len(_queue(pid)) == 1
+        assert _stock(pid) == (cost_m * 9, cost_c * 9)
+        conn = _db()
+        conn.execute("DELETE FROM build_queue WHERE planet_id = ?;", (pid,))
+        conn.commit()
+        conn.close()
+
+
+@postgres_only
+def test_postgres_concurrent_arming_leaves_exactly_one_armed_row(world):
+    from game.build_reservations import cancel_reservation, arm_reservation
+
+    uid, planet = world
+    pid = int(planet["id"])
+    kinds = ("metal_mine", "crystal_mine")
+    for _ in range(10):
+        _set_stock(pid, POOR, POOR)
+        results = _run_threads(2, lambda i: arm_reservation(uid, kinds[i], planet_id=pid)[:2])
+        assert sorted(r[1] for r in results) == ["ok", "reservation_exists"], results
+        conn = _db()
+        try:
+            armed = conn.execute("SELECT id FROM build_reservations WHERE planet_id = ? AND state = 'armed';", (pid,)).fetchall()
+        finally:
+            conn.close()
+        assert len(armed) == 1
+        assert cancel_reservation(uid, int(armed[0]["id"]))[:2] == (True, "ok")
+
+
+@postgres_only
+def test_postgres_one_request_id_from_six_threads_is_one_reservation(world):
+    from game.build_reservations import arm_reservation
+
+    uid, planet = world
+    pid = int(planet["id"])
+    _set_stock(pid, POOR, POOR)
+    results = _run_threads(6, lambda _i: arm_reservation(uid, "metal_mine", planet_id=pid, request_id="same-click"))
+    assert all(r[0] and r[1] == "ok" for r in results), [r[:2] for r in results]
+    assert len({int(r[2]["reservation"]["id"]) for r in results}) == 1
+    conn = _db()
+    try:
+        count = conn.execute("SELECT COUNT(*) AS c FROM build_reservations WHERE player_id = ? AND request_id = 'same-click';", (uid,)).fetchone()["c"]
+    finally:
+        conn.close()
+    assert int(count) == 1
+
+
+@postgres_only
+def test_postgres_manual_click_racing_the_worker_never_charges_one_level_twice(world):
+    """The player clicks the very building they reserved while the worker starts it: one job per level, exact debit."""
+    from game.build_reservations import evaluate_reservation
+    from game.buildings import get_upgrade_cost, queue_build_for_planet
+
+    uid, planet = world
+    pid = int(planet["id"])
+    level = int(models.get_planet_buildings(pid).get("metal_mine", 0) or 0)
+    price_l = tuple(int(x) for x in get_upgrade_cost("metal_mine", level))
+    price_l1 = tuple(int(x) for x in get_upgrade_cost("metal_mine", level + 1))
+    seen = set()
+    for _ in range(10):
+        res = _arm_poor(uid, planet)
+        _set_stock(pid, RICH, RICH)
+        snapshot = _reservation(res["id"])
+
+        def act(i: int):
+            if i == 0:
+                return ("worker", evaluate_reservation(dict(snapshot))["outcome"])
+            ok, reason, _p = queue_build_for_planet(planet, {}, "metal_mine", user_id=uid)
+            return ("manual", ok)
+
+        out = dict(_run_threads(2, act))
+        jobs = len(_queue(pid))
+        spent = (RICH - _stock(pid)[0], RICH - _stock(pid)[1])
+        state = _reservation(res["id"])["state"]
+        if state == "armed":  # the worker met the click's planet lock and left; the next beat settles it, free of charge
+            assert jobs == 1 and spent == price_l, (out, jobs, spent)
+            assert _evaluate(res["id"])["outcome"] == "superseded"
+            assert (RICH - _stock(pid)[0], RICH - _stock(pid)[1]) == spent
+            state = _reservation(res["id"])["state"]
+            assert state == "cancelled"
+        if jobs == 1:  # one side won the level; the other did nothing (superseded) -> exactly one price of that level
+            assert spent == price_l, (out, spent)
+        else:  # worker took level L, the manual click became level L+1 -> two different levels, two prices
+            assert jobs == 2 and spent == (price_l[0] + price_l1[0], price_l[1] + price_l1[1]), (out, jobs, spent)
+            assert state == "started"
+        seen.add(jobs)
+        conn = _db()
+        conn.execute("DELETE FROM build_queue WHERE planet_id = ?;", (pid,))
+        conn.commit()
+        conn.close()
+    assert seen  # coverage marker: at least one of the two legal interleavings occurred
+
+
+@postgres_only
+def test_postgres_prune_reports_zero_when_nothing_is_old(world):
+    """The PostgreSQL cursor wrapper reports 'no rows' as -1; the pruning count must still be a plain 0."""
+    from game.build_reservations import prune_ended
+
+    assert prune_ended(time.time()) == 0
+
+
+# ---------------------------------------------------------------------------
+# gate 3: flag isolation - OFF is today's behaviour exactly, TEST admits only the listed accounts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw, mode",
+    [
+        (None, "off"), ("", "off"), ("off", "off"), ("OFF", "off"), ("0", "off"), ("false", "off"), ("no", "off"),
+        ("garbage", "off"), ("tset", "off"), ("on ", "on"), ("ON", "on"), ("1", "on"), ("true", "on"), ("yes", "on"),
+        ("all", "on"), ("test", "test"), (" Test ", "test"), ("allowlist", "test"), ("beta", "test"),
+    ],
+)
+def test_flag_values_fail_closed(monkeypatch, raw, mode):
+    from game.config import reserve_next_purchase_mode
+
+    if raw is None:
+        monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE", raising=False)
+    else:
+        monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", raw)
+    assert reserve_next_purchase_mode() == mode
+
+
+def test_allow_list_parsing_and_test_mode_edges(monkeypatch):
+    from game.config import is_reserve_next_purchase_enabled_for, reserve_next_purchase_user_ids
+
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", "test")
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE_USER_IDS", "abc, ,12;13, -4 ,x7, 014")
+    assert reserve_next_purchase_user_ids() == frozenset({12, 13, 14})
+    assert is_reserve_next_purchase_enabled_for(12) and is_reserve_next_purchase_enabled_for(14)
+    assert not is_reserve_next_purchase_enabled_for(11) and not is_reserve_next_purchase_enabled_for(None)
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE_USER_IDS", "")
+    assert not is_reserve_next_purchase_enabled_for(12)  # test mode with an empty list admits nobody
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", "off")
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE_USER_IDS", "12")
+    assert not is_reserve_next_purchase_enabled_for(12)  # the list never switches the feature on by itself
+
+
+def _touch_every_reservation_entry_point(uid: int, planet: dict) -> dict:
+    """Everything the feature adds to a running game: payload, guard, autoplay, heartbeat, both routes, game state, page."""
+    import importlib
+
+    import app as app_module
+    from flask import Flask
+
+    from game.auto_empire import plan_passive_planet_tick
+    from game.build_reservations import arm_reservation, cancel_reservation, planet_has_armed_reservation, run_reservation_tick
+    from game.buildings import get_build_queue_status_for_planet, queue_build_for_planet
+
+    pid = int(planet["id"])
+    out: dict = {}
+    conn = _db()
+    try:
+        with Flask("gc_reserve_isolation").test_request_context("/"):
+            out["payload"] = get_build_queue_status_for_planet(pid, conn=conn, skip_finish=True)
+        out["guard"] = planet_has_armed_reservation(conn, pid, uid)
+        out["autoplay"] = plan_passive_planet_tick(conn, player_id=uid, planet=planet, allow_research=False, allow_defense=False, now=time.time())
+        conn.commit()
+    finally:
+        conn.close()
+    out["arm"] = arm_reservation(uid, "metal_mine", planet_id=pid)[:2]
+    out["cancel"] = cancel_reservation(uid, 1)[:2]
+    out["tick"] = run_reservation_tick()
+    importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    out["route_arm"] = client.post("/api/buildings/reserve", json={"building_type": "metal_mine", "planet_id": pid}).get_json()
+    out["route_cancel"] = client.post("/api/buildings/reserve/cancel", json={"reservation_id": 1}).get_json()
+    out["state"] = client.get("/api/game-state").get_json()
+    page = client.get("/buildings")
+    out["page_status"] = page.status_code
+    out["page"] = page.get_data(as_text=True)
+    ok, _reason, _job = queue_build_for_planet(planet, {}, "metal_mine", user_id=uid)  # the manual path, as ever
+    out["manual_ok"] = ok
+    return out
+
+
+@sqlite_only
+def test_flag_off_touches_the_reservation_table_nowhere_and_adds_nothing_visible(world, monkeypatch):
+    """Positive control included: with the flag ON the same walk DOES query the table and render the strip host."""
+    import sqlite3
+
+    uid, planet = world
+    statements: list[str] = []
+    real_connect = sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", traced_connect)
+    cost_m, cost_c = _cost_of_next(planet)
+    _set_stock(planet["id"], cost_m * 20, cost_c * 20)
+
+    monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE", raising=False)
+    del statements[:]
+    off = _touch_every_reservation_entry_point(uid, planet)
+    touched = [s for s in statements if "build_reservations" in s.lower()]
+    assert touched == [], touched[:3]
+    assert "reservation" not in off["payload"] and off["guard"] is False
+    assert off["arm"] == (False, "disabled") and off["cancel"] == (False, "disabled")
+    assert off["tick"] == {"enabled": False, "evaluated": 0, "outcomes": {}, "errors": 0}
+    assert off["route_arm"].get("ok") is False and off["route_arm"].get("reason") == "disabled"
+    assert off["route_cancel"].get("ok") is False and off["route_cancel"].get("reason") == "disabled"
+    assert "reservation" not in (off["state"].get("build_queue") or {})
+    assert off["page_status"] == 200 and 'id="gc-build-reservation"' not in off["page"]
+    assert off["manual_ok"] is True  # the manual build path is untouched
+
+    # positive control: the walk is not vacuous - switched on, it reaches the table and the page
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", "on")
+    conn = _db()
+    conn.execute("DELETE FROM build_queue WHERE planet_id = ?;", (int(planet["id"]),))
+    conn.commit()
+    conn.close()
+    del statements[:]
+    on = _touch_every_reservation_entry_point(uid, planet)
+    assert any("build_reservations" in s.lower() for s in statements)
+    assert on["payload"]["reservation"]["enabled"] is True
+    assert on["page_status"] == 200 and 'id="gc-build-reservation"' in on["page"]
+
+
+def test_test_mode_admits_only_the_listed_accounts_at_every_entry_point(world, monkeypatch):
+    from flask import Flask
+
+    from game.build_reservations import arm_reservation, cancel_reservation, planet_has_armed_reservation, run_reservation_tick
+    from game.buildings import get_build_queue_status_for_planet
+
+    uid, planet = world
+    ok, err, info = models.create_user("reserve_other", "secret123")
+    assert ok, err
+    other = int(info["id"])
+    oplanet = dict(models.get_homeworld(player_id=other))
+    assert other != uid
+
+    mine = _arm_poor(uid, planet)  # both hold an armed row, as if a wider test phase had run before
+    _set_stock(oplanet["id"], POOR, POOR)
+    ok, reason, payload = arm_reservation(other, "metal_mine", planet_id=int(oplanet["id"]))
+    assert ok and reason == "ok", (reason, payload)
+    theirs = payload["reservation"]
+
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", "test")
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE_USER_IDS", str(uid))
+    cost_m, cost_c = _cost_of_next(planet)
+    _set_stock(planet["id"], cost_m * 3, cost_c * 3)
+    _set_stock(oplanet["id"], cost_m * 3, cost_c * 3)
+
+    assert arm_reservation(other, "crystal_mine", planet_id=int(oplanet["id"]))[:2] == (False, "disabled")
+    assert cancel_reservation(other, int(theirs["id"]))[:2] == (False, "disabled")
+    conn = _db()
+    try:
+        with Flask("gc_reserve_test_mode").test_request_context("/"):
+            assert "reservation" not in get_build_queue_status_for_planet(int(oplanet["id"]), conn=conn, skip_finish=True)
+            assert get_build_queue_status_for_planet(int(planet["id"]), conn=conn, skip_finish=True)["reservation"]["enabled"] is True
+        assert planet_has_armed_reservation(conn, int(oplanet["id"]), other) is False  # the autoplay guard stays silent for them
+        assert planet_has_armed_reservation(conn, int(planet["id"]), uid) is True
+    finally:
+        conn.close()
+
+    tick = run_reservation_tick()
+    assert tick["enabled"] is True
+    assert _reservation(mine["id"])["state"] == "started"
+    still = _reservation(theirs["id"])
+    assert still["state"] == "armed" and _queue(oplanet["id"]) == [] and _stock(oplanet["id"]) == (cost_m * 3, cost_c * 3)
+    assert _evaluate(theirs["id"])["outcome"] == "disabled"  # even a worker that is handed their row declines it
+
+
+# ---------------------------------------------------------------------------
+# an idle tab must learn that a reservation ended (diet poll version / ?since= short-circuit)
+# ---------------------------------------------------------------------------
+
+
+def test_poll_fingerprint_reads_the_reservation_only_while_the_feature_is_on():
+    from game.live_state import compute_poll_version, poll_slim_from_payload
+
+    base = {"build_queue": {"queue": []}, "research": {"queue": []}, "energy": {}, "active_planet": {"id": 1}}
+    assert "reservation" not in poll_slim_from_payload(base)  # off: the legacy slim dict, key for key
+    off_version = compute_poll_version(base)
+    on_idle = {**base, "build_queue": {"queue": [], "reservation": {"enabled": True, "armed": None, "last_ended": None}}}
+    on_armed = {**base, "build_queue": {"queue": [], "reservation": {"enabled": True, "armed": {"id": 7}, "last_ended": None}}}
+    on_ended = {**base, "build_queue": {"queue": [], "reservation": {"enabled": True, "armed": None, "last_ended": {"id": 7}}}}
+    assert poll_slim_from_payload(on_armed)["reservation"] == [7, 0] and poll_slim_from_payload(on_ended)["reservation"] == [0, 7]
+    assert len({compute_poll_version(p) for p in (on_idle, on_armed, on_ended)}) == 3
+    # a payload whose reservation block says "disabled" hashes exactly like one without the block
+    disabled = {**base, "build_queue": {"queue": [], "reservation": {"enabled": False}}}
+    assert compute_poll_version(disabled) == off_version
+
+
+def test_probe_version_changes_when_a_reservation_arms_and_when_it_ends_without_touching_the_queue(world, monkeypatch):
+    from game.build_reservations import evaluate_reservation
+    from game.live_state import clear_diet_poll_fingerprint, probe_poll_version, try_diet_poll_early_unchanged
+
+    uid, planet = world
+
+    def probe():
+        conn = _db()
+        try:
+            return probe_poll_version(uid, conn)
+        finally:
+            conn.close()
+
+    monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE", raising=False)
+    legacy = probe()
+    assert legacy is not None
+
+    monkeypatch.setenv("GC_RESERVE_NEXT_PURCHASE", "on")
+    idle = probe()
+    res = _arm_poor(uid, planet)
+    armed = probe()
+    assert len({idle, armed}) == 2 and armed != legacy
+
+    # the idle tab polls with the version it has: unchanged while nothing moved ...
+    clear_diet_poll_fingerprint(uid)
+    conn = _db()
+    try:
+        assert (try_diet_poll_early_unchanged(uid, armed, conn=conn) or {}).get("unchanged") is True
+    finally:
+        conn.close()
+
+    # ... and a full state the moment the reservation ends WITHOUT a queue change (expiry)
+    _set_reservation(res["id"], expires_at=time.time() - 5)
+    assert evaluate_reservation(_reservation(res["id"]))["outcome"] == "expired"
+    ended = probe()
+    assert ended not in (armed, idle)
+    clear_diet_poll_fingerprint(uid)
+    conn = _db()
+    try:
+        assert try_diet_poll_early_unchanged(uid, armed, conn=conn) is None  # not "unchanged": the client gets the new state
+    finally:
+        conn.close()
+
+    # switching the feature off restores the legacy version exactly - the armed/ended rows are invisible again
+    monkeypatch.delenv("GC_RESERVE_NEXT_PURCHASE", raising=False)
+    assert probe() == legacy
+
+
+def test_probe_fingerprint_equals_the_one_read_from_the_full_reservation_payload(world):
+    """The cheap probe and the full payload derive the same two facts, or the idle short-circuit would misfire."""
+    from game.build_reservations import evaluate_reservation, planet_reservation_payload, reservation_poll_fingerprint
+    from game.live_state import _reservation_fp_for_poll
+
+    uid, planet = world
+    pid = int(planet["id"])
+
+    def both():
+        conn = _db()
+        try:
+            full = _reservation_fp_for_poll({"build_queue": {"reservation": planet_reservation_payload(conn, pid, uid)}})
+            return full, reservation_poll_fingerprint(conn, pid, uid)
+        finally:
+            conn.close()
+
+    assert both() == ([0, 0], [0, 0])
+    res = _arm_poor(uid, planet)
+    full, probe = both()
+    assert full == probe == [int(res["id"]), 0]
+    _set_reservation(res["id"], expires_at=time.time() - 5)
+    assert evaluate_reservation(_reservation(res["id"]))["outcome"] == "expired"
+    full, probe = both()
+    assert full == probe == [0, int(res["id"])]
+    # the 24 h window of "last ended" ages out the same way on both sides
+    conn = _db()
+    try:
+        later = time.time() + 2 * 86400
+        aged_full = _reservation_fp_for_poll({"build_queue": {"reservation": planet_reservation_payload(conn, pid, uid, now=later)}})
+        assert aged_full == reservation_poll_fingerprint(conn, pid, uid, now=later) == [0, 0]
+    finally:
+        conn.close()

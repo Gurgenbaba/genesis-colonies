@@ -451,8 +451,8 @@
     </div>
     {% endif %}
 
-    {# GC-RESERVE-001: filled by main.js from build_queue.reservation; stays hidden (and empty) while the feature flag is off. #}
-    <div id="gc-build-reservation" class="gc-build-reservation" data-build-reservation hidden></div>
+    {# GC-RESERVE-001: filled by main.js from build_queue.reservation. Not rendered at all while the feature flag is off for this player. #}
+    {% if reserve_next_enabled %}<div id="gc-build-reservation" class="gc-build-reservation" data-build-reservation hidden></div>{% endif %}
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
     {% set bq_mini = (bq.mini_queue_jobs if bq and bq.mini_queue_jobs is defined else []) %}
     {{ render_page_mini_queue_strip(

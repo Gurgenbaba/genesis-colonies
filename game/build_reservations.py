@@ -302,7 +302,12 @@ def arm_reservation(
 
 
 def cancel_reservation(user_id: int, reservation_id: int, *, now: Optional[float] = None) -> Tuple[bool, str, Dict[str, Any]]:
-    """Free, immediate, owner-only. A STARTED reservation is cancelled through its job (queue refund rules)."""
+    """Free, immediate, owner-only. A STARTED reservation is cancelled through its job (queue refund rules).
+
+    Flag off (kill switch) -> ``disabled`` without touching the database, like arming.
+    """
+    if not is_reserve_next_purchase_enabled_for(int(user_id)):
+        return False, "disabled", {}
     ts = float(time.time() if now is None else now)
     conn = db()
     try:
@@ -490,7 +495,8 @@ def prune_ended(now: float, *, batch: int = 500) -> int:
             """,
             (float(now) - RESERVATION_RETENTION_SECONDS, int(batch)),
         )
-        removed = int(cur.rowcount or 0)
+        # The PostgreSQL cursor wrapper reports "0 rows" as -1 (``rowcount or -1``): never trust a negative count.
+        removed = max(0, int(cur.rowcount or 0))
         commit(conn)
         return removed
     except Exception:
@@ -585,3 +591,28 @@ def planet_reservation_payload(conn, planet_id: int, player_id: int, *, now: Opt
     if ended:
         out["last_ended"] = public_view(_row_to_dict(ended))
     return out
+
+
+def reservation_poll_fingerprint(conn, planet_id: int, player_id: int, *, now: Optional[float] = None) -> Optional[List[int]]:
+    """``[armed id, last ended id]`` for the diet poll version, or ``None`` while the feature is off for this player.
+
+    The ``/api/game-state?since=`` short-circuit hashes queues, fleets and notifications; a reservation that
+    ends WITHOUT touching the queue (expired / superseded / invalid / cancelled elsewhere) would otherwise stay
+    "armed" in an idle tab. Same two facts, same selection rules as ``planet_reservation_payload``, so the cheap
+    probe and the full payload hash alike. Flag off -> ``None`` -> the legacy version is untouched.
+    """
+    if not is_reserve_next_purchase_enabled_for(int(player_id)):
+        return None
+    if not table_exists(conn, "build_reservations"):
+        return None
+    ts = float(time.time() if now is None else now)
+    armed = get_armed_reservation(conn, int(planet_id))
+    ended = conn.execute(
+        """
+        SELECT id FROM build_reservations
+        WHERE planet_id = ? AND state <> 'armed' AND ended_at IS NOT NULL AND ended_at >= ?
+        ORDER BY ended_at DESC, id DESC LIMIT 1;
+        """,
+        (int(planet_id), ts - RECENT_ENDED_SECONDS),
+    ).fetchone()
+    return [int(armed["id"]) if armed else 0, int(ended["id"]) if ended else 0]
