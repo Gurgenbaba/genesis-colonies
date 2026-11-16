@@ -8510,7 +8510,7 @@
   "wb_ends_in": "Ends in",
   "wb_event_panel": "Active events",
   "wb_expo_discovery_report": "World Boss discovered at %(coords)s — attack via World Boss / Galaxy.",
-  "wb_galaxy": "To Galaxy",
+  "wb_galaxy": "View Boss Location",
   "wb_help_alliance_xp": "Alliance XP: Scales with the damage of your waves — more damage grants more Alliance XP, with a cap per wave.",
   "wb_help_attack": "Attacks: Instant strike with no flight time and no ship losses. ×1 has a 5-minute cooldown; ×5 counts as 5 waves and has a 25-minute cooldown.",
   "wb_help_board": "Ranking: Damage, waves, and alliance contributions are scored per boss. Your current rank and alliance damage are shown directly on the boss card.",
