@@ -2236,3 +2236,30 @@ def test_instant_attack_hit_mult_x5_damage_and_cooldown(wb_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_world_boss_galaxy_entry_is_navigation_not_an_attack():
+    """A Galaxy click must never be presented as if it submitted a boss strike."""
+    import json
+
+    marker = Path("templates/partials/galaxy_ring_world_boss_marker.html").read_text(encoding="utf-8")
+    inspector = Path("templates/partials/galaxy_world_boss_block.html").read_text(encoding="utf-8")
+    actions = Path("templates/partials/galaxy_fleet_actions.html").read_text(encoding="utf-8")
+    encounter = Path("templates/world_boss.html").read_text(encoding="utf-8")
+
+    boss_action = actions.split("{% if slot.has_world_boss %}", 1)[1].split("{% endif %}", 1)[0]
+    for nav in (marker, inspector, boss_action):
+        assert "galaxy_wb_open_arena" in nav
+        assert "T('wb_attack', 'Angreifen')" not in nav
+        assert "mission=attack" not in nav
+    assert "galaxy_wb_open_hint" in inspector
+    # Cooldown/wave limits may block a strike, not navigation to the encounter.
+    assert 'aria-disabled="true"' not in inspector
+    assert "wb_attack_guide" in encounter
+    assert encounter.index("wb_attack_guide") < encounter.index("data-wb-instant-attack")
+
+    for lang in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        locale = json.loads(Path(f"locales/{lang}.json").read_text(encoding="utf-8"))
+        for key in ("galaxy_wb_open_arena", "galaxy_wb_open_hint", "wb_attack_guide"):
+            assert locale.get(key), f"{lang}: missing {key}"
+        assert locale["galaxy_wb_open_arena"] != locale["wb_attack"]
