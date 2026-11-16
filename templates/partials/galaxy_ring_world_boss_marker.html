@@ -5,17 +5,17 @@
 {% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
 {% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
 {# Keep the ring marker on the instant-attack encounter route. #}
-{% set attack_href = wb.encounter_path if wb.encounter_path is defined and wb.encounter_path else url_for('world_boss_view') %}
+{% set encounter_href = wb.encounter_path if wb.encounter_path is defined and wb.encounter_path else url_for('world_boss_view') %}
 <div class="galaxy-ring-wb-wrap"
      data-galaxy-ring-wb-wrap
      data-target-galaxy="{{ g }}"
      data-target-system="{{ s }}"
      data-target-position="{{ p }}">
-  <a href="{{ attack_href }}"
+  <a href="{{ encounter_href }}"
      class="galaxy-ring-wb-marker galaxy-ring-wb-marker--sr"
-     title="{{ T('galaxy_wb_attack_title', 'World Boss angreifen') }}"
-     aria-label="{{ T('galaxy_wb_field', 'World Boss') }} {{ T(wb.name_key, wb.boss_key) }} — {{ T('wb_attack', 'Angreifen') }}">
-    {{ T('wb_attack', 'Angreifen') }}
+     title="{{ T('galaxy_wb_open_encounter', 'Zur Boss-Arena') }}"
+     aria-label="{{ T('galaxy_wb_open_encounter', 'Zur Boss-Arena') }} — {{ T(wb.name_key, wb.boss_key) }}">
+    {{ T('galaxy_wb_open_encounter', 'Zur Boss-Arena') }}
   </a>
 </div>
 {% endif %}
