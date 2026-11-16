@@ -53,24 +53,10 @@
   <p class="hint">{{ T('wb_wave_cooldown_rule', 'Cooldown zwischen Wellen') }}:
     <span class="gc-mono">{{ (wb.wave_cooldown_sec / 60)|int }}m</span></p>
   {% endif %}
-  {% if wb.viewer_can_attack is defined and wb.viewer_can_attack == false and wb.viewer_attack_block_reason == 'world_boss_wave_limit' %}
-  <span class="gc-btn gc-btn-primary gc-btn-sm is-disabled" aria-disabled="true">
-    {{ T('wb_attack', 'Angreifen') }}
-  </span>
-  {% elif wb.viewer_can_attack is defined and wb.viewer_can_attack == false and wb.viewer_attack_block_reason == 'world_boss_cooldown' and vmeta.next_attack_at %}
-  <a class="gc-btn gc-btn-primary gc-btn-sm is-disabled"
-     id="wb-attack-btn"
-     href="{{ attack_href }}"
-     aria-disabled="true"
-     tabindex="-1"
-     data-wb-locked-until="{{ vmeta.next_attack_at|int }}"
-     title="{{ T('wb_attack_cooldown', 'Nächster Angriff in') }}">
-    {{ T('wb_attack', 'Angreifen') }}
+  <p class="hint galaxy-wb-entry-hint">{{ T('galaxy_wb_open_hint', 'Die Galaxie öffnet nur die Boss-Arena. Dort Kampfschiffe wählen und ×1 oder ×5 drücken.') }}</p>
+  {# This is navigation, never a direct attack: keep it accessible even on cooldown. #}
+  <a class="gc-btn gc-btn-primary gc-btn-sm" href="{{ attack_href }}">
+    {{ T('galaxy_wb_open_arena', 'Bosskampf öffnen') }}
   </a>
-  {% else %}
-  <a class="gc-btn gc-btn-primary gc-btn-sm" id="wb-attack-btn" href="{{ attack_href }}">
-    {{ T('wb_attack', 'Angreifen') }}
-  </a>
-  {% endif %}
 </div>
 {% endif %}
