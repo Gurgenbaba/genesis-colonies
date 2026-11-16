@@ -26,6 +26,10 @@
     <p class="section-hint hint">{{ T("wb_subtitle", "Serverweite PvE-Ereignisse — gemeinsamer Schaden, gemeinsame Belohnungen") }}</p>
   </header>
 
+  {% if has_active %}
+  <p class="hint gc-world-boss-attack-guide" role="note">{{ T('wb_attack_guide', 'Hier wird wirklich angegriffen: Kampfschiffe auf dem aktiven Planeten wählen und beim Boss ×1 oder ×5 drücken. Der Galaxie-Button öffnet nur diese Ansicht.') }}</p>
+  {% endif %}
+
   <section class="gc-panel" aria-labelledby="wb-event-title">
     <div class="gc-panel-header gc-world-boss-panel-head">
       <span class="gc-panel-title" id="wb-event-title">{{ T("wb_event_panel", "Aktive Ereignisse") }}</span>
