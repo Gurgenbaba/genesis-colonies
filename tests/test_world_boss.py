@@ -168,14 +168,21 @@ def test_world_boss_galaxy_ui_contracts():
     marker = Path("templates/partials/galaxy_ring_world_boss_marker.html").read_text(encoding="utf-8")
     assert "galaxy-ring-wb-marker" in marker
     assert "encounter_path" in marker
+    assert "galaxy_wb_open_encounter" in marker
+    assert "galaxy_wb_attack_title" not in marker
 
     wb_page = Path("templates/world_boss.html").read_text(encoding="utf-8")
     assert "data-wb-auto-attack" in wb_page
     assert "wb_auto_attack" in wb_page
     assert "data-wb-encounter" in wb_page
+    assert "wb_attack_here_hint" in wb_page
 
     wb_block = Path("templates/partials/galaxy_world_boss_block.html").read_text(encoding="utf-8")
     assert "encounter_path" in wb_block
+    assert "galaxy_wb_open_encounter" in wb_block
+    assert "galaxy_wb_encounter_hint" in wb_block
+    assert 'id="wb-attack-btn"' not in wb_block
+    assert "is-disabled" not in wb_block
 
     hover_stack = Path("templates/partials/galaxy_ring_slot_hover_stack.html").read_text(encoding="utf-8")
     assert "galaxy-ring-slot-hover-stack" in hover_stack
@@ -186,6 +193,7 @@ def test_world_boss_galaxy_ui_contracts():
     actions = Path("templates/partials/galaxy_fleet_actions.html").read_text(encoding="utf-8")
     assert "has_world_boss" in actions
     assert "galaxy-fleet-action--world-boss" in actions
+    assert "galaxy_wb_open_encounter" in actions
     # World Boss instant attacks must never deep-link to the blocked fleet send route.
     boss_action = actions.split("{% if slot.has_world_boss %}", 1)[1].split("{% endif %}", 1)[0]
     assert "url_for('world_boss_view')" in boss_action
@@ -2236,3 +2244,14 @@ def test_instant_attack_hit_mult_x5_damage_and_cooldown(wb_db):
         commit(conn)
     finally:
         conn.close()
+
+
+
+def test_world_boss_galaxy_navigation_copy_is_translated():
+    import json
+
+    keys = ("galaxy_wb_open_encounter", "galaxy_wb_encounter_hint", "wb_attack_here_hint")
+    for lang in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        translations = json.loads(Path(f"locales/{lang}.json").read_text(encoding="utf-8"))
+        for key in keys:
+            assert isinstance(translations.get(key), str) and translations[key].strip(), (lang, key)
