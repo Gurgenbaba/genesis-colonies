@@ -3368,6 +3368,7 @@ def _event_card_for_player(
             )
         outlook = build_player_reward_outlook(event, int(player_id), conn=conn)
         formation: List[Dict[str, Any]] = []
+        has_hangar_snapshot = False
         auto_enabled = False
         try:
             from .fleet import get_planet_ships
@@ -3376,9 +3377,13 @@ def _event_card_for_player(
             planet = get_context_planet(int(player_id), conn=conn)
             if planet:
                 hangar = get_planet_ships(int(planet["id"]), conn=conn)
+                has_hangar_snapshot = True
                 formation = formation_preview_from_hangar(hangar, limit=4)
         except Exception:
             logger.exception("world_boss formation preview failed player=%s", player_id)
+        if ok_atk and has_hangar_snapshot and not formation:
+            ok_atk = False
+            atk_reason = "no_combat_ships_available"
         if _auto_attack_columns_ready(conn):
             auto_row = conn.execute(
                 """

@@ -310,6 +310,10 @@
                     <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status">{{ T("wb_attack_inflight", "Angriffsflotte bereits unterwegs.") }}</p>
                     {% elif player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
                     <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status">{{ T("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.") }}</p>
+                    {% elif player_info and player_info.attack_block_reason == 'no_combat_ships_available' %}
+                    <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status">
+                      {{ T("wb_auto_attack_no_ships", "Keine Kampfschiffe auf dem aktiven Planeten.") }}
+                    </p>
                     {% elif player_info and player_info.can_attack and auto_on %}
                     <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_auto_attack_pending", "Auto-Angriff aktiv — nächster Treffer folgt.") }}</p>
                     {% elif player_info and player_info.can_attack %}
@@ -337,8 +341,14 @@
                   <div class="gc-world-boss-actions" data-wb-catch data-wb-event-id="{{ event.id }}">
                     {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
                     <div class="wb-hit-group" role="group" aria-label="{{ T('wb_attack', 'Angreifen') }}">
-                      <span class="gc-btn gc-btn-primary is-disabled wb-attack-btn" aria-disabled="true">{{ T("wb_attack_x1", "×1") }}</span>
-                      <span class="gc-btn gc-btn-primary is-disabled wb-attack-btn" aria-disabled="true">{{ T("wb_attack_x5", "×5") }}</span>
+                      <button type="button" class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
+                              aria-disabled="true" data-wb-instant-attack
+                              data-wb-disabled-reason="world_boss_wave_limit"
+                              data-wb-hit-mult="1" data-wb-event-id="{{ event.id }}">{{ T("wb_attack_x1", "×1") }}</button>
+                      <button type="button" class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
+                              aria-disabled="true" data-wb-instant-attack
+                              data-wb-disabled-reason="world_boss_wave_limit"
+                              data-wb-hit-mult="5" data-wb-event-id="{{ event.id }}">{{ T("wb_attack_x5", "×5") }}</button>
                     </div>
                     <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
                     {% elif player_info and player_info.attack_block_reason == 'world_boss_cooldown' and cooldown_until %}
@@ -346,8 +356,7 @@
                       <button type="button"
                               class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
                               aria-disabled="true"
-                              tabindex="-1"
-                              disabled
+
                               data-wb-instant-attack
                               data-wb-hit-mult="1"
                               data-wb-event-id="{{ event.id }}"
@@ -355,8 +364,7 @@
                       <button type="button"
                               class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
                               aria-disabled="true"
-                              tabindex="-1"
-                              disabled
+
                               data-wb-instant-attack
                               data-wb-hit-mult="5"
                               data-wb-event-id="{{ event.id }}"

@@ -32881,6 +32881,20 @@ button.pe-hero-planet-hint:focus-visible {
   pointer-events: none;
   cursor: not-allowed;
 }
+/* Locked raid buttons keep their disabled appearance but remain explainable. */
+.gc-world-boss-page .wb-attack-btn.is-disabled {
+  pointer-events: auto;
+  cursor: help;
+}
+.gc-world-boss-page [data-wb-action-feedback][data-wb-feedback-kind="error"] {
+  margin: 0.2rem 0;
+  padding: 0.55rem 0.7rem;
+  color: var(--gc-text);
+  border: 1px solid rgba(255, 153, 110, 0.55);
+  background: rgba(80, 32, 27, 0.3);
+  border-radius: var(--gc-radius-sm, 2px);
+  font-size: 0.88rem;
+}
 .galaxy-wb-cooldown {
   margin: 0.35rem 0;
   padding: 0.3rem 0.45rem;
