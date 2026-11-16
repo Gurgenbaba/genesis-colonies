@@ -8566,10 +8566,16 @@ def api_world_boss_attack():
             rollback(conn)
             raise
     except Exception:
+        app.logger.exception("world_boss_attack_exception player=%s event=%s", player_id, event_id)
         return jsonify({"ok": False, "error": "world_boss_attack_failed"}), 500
     finally:
         conn.close()
 
+    if not result.get("ok"):
+        app.logger.info(
+            "world_boss_attack_rejected player=%s event=%s reason=%s hit_mult=%s",
+            player_id, event_id, result.get("error"), hit_mult,
+        )
     body: Dict[str, Any] = {
         "ok": bool(result.get("ok")),
         "attack": result.get("attack"),

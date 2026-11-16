@@ -41951,9 +41951,10 @@
       card.querySelectorAll("[data-wb-instant-attack]").forEach((btn) => {
         btn.classList.add("is-disabled");
         btn.setAttribute("aria-disabled", "true");
-        btn.setAttribute("tabindex", "-1");
+        btn.removeAttribute("tabindex");
         btn.setAttribute("data-wb-locked-until", String(until));
-        if (btn.tagName === "BUTTON") btn.disabled = true;
+        // Clicks on a locked attack must reach the explanatory feedback guard.
+        if (btn.tagName === "BUTTON") btn.disabled = false;
         delete btn.dataset.wbCdBound;
         delete btn.dataset.wbCdUntil;
         if (typeof btn._wbCdClear === "function") {
@@ -42468,13 +42469,13 @@
         el = document.createElement("p");
         el.className = "gc-world-boss-action-hint hint";
         el.setAttribute("data-wb-action-feedback", "");
-        el.setAttribute("role", "status");
-        el.setAttribute("aria-live", "polite");
         actions.insertAdjacentElement("afterend", el);
       }
       el.textContent = String(message || "");
       el.hidden = !message;
       el.dataset.wbFeedbackKind = kind || "info";
+      el.setAttribute("role", kind === "error" ? "alert" : "status");
+      el.setAttribute("aria-live", kind === "error" ? "assertive" : "polite");
     };
 
     const wbPostInstantAttack = async (btn, { autoSelect }) => {
@@ -42487,11 +42488,9 @@
       ) {
         if (btn && btn.dataset.submitting !== "1") {
           const card = btn.closest(".gc-world-boss-card");
-          const locked = Number(btn.getAttribute("data-wb-locked-until") || 0);
-          const blockedMessage = locked > Date.now() / 1000
-            ? t("wb_attack_cooldown", "Next attack in") + "…"
-            : t("msg_action_failed", "Attack unavailable.");
-          wbShowAttackFeedback(card, blockedMessage, "error");
+          const reason = btn.dataset.wbDisabledReason ||
+            (btn.hasAttribute("data-wb-locked-until") ? "world_boss_cooldown" : "world_boss_wave_limit");
+          wbShowAttackFeedback(card, wbMapAttackError(reason), "error");
         }
         return;
       }
