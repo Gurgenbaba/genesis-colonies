@@ -5,8 +5,6 @@
 {% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
 {% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
 {% set hp_pct = ((wb.hp_ratio or 0) * 100)|round(1) %}
-{# Instant World Boss attacks belong to the encounter, never /fleet. #}
-{% set attack_href = wb.encounter_path if wb.encounter_path is defined and wb.encounter_path else url_for('world_boss_view') %}
 <div class="galaxy-wb-block">
   <div class="galaxy-wb-block-head">
     {% set _wb_png = url_for('static', filename='img/bosses/' ~ (wb.boss_key or '_placeholder') ~ '.png', v=GC_ASSET_VERSION) %}
@@ -54,9 +52,5 @@
     <span class="gc-mono">{{ (wb.wave_cooldown_sec / 60)|int }}m</span></p>
   {% endif %}
   <p class="hint galaxy-wb-entry-hint">{{ T('galaxy_wb_open_hint', 'Die Galaxie öffnet nur die Boss-Arena. Dort Kampfschiffe wählen und ×1 oder ×5 drücken.') }}</p>
-  {# This is navigation, never a direct attack: keep it accessible even on cooldown. #}
-  <a class="gc-btn gc-btn-primary gc-btn-sm" href="{{ attack_href }}">
-    {{ T('galaxy_wb_open_arena', 'Bosskampf öffnen') }}
-  </a>
 </div>
 {% endif %}
