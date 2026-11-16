@@ -810,12 +810,13 @@ def estimate_world_boss_wave_damage(
     rng_seed: int,
     conn=None,
 ) -> int:
-    """Deterministic HP-damage estimate for auto-attack trim (plan seed ≠ arrival seed)."""
-    import random
+    """Estimate instant World Boss HP damage without a full battle simulation.
 
-    from .combat import attacker_stacks_from_fleet, simulate_battle
-    from .combat_models import COMBAT_UNIT_SHIP, stacks_from_counts
-
+    The auto-picker calls this many times in a binary search. Instant strikes
+    use prestige-score math, not simulate_battle, so estimate with the actual
+    instant damage calculation instead of a costly battle resolution. Keep
+    rng_seed and conn for backwards-compatible callers.
+    """
     atk = {
         str(k): max(0, int(v or 0))
         for k, v in dict(attacker_ships or {}).items()
@@ -823,28 +824,19 @@ def estimate_world_boss_wave_damage(
     }
     if not atk:
         return 0
-    def_ships = {
+    wave = {
         str(k): max(0, int(v or 0))
         for k, v in dict(defender_ships or {}).items()
         if int(v or 0) > 0
     }
-    result = simulate_battle(
-        attacker_stacks_from_fleet(atk),
-        stacks_from_counts(def_ships, unit_type=COMBAT_UNIT_SHIP),
-        rng=random.Random(int(rng_seed)),
-        attacker_player_id=None,
-        defender_player_id=None,
-        conn=conn,
-    )
     return int(
-        compute_world_boss_hp_damage(
-            defender_ships_before=def_ships,
-            defender_losses=result.defender_losses or {},
+        compute_instant_hp_damage(
+            ships=atk,
+            defender_ships=wave,
             max_hp=int(max_hp),
-            attacker_ships_before=atk,
+            critical=False,
         )
     )
-
 
 def select_world_boss_auto_attack_ships(
     hangar: Mapping[str, int],

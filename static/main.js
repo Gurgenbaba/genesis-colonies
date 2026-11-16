@@ -42349,6 +42349,26 @@
       return t("msg_action_failed", "Aktion fehlgeschlagen.");
     };
 
+    // Keep action feedback in the encounter itself: toast overlays can be missed
+    // on mobile, and a slow server request must never look like a dead button.
+    const wbShowAttackFeedback = (card, message, kind) => {
+      if (!card) return;
+      let el = card.querySelector("[data-wb-action-feedback]");
+      if (!el) {
+        const actions = card.querySelector(".gc-world-boss-actions");
+        if (!actions) return;
+        el = document.createElement("p");
+        el.className = "gc-world-boss-action-hint hint";
+        el.setAttribute("data-wb-action-feedback", "");
+        el.setAttribute("role", "status");
+        el.setAttribute("aria-live", "polite");
+        actions.insertAdjacentElement("afterend", el);
+      }
+      el.textContent = String(message || "");
+      el.hidden = !message;
+      el.dataset.wbFeedbackKind = kind || "info";
+    };
+
     const wbPostInstantAttack = async (btn, { autoSelect }) => {
       if (
         !btn ||
@@ -42357,15 +42377,27 @@
         btn.getAttribute("aria-disabled") === "true" ||
         btn.dataset.submitting === "1"
       ) {
+        if (btn && btn.dataset.submitting !== "1") {
+          const card = btn.closest(".gc-world-boss-card");
+          const locked = Number(btn.getAttribute("data-wb-locked-until") || 0);
+          const blockedMessage = locked > Date.now() / 1000
+            ? t("wb_attack_cooldown", "Next attack in") + "…"
+            : t("msg_action_failed", "Attack unavailable.");
+          wbShowAttackFeedback(card, blockedMessage, "error");
+        }
         return;
       }
       const eventId = Number(btn.getAttribute("data-wb-event-id") || 0);
-      if (!eventId) return;
+      if (!eventId) {
+        wbShowAttackFeedback(btn.closest(".gc-world-boss-card"), t("msg_action_failed", "Action failed."), "error");
+        return;
+      }
       let hitMult = Number(btn.getAttribute("data-wb-hit-mult") || 1);
       if (hitMult !== 5) hitMult = 1;
       const card = btn.closest(".gc-world-boss-card");
       btn.disabled = true;
       btn.dataset.submitting = "1";
+      wbShowAttackFeedback(card, t("wb_attack", "Attack") + "…", "pending");
       const requestId =
         typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
@@ -42389,6 +42421,7 @@
           GC.applyActionState(res, res.ok ? "world_boss_attack" : "world_boss_attack_error");
         }
         if (res && res.ok) {
+          wbShowAttackFeedback(card, "", "success");
           if (card) {
             wbApplyAttackResult(card, res);
             wbPlayAttackFx(card, res.attack, res.boss);
@@ -42409,12 +42442,16 @@
           }
         } else {
           const reason = String(res?.error || res?.reason || "generic");
-          showNotify(wbMapAttackError(reason, res), "error");
+          const errorMessage = wbMapAttackError(reason, res);
+          showNotify(errorMessage, "error");
+          wbShowAttackFeedback(card, errorMessage, "error");
           btn.disabled = false;
           delete btn.dataset.submitting;
         }
       } catch (_err) {
-        showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        const errorMessage = t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen.");
+        showNotify(errorMessage, "error");
+        wbShowAttackFeedback(card, errorMessage, "error");
         btn.disabled = false;
         delete btn.dataset.submitting;
       }
