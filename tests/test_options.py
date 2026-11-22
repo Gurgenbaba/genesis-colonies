@@ -664,3 +664,122 @@ def test_options_module_bootstraps_account_safety_after_export():
     tail = options_js.split(export, 1)[1]
     assert 'document.getElementById("options-page")' in tail
     assert 'initOptionsPage();' in tail
+
+
+def test_due_account_deletion_cleans_stellar_forge_and_mine_ascension_fks(temp_db):
+    """A due deletion cannot leave non-cascading endgame planet rows behind."""
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    conn = models.db()
+    try:
+        old_planet = int(conn.execute(
+            "SELECT id FROM planets WHERE player_id = ? LIMIT 1;", (pid,)
+        ).fetchone()["id"])
+        conn.execute(
+            "INSERT INTO planet_shipyard_ascension (planet_id, forge_rank) VALUES (?, 1);",
+            (old_planet,),
+        )
+        conn.execute(
+            "INSERT INTO planet_mine_evolution (planet_id, building_type, evolution_rank) "
+            "VALUES (?, 'metal_mine', 1);",
+            (old_planet,),
+        )
+        conn.execute(
+            "INSERT INTO planet_mine_ascension_state (planet_id, building_type) "
+            "VALUES (?, 'metal_mine');",
+            (old_planet,),
+        )
+        conn.execute(
+            "INSERT INTO planet_mine_ascension_skills (planet_id, building_type, skill_key) "
+            "VALUES (?, 'metal_mine', 'test_skill');",
+            (old_planet,),
+        )
+        due = int(time.time()) - 10
+        conn.execute(
+            "UPDATE players SET account_deletion_requested_at = ?, "
+            "account_deletion_due_at = ? WHERE id = ?;",
+            (due - 7 * 86400, due, pid),
+        )
+        conn.commit()
+        result = process_all_due_account_deletions(conn=conn)
+        assert result["ok"] is True, result["errors"]
+        assert result["processed"] == [pid]
+        assert is_account_deleted(pid, conn=conn)
+        for table in (
+            "planet_shipyard_ascension",
+            "planet_mine_evolution",
+            "planet_mine_ascension_state",
+            "planet_mine_ascension_skills",
+        ):
+            assert conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE planet_id = ?;",
+                (old_planet,),
+            ).fetchone()["n"] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) AS n FROM planets WHERE player_id = ?;", (pid,)
+        ).fetchone()["n"] == 1
+    finally:
+        conn.close()
+
+
+def test_overdue_deletion_failure_does_not_block_options_read(temp_db, monkeypatch):
+    """Options is read-only even if a due deletion needs worker retry."""
+    from game import options as options_mod
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    conn = models.db()
+    try:
+        due = int(time.time()) - 10
+        conn.execute(
+            "UPDATE players SET account_deletion_requested_at = ?, "
+            "account_deletion_due_at = ? WHERE id = ?;",
+            (due - 7 * 86400, due, pid),
+        )
+        conn.commit()
+        def fail_delete(*_args, **_kwargs):
+            raise AssertionError("options GET must not execute account deletion")
+        monkeypatch.setattr(options_mod, "process_due_account_deletion", fail_delete)
+        snapshot = get_options_snapshot(pid, conn=conn)
+        assert snapshot["account_safety"]["deletion_pending"] is True
+    finally:
+        conn.close()
+
+
+def test_due_deletion_worker_isolates_failed_player(temp_db, monkeypatch):
+    """One failed account is rolled back without aborting the next deletion."""
+    from game import options as options_mod
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    first, _, _ = _create_player()
+    second, _, _ = _create_player()
+    conn = models.db()
+    try:
+        due = int(time.time()) - 10
+        conn.execute(
+            "UPDATE players SET account_deletion_requested_at = ?, "
+            "account_deletion_due_at = ? WHERE id IN (?, ?);",
+            (due - 7 * 86400, due, first, second),
+        )
+        conn.commit()
+        real = options_mod.process_due_account_deletion
+        def fail_first(player_id, *, conn=None):
+            if player_id == first:
+                conn.execute("UPDATE players SET name = ? WHERE id = ?;", ("poisoned", first))
+                raise RuntimeError("simulated deletion failure")
+            return real(player_id, conn=conn)
+        monkeypatch.setattr(options_mod, "process_due_account_deletion", fail_first)
+        result = process_all_due_account_deletions(conn=conn)
+        assert result["processed"] == [second]
+        assert result["errors"][0]["player_id"] == first
+        assert not is_account_deleted(first, conn=conn)
+        assert is_account_deleted(second, conn=conn)
+        assert conn.execute(
+            "SELECT name FROM players WHERE id = ?;", (first,)
+        ).fetchone()["name"] != "poisoned"
+    finally:
+        conn.close()
