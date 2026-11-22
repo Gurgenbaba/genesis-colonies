@@ -27,6 +27,8 @@ DEFAULT_SEASON_SLUG = "genesis_s1"
 DEFAULT_XP_PER_LEVEL = 100
 DEFAULT_MAX_LEVEL = 50
 DEFAULT_SEASON_DAYS = 60
+# P0 recovery: bounded one-time S1 grace, no new season / premium reset.
+DEFAULT_S1_RECOVERY_GRACE_DAYS = 60
 TRACK_FREE = "free"
 TRACK_PREMIUM = "premium"
 # Bump when reward tables change — ensure_default_season reseeds levels if stale.
@@ -393,6 +395,37 @@ def _seed_season_levels(conn, season_id: int) -> None:
         )
 
 
+def _recover_expired_default_season_once(conn, season_id: int, now: float) -> None:
+    """One-time bounded grace for the original 60-day S1 pass.
+
+    S1 was left active after its expiry, so Ops became impossible to earn.
+    Extend only an *expired, original-length* default S1 for another 60 days.
+    Do not change its id, XP, premium entitlements, rewards or claims. Never
+    extend already-graced seasons again or touch operator-created seasons.
+    """
+    row = conn.execute(
+        "SELECT slug, starts_at, ends_at FROM battle_pass_seasons "
+        "WHERE id = ? AND active = 1 LIMIT 1;",
+        (int(season_id),),
+    ).fetchone()
+    if not row or str(row["slug"]) != DEFAULT_SEASON_SLUG:
+        return
+    start = float(row["starts_at"] or 0)
+    end = float(row["ends_at"] or 0)
+    normal_seconds = DEFAULT_SEASON_DAYS * 86400
+    extended_end = start + (DEFAULT_SEASON_DAYS + DEFAULT_S1_RECOVERY_GRACE_DAYS) * 86400
+    # Original season only; a 120-day already-extended season is left alone.
+    if not (start > 0 and start < end < now < extended_end):
+        return
+    if end - start > normal_seconds + 1:
+        return
+    conn.execute(
+        "UPDATE battle_pass_seasons SET ends_at = ? "
+        "WHERE id = ? AND active = 1 AND ends_at = ?;",
+        (extended_end, int(season_id), end),
+    )
+
+
 def ensure_default_season(conn, *, now: Optional[float] = None) -> Optional[int]:
     """Ensure an active season + level catalog exists. Returns season id."""
     if not schema_ready(conn):
@@ -408,6 +441,7 @@ def ensure_default_season(conn, *, now: Optional[float] = None) -> Optional[int]
     ).fetchone()
     if row:
         sid = int(row["id"])
+        _recover_expired_default_season_once(conn, sid, ts)
         if _season_levels_stale(conn, sid):
             _seed_season_levels(conn, sid)
         return sid
