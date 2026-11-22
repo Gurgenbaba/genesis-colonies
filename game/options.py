@@ -977,7 +977,9 @@ def get_account_safety_snapshot(
             }
         if self_heal:
             repair_account_safety_state(int(pid), conn=c)
-        process_due_account_deletion(int(pid), conn=c)
+        # The periodic deletion worker (or the HUD self-heal path) performs
+        # destructive cleanup. Reading /options must never delete planets:
+        # a failed FK write would poison this request's PostgreSQL transaction.
         row = _player_safety_row(int(pid), c)
         now = _now_ts()
         hud = _vacation_hud_from_row(row, now)
@@ -1548,6 +1550,8 @@ def _wipe_player_game_progress(player_id: int, *, conn) -> None:
     planet_ids = [int(r["id"]) for r in cur.fetchall()]
     if planet_ids:
         ph = ",".join("?" for _ in planet_ids)
+        # Legacy endgame tables lack ON DELETE CASCADE. Delete only rows owned
+        # by this player's planets, before removing their parent planets.
         for table, col in (
             ("build_queue", "planet_id"),
             ("shipyard_queue", "planet_id"),
@@ -1555,10 +1559,29 @@ def _wipe_player_game_progress(player_id: int, *, conn) -> None:
             ("planet_evolution_queue", "planet_id"),
             ("planet_ships", "planet_id"),
             ("planet_buildings", "planet_id"),
+            ("planet_mine_ascension_skills", "planet_id"),
+            ("planet_mine_ascension_state", "planet_id"),
+            ("planet_mine_evolution", "planet_id"),
+            ("planet_shipyard_ascension", "planet_id"),
+            ("activity_xp_log", "planet_id"),
+            ("auction_house_bids", "planet_id"),
+            ("world_claims", "planet_id"),
         ):
             if table_exists(conn, table):
                 cur.execute(f"DELETE FROM {table} WHERE {col} IN ({ph});", planet_ids)
+        # Auction listings can refer to a planet without being owned by the
+        # player (historical bids). Preserve the listing, clear the pointer.
+        if table_exists(conn, "auction_house_listings"):
+            cur.execute(
+                f"UPDATE auction_house_listings SET current_bid_planet_id = NULL "
+                f"WHERE current_bid_planet_id IN ({ph});",
+                planet_ids,
+            )
 
+    if table_exists(conn, "world_claims"):
+        cur.execute("DELETE FROM world_claims WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "player_forge_cores"):
+        cur.execute("DELETE FROM player_forge_cores WHERE player_id = ?;", (pid,))
     if table_exists(conn, "fleet_movements"):
         cur.execute("DELETE FROM fleet_movements WHERE player_id = ?;", (pid,))
     if table_exists(conn, "research_queue"):
@@ -1930,10 +1953,17 @@ def process_all_due_account_deletions(*, conn=None) -> Dict[str, Any]:
         try:
             for row in rows:
                 pid = int(row["id"])
+                # PostgreSQL aborts a transaction after a foreign-key error.
+                # A per-account savepoint prevents one corrupt legacy account
+                # from blocking unrelated players' scheduled deletions.
+                c.execute("SAVEPOINT account_delete_one;")
                 try:
                     if process_due_account_deletion(pid, conn=c):
                         processed.append(pid)
+                    c.execute("RELEASE SAVEPOINT account_delete_one;")
                 except Exception as exc:
+                    c.execute("ROLLBACK TO SAVEPOINT account_delete_one;")
+                    c.execute("RELEASE SAVEPOINT account_delete_one;")
                     errors.append({"player_id": pid, "error": str(exc)})
                     logger.exception("account deletion failed player_id=%s", pid)
             commit(c)
