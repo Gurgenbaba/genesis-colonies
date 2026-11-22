@@ -25,6 +25,51 @@ def _now() -> float:
     return time.time()
 
 
+def cleanup_planet_delete_references(
+    conn, planet_ids, *, replacement_planet_id: Optional[int] = None
+) -> None:
+    """Clean legacy non-cascading planet FKs before the canonical DELETE.
+
+    Shared by voluntary/combat colony destruction and due account cleanup.
+    All input planet IDs must have passed caller ownership checks.
+    """
+    from ..db import table_exists
+
+    ids = [int(planet_id) for planet_id in planet_ids]
+    if not ids:
+        return
+    ph = ",".join("?" for _ in ids)
+    for table in (
+        "planet_mine_ascension_skills",
+        "planet_mine_ascension_state",
+        "planet_mine_evolution",
+        "planet_shipyard_ascension",
+        "activity_xp_log",
+        "world_claims",
+    ):
+        if table_exists(conn, table):
+            conn.execute(f"DELETE FROM {table} WHERE planet_id IN ({ph});", ids)
+
+    if table_exists(conn, "auction_house_bids"):
+        if replacement_planet_id is not None:
+            # Existing bids remain refundable to the surviving homeworld.
+            conn.execute(
+                f"UPDATE auction_house_bids SET planet_id = ? "
+                f"WHERE planet_id IN ({ph});",
+                [int(replacement_planet_id), *ids],
+            )
+        else:
+            conn.execute(
+                f"DELETE FROM auction_house_bids WHERE planet_id IN ({ph});", ids
+            )
+    if table_exists(conn, "auction_house_listings"):
+        conn.execute(
+            f"UPDATE auction_house_listings SET current_bid_planet_id = ? "
+            f"WHERE current_bid_planet_id IN ({ph});",
+            [int(replacement_planet_id) if replacement_planet_id is not None else None, *ids],
+        )
+
+
 def destroy_colony_planet(
     conn,
     *,
@@ -110,6 +155,9 @@ def destroy_colony_planet(
         int(row["position"] or 1),
     )
     name = str(row["name"] or "")
+    cleanup_planet_delete_references(
+        conn, [pid], replacement_planet_id=hw_id
+    )
     cur = conn.execute(
         "DELETE FROM planets WHERE id = ? AND player_id = ? AND COALESCE(is_homeworld, 0) = 0;",
         (pid, owner),
