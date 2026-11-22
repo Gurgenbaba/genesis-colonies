@@ -783,3 +783,51 @@ def test_due_deletion_worker_isolates_failed_player(temp_db, monkeypatch):
         ).fetchone()["name"] != "poisoned"
     finally:
         conn.close()
+
+
+def test_voluntary_colony_delete_cleans_legacy_ascension_and_keeps_homeworld(app_client):
+    """Options colony-delete route must handle non-cascading Stellar Forge FKs."""
+    pid, uname, _ = _create_player()
+    ok, reason, extra = colonize_planet(
+        pid, name="DeleteMe", galaxy=1, system=402, position=4,
+        allow_legacy_coordinates=True, source="test",
+    )
+    assert ok, reason
+    colony_id = int(extra["planet_id"])
+    conn = models.db()
+    try:
+        homeworld_id = int(conn.execute(
+            "SELECT id FROM planets WHERE player_id = ? AND is_homeworld = 1;",
+            (pid,),
+        ).fetchone()["id"])
+        conn.execute(
+            "INSERT INTO planet_shipyard_ascension (planet_id, forge_rank) VALUES (?, 2);",
+            (colony_id,),
+        )
+        conn.execute(
+            "INSERT INTO planet_mine_ascension_state (planet_id, building_type) "
+            "VALUES (?, 'metal_mine');",
+            (colony_id,),
+        )
+        set_active_planet_id(pid, colony_id, conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    _login(app_client, uname)
+    response = app_client.post(
+        "/api/planet/delete", json={}, headers={"Accept": "application/json"},
+    )
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["ok"] is True
+    conn = models.db()
+    try:
+        assert conn.execute(
+            "SELECT id FROM planets WHERE id = ?;", (colony_id,)
+        ).fetchone() is None
+        assert int(conn.execute(
+            "SELECT active_planet_id FROM players WHERE id = ?;", (pid,)
+        ).fetchone()["active_planet_id"]) == homeworld_id
+    finally:
+        conn.close()
