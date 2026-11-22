@@ -1559,24 +1559,12 @@ def _wipe_player_game_progress(player_id: int, *, conn) -> None:
             ("planet_evolution_queue", "planet_id"),
             ("planet_ships", "planet_id"),
             ("planet_buildings", "planet_id"),
-            ("planet_mine_ascension_skills", "planet_id"),
-            ("planet_mine_ascension_state", "planet_id"),
-            ("planet_mine_evolution", "planet_id"),
-            ("planet_shipyard_ascension", "planet_id"),
-            ("activity_xp_log", "planet_id"),
-            ("auction_house_bids", "planet_id"),
-            ("world_claims", "planet_id"),
         ):
             if table_exists(conn, table):
                 cur.execute(f"DELETE FROM {table} WHERE {col} IN ({ph});", planet_ids)
-        # Auction listings can refer to a planet without being owned by the
-        # player (historical bids). Preserve the listing, clear the pointer.
-        if table_exists(conn, "auction_house_listings"):
-            cur.execute(
-                f"UPDATE auction_house_listings SET current_bid_planet_id = NULL "
-                f"WHERE current_bid_planet_id IN ({ph});",
-                planet_ids,
-            )
+        from .pirates.destroy import cleanup_planet_delete_references
+
+        cleanup_planet_delete_references(conn, planet_ids)
 
     if table_exists(conn, "world_claims"):
         cur.execute("DELETE FROM world_claims WHERE player_id = ?;", (pid,))
