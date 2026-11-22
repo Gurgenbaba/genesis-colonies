@@ -681,3 +681,55 @@ def test_premium_page_serves_pass_relic_art(liveops_db):
         item_catalog_entry(i["item_key"]).get("image", "").startswith("img/pass/")
         for i in free_l1.get("items") or []
     )
+
+
+def test_expired_default_s1_ops_xp_recovers_once_without_resetting_progress(liveops_db):
+    """Post-60-day S1 Ops must resume without losing old XP or premium."""
+    from game.battle_pass import DEFAULT_SEASON_DAYS, DEFAULT_S1_RECOVERY_GRACE_DAYS
+
+    uid = _player()
+    conn = db()
+    now = time.time()
+    original_start = now - DEFAULT_SEASON_DAYS * 86400 - 100
+    original_end = now - 100
+    try:
+        season = get_active_season(conn, now=original_end - 10)
+        sid = int(season["id"])
+        conn.execute(
+            "UPDATE battle_pass_seasons SET starts_at = ?, ends_at = ? WHERE id = ?;",
+            (original_start, original_end, sid),
+        )
+        before = credit_xp(uid, 17, conn=conn, now=original_end - 10)
+        assert before["granted"] is True
+        restored = get_active_season(conn, now=now)
+        assert restored["id"] == sid
+        assert restored["ends_at"] == pytest.approx(
+            original_start + (DEFAULT_SEASON_DAYS + DEFAULT_S1_RECOVERY_GRACE_DAYS) * 86400
+        )
+        after = credit_xp(uid, 35, conn=conn, now=now)
+        assert after["granted"] is True
+        assert after["xp"] == 52
+        # No rolling extension. Ops stop at the bounded end until S2 ships.
+        future = restored["ends_at"] + 1
+        assert get_active_season(conn, now=future)["ends_at"] == restored["ends_at"]
+        refused = credit_xp(uid, 5, conn=conn, now=future)
+        assert refused["reason"] == "season_inactive"
+    finally:
+        conn.close()
+
+
+def test_operator_season_is_never_auto_extended(liveops_db):
+    """Only original genesis_s1 may receive the emergency grace."""
+    conn = db()
+    now = time.time()
+    try:
+        sid = ensure_default_season(conn, now=now - 86400)
+        conn.execute(
+            "UPDATE battle_pass_seasons SET slug = ?, starts_at = ?, ends_at = ? "
+            "WHERE id = ?;",
+            ("operator_s2", now - 61 * 86400, now - 86400, sid),
+        )
+        season = get_active_season(conn, now=now)
+        assert season["ends_at"] == pytest.approx(now - 86400)
+    finally:
+        conn.close()
