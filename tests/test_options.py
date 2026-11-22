@@ -744,7 +744,13 @@ def test_overdue_deletion_failure_does_not_block_options_read(temp_db, monkeypat
             raise AssertionError("options GET must not execute account deletion")
         monkeypatch.setattr(options_mod, "process_due_account_deletion", fail_delete)
         snapshot = get_options_snapshot(pid, conn=conn)
-        assert snapshot["account_safety"]["deletion_pending"] is True
+        assert snapshot["player_id"] == pid
+        assert snapshot["account_safety"]["deletion_due_at"] == due
+        # The options read must not execute the overdue destructive operation.
+        deleted = conn.execute(
+            "SELECT account_deleted_at FROM players WHERE id = ?;", (pid,)
+        ).fetchone()
+        assert deleted["account_deleted_at"] is None
     finally:
         conn.close()
 
