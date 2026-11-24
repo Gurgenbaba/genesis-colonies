@@ -153,6 +153,18 @@ def test_manufacturing_role_presence_accepts_huge_integer_mass():
     )
 
 
+def test_manufacturing_hybrid_role_presence_accepts_huge_integer_mass():
+    by_role = {"expedition_combat": HUGE, "scout": 1}
+    assert formulas.manufacturing_trial_complete(
+        max(formulas.hull_mass_target(1), sum(by_role.values())),
+        1,
+        by_role,
+        ["combat", "expedition", "scout"],
+    )
+    assert formulas.manufacturing_role_progress(by_role, "expedition") == HUGE
+    assert formulas.manufacturing_role_progress(by_role, "combat") == HUGE
+
+
 def test_stellar_forge_tribute_and_capacity_sources_have_no_unbounded_float_roundtrip():
     service_src = (ROOT / "game" / "stellar_forge" / "service.py").read_text(encoding="utf-8")
     formulas_src = (ROOT / "game" / "stellar_forge" / "formulas.py").read_text(encoding="utf-8")
@@ -170,7 +182,9 @@ def test_stellar_forge_tribute_and_capacity_sources_have_no_unbounded_float_roun
 
     assert "rate = max(0, int(production_per_hour.get(resource, 0) or 0))" in formulas_src
     assert "float(production_per_hour.get(resource, 0) or 0)" not in formulas_src
-    assert "all(int(by_role.get(r, 0) or 0) > 0 for r in roles)" in formulas_src
+    # Role presence now uses a hybrid-aware integer helper (no float conversion).
+    assert "all(manufacturing_role_progress(by_role, r) > 0 for r in roles)" in formulas_src
+    assert "int(by_role.get(role, 0) or 0)" in formulas_src
 
     assert "forge_capacity_scaled_floor(base, forge_rank)" in shipyard_src
     assert "base * forge_capacity_multiplier(forge_rank)" not in shipyard_src
