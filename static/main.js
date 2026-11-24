@@ -45002,8 +45002,13 @@
       manuRequiredList.innerHTML = "";
       const requiredRoles = forge.stellar_forge_manufacturing_roles || [];
       const builtRoles = forge.stellar_forge_hull_mass_roles || {};
+      // Qualifying roles are server-derived: expedition+combat hybrid hulls
+      // fulfill both capabilities without double-counting the Hull Mass ledger.
+      const qualifiedRoles = forge.stellar_forge_manufacturing_role_progress || {};
       requiredRoles.forEach((role) => {
-        const built = Number(builtRoles[role] || 0) > 0;
+        const roleMass = Object.prototype.hasOwnProperty.call(qualifiedRoles, role)
+          ? qualifiedRoles[role] : builtRoles[role];
+        const built = Number(roleMass || 0) > 0;
         const li = document.createElement("li");
         li.className = "gc-sf-protocol-chip" + (built ? " is-done" : "");
         const label = document.createElement("span");

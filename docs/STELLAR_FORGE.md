@@ -105,7 +105,12 @@ except `colony` — Seed Ark stays rare/limited-purpose, not a Hull Mass grind t
 via `roll_manufacturing_roles()`, stored in `planet_shipyard_ascension.manufacturing_roles`
 (migration `151_stellar_forge_manufacturing_roles.sql`) and reset to `[]` on ascend.
 `manufacturing_trial_complete(total, rank, by_role, required_roles)` checks total ≥
-target **and** every required role has `by_role[role] > 0` — falls back to the old
+target **and** every required role has qualifying Hull Mass > 0. The Voidrunner's
+`expedition_combat` ledger qualifies for either `expedition` or `combat` (and the
+`expedition_combat` requirement itself), without doubling stored total Hull Mass;
+existing running campaigns and already credited builds are recognized automatically.
+The Forge panel receives distinct server-side qualification values while the original
+role breakdown retains its single-entry per-build accounting. This falls back to the old
 "any 3 distinct roles" behavior when `required_roles` is empty (campaigns started
 before this shipped).
 

@@ -233,6 +233,28 @@ class TestStellarForgeFormulas:
         under_target = {"cargo": 10, "combat": 10, "scout": 10}
         assert not manufacturing_trial_complete(sum(under_target.values()), 1, under_target, required)
 
+    def test_voidrunner_hybrid_satisfies_expedition_and_combat_without_double_mass(self):
+        from game.stellar_forge.formulas import manufacturing_role_progress
+
+        target = hull_mass_target(1)
+        # Mirrors UNI1 report: expedition_combat already contributes, but the
+        # campaign rolls the expedition (not expedition_combat) requirement.
+        by_role = {
+            "combat": target,
+            "expedition_combat": 23_007_688_046,
+            "scout": 875_000_000,
+        }
+        total = sum(by_role.values())
+        assert manufacturing_role_progress(by_role, "expedition") == 23_007_688_046
+        assert manufacturing_role_progress(by_role, "combat") == target + 23_007_688_046
+        assert manufacturing_role_progress(by_role, "expedition_combat") == 23_007_688_046
+        assert manufacturing_role_progress(by_role, "recycle") == 0
+        assert manufacturing_trial_complete(total, 1, by_role, ["combat", "expedition", "scout"])
+        assert not manufacturing_trial_complete(total, 1, by_role, ["combat", "expedition", "recycle"])
+        assert not manufacturing_trial_complete(total - target, 1, by_role, ["combat", "expedition", "scout"])
+        # Qualifying for two categories never inflates stored Hull Mass.
+        assert sum(by_role.values()) == total
+
     def test_roll_manufacturing_roles_picks_three_distinct_from_pool(self):
         from game.stellar_forge import MANUFACTURING_ROLE_POOL, roll_manufacturing_roles
 
@@ -292,6 +314,38 @@ class TestStellarForgeCampaign:
         ok2, reason2, _ = start_campaign(uid, dict(planet))
         assert not ok2
         assert reason2 == "campaign_active"
+
+    def test_existing_hybrid_delivery_marks_expedition_in_forge_panel(self, forge_db, monkeypatch):
+        from game.fleet_defs import get_ship
+        from game.models import get_homeworld
+        from game.stellar_forge import panel_forge_fields
+
+        uid = forge_db
+        planet = get_homeworld(player_id=uid)
+        pid = int(planet["id"])
+        _max_out_shipyard(pid)
+        monkeypatch.setattr(
+            "game.stellar_forge.service.roll_manufacturing_roles",
+            lambda: ["combat", "expedition", "scout"],
+        )
+        ok, reason, _ = start_campaign(uid, dict(planet))
+        assert ok, reason
+
+        # Deliver the same hybrid hull that players already built on UNI1.
+        per_ship = ship_hull_mass(get_ship("eclipse_runner")["build_cost"])
+        _add_hull_mass(pid, "eclipse_runner", (hull_mass_target(1) + per_ship - 1) // per_ship)
+        _add_hull_mass(pid, "spark_drone", 1)
+        state = get_raw_state(pid)
+        assert state["hull_mass_by_role"].get("expedition", 0) == 0
+        assert state["hull_mass_by_role"].get("expedition_combat", 0) > 0
+        assert state["hull_mass_progress"] == sum(state["hull_mass_by_role"].values())
+
+        fields = panel_forge_fields(dict(get_homeworld(player_id=uid)))
+        assert fields["stellar_forge_manufacturing_done"] is True
+        assert fields["stellar_forge_manufacturing_role_progress"]["expedition"] > 0
+        assert fields["stellar_forge_manufacturing_role_progress"]["combat"] > 0
+        assert fields["stellar_forge_manufacturing_role_progress"]["scout"] > 0
+        assert fields["stellar_forge_hull_mass_progress"] == sum(fields["stellar_forge_hull_mass_roles"].values())
 
     def test_pay_tribute_spends_planet_resources(self, forge_db):
         from game.models import get_homeworld

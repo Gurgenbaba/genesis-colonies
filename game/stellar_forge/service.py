@@ -18,6 +18,7 @@ from .formulas import (
     forge_capacity_multiplier,
     forge_cores_required,
     hull_mass_target,
+    manufacturing_role_progress,
     manufacturing_trial_complete,
     nanite_assist_unlocked,
     operational_target,
@@ -344,6 +345,10 @@ def panel_forge_fields(
             "stellar_forge_hull_mass_roles": state["hull_mass_by_role"],
             "stellar_forge_hull_mass_min_roles": HULL_MASS_MIN_ROLES,
             "stellar_forge_manufacturing_roles": manufacturing_roles,
+            "stellar_forge_manufacturing_role_progress": {
+                role: manufacturing_role_progress(state["hull_mass_by_role"], role)
+                for role in manufacturing_roles
+            },
             "stellar_forge_manufacturing_done": pillar2_done,
             "stellar_forge_operational_protocols": {
                 p: {
