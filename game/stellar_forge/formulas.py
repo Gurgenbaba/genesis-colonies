@@ -94,6 +94,20 @@ def roll_manufacturing_roles() -> List[str]:
     return sorted(picked)
 
 
+def manufacturing_role_progress(by_role: Mapping[str, int], required_role: str) -> int:
+    """Recorded mass qualifying for a campaign role, including hybrid hull capabilities.
+
+    Keep the stored by_role ledger and the total Hull Mass unchanged: a hybrid
+    Voidrunner is one build, but it is eligible for both expedition and combat
+    category requirements. Historical campaigns benefit without data migration.
+    """
+    compatible = {
+        "expedition": ("expedition", "expedition_combat"),
+        "combat": ("combat", "expedition_combat"),
+    }.get(required_role, (required_role,))
+    return sum(max(0, int(by_role.get(role, 0) or 0)) for role in compatible)
+
+
 def manufacturing_trial_complete(
     total: int,
     rank: int,
@@ -117,7 +131,7 @@ def manufacturing_trial_complete(
         return False
     roles = list(required_roles or [])
     if roles:
-        return all(int(by_role.get(r, 0) or 0) > 0 for r in roles)
+        return all(manufacturing_role_progress(by_role, r) > 0 for r in roles)
     contributing_roles = [v for v in by_role.values() if v > 0]
     return len(contributing_roles) >= HULL_MASS_MIN_ROLES
 
