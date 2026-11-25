@@ -290,7 +290,7 @@ def test_endgame_colony_unlocks_12_through_15(mandates_db):
         for i in range(10):
             conn.execute(
                 "INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, ?, 1, ?, 2, 0, 14, ?);",
-                (uid, f"E{i}", 40 + i % 3, time.time()),
+                (uid, f"E{i}", 40 + i, time.time()),
             )
         conn.commit()
         assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 11
