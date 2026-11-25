@@ -815,9 +815,9 @@
       <section class="pe-expansion-panel pe-mandates-panel" id="pe-section-mandates" aria-label="{{ T('imperial_mandates_title', 'Imperial Mandates') }}">
         <p class="pe-expansion-panel-lead hint">
           {{ T("imperial_mandates_title", "Imperial Mandates") }}
-          · <span class="gc-mono">{{ (pe_mandates.late_slots or 0)|int }}/{{ (pe_mandates.late_slot_max or 4)|int }}</span>
+          · <span class="gc-mono">{{ (pe_mandates.late_slots or 0)|int }}/{{ (pe_mandates.late_slot_max or 8)|int }}</span>
         </p>
-        <p class="pe-expansion-panel-note hint">{{ T("imperial_mandates_hint", "Spätreich: galaktische Taten schalten Welten 7–10 frei — nicht weitere Ark-Stufen.") }}</p>
+        <p class="pe-expansion-panel-note hint">{{ T("imperial_mandates_hint", "Spätreich: Imperiale Mandate erschließen bis zu 15 Welten — keine weiteren Ark-Stufen.") }}</p>
         <ol class="pe-expansion-rail pe-mandates-rail">
           {% set ns_m = namespace(active_set=false) %}
           {% for m in pe_mandates.all_mandates %}

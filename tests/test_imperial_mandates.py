@@ -81,10 +81,10 @@ def test_ark_slots_cap_at_six_no_extrapolation():
     assert legacy_expansion_slots_unlocked(40) == 8
 
 
-def test_admin_default_is_eleven(mandates_db):
+def test_admin_default_is_fifteen(mandates_db):
     conn = db()
     try:
-        assert get_max_planets_per_player(conn=conn) == 11
+        assert get_max_planets_per_player(conn=conn) == 15
     finally:
         conn.close()
 
@@ -273,5 +273,65 @@ def test_owned_worlds_never_deleted_when_over_new_formula(mandates_db):
                 "SELECT COUNT(*) AS n FROM planets WHERE player_id = ?;", (uid,)
             ).fetchone()["n"]
         ) == 9
+    finally:
+        conn.close()
+
+
+
+def test_endgame_colony_unlocks_12_through_15(mandates_db):
+    from game.planet_evolution.imperial_mandates import LATE_SLOT_MAX, MANDATE_ORDER
+    uid = _player()
+    conn = db()
+    try:
+        _set_hw(conn, uid, 30)
+        assert len(MANDATE_ORDER) == LATE_SLOT_MAX == 8
+        for key in MANDATE_ORDER[:4]:
+            conn.execute("INSERT INTO player_imperial_mandates (player_id, mandate_key, earned_at) VALUES (?, ?, ?);", (uid, key, time.time()))
+        for i in range(10):
+            conn.execute(
+                "INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, ?, 1, ?, 2, 0, 14, ?);",
+                (uid, f"E{i}", 40 + i, time.time()),
+            )
+        conn.commit()
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 11
+        conn.execute("UPDATE planets SET planet_level=15 WHERE player_id=? AND is_homeworld=0", (uid,))
+        conn.commit()
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 12
+        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col11', 1, 70, 2, 0, 15, ?);", (uid, time.time()))
+        conn.commit()
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 12
+        conn.execute("UPDATE planets SET planet_level=20 WHERE player_id=? AND is_homeworld=0", (uid,))
+        conn.commit()
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 13
+        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col12', 1, 71, 2, 0, 15, ?);", (uid, time.time()))
+        conn.execute("UPDATE planets SET system=system+100 WHERE player_id=? AND is_homeworld=0 AND name LIKE 'E%'", (uid,))
+        conn.commit()
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 14
+        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col13', 1, 72, 2, 0, 20, ?);", (uid, time.time()))
+        conn.execute("UPDATE planets SET planet_level=20 WHERE player_id=? AND is_homeworld=0", (uid,))
+        conn.commit()
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 14
+        hw = get_homeworld(uid, conn=conn)
+        conn.execute("UPDATE planets SET ascension_key='legacy_test' WHERE id=?;", (int(hw["id"]),))
+        conn.commit()
+        state = ensure_player_mandate_state(uid, conn=conn)
+        assert state["late_slots"] == 8 and len(state["earned_mandates"]) == 8
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 15
+        assert get_planet_limit_block(uid, conn=conn)["max"] == 15
+        assert len(conn.execute("SELECT id FROM planets WHERE player_id=?", (uid,)).fetchall()) == 14
+    finally:
+        conn.close()
+
+
+def test_legacy_credit_stays_at_four_after_new_mandates(mandates_db):
+    uid = _player()
+    conn = db()
+    try:
+        _set_hw(conn, uid, 80)
+        state = ensure_player_mandate_state(uid, conn=conn)
+        assert state["legacy_slots"] > 4
+        assert state["credited_late_steps"] == state["late_slots"] == 4
+        assert len(state["earned_mandates"]) == 4
+        assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 11
     finally:
         conn.close()
