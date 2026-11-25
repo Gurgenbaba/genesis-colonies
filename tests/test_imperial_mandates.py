@@ -297,17 +297,17 @@ def test_endgame_colony_unlocks_12_through_15(mandates_db):
         conn.execute("UPDATE planets SET planet_level=15 WHERE player_id=? AND is_homeworld=0", (uid,))
         conn.commit()
         assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 12
-        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col11', 1, 43, 2, 0, 15, ?);", (uid, time.time()))
+        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col11', 1, 70, 2, 0, 15, ?);", (uid, time.time()))
         conn.commit()
         assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 12
         conn.execute("UPDATE planets SET planet_level=20 WHERE player_id=? AND is_homeworld=0", (uid,))
         conn.commit()
         assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 13
-        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col12', 1, 44, 2, 0, 15, ?);", (uid, time.time()))
+        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col12', 1, 71, 2, 0, 15, ?);", (uid, time.time()))
         conn.execute("UPDATE planets SET system=system+100 WHERE player_id=? AND is_homeworld=0 AND name LIKE 'E%'", (uid,))
         conn.commit()
         assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 14
-        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col13', 1, 45, 2, 0, 20, ?);", (uid, time.time()))
+        conn.execute("INSERT INTO planets (player_id, name, galaxy, system, position, is_homeworld, planet_level, last_update) VALUES (?, 'Col13', 1, 72, 2, 0, 20, ?);", (uid, time.time()))
         conn.execute("UPDATE planets SET planet_level=20 WHERE player_id=? AND is_homeworld=0", (uid,))
         conn.commit()
         assert expansion_gameplay_cap(uid, conn=conn)["gameplay_cap"] == 14
