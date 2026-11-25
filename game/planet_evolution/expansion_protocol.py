@@ -205,7 +205,7 @@ def expansion_gameplay_cap(
 ) -> Dict[str, Any]:
     """Ark slots + late mandates + directive bonus, capped by admin ceiling."""
     from game.logic import get_max_planets_per_player
-    from .imperial_mandates import ARK_SLOT_MAX, ensure_player_mandate_state
+    from .imperial_mandates import ARK_SLOT_MAX, LATE_SLOT_MAX, ensure_player_mandate_state
 
     uid = int(player_id)
     hw_level = get_homeworld_level(uid, conn=conn)
@@ -368,7 +368,7 @@ def can_found_colony(
 ) -> Tuple[bool, str]:
     """Galaxy colonize cap — min(admin ceiling, Ark + late slots). No world-map gates."""
     from game.logic import get_max_planets_per_player
-    from .imperial_mandates import ARK_SLOT_MAX
+    from .imperial_mandates import ARK_SLOT_MAX, LATE_SLOT_MAX
     from .repository import evolution_schema_ready
 
     uid = int(player_id)
@@ -390,7 +390,7 @@ def can_found_colony(
         late_slots = 0
 
     if total >= evolution_max:
-        if ark_slots >= ARK_SLOT_MAX and late_slots < 4:
+        if ark_slots >= ARK_SLOT_MAX and late_slots < LATE_SLOT_MAX:
             return False, "imperial_mandate_required"
         return False, "planet_evolution_colony_slot_required"
 
@@ -443,6 +443,8 @@ def can_found_expansion_world(
     site_key: str | None = None,
 ) -> Tuple[bool, str]:
     """Gate matrix + gameplay cap + admin safety ceiling (grandfathering)."""
+    from .imperial_mandates import LATE_SLOT_MAX
+
     uid = int(player_id)
     cap = expansion_gameplay_cap(uid, conn=conn)
     total = len(get_planets_by_player(uid, conn=conn) or [])
@@ -450,7 +452,7 @@ def can_found_expansion_world(
     if total >= gameplay_cap:
         expansion_count = count_expansion_worlds(uid, conn=conn)
         if _expansion_slot_cap_reached(expansion_count, int(cap["expansion_slots_unlocked"]) + int(cap.get("late_slots") or 0)):
-            if int(cap.get("expansion_slots_unlocked") or 0) >= INTERSTELLAR_EXPANSION_MAX_LEVEL and int(cap.get("late_slots") or 0) < 4:
+            if int(cap.get("expansion_slots_unlocked") or 0) >= INTERSTELLAR_EXPANSION_MAX_LEVEL and int(cap.get("late_slots") or 0) < LATE_SLOT_MAX:
                 return False, "imperial_mandate_required"
             return False, "expansion_slot_cap_reached"
         return False, "expansion_admin_ceiling_reached"
@@ -480,7 +482,7 @@ def get_expansion_limit_block(
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
     """Expansion-focused limit block for game-state / empire."""
-    from .imperial_mandates import ARK_SLOT_MAX, ensure_player_mandate_state
+    from .imperial_mandates import ARK_SLOT_MAX, LATE_SLOT_MAX, ensure_player_mandate_state
 
     uid = int(player_id)
     planets = get_planets_by_player(uid, conn=conn) or []
@@ -510,7 +512,7 @@ def get_expansion_limit_block(
     if not under_cap and not gate_reason:
         if total >= admin:
             gate_reason = "colony_limit_reached"
-        elif slots_unlocked >= ARK_SLOT_MAX and late_slots < 4:
+        elif slots_unlocked >= ARK_SLOT_MAX and late_slots < LATE_SLOT_MAX:
             gate_reason = "imperial_mandate_required"
         else:
             gate_reason = "planet_evolution_colony_slot_required"
@@ -566,7 +568,7 @@ def build_expansion_launch_checklist(
     site_key: str | None = None,
 ) -> Dict[str, Any]:
     """Command Map / PE expansion checklist (GC-926 + Imperial Mandates)."""
-    from .imperial_mandates import ARK_SLOT_MAX, next_mandate_checklist_item
+    from .imperial_mandates import ARK_SLOT_MAX, LATE_SLOT_MAX, next_mandate_checklist_item
 
     uid = int(player_id)
     ok_gates, gate_reason, meta = evaluate_expansion_gates(
@@ -642,7 +644,7 @@ def build_expansion_launch_checklist(
     if not under_cap:
         if total >= int(cap["admin_ceiling"]):
             gate_reason = "expansion_admin_ceiling_reached"
-        elif ark_slots >= ARK_SLOT_MAX and late_slots < 4:
+        elif ark_slots >= ARK_SLOT_MAX and late_slots < LATE_SLOT_MAX:
             gate_reason = "imperial_mandate_required"
         elif not gate_reason:
             gate_reason = "expansion_slot_cap_reached"

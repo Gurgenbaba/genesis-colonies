@@ -15,9 +15,10 @@ from ..models import get_homeworld, get_planets_by_player
 from .expansion_gates import get_homeworld_level
 
 ARK_SLOT_MAX = 6
-LATE_SLOT_MAX = 4
+LEGACY_LATE_SLOT_MAX = 4  # Old high-Ark grandfather grants remain limited to 4.
+LATE_SLOT_MAX = 8
 
-MANDATE_ORDER: Tuple[str, ...] = ("survey", "presence", "directive", "apex")
+MANDATE_ORDER: Tuple[str, ...] = ("survey", "presence", "directive", "apex", "maturity", "infrastructure", "dominance", "legacy")
 
 SURVEY_EXPEDITIONS_REQUIRED = 12
 PRESENCE_SYSTEMS_REQUIRED = 3
@@ -27,6 +28,10 @@ MANDATE_LABEL_KEYS: Dict[str, str] = {
     "presence": "imperial_mandate_presence",
     "directive": "imperial_mandate_directive",
     "apex": "imperial_mandate_apex",
+    "maturity": "imperial_mandate_maturity",
+    "infrastructure": "imperial_mandate_infrastructure",
+    "dominance": "imperial_mandate_dominance",
+    "legacy": "imperial_mandate_legacy",
 }
 
 
@@ -185,6 +190,7 @@ def mandate_progress(
     player_id: int,
     *,
     conn: sqlite3.Connection,
+    planets: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Progress for one mandate (current/required/met)."""
     key = str(mandate_key)
@@ -227,6 +233,27 @@ def mandate_progress(
             "required": 1,
             "met": bool(met),
         }
+    # The four new mandate steps require already-developed existing colonies.
+    # This prevents 12-15 from being awarded before previous worlds exist.
+    if key in ("maturity", "infrastructure", "dominance", "legacy"):
+        worlds = planets if planets is not None else (get_planets_by_player(int(player_id), conn=conn) or [])
+        colonies = [p for p in worlds if not bool(p.get("is_homeworld"))]
+        lvl15 = sum(int(p.get("planet_level") or 0) >= 15 for p in colonies)
+        lvl20 = sum(int(p.get("planet_level") or 0) >= 20 for p in colonies)
+        if key == "maturity":
+            current, required = min(10, lvl15), 10
+        elif key == "infrastructure":
+            current, required = min(11, lvl20), 11
+        elif key == "dominance":
+            systems = {(int(p["galaxy"]), int(p["system"])) for p in worlds
+                       if p.get("galaxy") is not None and p.get("system") is not None}
+            current, required = min(12, lvl15) + min(6, len(systems)), 18
+        else:
+            hw = get_homeworld(int(player_id), conn=conn) or {}
+            ascended = bool(str(hw.get("ascension_key") or "").strip())
+            current, required = min(13, lvl20) + int(ascended), 14
+        return {"key": key, "label_key": label_key, "current": current,
+                "required": required, "met": current >= required}
     return {
         "key": key,
         "label_key": label_key,
@@ -243,11 +270,12 @@ def sync_earned_mandates(
     now: float | None = None,
     legacy_slots: int = 0,
     persist: bool = True,
+    planets: Optional[List[Dict[str, Any]]] = None,
 ) -> List[str]:
     """Resolve earned mandates in order; optionally persist newly earned rows."""
     uid = int(player_id)
     ts = float(now if now is not None else time.time())
-    legacy_n = min(LATE_SLOT_MAX, max(0, int(legacy_slots)))
+    legacy_n = min(LEGACY_LATE_SLOT_MAX, max(0, int(legacy_slots)))
     earned = set(list_earned_mandates(uid, conn=conn))
     grants_ready = _table_ready(conn, "player_imperial_mandates")
     for index, key in enumerate(MANDATE_ORDER):
@@ -262,7 +290,7 @@ def sync_earned_mandates(
             else:
                 earned.add(key)
             continue
-        prog = mandate_progress(key, uid, conn=conn)
+        prog = mandate_progress(key, uid, conn=conn, planets=planets)
         if not prog.get("met"):
             break
         if not grants_ready:
@@ -286,20 +314,21 @@ def ensure_player_mandate_state(
     """Lazy migrate + sync grants; returns late-slot breakdown for cap merge."""
     uid = int(player_id)
     legacy = ensure_legacy_slots(uid, conn=conn, persist=persist)
+    planets = get_planets_by_player(uid, conn=conn) or []
     earned = sync_earned_mandates(
-        uid, conn=conn, legacy_slots=legacy, persist=persist
+        uid, conn=conn, legacy_slots=legacy, persist=persist, planets=planets
     )
     mandate_count = len(earned)
-    # Cap: late = min(4, mandate_count) — legacy is already baked into earned rows.
+    # Only the first four mandates can be granted via old Ark legacy credits.
     late = min(LATE_SLOT_MAX, mandate_count)
-    credited = min(LATE_SLOT_MAX, max(0, int(legacy)))
+    credited = min(LEGACY_LATE_SLOT_MAX, max(0, int(legacy)))
     next_key: Optional[str] = None
     next_prog: Optional[Dict[str, Any]] = None
     for key in MANDATE_ORDER:
         if key in earned:
             continue
         next_key = key
-        next_prog = mandate_progress(key, uid, conn=conn)
+        next_prog = mandate_progress(key, uid, conn=conn, planets=planets)
         break
 
     return {
@@ -313,7 +342,7 @@ def ensure_player_mandate_state(
         "next_mandate": next_prog,
         "all_mandates": [
             {
-                **mandate_progress(k, uid, conn=conn),
+                **mandate_progress(k, uid, conn=conn, planets=planets),
                 "earned": k in earned,
                 "credited_by_legacy": (MANDATE_ORDER.index(k) < credited),
             }
